@@ -17,6 +17,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     var bookDetailView: BookDetailView?
     var lastScale = CGFloat(1.0)
     
+    
     let logger = Logger()
 
     func open(pdfURL: URL, bookDetailView: BookDetailView) {
@@ -29,6 +30,12 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
         pdfView!.interpolationQuality = PDFInterpolationQuality.high
         
         pdfView!.usePageViewController(true, withViewOptions: nil)
+        
+        setToolbarItems(
+            [   UIBarButtonItem.flexibleSpace(),
+                UIBarButtonItem(title: "0 / 0", style: .plain, target: self, action: nil),
+                UIBarButtonItem.flexibleSpace()
+            ], animated: true)
         
         NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView!)
         NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .PDFViewScaleChanged, object: nil)
@@ -96,7 +103,11 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     
     @objc private func handlePageChange(notification: Notification)
     {
-        
+        setToolbarItems(
+            [   UIBarButtonItem.flexibleSpace(),
+                UIBarButtonItem(title: "\(pdfView?.currentPage?.pageRef?.pageNumber ?? 1) / \(pdfView?.document?.pageCount ?? 1)", style: .plain, target: self, action: nil),
+                UIBarButtonItem.flexibleSpace()
+            ], animated: false)
         // pdfView!.scaleFactor = lastScale
     }
     

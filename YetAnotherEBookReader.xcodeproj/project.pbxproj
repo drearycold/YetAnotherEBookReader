@@ -12,6 +12,18 @@
 		2A8C26C325C589D900FC7FC0 /* PDFViewUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26C225C589D900FC7FC0 /* PDFViewUI.swift */; };
 		2A8C26D025C5A1E100FC7FC0 /* PDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26CF25C5A1E000FC7FC0 /* PDFViewController.swift */; };
 		2A8C26D825C5A7D000FC7FC0 /* PDFViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26D725C5A7D000FC7FC0 /* PDFViewContainer.swift */; };
+		2A8C278525CBD46E00FC7FC0 /* ShelfViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C277D25CBD46D00FC7FC0 /* ShelfViewModel.swift */; };
+		2A8C278625CBD46E00FC7FC0 /* PlainShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C277E25CBD46D00FC7FC0 /* PlainShelfView.swift */; };
+		2A8C278725CBD46E00FC7FC0 /* ShelfHeaderCellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C277F25CBD46D00FC7FC0 /* ShelfHeaderCellView.swift */; };
+		2A8C278825CBD46E00FC7FC0 /* SectionShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */; };
+		2A8C278925CBD46E00FC7FC0 /* ShelfCellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278125CBD46E00FC7FC0 /* ShelfCellView.swift */; };
+		2A8C278A25CBD46E00FC7FC0 /* Dimens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278225CBD46E00FC7FC0 /* Dimens.swift */; };
+		2A8C278B25CBD46E00FC7FC0 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278325CBD46E00FC7FC0 /* Utils.swift */; };
+		2A8C278C25CBD46E00FC7FC0 /* ShelfViewDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */; };
+		2A8C27B625CBD73E00FC7FC0 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 2A8C27B525CBD73E00FC7FC0 /* Kingfisher */; };
+		2A8C27B825CBD73E00FC7FC0 /* KingfisherSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 2A8C27B725CBD73E00FC7FC0 /* KingfisherSwiftUI */; };
+		2A8C27BC25CBDD0600FC7FC0 /* PlainShelfController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C27BB25CBDD0600FC7FC0 /* PlainShelfController.swift */; };
+		2A8C27C425CBDD7600FC7FC0 /* PlainShelfUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C27C325CBDD7600FC7FC0 /* PlainShelfUI.swift */; };
 		2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */; };
 		2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */; };
 		2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC2225BDBC11004A6633 /* Preview Assets.xcassets */; };
@@ -109,6 +121,19 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		2A8C27AF25CBD66A00FC7FC0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUIVC.swift; sourceTree = "<group>"; };
 		2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUI.swift; sourceTree = "<group>"; };
@@ -116,6 +141,16 @@
 		2A8C26CF25C5A1E000FC7FC0 /* PDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewController.swift; sourceTree = "<group>"; };
 		2A8C26D725C5A7D000FC7FC0 /* PDFViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFViewContainer.swift; sourceTree = "<group>"; };
 		2A8C26DF25C9970B00FC7FC0 /* YetAnotherEBookReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YetAnotherEBookReader.entitlements; sourceTree = "<group>"; };
+		2A8C277D25CBD46D00FC7FC0 /* ShelfViewModel.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfViewModel.swift; sourceTree = "<group>"; };
+		2A8C277E25CBD46D00FC7FC0 /* PlainShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PlainShelfView.swift; sourceTree = "<group>"; };
+		2A8C277F25CBD46D00FC7FC0 /* ShelfHeaderCellView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfHeaderCellView.swift; sourceTree = "<group>"; };
+		2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SectionShelfView.swift; sourceTree = "<group>"; };
+		2A8C278125CBD46E00FC7FC0 /* ShelfCellView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfCellView.swift; sourceTree = "<group>"; };
+		2A8C278225CBD46E00FC7FC0 /* Dimens.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Dimens.swift; sourceTree = "<group>"; };
+		2A8C278325CBD46E00FC7FC0 /* Utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfViewDelegate.swift; sourceTree = "<group>"; };
+		2A8C27BB25CBDD0600FC7FC0 /* PlainShelfController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PlainShelfController.swift; sourceTree = "<group>"; };
+		2A8C27C325CBDD7600FC7FC0 /* PlainShelfUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainShelfUI.swift; sourceTree = "<group>"; };
 		2AC3EC1825BDBC10004A6633 /* YetAnotherEBookReader.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YetAnotherEBookReader.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderApp.swift; sourceTree = "<group>"; };
 		2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -206,9 +241,11 @@
 			files = (
 				2ADD966625C037F3001DE755 /* ZipArchive in Frameworks */,
 				2ADD966025C03799001DE755 /* AEXML in Frameworks */,
+				2A8C27B625CBD73E00FC7FC0 /* Kingfisher in Frameworks */,
 				2ADD965225C03650001DE755 /* RealmSwift in Frameworks */,
 				2ADD965825C03706001DE755 /* MenuItemKit in Frameworks */,
 				2ADD965025C03650001DE755 /* Realm in Frameworks */,
+				2A8C27B825CBD73E00FC7FC0 /* KingfisherSwiftUI in Frameworks */,
 				2ADD966F25C0398A001DE755 /* FontBlaster in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -249,6 +286,23 @@
 			path = PDFView;
 			sourceTree = "<group>";
 		};
+		2A8C277C25CBD45400FC7FC0 /* ShelfView */ = {
+			isa = PBXGroup;
+			children = (
+				2A8C27BB25CBDD0600FC7FC0 /* PlainShelfController.swift */,
+				2A8C278225CBD46E00FC7FC0 /* Dimens.swift */,
+				2A8C277E25CBD46D00FC7FC0 /* PlainShelfView.swift */,
+				2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */,
+				2A8C278125CBD46E00FC7FC0 /* ShelfCellView.swift */,
+				2A8C277F25CBD46D00FC7FC0 /* ShelfHeaderCellView.swift */,
+				2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */,
+				2A8C277D25CBD46D00FC7FC0 /* ShelfViewModel.swift */,
+				2A8C278325CBD46E00FC7FC0 /* Utils.swift */,
+				2A8C27C325CBDD7600FC7FC0 /* PlainShelfUI.swift */,
+			);
+			path = ShelfView;
+			sourceTree = "<group>";
+		};
 		2AC3EC0F25BDBC10004A6633 = {
 			isa = PBXGroup;
 			children = (
@@ -275,12 +329,13 @@
 		2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */ = {
 			isa = PBXGroup;
 			children = (
+				2AC3EC5325BE7486004A6633 /* Models */,
+				2AC3EC6125BE7F2B004A6633 /* Views */,
+				2A8C277C25CBD45400FC7FC0 /* ShelfView */,
 				2A8C26DF25C9970B00FC7FC0 /* YetAnotherEBookReader.entitlements */,
 				2A8C26BE25C5570E00FC7FC0 /* PDFView */,
 				2A8C26B325C54BA700FC7FC0 /* WebView */,
 				2ADD968525C03AB7001DE755 /* ViewController */,
-				2AC3EC6125BE7F2B004A6633 /* Views */,
-				2AC3EC5325BE7486004A6633 /* Models */,
 				2AC3EC1B25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift */,
 				2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */,
 				2AC3EC2925BDBC11004A6633 /* Info.plist */,
@@ -517,6 +572,7 @@
 				2AC3EC1425BDBC10004A6633 /* Sources */,
 				2AC3EC1525BDBC10004A6633 /* Frameworks */,
 				2AC3EC1625BDBC10004A6633 /* Resources */,
+				2A8C27AF25CBD66A00FC7FC0 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -530,6 +586,8 @@
 				2ADD965F25C03799001DE755 /* AEXML */,
 				2ADD966525C037F3001DE755 /* ZipArchive */,
 				2ADD966E25C0398A001DE755 /* FontBlaster */,
+				2A8C27B525CBD73E00FC7FC0 /* Kingfisher */,
+				2A8C27B725CBD73E00FC7FC0 /* KingfisherSwiftUI */,
 			);
 			productName = YetAnotherEBookReader;
 			productReference = 2AC3EC1825BDBC10004A6633 /* YetAnotherEBookReader.app */;
@@ -609,6 +667,7 @@
 				2ADD965E25C03799001DE755 /* XCRemoteSwiftPackageReference "AEXML" */,
 				2ADD966425C037F3001DE755 /* XCRemoteSwiftPackageReference "ZipArchive" */,
 				2ADD966D25C0398A001DE755 /* XCRemoteSwiftPackageReference "FontBlaster" */,
+				2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */,
 			);
 			productRefGroup = 2AC3EC1925BDBC10004A6633 /* Products */;
 			projectDirPath = "";
@@ -671,6 +730,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A8C278625CBD46E00FC7FC0 /* PlainShelfView.swift in Sources */,
 				2ADD967625C039AE001DE755 /* SMSegmentView.swift in Sources */,
 				2ADD962E25C03440001DE755 /* MediaType.swift in Sources */,
 				2ADD962D25C03440001DE755 /* FRResources.swift in Sources */,
@@ -679,6 +739,9 @@
 				2ADD969025C03BDD001DE755 /* Epub.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
 				2ADD963D25C03440001DE755 /* FolioReaderAudioPlayer.swift in Sources */,
+				2A8C278825CBD46E00FC7FC0 /* SectionShelfView.swift in Sources */,
+				2A8C278525CBD46E00FC7FC0 /* ShelfViewModel.swift in Sources */,
+				2A8C278725CBD46E00FC7FC0 /* ShelfHeaderCellView.swift in Sources */,
 				2ADD963725C03440001DE755 /* QuoteImage.swift in Sources */,
 				2A8C26D025C5A1E100FC7FC0 /* PDFViewController.swift in Sources */,
 				2ADD962F25C03440001DE755 /* FRResource.swift in Sources */,
@@ -694,17 +757,20 @@
 				2ADD962A25C03440001DE755 /* FRSpine.swift in Sources */,
 				2ADD962725C03440001DE755 /* FolioReaderWebView.swift in Sources */,
 				2AC3EC6E25BE9B54004A6633 /* LibraryView.swift in Sources */,
+				2A8C278A25CBD46E00FC7FC0 /* Dimens.swift in Sources */,
 				2ADD962325C03440001DE755 /* FolioReaderQuoteShare.swift in Sources */,
 				2ADD962525C03440001DE755 /* FolioReaderContainer.swift in Sources */,
 				2AC3EC6325BE7F3B004A6633 /* LibraryInfoView.swift in Sources */,
 				2ADD963025C03440001DE755 /* FRSmilElement.swift in Sources */,
 				2ADD962225C03440001DE755 /* FolioReaderSharingProvider.swift in Sources */,
 				2ADD963825C03440001DE755 /* Highlight.swift in Sources */,
+				2A8C278C25CBD46E00FC7FC0 /* ShelfViewDelegate.swift in Sources */,
 				2ADD968B25C03B52001DE755 /* FolioReaderViewController.swift in Sources */,
 				2ADD96A625C04784001DE755 /* BookButtonView.swift in Sources */,
 				2ADD96B425C04882001DE755 /* ReaderView.swift in Sources */,
 				2ADD962B25C03440001DE755 /* FRBook.swift in Sources */,
 				2ADD962C25C03440001DE755 /* FRSmils.swift in Sources */,
+				2A8C27C425CBDD7600FC7FC0 /* PlainShelfUI.swift in Sources */,
 				2ADD962925C03440001DE755 /* FRTocReference.swift in Sources */,
 				2ADDA36425C18232001DE755 /* Book.swift in Sources */,
 				2ADD963C25C03440001DE755 /* FolioReaderUserDefaults.swift in Sources */,
@@ -718,13 +784,16 @@
 				2ADD963225C03440001DE755 /* FolioReaderKit.swift in Sources */,
 				2ADD963A25C03440001DE755 /* FolioReaderHighlightList.swift in Sources */,
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
+				2A8C27BC25CBDD0600FC7FC0 /* PlainShelfController.swift in Sources */,
 				2ADD961F25C03440001DE755 /* Extensions.swift in Sources */,
 				2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */,
 				2ADD963325C03440001DE755 /* FolioReaderFontsMenu.swift in Sources */,
+				2A8C278B25CBD46E00FC7FC0 /* Utils.swift in Sources */,
 				2AC3EC7E25BEBA0D004A6633 /* BookDetailView.swift in Sources */,
 				2A8C26D825C5A7D000FC7FC0 /* PDFViewContainer.swift in Sources */,
 				2ADD962425C03440001DE755 /* FolioReaderCenter.swift in Sources */,
 				2ADD963425C03440001DE755 /* FolioReaderPageIndicator.swift in Sources */,
+				2A8C278925CBD46E00FC7FC0 /* ShelfCellView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -889,14 +958,13 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = YetAnotherEBookReader/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.5;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -917,14 +985,13 @@
 				ENABLE_PREVIEWS = YES;
 				INFOPLIST_FILE = YetAnotherEBookReader/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 13.5;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SUPPORTS_MACCATALYST = YES;
+				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -1053,6 +1120,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/onevcat/Kingfisher";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.0.0;
+			};
+		};
 		2ADD964E25C03650001DE755 /* XCRemoteSwiftPackageReference "realm-cocoa" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/realm/realm-cocoa.git";
@@ -1096,6 +1171,16 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2A8C27B525CBD73E00FC7FC0 /* Kingfisher */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = Kingfisher;
+		};
+		2A8C27B725CBD73E00FC7FC0 /* KingfisherSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */;
+			productName = KingfisherSwiftUI;
+		};
 		2ADD964F25C03650001DE755 /* Realm */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2ADD964E25C03650001DE755 /* XCRemoteSwiftPackageReference "realm-cocoa" */;

@@ -31,7 +31,11 @@ class PDFViewContainer : UIViewController {
         
         pdfViewController.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         pdfViewController.navigationItem.setRightBarButton(UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
-        pdfViewController.setToolbarItems([UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:)))], animated: true)
+        
+        
+        
+        
+        
         
         
         pdfViewController.open(pdfURL: pdfURL, bookDetailView: bookDetailView)

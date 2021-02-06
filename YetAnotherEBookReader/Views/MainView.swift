@@ -12,26 +12,46 @@ import OSLog
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
     var defaultLog = Logger()
-
+    var plainShelfUI = PlainShelfUI()
     
     @State private var calibreServer = "http://calibre-server.lan:8080/"
     @State private var result = "Waiting"
+    @State private var activeTab = 0
     
     var body: some View {
-        VStack {
-            HStack {
-                Text("Server:")
-                TextField("Server", text: $calibreServer)
-                Button("Connect") {
-                    startLoad()
+        TabView(selection: $activeTab) {
+            plainShelfUI
+                .tabItem {
+                    Image(systemName: "1.square.fill")
+                    Text("Shelf")
                 }
+                .tag(1)
+            
+            VStack {
+                HStack {
+                    Text("Server:")
+                    TextField("Server", text: $calibreServer)
+                    Button("Connect") {
+                        startLoad()
+                    }
+                }
+                
+                //LibraryInfoView(libraryInfo: $modelData.libraryInfo)
+                LibraryInfoView()
             }
-            TextField("Result", text: $result)
-            
-            LibraryInfoView(libraryInfo: $modelData.libraryInfo)
-            
-            Spacer()
+                .tabItem {
+                    Image(systemName: "2.square.fill")
+                    Text("Server")
+                }
+                .tag(2)
         }
+        .font(.headline)
+        .onChange(of: activeTab, perform: { index in
+            if index == 1 {
+                
+            }
+        })
+        
     }
     
     func startLoad() {

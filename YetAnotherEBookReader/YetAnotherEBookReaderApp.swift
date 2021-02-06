@@ -16,7 +16,7 @@ struct YetAnotherEBookReaderApp: App {
 //                .environment(\.managedObjectContext, persistenceController.container.viewContext)
             MainView()
                 .environmentObject(modelData)
-                
+            
 //            ReaderView()
         }
     }

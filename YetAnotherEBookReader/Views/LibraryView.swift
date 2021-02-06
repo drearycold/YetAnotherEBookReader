@@ -33,7 +33,19 @@ struct LibraryView: View {
             NavigationView {
                 List {
                     ForEach(library.books.indices, id: \.self) { index in
-                        NavigationLink(destination: BookDetailView(book: $library.books[index])) {
+                        NavigationLink(destination: BookDetailView(book: Binding<Book>(
+                            get: {
+//                                var book = library.books[index]
+//                                if( !book.inShelf ) {
+//                                    print("INSHELF \(library) \(library.books) \(index) \(book.title) \(book.inShelf)")
+//                                }
+                                return modelData.libraryInfo.libraryMap[library.name]!.books[index]
+                            },
+                            set: { newBook in
+                                library.books[index] = newBook
+                                library.booksMap[newBook.id] = newBook
+                            }
+                        ))) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(library.books[index].title)").font(.headline)
                                 Text("\(library.books[index].authors)").font(.subheadline)
@@ -104,7 +116,7 @@ struct LibraryView: View {
             bookIds.forEach { idNum in
                 let id = (idNum as! NSNumber).int32Value
                 if booksMap[id] == nil {
-                    var book = Book()
+                    var book = Book(serverInfo: ServerInfo(calibreServer: modelData.calibreServer))
                     book.id = id
                     book.libraryName = library.name
                     booksMap[book.id] = book

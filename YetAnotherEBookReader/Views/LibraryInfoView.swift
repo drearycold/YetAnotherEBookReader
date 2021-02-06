@@ -12,15 +12,21 @@ import CoreData
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
 
-    @Binding var libraryInfo: LibraryInfo
+    // @Binding var libraryInfo: LibraryInfo
     
     var body: some View {
         NavigationView {
             List {
-                ForEach(libraryInfo.libraries.indices, id: \.self) { index in
+                ForEach(modelData.libraryInfo.libraries.indices, id: \.self) { index in
                     NavigationLink(
-                        destination: LibraryView(library: $libraryInfo.libraries[index])) {
-                            Text("\(libraryInfo.libraries[index].name)")
+                        destination: LibraryView(library: Binding<Library>(
+                            get: { return modelData.libraryInfo.libraries[index] },
+                            set: { newLibrary in
+                                modelData.libraryInfo.libraries[index] = newLibrary
+                                modelData.libraryInfo.libraryMap[newLibrary.name] = newLibrary
+                            }
+                        ))) {
+                        Text("\(modelData.libraryInfo.libraries[index].name)")
                         }
                 }
             }
@@ -35,7 +41,7 @@ struct LibraryInfoView_Previews: PreviewProvider {
     static private var modelData = ModelData()
     @State static private var libraryInfo = LibraryInfo()
     static var previews: some View {
-        LibraryInfoView(libraryInfo: $libraryInfo)
+        LibraryInfoView()
             .environmentObject(ModelData())
     }
 }
