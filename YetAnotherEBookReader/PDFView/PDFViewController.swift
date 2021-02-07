@@ -77,6 +77,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 self.pdfView!.go(to: destPage)
             }
         }), for: .valueChanged)
+
         
         var contents = [UIMenuElement]()
         
@@ -88,19 +89,19 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 contents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { (action) in
                     if let dest = outlineRoot.child(at: i)?.destination {
                         if let curPage = self.pdfView?.currentPage {
-                            let backButton = UIBarButtonItem(title: " Back to \(curPage.pageRef!.pageNumber)", primaryAction: UIAction(handler: { (action) in
-                                self.pdfView!.go(to: curPage)
-                                var rightBarButtonItems = self.navigationItem.rightBarButtonItems!
-                                if rightBarButtonItems.count > 1 {
-                                    rightBarButtonItems.removeLast()
-                                    self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
-                                }
-                            }))
-                            var rightBarButtonItems = self.navigationItem.rightBarButtonItems!
-                            if rightBarButtonItems.count == 1 {
-                                rightBarButtonItems.append(backButton)
-                                self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
-                            }
+//                            let backButton = UIBarButtonItem(title: " Back to \(curPage.pageRef!.pageNumber)", primaryAction: UIAction(handler: { (action) in
+//                                self.pdfView!.go(to: curPage)
+//                                var rightBarButtonItems = self.navigationItem.rightBarButtonItems!
+//                                if rightBarButtonItems.count > 1 {
+//                                    rightBarButtonItems.removeLast()
+//                                    self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
+//                                }
+//                            }))
+//                            var rightBarButtonItems = self.navigationItem.rightBarButtonItems!
+//                            if rightBarButtonItems.count == 1 {
+//                                rightBarButtonItems.append(backButton)
+//                                self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
+//                            }
                             
                             var historyItems = self.historyMenu.children
                             var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
@@ -117,12 +118,20 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                                 if let index = children.firstIndex(of: action) {
                                     children.removeLast(children.count - index)
                                     self.historyMenu = self.historyMenu.replacingChildren(children)
-                                    self.navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)], animated: true)
+                                    if var rightBarButtonItems = self.navigationItem.rightBarButtonItems {
+                                        rightBarButtonItems[0] = UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)
+                                        self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
+                                    }
                                     self.pdfView!.go(to: curPage)
                                 }
                             })
                             self.historyMenu = self.historyMenu.replacingChildren(historyItems)
-                            self.navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)], animated: true)
+                            if let rightBarButtonItems = self.navigationItem.rightBarButtonItems {
+                                rightBarButtonItems[0].menu = self.historyMenu
+                                    //= UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)
+                                //self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
+                            }
+                            //self.navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)], animated: true)
                         }
                         self.pdfView!.go(to: dest)
                     }
@@ -131,11 +140,22 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             }
         }
         
-        var navContentsMenu = UIMenu(title: "Contents", children: contents)
+        navigationItem.setRightBarButtonItems(
+            [
+                UIBarButtonItem(image: UIImage(systemName: "clock"), menu: historyMenu),
+                UIBarButtonItem(title: "Zoom In", image: UIImage(systemName: "plus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
+                    self.pdfView?.scaleFactor = (self.pdfView?.scaleFactor ?? 1.0) * 1.1
+                })),
+                UIBarButtonItem(title: "Zoom Out", image: UIImage(systemName: "minus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
+                    self.pdfView?.scaleFactor = (self.pdfView?.scaleFactor ?? 1.0) / 1.1
+                }))
+        ], animated: true)
+        
+        let navContentsMenu = UIMenu(title: "Contents", children: contents)
         
         //navigationItem.setRightBarButton(UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         //navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "list.bullet"), menu: navContentsMenu)], animated: true)
-        navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "clock"), menu: historyMenu)], animated: true)
+        
         
         thumbController.view = thumbImageView
         
@@ -259,18 +279,22 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             
             print("width=\(cgimage!.width) height=\(cgimage!.height)")
             
+            let align = 8
+            let padding = align - cgimage!.width % align
+            print("CGIMAGE PADDING \(padding)")
+            
             //TOP
             for h in (0..<(cgimage!.height/4)) {
                 var isWhite = true
                 for w in (0..<cgimage!.width) {
                     
-                    let pixelData = ((Int(cgimage!.width + 1) * h) + w) * numberOfComponents
+                    let pixelData = ((Int(cgimage!.width + padding) * h) + w) * numberOfComponents
                     
                     let r = data![pixelData]
                     let g = data![pixelData + 1]
                     let b = data![pixelData + 2]
                     let a = data![pixelData + 3]
-                    //print("\(h) \(w) \(r) \(g) \(b) \(a)")
+                    // print("\(h) \(w) \(r) \(g) \(b) \(a)")
                     
                     if r < 250 && g < 250 && b < 250 {
                         isWhite = false
@@ -291,7 +315,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 var isWhite = true
                 for w in (0..<cgimage!.width) {
                     
-                    let pixelData = ((Int(cgimage!.width + 1) * (cgimage!.height - h - 1)) + w) * numberOfComponents
+                    let pixelData = ((Int(cgimage!.width + padding) * (cgimage!.height - h - 1)) + w) * numberOfComponents
                     
                     let r = data![pixelData]
                     let g = data![pixelData + 1]
@@ -316,7 +340,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             for w in (0..<(cgimage!.width/4)) {
                 var isWhite = true
                 for h in (0..<(cgimage!.height)){
-                    let pixelData = ((Int(cgimage!.width + 1) * (h)) + w) * numberOfComponents
+                    let pixelData = ((Int(cgimage!.width + padding) * (h)) + w) * numberOfComponents
                     
                     let r = data![pixelData]
                     let g = data![pixelData + 1]
@@ -341,7 +365,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             for w in (0..<(cgimage!.width/4)) {
                 var isWhite = true
                 for h in (0..<(cgimage!.height)){
-                    let pixelData = ((Int(cgimage!.width + 1) * (h)) + (cgimage!.width - w - 1)) * numberOfComponents
+                    let pixelData = ((Int(cgimage!.width + padding) * (h)) + (cgimage!.width - w - 1)) * numberOfComponents
                     
                     let r = data![pixelData]
                     let g = data![pixelData + 1]
@@ -388,10 +412,26 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 if scale > 1 {
                     pdfView?.scaleFactor = curScale * CGFloat(scale)
                     
-                    let pdfDest = pdfView?.currentDestination
-                    let curPoint = pdfDest!.point
+                    var pdfDest = pdfView?.currentDestination
+                    var curPoint = pdfDest!.point
                     let newDest = PDFDestination(page: page, at: CGPoint(x: curPoint.x, y: 0))
                     print("POINT \(pdfDest!.point) \(page.bounds(for: .cropBox)) \(pdfView!.documentView)")
+                    
+                    while curPoint.x < 0.0 {
+                        self.pdfView!.scaleFactor = self.pdfView!.scaleFactor * 1.1
+                        pdfDest = pdfView!.currentDestination
+                        curPoint = pdfDest!.point
+                        print("CURPOINT \(curPoint)")
+                    }
+                    while curPoint.x > 20.0 {
+                        self.pdfView!.scaleFactor = self.pdfView!.scaleFactor / 1.1
+                        pdfDest = pdfView!.currentDestination
+                        curPoint = pdfDest!.point
+                        print("CURPOINT \(curPoint)")
+                    }
+                    
+                    
+                    
                     //pdfView?.go(to: newDest)
                     // pdfView?.go(to: CGRect(x: 0, y: 0, width: 0.5, height: 0.5), on: page)
                     
