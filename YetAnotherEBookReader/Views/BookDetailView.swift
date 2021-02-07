@@ -148,7 +148,7 @@ struct BookDetailView: View {
                         Text("Download")
                     }
                     Spacer()
-                    Button(action: {clearCache(book: book)}) {
+                    Button(action: {clearCache(book: book, format: selectedFormat)}) {
                         Text("Clear")
                     }
                     Spacer()
@@ -386,13 +386,27 @@ struct BookDetailView: View {
         downloadTask.resume()
     }
     
-    func clearCache(book: Book) {
+    func clearCache(book: Book, format: Book.Format) {
         do {
             let documentURL = try FileManager.default.url(for: .documentDirectory,
                                                           in: .userDomainMask,
                                                           appropriateFor: nil,
                                                           create: false)
-            let savedURL = documentURL.appendingPathComponent("\(book.libraryName) - \(book.id).epub")
+            let savedURL = documentURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(format.rawValue.lowercased())")
+            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
+            if( isFileExist) {
+                try FileManager.default.removeItem(at: savedURL)
+            }
+        } catch {
+            defaultLog.error("clearCache \(error.localizedDescription)")
+        }
+        
+        do {
+            let downloadBaseURL = try FileManager.default.url(for: .cachesDirectory,
+                                                          in: .userDomainMask,
+                                                          appropriateFor: nil,
+                                                          create: false)
+            let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(format.rawValue.lowercased())")
             let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
             if( isFileExist) {
                 try FileManager.default.removeItem(at: savedURL)

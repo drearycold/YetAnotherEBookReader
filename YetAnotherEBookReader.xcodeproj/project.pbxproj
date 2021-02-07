@@ -34,6 +34,7 @@
 		2AC3EC6325BE7F3B004A6633 /* LibraryInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC6225BE7F3B004A6633 /* LibraryInfoView.swift */; };
 		2AC3EC6E25BE9B54004A6633 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC6D25BE9B54004A6633 /* LibraryView.swift */; };
 		2AC3EC7E25BEBA0D004A6633 /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC7D25BEBA0D004A6633 /* BookDetailView.swift */; };
+		2AC95DE925CFD81300A462F1 /* MyPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC95DE825CFD81200A462F1 /* MyPDFView.swift */; };
 		2ADD961F25C03440001DE755 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FA25C0342A001DE755 /* Extensions.swift */; };
 		2ADD962025C03440001DE755 /* PageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FB25C0342B001DE755 /* PageViewController.swift */; };
 		2ADD962125C03440001DE755 /* FolioReaderChapterListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FC25C0342C001DE755 /* FolioReaderChapterListCell.swift */; };
@@ -167,6 +168,7 @@
 		2AC3EC6225BE7F3B004A6633 /* LibraryInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoView.swift; sourceTree = "<group>"; };
 		2AC3EC6D25BE9B54004A6633 /* LibraryView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		2AC3EC7D25BEBA0D004A6633 /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
+		2AC95DE825CFD81200A462F1 /* MyPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyPDFView.swift; sourceTree = "<group>"; };
 		2ADD95FA25C0342A001DE755 /* Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
 		2ADD95FB25C0342B001DE755 /* PageViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PageViewController.swift; sourceTree = "<group>"; };
 		2ADD95FC25C0342C001DE755 /* FolioReaderChapterListCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderChapterListCell.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				2A8C26C225C589D900FC7FC0 /* PDFViewUI.swift */,
 				2A8C26CF25C5A1E000FC7FC0 /* PDFViewController.swift */,
 				2A8C26D725C5A7D000FC7FC0 /* PDFViewContainer.swift */,
+				2AC95DE825CFD81200A462F1 /* MyPDFView.swift */,
 			);
 			path = PDFView;
 			sourceTree = "<group>";
@@ -730,6 +733,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2AC95DE925CFD81300A462F1 /* MyPDFView.swift in Sources */,
 				2A8C278625CBD46E00FC7FC0 /* PlainShelfView.swift in Sources */,
 				2ADD967625C039AE001DE755 /* SMSegmentView.swift in Sources */,
 				2ADD962E25C03440001DE755 /* MediaType.swift in Sources */,
