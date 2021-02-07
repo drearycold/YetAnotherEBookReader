@@ -23,6 +23,8 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     
     var pageSlider = UISlider()
     var pageIndicator = UIButton()
+    var pageNextButton = UIButton()
+    var pagePrevButton = UIButton()
     
     let titleInfoButton = UIButton()
     
@@ -78,6 +80,15 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             }
         }), for: .valueChanged)
 
+        pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
+        pagePrevButton.addAction(UIAction(handler: { (action) in
+            self.pdfView!.goToPreviousPage(self.pagePrevButton)
+        }), for: .primaryActionTriggered)
+        pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
+        pageNextButton.addAction(UIAction(handler: { (action) in
+            self.pdfView!.goToNextPage(self.pageNextButton)
+        }), for: .primaryActionTriggered)
+        
         
         var contents = [UIMenuElement]()
         
@@ -402,7 +413,8 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             
             self.thumbImageView.image = newImage
             
-            if let curScale = pdfView?.scaleFactor {
+            if let curScale = pdfView?.scaleFactor, curScale > 0 {
+                
                 let visibleWidthRatio = 1.0 * Double(trailing - leading + 1) / Double(cgimage!.width)
                 let visibleHeightRatio = 1.0 * Double(bottom - top + 1) / Double(cgimage!.height)
                 let scale = 0.93 / visibleWidthRatio
@@ -421,13 +433,13 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                         self.pdfView!.scaleFactor = self.pdfView!.scaleFactor * 1.1
                         pdfDest = pdfView!.currentDestination
                         curPoint = pdfDest!.point
-                        print("CURPOINT \(curPoint)")
+                        print("CURPOINT \(curPoint) \(self.pdfView!.scaleFactor)")
                     }
                     while curPoint.x > 20.0 {
                         self.pdfView!.scaleFactor = self.pdfView!.scaleFactor / 1.1
                         pdfDest = pdfView!.currentDestination
                         curPoint = pdfDest!.point
-                        print("CURPOINT \(curPoint)")
+                        print("CURPOINT \(curPoint) \(self.pdfView!.scaleFactor)")
                     }
                     
                     

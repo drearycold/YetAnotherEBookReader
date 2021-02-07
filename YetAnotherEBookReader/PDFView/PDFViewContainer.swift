@@ -33,17 +33,23 @@ class PDFViewContainer : UIViewController {
         
         let stackView = UIStackView(frame: nav.toolbar.frame)
         stackView.distribution = .fill
-        stackView.alignment = .top
+        stackView.alignment = .fill
         stackView.axis = .horizontal
-        stackView.spacing = 8.0
+        stackView.spacing = 16.0
         
+        stackView.addArrangedSubview(pdfViewController.pagePrevButton)
         stackView.addArrangedSubview(pdfViewController.pageSlider)
         stackView.addArrangedSubview(pdfViewController.pageIndicator)
+        stackView.addArrangedSubview(pdfViewController.pageNextButton)
         
         let toolbarView = UIBarButtonItem(customView: stackView)
         pdfViewController.setToolbarItems([toolbarView], animated: false)
+//        pdfViewController.additionalSafeAreaInsets = UIEdgeInsets(top: 0, left: 0, bottom: 256, right: 0)
+        
         
         self.present(nav, animated: true, completion: nil)
+        
+        
         
     }
     

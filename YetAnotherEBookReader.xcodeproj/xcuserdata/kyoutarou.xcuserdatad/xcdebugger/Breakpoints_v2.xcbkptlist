@@ -830,8 +830,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "190"
-            endingLineNumber = "190"
+            startingLineNumber = "201"
+            endingLineNumber = "201"
             landmarkName = "viewDidDisappear(_:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -846,8 +846,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "200"
-            endingLineNumber = "200"
+            startingLineNumber = "211"
+            endingLineNumber = "211"
             landmarkName = "draw(with:to:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -862,10 +862,10 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "448"
-            endingLineNumber = "448"
-            landmarkName = "unknown"
-            landmarkType = "0">
+            startingLineNumber = "460"
+            endingLineNumber = "460"
+            landmarkName = "handleScaleChange(_:)"
+            landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
       <BreakpointProxy
@@ -878,8 +878,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "181"
-            endingLineNumber = "181"
+            startingLineNumber = "192"
+            endingLineNumber = "192"
             landmarkName = "viewDidAppear(_:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -894,8 +894,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewContainer.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "46"
-            endingLineNumber = "46"
+            startingLineNumber = "50"
+            endingLineNumber = "50"
             landmarkName = "open(pdfURL:bookDetailView:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -1246,8 +1246,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "106"
-            endingLineNumber = "106"
+            startingLineNumber = "117"
+            endingLineNumber = "117"
             landmarkName = "open(pdfURL:bookDetailView:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -1278,8 +1278,8 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "229"
-            endingLineNumber = "229"
+            startingLineNumber = "240"
+            endingLineNumber = "240"
             landmarkName = "handlePageChange(notification:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -1294,9 +1294,25 @@
             filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "147"
-            endingLineNumber = "147"
+            startingLineNumber = "158"
+            endingLineNumber = "158"
             landmarkName = "open(pdfURL:bookDetailView:)"
+            landmarkType = "7">
+         </BreakpointContent>
+      </BreakpointProxy>
+      <BreakpointProxy
+         BreakpointExtensionID = "Xcode.Breakpoint.FileBreakpoint">
+         <BreakpointContent
+            uuid = "4C4F599D-3162-4021-8DDF-0A7A3CC3A7BE"
+            shouldBeEnabled = "No"
+            ignoreCount = "0"
+            continueAfterRunningActions = "No"
+            filePath = "YetAnotherEBookReader/PDFView/PDFViewController.swift"
+            startingColumnNumber = "9223372036854775807"
+            endingColumnNumber = "9223372036854775807"
+            startingLineNumber = "418"
+            endingLineNumber = "418"
+            landmarkName = "handlePageChange(notification:)"
             landmarkType = "7">
          </BreakpointContent>
       </BreakpointProxy>
