@@ -130,15 +130,26 @@ open class FolioReaderPage: UICollectionViewCell, UIWebViewDelegate, UIGestureRe
         let statusbarHeight = UIApplication.shared.statusBarFrame.size.height
         let navBarHeight = self.folioReader.readerCenter?.navigationController?.navigationBar.frame.size.height ?? CGFloat(0)
         let navTotal = self.readerConfig.shouldHideNavigationOnTap ? 0 : statusbarHeight + navBarHeight
-        let paddingTop: CGFloat = 20
-        let paddingBottom: CGFloat = 30
+        let paddingTop: CGFloat = -40
+        let paddingBottom: CGFloat = 50
 
-        return CGRect(
-            x: bounds.origin.x,
-            y: self.readerConfig.isDirection(bounds.origin.y + navTotal, bounds.origin.y + navTotal + paddingTop, bounds.origin.y + navTotal),
-            width: bounds.width,
-            height: self.readerConfig.isDirection(bounds.height - navTotal, bounds.height - navTotal - paddingTop - paddingBottom, bounds.height - navTotal)
-        )
+        print("boundsFrame \(bounds)")
+        print("statusBarFrame \(UIApplication.shared.statusBarFrame)")
+        print("navigationBarFrame \(self.folioReader.readerCenter?.navigationController?.navigationBar.frame)")
+        
+        var x = bounds.origin.x
+        var y = self.readerConfig.isDirection(bounds.origin.y + navTotal, bounds.origin.y + navTotal + paddingTop, bounds.origin.y + navTotal)
+        y = navBarHeight
+        var width = bounds.width
+        var height = self.readerConfig.isDirection(bounds.height - navTotal, bounds.height - navTotal - paddingTop - paddingBottom, bounds.height - navTotal)
+        height = bounds.height - navBarHeight - statusbarHeight
+        
+        var frame = CGRect(x:x, y:y, width: width, height: height)
+        
+        
+        print("Frame \(frame)")
+        
+        return frame
     }
 
     func loadHTMLString(_ htmlContent: String!, baseURL: URL!) {

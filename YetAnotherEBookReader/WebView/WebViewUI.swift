@@ -19,12 +19,13 @@ struct WebViewUI : UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiViewController: WebViewUIVC, context: Context) {
-        webView.webView.loadHTMLString(headerString + webView.content, baseURL: nil)
+        webView.webView.loadHTMLString(headerString + webView.content, baseURL: webView.baseURL)
     }
     
     func setContent(_ content: String, _ baseURL: URL?) {
         webView.content = content
-        webView.webView.loadHTMLString(headerString + webView.content, baseURL: baseURL)
+        webView.baseURL = baseURL
+        webView.webView.loadHTMLString(headerString + webView.content, baseURL: webView.baseURL)
         
     }
 }

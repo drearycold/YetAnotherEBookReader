@@ -23,7 +23,7 @@ import UIKit
     ///   - page: The `FolioReaderPage`.
     ///   - htmlContent: The current HTML content as `String`.
     /// - Returns: The adjusted HTML content as `String`. This is the content which will be loaded into the given `FolioReaderPage`.
-    @objc optional func htmlContentForPage(_ page: FolioReaderPage, htmlContent: String) -> String
+    @objc func htmlContentForPage(_ page: FolioReaderPage, htmlContent: String) -> String
     
     /// Notifies that a page changed. This is triggered when collection view cell is changed.
     ///
@@ -36,7 +36,7 @@ import UIKit
 open class FolioReaderCenter: UIViewController, UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
 
     /// This delegate receives the events from the current `FolioReaderPage`s delegate.
-    open weak var delegate: FolioReaderCenterDelegate?
+    open var delegate: FolioReaderCenterDelegate?
 
     /// This delegate receives the events from current page
     open weak var pageDelegate: FolioReaderPageDelegate?
@@ -497,7 +497,7 @@ open class FolioReaderCenter: UIViewController, UICollectionViewDelegate, UIColl
         html = html.replacingOccurrences(of: "<html ", with: "<html class=\"\(classes)\"")
 
         // Let the delegate adjust the html string
-        if let modifiedHtmlContent = self.delegate?.htmlContentForPage?(cell, htmlContent: html) {
+        if let modifiedHtmlContent = self.delegate?.htmlContentForPage(cell, htmlContent: html) {
             html = modifiedHtmlContent
         }
 

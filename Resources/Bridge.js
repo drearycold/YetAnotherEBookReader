@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", function(event) {
 //        lnk[i].setAttribute("onclick","return callVerseURL(this);");
 //    }
     removeOuterTable()
+    removePSpace()
 });
 
 // Generate a GUID
@@ -27,27 +28,55 @@ function guid() {
     return guid.toUpperCase();
 }
 
+function removePSpace() {
+    var ps = Array.from(document.getElementsByTagName('p'));
+    var len = ps.length
+    var i = 0
+    for (; i<len; i++) {
+        var p = ps[i]
+        p.innerHTML = p.innerHTML.trim()
+    }
+}
+
 function removeOuterTable() {
     // table references the table DOM element
-    var table = Array.from(document.getElementsByTagName('table'))[0];
-    var keep = document.createDocumentFragment(),
-    tds = table.getElementsByTagName('td'),
-    td, i, l;
+    var tables = Array.from(document.getElementsByTagName('table'));
+    var handled = 0;
+    while (tables.length > 0) {
+        var table = tables[0];
+        //alert(table.innerHTML);
+//        if (!table.hasAttribute("width")) {
+//            break
+//        }
+        var keep = document.createDocumentFragment(),
+        tds = table.getElementsByTagName('td'),
+        td, i, l;
 
-    // extract the content of each cell
-    for (i = 0, l = tds.length; i < l; i++) {
-        td = tds[i];
-        while(td.firstChild) {
-            keep.appendChild(td.firstChild);
+        // alert("after keep");
+        
+        while (tds.length > 0) {
+            //alert(i + " in " + tds.length)
+            td = tds[0];
+            //alert(td.innerHTML)
+            while(td.firstChild) {
+                keep.appendChild(td.firstChild);
+            }
+            //alert("after while(td.firstChild)")
+            
+            td.parentNode.removeChild(td)
+            tds = table.getElementsByTagName('td')
         }
-    }
+        
+        //alert(keep)
+        
+        table.parentNode.insertBefore(keep, table);
 
-    // insert the content before the table (or where ever you want)
-    table.parentNode.insertBefore(keep, table);
-    // remove the table
-    table.parentNode.removeChild(table);
-    
-    return tds.length
+        table.parentNode.removeChild(table);
+        
+        tables = Array.from(document.getElementsByTagName('table'));
+        //alert(tables.length);
+    }
+    return handled
 }
 
 // Get All HTML

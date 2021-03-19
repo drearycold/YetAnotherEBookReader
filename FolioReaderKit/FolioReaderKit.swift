@@ -160,11 +160,18 @@ extension FolioReader {
     ///   - config: FolioReader configuration.
     ///   - shouldRemoveEpub: Boolean to remove the epub or not. Default true.
     ///   - animated: Pass true to animate the presentation; otherwise, pass false.
-    open func presentReader(parentViewController: UIViewController, withEpubPath epubPath: String, unzipPath: String? = nil, andConfig config: FolioReaderConfig, shouldRemoveEpub: Bool = true, animated:
-        Bool = true) {
+    open func presentReader(parentViewController: UIViewController, withEpubPath epubPath: String, unzipPath: String? = nil, andConfig config: FolioReaderConfig, shouldRemoveEpub: Bool = true, animated: Bool = true, folioReaderCenterDelegate: FolioReaderCenterDelegate?) {
         let readerContainer = FolioReaderContainer(withConfig: config, folioReader: self, epubPath: epubPath, unzipPath: unzipPath, removeEpub: shouldRemoveEpub)
         self.readerContainer = readerContainer
+        
         parentViewController.present(readerContainer, animated: animated, completion: nil)
+        addObservers()
+    }
+    
+    open func prepareReader(parentViewController: UIViewController, withEpubPath epubPath: String, unzipPath: String? = nil, andConfig config: FolioReaderConfig, shouldRemoveEpub: Bool = true, animated: Bool = true, folioReaderCenterDelegate: FolioReaderCenterDelegate?) {
+        let readerContainer = FolioReaderContainer(withConfig: config, folioReader: self, epubPath: epubPath, unzipPath: unzipPath, removeEpub: shouldRemoveEpub)
+        self.readerContainer = readerContainer
+        
         addObservers()
     }
 }

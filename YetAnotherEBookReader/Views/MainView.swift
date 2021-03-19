@@ -50,6 +50,10 @@ struct MainView: View {
             if index == 1 {
                 
             }
+            
+            if index == 2 {
+                startLoad()
+            }
         })
         
     }
@@ -89,7 +93,7 @@ struct MainView: View {
             
             let libraryMap = libraryInfo["library_map"] as! [String: String]
             libraryMap.forEach { (key, value) in
-                modelData.libraryInfo.addLibrary(name: key)
+                modelData.libraryInfo.getLibrary(name: key)
             }
         } catch {
         

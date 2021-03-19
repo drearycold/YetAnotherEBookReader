@@ -11,6 +11,7 @@ import UIKit
 @available(macCatalyst 14.0, *)
 class FolioReaderViewController: UIViewController {
     var folioReader: FolioReader?
+    var myFolioReaderCenterDelegate = MyFolioReaderCenterDelegate()
     var savedPositionObserver: NSKeyValueObservation?
     var bookDetailView: BookDetailView?
 
@@ -66,12 +67,27 @@ class FolioReaderViewController: UIViewController {
             self.bookDetailView?.updateCurrentPosition(position)
         }
         
-        folioReader?.presentReader(parentViewController: self, withEpubPath: bookPath, andConfig: readerConfiguration, shouldRemoveEpub: false)
+        folioReader?.presentReader(parentViewController: self, withEpubPath: bookPath, andConfig: readerConfiguration, shouldRemoveEpub: false, folioReaderCenterDelegate: myFolioReaderCenterDelegate)
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         savedPositionObserver?.invalidate()
         savedPositionObserver = nil
     }
+    
+    
 }
 
+class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
+    
+    @objc func htmlContentForPage(_ page: FolioReaderPage, htmlContent: String) -> String {
+        
+        // print(htmlContent)
+        let regex = try! NSRegularExpression(pattern: "background=\"[^\"]+\"", options: .caseInsensitive)
+        
+        
+        let modified = regex.stringByReplacingMatches(in: htmlContent, options: [], range: NSMakeRange(0, htmlContent.count), withTemplate: "").replacingOccurrences(of: "<body ", with: "<body style=\"color: #5F4B32 !important; background-color: #FBF0D9 !important; text-align: justify !important; display: block !important; \" ")
+        print(modified)
+        return modified
+    }
+}

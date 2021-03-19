@@ -9,45 +9,74 @@ import Foundation
 import Combine
 import RealmSwift
 import SwiftUI
+import OSLog
 
 final class ModelData: ObservableObject {
     @Published var calibreServer = "http://calibre-server.lan:8080/"
+    @Published var defaultFormat = Book.Format.PDF
     @Published var libraryInfo = LibraryInfo()
+    @Published var filteredBookList = [Int32]()
     
-    var isReading = false
+    var currentBookId: Int32 = -1 {
+            didSet {
+                self.selectionLibraryNav = currentBookId
+            }
+        }
+
+    @Published var selectionLibraryNav: Int32? = nil
+    
+    private var defaultLog = Logger()
     
     init() {
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
+        let realm = try! Realm(
+            configuration: Realm.Configuration(
+                schemaVersion: 5,
+                migrationBlock: { migration, oldSchemaVersion in
+                        if oldSchemaVersion < 5 {
+                            // if you added a new property or removed a property you don't
+                            // have to do anything because Realm automatically detects that
+                        }
+                    }
+            )
+        )
         
         let inShelf = realm.objects(BookRealm.self)
         print("In Shelf \(inShelf.count)")
         inShelf.forEach { bookRealm in
-            var library = libraryInfo.libraryMap[bookRealm.libraryName]
-            if( library == nil ) {
-                library = libraryInfo.addLibrary(name: bookRealm.libraryName)
-            }
+            let library = libraryInfo.getLibrary(name: bookRealm.libraryName)
             print(self.libraryInfo.libraries.count)
-            var book = library!.booksMap[bookRealm.id]
+            var book = library.booksMap[bookRealm.id]
             if( book == nil) {
                 book = Book(serverInfo: ServerInfo(calibreServer: calibreServer))
                 book!.id = bookRealm.id
-                book!.libraryName = library!.name
+                book!.authors = bookRealm.authors
+                book!.libraryName = library.name
                 book!.title = bookRealm.title
                 book!.comments = bookRealm.comments
                 book!.inShelf = true
                 if bookRealm.formatsData != nil {
                     book!.formats = try! JSONSerialization.jsonObject(with: bookRealm.formatsData! as Data, options: []) as! [String: String]
                 }
-                library!.booksMap[book!.id] = book
+//                library!.booksMap[book!.id] = book
+                libraryInfo.updateBook(book: book!)
             }
-            libraryInfo.libraryMap[bookRealm.libraryName] = library
+            // libraryInfo.libraryMap[bookRealm.libraryName] = library
             print(self.libraryInfo.libraryMap[bookRealm.libraryName]!.booksMap.count)
         }
-        for var library in libraryInfo.libraryMap.values {
-            library.filterBooks("")
-            libraryInfo.libraryMap[library.name] = library
-        }
+//        for var library in libraryInfo.libraryMap.values {
+//            library.filterBooks("")
+//            libraryInfo.libraryMap[library.name] = library
+//        }
         libraryInfo.regenArray()
+        
+        switch UIDevice.current.userInterfaceIdiom {
+            case .phone:
+                defaultFormat = Book.Format.EPUB
+            case .pad:
+                defaultFormat = Book.Format.PDF
+            @unknown default:
+                defaultFormat = Book.Format.EPUB
+        }
     }
     
     func getBook(libraryName: String, bookId: Int32) -> Binding<Book> {
@@ -55,8 +84,23 @@ final class ModelData: ObservableObject {
         return Binding<Book>(
             get: {
                 let libraryInfo = self.libraryInfo
-                print("GET inShelf \(self.libraryInfo.libraryMap[libraryName]!.booksMap[bookId]!.inShelf)")
-                return self.libraryInfo.libraryMap[libraryName]!.booksMap[bookId]!
+                let library = libraryInfo.libraryMap[libraryName]!
+                guard let book = self.libraryInfo.libraryMap[libraryName]!.booksMap[bookId] else {
+//                    if let (index, _) = self.libraryInfo.libraryMap[libraryName]!.books.map({ abs($0.id - bookId) }).enumerate().minElement({ $0.1 < $1.1 }) {
+//                        let result = self.libraryInfo.libraryMap[libraryName]!.books[index]
+//                    }
+                    if let minDiffIndex = library.books.map({ (book) -> Int32 in
+                        abs(book.id - bookId)
+                    }).enumerated().min(by: { (lhs, rhs) -> Bool in
+                        lhs.element < rhs.element
+                    }) {
+                        return library.books[minDiffIndex.offset]
+                    }
+                    return Book(serverInfo: ServerInfo(calibreServer: "DELETED"), title: "DELETED", authors: "DELETED")
+                }
+                print("GET inShelf \(book.inShelf)")
+                //return self.libraryInfo.libraryMap[libraryName]!.booksMap[bookId]!
+                return book
             },
             set: { newBook in
                 let libraryInfo = self.libraryInfo
@@ -75,6 +119,7 @@ final class ModelData: ObservableObject {
         )
     }
 
+    
 }
 
 func load<T: Decodable>(_ filename: String) -> T {

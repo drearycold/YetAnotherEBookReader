@@ -14,7 +14,7 @@ import RealmSwift
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
     // @Environment(\.managedObjectContext) private var viewContext
-    var defaultLog = Logger()
+    
     
     @Binding var book: Book
     //    var currentReadingPosition = BookDeviceReadingPosition(id: "")
@@ -23,6 +23,9 @@ struct BookDetailView: View {
     //    @State private var bookComments = ""
     
     @State private var readingPositions = [String]()
+    @State private var downloading = false
+    
+    var defaultLog = Logger()
     
     private var readingPositionsNew : [String] {
         var tmp = [String]()
@@ -31,54 +34,76 @@ struct BookDetailView: View {
         }
         return tmp
     }
-    @State private var showingAlert = false
-    @State private var showingRefreshAlert = false
-    @State private var showingDownloadAlert = false
+    
+    struct AlertItem : Identifiable {
+        var id: String
+    }
+    @State private var alertItem: AlertItem?
+
+//    @State private var showingAlert = false
+//    @State private var showingRefreshAlert = false
+//    @State private var showingDownloadAlert = false
     @State private var selectedFormat = Book.Format.EPUB
     @State private var selectedPosition = ""
     @State private var updater = 0
+    @State private var showingReadSheet = false
     
     var commentWebView = WebViewUI()
     
     let rvc = ReaderViewController()
     var pdfView = PDFViewUI()
     
+    class DownloadDelegate : NSObject, URLSessionTaskDelegate, URLSessionDownloadDelegate {
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+            //TODO
+        }
+        
+        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+            //TODO
+        }
+        
+    }
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-                HStack {
-                    //TextField("Title", text: $book.title).font(.title)
-                    Text(book.title).font(.title)
-                    Spacer()
-                }.padding()
+//                HStack {
+//                    //TextField("Title", text: $book.title).font(.title)
+//                    Text(book.title).font(.title)
+//                    Spacer()
+//                }.padding()
                 
                 HStack {
                     Text(book.authors).font(.subheadline)
                     Spacer()
                 }
                 
-                Picker("Format", selection: $selectedFormat) {
-                    ForEach(Book.Format.allCases) { format in
-                        if book.formats[format.rawValue] != nil {
-                            Text(format.rawValue).tag(format)
+                HStack {
+                    Picker("Format", selection: $selectedFormat) {
+                        ForEach(Book.Format.allCases) { format in
+                            if book.formats[format.rawValue] != nil {
+                                Text(format.rawValue).tag(format)
+                            }
                         }
                     }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .onAppear() {
-                    Book.Format.allCases.forEach { format in
-                        if self.book.formats[format.rawValue] != nil {
-                            self.selectedFormat = format
+                    .pickerStyle(SegmentedPickerStyle())
+                    .onAppear() {
+                        Book.Format.allCases.forEach { format in
+                            if self.book.formats[format.rawValue] != nil {
+                                self.selectedFormat = format
+                            }
                         }
                     }
+                    Spacer()
                 }
+                
                 
 //                ForEach(readingPositions, id: \.self) { position in
 //                    Text(position)
 //                }
-                ForEach(readingPositionsNew, id: \.self) { position in
-                    Text(position)
-                }
+//                ForEach(readingPositionsNew, id: \.self) { position in
+//                    Text(position)
+//                }
                 Picker("Position", selection: $selectedPosition) {
                     ForEach(self.book.readPos.getDevices(), id: \.self) { position in
                         HStack {
@@ -88,90 +113,33 @@ struct BookDetailView: View {
                             Spacer()
                         }.tag(position.id)
                     }
-                }.pickerStyle(WheelPickerStyle())
-                
-                HStack {
-                    Spacer()
-                    Button(action: {readFormat()}) {
-                        if selectedPosition.isEmpty {
-                            Text("Read").foregroundColor(.gray)
-                            
-                        } else {
-                            Text("Read following \(selectedPosition)" )
-                        }
-                    }.alert(isPresented: Binding<Bool>(
-                        get: {
-                            self.showingAlert
-                        },
-                        set: {
-                            self.showingAlert = $0
-                            self.showingRefreshAlert = false
-                            self.showingDownloadAlert = false
-                        }
-                    )) {
-                        if showingRefreshAlert
-                        {
-                            return Alert(
-                                title: Text("Need Refresh"),
-                                message: Text("Please Refresh First"),
-                                primaryButton: .default(Text("Refresh")
-                                ) {
-                                    getMetadata()
-                                },
-                                secondaryButton: .cancel()
-                            )
-                        }
-                        if showingDownloadAlert
-                        {
-                            return Alert(
-                                title: Text("Need Download"),
-                                message: Text("Please Download First"),
-                                primaryButton: .default(Text("Download"), action: {
-                                    downloadFormat(book: book, format: selectedFormat)
-                                }),
-                                secondaryButton: .cancel()
-                            )
-                        }
-                        return Alert(title: Text("Dummy"))
-                    }
-                    Spacer()
                 }
-                .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 5))
-                
-                HStack {
-                    Spacer()
-                    Button(action: {getMetadata()}) {
-                        Text("Refresh")
-                    }
-                    Spacer()
-                    Button(action: {downloadFormat(book: book, format: selectedFormat)}) {
-                        Text("Download")
-                    }
-                    Spacer()
-                    Button(action: {clearCache(book: book, format: selectedFormat)}) {
-                        Text("Clear")
-                    }
-                    Spacer()
+                .pickerStyle(WheelPickerStyle())
+                .onChange(of: book) {_ in
+                    getMetadata()
                 }
-                .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 5))
                 
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        if book.inShelf {
-                            removeFromShelf()
-                        } else {
-                            addToShelf()
-                        }
-                    }) {
-                        if book.inShelf {
-                            Text("Remove from Shelf")
-                        } else {
-                            Text("Add to Shelf")
-                        }
-                    }
-                    Spacer()
-                }
+                
+                .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                
+//                HStack {
+//                    Spacer()
+//                    Button(action: {getMetadata()}) {
+//                        Text("Refresh")
+//                    }
+//                    Spacer()
+//                    Button(action: {downloadFormat(book: book, format: selectedFormat)}) {
+//                        Text("Download")
+//                    }
+//                    Spacer()
+//                    Button(action: {clearCache(book: book, format: selectedFormat)}) {
+//                        Text("Clear")
+//                    }
+//                    Spacer()
+//                }
+//                .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 5))
+                
+                
                 
                 VStack {
                     rvc.frame(width: CGFloat(100), height: CGFloat(1), alignment: .center)
@@ -182,18 +150,99 @@ struct BookDetailView: View {
                             commentWebView.setContent(self.book.comments, URL(string: self.book.serverInfo.calibreServer))
                         }
                 }
+            }   //VStack
+            .onAppear() {
+                getMetadata()
+                modelData.currentBookId = book.id
             }
+            
+        }
+        .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+        .navigationTitle(Text(book.title))
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Delete") {
+                    alertItem = AlertItem(id: "Delete")
+                }
+            }
+//            ToolbarItem(placement: .confirmationAction) {
+//                Button(action: {readFormat()}) {
+//                    Text("Read")
+//                }
+//            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: {showingReadSheet = true}) {
+                    Text("Read")
+                }
+                
+            }
+            ToolbarItem(placement: .cancellationAction) {
+                Button(action: {
+                    if book.inShelf {
+                        modelData.libraryInfo.clearCache(book.id, book.libraryName, selectedFormat)
+                        modelData.libraryInfo.removeFromShelf(book.id, book.libraryName)
+                    } else {
+                        if !downloading {
+                            downloading = modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { isSuccess in
+                                downloading = false
+                                if isSuccess {
+                                    modelData.libraryInfo.addToShelf(book.id, book.libraryName)
+                                } else {
+                                    alertItem = AlertItem(id: "DownloadFailure")
+                                }
+                            }
+                        }
+                    }
+                    updater += 1
+                }) {
+                    if( downloading) {
+                        Text("Downloading")
+                    } else if book.inShelf {
+                        Text("Remove from Shelf").foregroundColor(.red)
+                    } else {
+                        Text("Add to Shelf")
+                    }
+                }
+            }
+        }.alert(item: $alertItem) { item in
+            if item.id == "Delete" {
+                return Alert(
+                    title: Text("Confirm to Deleting"),
+                    message: Text("Will Delete Book from Calibre Server"),
+                    primaryButton: .destructive(Text("Sure"), action: {
+                        deleteBook()
+                    }),
+                    secondaryButton: .cancel()
+                )
+            }
+            if item.id == "Refresh" {
+                return Alert(
+                    title: Text("Need Refresh"),
+                    message: Text("Please Refresh First"),
+                    primaryButton: .default(Text("Refresh")
+                    ) {
+                        getMetadata()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+            if item.id == "Download" {
+                return Alert(
+                    title: Text("Need Download"),
+                    message: Text("Please Download First"),
+                    primaryButton: .default(Text("Download"), action: {
+                        modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { result in
+                            
+                        }
+                    }),
+                    secondaryButton: .cancel()
+                )
+            }
+            return Alert(title: Text(item.id))
+        }.fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
+            EpubReader(bookURL: getSavedUrl(), bookDetailView: self)
         }
     }
-    
-//    init(book: Binding<Book>) {
-//        self._book = book
-//
-//
-//        // commentWebView.setContent(self.book.comments, URL(string: self.book.serverInfo.calibreServer))
-//
-//        self.updater += 1
-//    }
 
     func getMetadata() {
         let endpointUrl = URL(string: book.serverInfo.calibreServer + "/cdb/cmd/list/0?library_id=" + book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
@@ -350,79 +399,25 @@ struct BookDetailView: View {
         }
     }
     
-    func downloadFormat(book: Book, format: Book.Format) {
-        let url = URL(string: book.serverInfo.calibreServer + "/get/\(format.rawValue)/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")
-        let downloadTask = URLSession.shared.downloadTask(with: url!) {
-            urlOrNil, responseOrNil, errorOrNil in
-            // check for and handle errors:
-            // * errorOrNil should be nil
-            // * responseOrNil should be an HTTPURLResponse with statusCode in 200..<299
-            
-            guard let fileURL = urlOrNil else { return }
-            do {
-                let downloadBaseURL = try
-                    FileManager.default.url(for: .cachesDirectory,
-                                            in: .userDomainMask,
-                                            appropriateFor: nil,
-                                            create: false)
-                if !FileManager.default.fileExists(atPath: downloadBaseURL.path) {
-                    try FileManager.default.createDirectory(atPath: downloadBaseURL.path, withIntermediateDirectories: true)
-                }
-                let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(format.rawValue.lowercased())")
-                
-                defaultLog.info("fileURL: \(fileURL.absoluteString)")
-                defaultLog.info("savedURL: \(savedURL.absoluteString)")
-                if FileManager.default.fileExists(atPath: savedURL.path) {
-                    try FileManager.default.removeItem(at: savedURL)
-                }
-                try FileManager.default.moveItem(at: fileURL, to: savedURL)
-                
-                let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-                defaultLog.info("isFileExist: \(isFileExist)")
-            } catch {
-                print ("file error: \(error)")
-            }
-        }
-        downloadTask.resume()
-    }
     
-    func clearCache(book: Book, format: Book.Format) {
-        do {
-            let documentURL = try FileManager.default.url(for: .documentDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = documentURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
-            }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
-        }
+    func getSavedUrl() -> URL {
+        let downloadBaseURL = try!
+            FileManager.default.url(for: .cachesDirectory,
+                                    in: .userDomainMask,
+                                    appropriateFor: nil,
+                                    create: false)
+        let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
         
-        do {
-            let downloadBaseURL = try FileManager.default.url(for: .cachesDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
-            }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
-        }
+        return savedURL
     }
     
     //func readFormat(book: Book, format: Book.Format) {
     func readFormat() {
-        if(book.readPos.isEmpty) {
-            self.showingRefreshAlert = true
-            self.showingAlert = true
-            return
-        }
+//        if(book.readPos.isEmpty) {
+//            self.showingRefreshAlert = true
+//            self.showingAlert = true
+//            return
+//        }
         
         do {
             let downloadBaseURL = try
@@ -431,13 +426,6 @@ struct BookDetailView: View {
                                         appropriateFor: nil,
                                         create: false)
             let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if (!isFileExist) {
-                self.showingDownloadAlert = true
-                self.showingAlert = true
-                return
-            }
-            
             defaultLog.info("downloadBaseURL: \(downloadBaseURL.absoluteString)")
             defaultLog.info("savedURL: \(savedURL.absoluteString)")
             
@@ -457,7 +445,7 @@ struct BookDetailView: View {
             }
             if( selectedFormat == Book.Format.PDF) {
                 pdfView.open(pdfURL: savedURL, bookDetailView: self)
-            }
+             }
         } catch {
             
         }
@@ -483,6 +471,7 @@ struct BookDetailView: View {
             deviceReadingPosition!.lastPosition[0] = position!["pageNumber"]! as! Int
             deviceReadingPosition!.lastPosition[1] = Int((position!["pageOffsetX"]! as! CGFloat).rounded())
             deviceReadingPosition!.lastPosition[2] = Int((position!["pageOffsetY"]! as! CGFloat).rounded())
+            deviceReadingPosition!.lastReadPage = position!["pageNumber"]! as! Int
             
             book.readPos.updatePosition(deviceName, deviceReadingPosition!)
             
@@ -532,57 +521,62 @@ struct BookDetailView: View {
             
             task.resume()
             
+            self.updater += 1
+            
         }catch{
         }
         
         // modelData.isReading = false
     }
     
-    func addToShelf() {
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
-        
-        let inShelf = realm.objects(BookRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: book.id), book.libraryName)
-        )
-        if( !inShelf.isEmpty) {
-            defaultLog.info("Already in shelf, count: \(realm.objects(BookRealm.self).count)")
-            try! realm.write {
-                realm.delete(inShelf)
-            }
-        }
-        
-        let bookRealm = BookRealm()
-        bookRealm.id = book.id
-        bookRealm.libraryName = book.libraryName
-        bookRealm.title = book.title
-        bookRealm.authors = book.authors
-        bookRealm.comments = book.comments
-        bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
-        
-        
-        try! realm.write {
-            realm.add(bookRealm)
-        }
-        
-        book.inShelf.toggle()
-        print(book.inShelf)
-        updater += 1
-        
-        defaultLog.info("BookCount: \(realm.objects(BookRealm.self).count)")
+    func getSelectedReadingPosition() -> BookDeviceReadingPosition? {
+        return book.readPos.getPosition(selectedPosition)
     }
     
-    func removeFromShelf() {
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
-        let inShelf = realm.objects(BookRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: book.id), book.libraryName)
-        )
-        try! realm.write {
-            realm.delete(inShelf)
+    
+    func deleteBook() {
+        let endpointUrl = URL(string: book.serverInfo.calibreServer + "/cdb/cmd/remove/0?library_id=" + book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let json:[Any] = [[book.id], false]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: json, options: [])
+            
+            var request = URLRequest(url: endpointUrl)
+            request.httpMethod = "POST"
+            request.httpBody = data
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    // self.handleClientError(error)
+                    defaultLog.warning("error: \(error.localizedDescription)")
+                    return
+                }
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    // self.handleServerError(response)
+                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                    return
+                }
+                
+                if let mimeType = httpResponse.mimeType, mimeType == "application/json" {
+                    DispatchQueue.main.async {
+                        handleBookDeleted()
+                    }
+                }
+            }
+            
+            task.resume()
+            
+        }catch{
         }
         
-        book.inShelf.toggle()
-        print(book.inShelf)
-        updater += 1
+        
+    }
+    
+    func handleBookDeleted() {
+        modelData.libraryInfo.deleteBook(book: book)
+        getMetadata()
     }
 }
 

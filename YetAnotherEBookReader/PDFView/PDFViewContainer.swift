@@ -47,8 +47,11 @@ class PDFViewContainer : UIViewController {
 //        pdfViewController.additionalSafeAreaInsets = UIEdgeInsets(top: 0, left: 0, bottom: 256, right: 0)
         
         
-        self.present(nav, animated: true, completion: nil)
-        
+        if let navCtrl = self.navigationController {
+            navCtrl.present(nav, animated: true, completion: nil)
+        } else {
+            self.present(nav, animated: true, completion: nil)
+        }
         
         
     }
