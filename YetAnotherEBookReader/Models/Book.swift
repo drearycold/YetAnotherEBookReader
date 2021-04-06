@@ -12,13 +12,24 @@ import OSLog
 
 struct ServerInfo {
     var calibreServer: String
+    var calibreUsername = ""
+    var calibrePassword = ""
 }
 
 struct LibraryInfo {
+    // var serverInfo: ServerInfo
     var libraryMap = [String: Library]()
     var libraries = [Library]()
     
-    private var defaultLog = Logger()
+    var description: String {
+        if libraryMap.count > 1 {
+            return "\(libraryMap.count) Libraries in Server"
+        } else {
+            return "\(libraryMap.count) Library in Server"
+        }
+    }
+    
+    var defaultLog = Logger()
     
     mutating func getLibrary(name: String) -> Library {
         guard let library = libraryMap[name] else {
@@ -39,6 +50,11 @@ struct LibraryInfo {
         libraries.sort { (lhs, rhs) -> Bool in
             lhs.name < rhs.name
         }
+    }
+    
+    mutating func reset() {
+        libraryMap.removeAll()
+        libraries.removeAll()
     }
     
     mutating func updateBook(book: Book) {
@@ -250,8 +266,13 @@ struct Book: Hashable, Identifiable, Equatable {
     var title = ""
     var authors = ""
     var comments = ""
+    var rating = 0
     var formats = [String: String]()
     var readPos = BookReadingPosition()
+    
+    var coverURL : URL {
+        return URL(string: "\(serverInfo.calibreServer)/get/thumb/\(id)/\(libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
+    }
     
     var inShelf = false
     

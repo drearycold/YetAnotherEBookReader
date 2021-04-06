@@ -12,7 +12,7 @@ struct ReaderView: View {
     var body: some View {
         
         VStack {
-            ReaderViewController()
+            MyReaderViewController()
         }
         
     }

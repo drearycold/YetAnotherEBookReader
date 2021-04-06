@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class FolioReaderViewController: UIViewController {
@@ -19,20 +20,7 @@ class FolioReaderViewController: UIViewController {
         let config = FolioReaderConfig(withIdentifier: "READER")
         config.shouldHideNavigationOnTap = false
         config.scrollDirection = FolioReaderScrollDirection.vertical
-
-        // See more at FolioReaderConfig.swift
-//        config.canChangeScrollDirection = false
-//        config.enableTTS = false
-//        config.displayTitle = true
-//        config.allowSharing = false
-//        config.tintColor = UIColor.blueColor()
-//        config.toolBarTintColor = UIColor.redColor()
-//        config.toolBarBackgroundColor = UIColor.purpleColor()
-//        config.menuTextColor = UIColor.brownColor()
-//        config.menuBackgroundColor = UIColor.lightGrayColor()
-//        config.hidePageIndicator = true
-//        config.realmConfiguration = Realm.Configuration(fileURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("highlights.realm"))
-
+        
         // Custom sharing quote background
         config.quoteCustomBackgrounds = []
         if let image = UIImage(named: "demo-bg") {
@@ -86,7 +74,7 @@ class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
         let regex = try! NSRegularExpression(pattern: "background=\"[^\"]+\"", options: .caseInsensitive)
         
         
-        let modified = regex.stringByReplacingMatches(in: htmlContent, options: [], range: NSMakeRange(0, htmlContent.count), withTemplate: "").replacingOccurrences(of: "<body ", with: "<body style=\"color: #5F4B32 !important; background-color: #FBF0D9 !important; text-align: justify !important; display: block !important; \" ")
+        let modified = regex.stringByReplacingMatches(in: htmlContent, options: [], range: NSMakeRange(0, htmlContent.count), withTemplate: "").replacingOccurrences(of: "<body ", with: "<body style=\"text-align: justify !important; display: block !important; \" ")
         print(modified)
         return modified
     }

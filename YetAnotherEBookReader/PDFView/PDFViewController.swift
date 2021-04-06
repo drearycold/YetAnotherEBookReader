@@ -11,11 +11,14 @@ import UIKit
 import PDFKit
 import OSLog
 import SwiftUI
+import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate {
     var pdfView: PDFView?
     var bookDetailView: BookDetailView?
+    // var starDictView = StarDictViewContainer()
+    var mDictView = MDictViewContainer()
     var lastScale = CGFloat(-1.0)
     
     let logger = Logger()
@@ -219,7 +222,11 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     override func viewDidAppear(_ animated: Bool) {
         self.viewSafeAreaInsetsDidChange()
         self.viewLayoutMarginsDidChange()
-        //self.additionalSafeAreaInsets = .init(top: <#T##CGFloat#>, left: <#T##CGFloat#>, bottom: <#T##CGFloat#>, right: <#T##CGFloat#>)
+        
+//        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
+        UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
+//        starDictView.loadViewIfNeeded()
+        mDictView.loadViewIfNeeded()
         
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
         let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
@@ -236,16 +243,17 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
         }
         
-        let bookReadingPosition = bookDetailView?.getSelectedReadingPosition()
-        if( bookReadingPosition != nil ) {
-            var destPageNum = (bookReadingPosition?.lastPosition[0] ?? 1) - 1
-            if destPageNum < 0 {
-                destPageNum = 0
-            }	
-            
-            if let page = pdfView?.document?.page(at: destPageNum) {
-                pdfView?.go(to: page)
-            }
+        var destPageNum = (bookDetailView?.getSelectedReadingPosition()?.lastPosition[0] ?? 1) - 1
+        if destPageNum < 0 {
+            destPageNum = 0
+        }
+        
+        if let page = pdfView?.document?.page(at: destPageNum) {
+            pdfView?.go(to: page)
+        }
+        
+        if destPageNum == 0 {
+            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
     }
 
@@ -687,6 +695,21 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
+    }
+    
+//    @objc func lookupStarDict() {
+//        if let s = pdfView?.currentSelection?.string {
+//            print(s)
+//            starDictView.word = s
+//            self.present(starDictView, animated: true, completion: nil)
+//        }
+//    }
+    @objc func lookupMDict() {
+        if let s = pdfView?.currentSelection?.string {
+            print(s)
+            mDictView.word = s
+            self.present(mDictView, animated: true, completion: nil)
+        }
     }
 }
 

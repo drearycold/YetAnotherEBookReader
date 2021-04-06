@@ -7,8 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		17C3957C8FAD6C8F240E2079 /* Pods_YetAnotherEBookReader.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAAD088B00B456E9B7569E42 /* Pods_YetAnotherEBookReader.framework */; };
 		2A07541825F35D4D00A34306 /* EpubReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A07541725F35D4D00A34306 /* EpubReader.swift */; };
 		2A07541E25F35FAB00A34306 /* EpubReaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A07541D25F35FAB00A34306 /* EpubReaderContainer.swift */; };
+		2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift .swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift .swift */; };
+		2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
+		2A65F390261358A40064E3D8 /* SectionShelfController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A65F38F261358A40064E3D8 /* SectionShelfController.swift */; };
+		2A65F39426135BE80064E3D8 /* SectionShelfUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A65F39326135BE80064E3D8 /* SectionShelfUI.swift */; };
+		2A65F39C2614A77F0064E3D8 /* ServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A65F39B2614A77F0064E3D8 /* ServerView.swift */; };
+		2A762221261C07C50067EFD8 /* FolioReaderKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2A762220261C07C50067EFD8 /* FolioReaderKit */; };
 		2A890571260076780072B580 /* PDFOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A890570260076780072B580 /* PDFOptionView.swift */; };
 		2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */; };
 		2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */; };
@@ -21,7 +28,7 @@
 		2A8C278825CBD46E00FC7FC0 /* SectionShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */; };
 		2A8C278925CBD46E00FC7FC0 /* ShelfCellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278125CBD46E00FC7FC0 /* ShelfCellView.swift */; };
 		2A8C278A25CBD46E00FC7FC0 /* Dimens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278225CBD46E00FC7FC0 /* Dimens.swift */; };
-		2A8C278B25CBD46E00FC7FC0 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278325CBD46E00FC7FC0 /* Utils.swift */; };
+		2A8C278B25CBD46E00FC7FC0 /* ShelfViewUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278325CBD46E00FC7FC0 /* ShelfViewUtils.swift */; };
 		2A8C278C25CBD46E00FC7FC0 /* ShelfViewDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */; };
 		2A8C27B625CBD73E00FC7FC0 /* Kingfisher in Frameworks */ = {isa = PBXBuildFile; productRef = 2A8C27B525CBD73E00FC7FC0 /* Kingfisher */; };
 		2A8C27B825CBD73E00FC7FC0 /* KingfisherSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 2A8C27B725CBD73E00FC7FC0 /* KingfisherSwiftUI */; };
@@ -36,74 +43,19 @@
 		2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */; };
 		2AC3EC6325BE7F3B004A6633 /* LibraryInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC6225BE7F3B004A6633 /* LibraryInfoView.swift */; };
 		2AC3EC7E25BEBA0D004A6633 /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC7D25BEBA0D004A6633 /* BookDetailView.swift */; };
-		2ADD961F25C03440001DE755 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FA25C0342A001DE755 /* Extensions.swift */; };
-		2ADD962025C03440001DE755 /* PageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FB25C0342B001DE755 /* PageViewController.swift */; };
-		2ADD962125C03440001DE755 /* FolioReaderChapterListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FC25C0342C001DE755 /* FolioReaderChapterListCell.swift */; };
-		2ADD962225C03440001DE755 /* FolioReaderSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FD25C0342C001DE755 /* FolioReaderSharingProvider.swift */; };
-		2ADD962325C03440001DE755 /* FolioReaderQuoteShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FE25C0342D001DE755 /* FolioReaderQuoteShare.swift */; };
-		2ADD962425C03440001DE755 /* FolioReaderCenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD95FF25C0342E001DE755 /* FolioReaderCenter.swift */; };
-		2ADD962525C03440001DE755 /* FolioReaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960025C0342F001DE755 /* FolioReaderContainer.swift */; };
-		2ADD962625C03440001DE755 /* FolioReaderConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960125C03430001DE755 /* FolioReaderConfig.swift */; };
-		2ADD962725C03440001DE755 /* FolioReaderWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960225C03431001DE755 /* FolioReaderWebView.swift */; };
-		2ADD962825C03440001DE755 /* FREpubParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960425C03432001DE755 /* FREpubParser.swift */; };
-		2ADD962925C03440001DE755 /* FRTocReference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960525C03432001DE755 /* FRTocReference.swift */; };
-		2ADD962A25C03440001DE755 /* FRSpine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960625C03432001DE755 /* FRSpine.swift */; };
-		2ADD962B25C03440001DE755 /* FRBook.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960725C03432001DE755 /* FRBook.swift */; };
-		2ADD962C25C03440001DE755 /* FRSmils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960825C03432001DE755 /* FRSmils.swift */; };
-		2ADD962D25C03440001DE755 /* FRResources.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960925C03432001DE755 /* FRResources.swift */; };
-		2ADD962E25C03440001DE755 /* MediaType.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960A25C03432001DE755 /* MediaType.swift */; };
-		2ADD962F25C03440001DE755 /* FRResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960B25C03432001DE755 /* FRResource.swift */; };
-		2ADD963025C03440001DE755 /* FRSmilElement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960C25C03432001DE755 /* FRSmilElement.swift */; };
-		2ADD963125C03440001DE755 /* FRMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960D25C03432001DE755 /* FRMetadata.swift */; };
-		2ADD963225C03440001DE755 /* FolioReaderKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960E25C03433001DE755 /* FolioReaderKit.swift */; };
-		2ADD963325C03440001DE755 /* FolioReaderFontsMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD960F25C03434001DE755 /* FolioReaderFontsMenu.swift */; };
-		2ADD963425C03440001DE755 /* FolioReaderPageIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961025C03435001DE755 /* FolioReaderPageIndicator.swift */; };
-		2ADD963525C03440001DE755 /* FolioReaderChapterList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961125C03436001DE755 /* FolioReaderChapterList.swift */; };
-		2ADD963625C03440001DE755 /* FolioReaderPlayerMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961225C03437001DE755 /* FolioReaderPlayerMenu.swift */; };
-		2ADD963725C03440001DE755 /* QuoteImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961425C03439001DE755 /* QuoteImage.swift */; };
-		2ADD963825C03440001DE755 /* Highlight.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961625C0343A001DE755 /* Highlight.swift */; };
-		2ADD963925C03440001DE755 /* Highlight+Helper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961725C0343A001DE755 /* Highlight+Helper.swift */; };
-		2ADD963A25C03440001DE755 /* FolioReaderHighlightList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961825C0343A001DE755 /* FolioReaderHighlightList.swift */; };
-		2ADD963B25C03440001DE755 /* FolioReaderPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961925C0343B001DE755 /* FolioReaderPage.swift */; };
-		2ADD963C25C03440001DE755 /* FolioReaderUserDefaults.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961A25C0343C001DE755 /* FolioReaderUserDefaults.swift */; };
-		2ADD963D25C03440001DE755 /* FolioReaderAudioPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961B25C0343D001DE755 /* FolioReaderAudioPlayer.swift */; };
-		2ADD963E25C03440001DE755 /* FolioReaderAddHighlightNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961D25C0343F001DE755 /* FolioReaderAddHighlightNote.swift */; };
-		2ADD963F25C03440001DE755 /* ScrollScrubber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD961E25C03440001DE755 /* ScrollScrubber.swift */; };
-		2ADD964A25C03513001DE755 /* ZFModalTransitionAnimator.m in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD964925C03513001DE755 /* ZFModalTransitionAnimator.m */; };
 		2ADD965025C03650001DE755 /* Realm in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD964F25C03650001DE755 /* Realm */; };
 		2ADD965225C03650001DE755 /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD965125C03650001DE755 /* RealmSwift */; };
 		2ADD965825C03706001DE755 /* MenuItemKit in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD965725C03706001DE755 /* MenuItemKit */; };
 		2ADD966025C03799001DE755 /* AEXML in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD965F25C03799001DE755 /* AEXML */; };
 		2ADD966625C037F3001DE755 /* ZipArchive in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD966525C037F3001DE755 /* ZipArchive */; };
 		2ADD966F25C0398A001DE755 /* FontBlaster in Frameworks */ = {isa = PBXBuildFile; productRef = 2ADD966E25C0398A001DE755 /* FontBlaster */; };
-		2ADD967525C039AE001DE755 /* SMSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD967325C039AD001DE755 /* SMSegment.swift */; };
-		2ADD967625C039AE001DE755 /* SMSegmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD967425C039AE001DE755 /* SMSegmentView.swift */; };
-		2ADD967C25C039D6001DE755 /* HADiscreteSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD967B25C039D6001DE755 /* HADiscreteSlider.swift */; };
 		2ADD968B25C03B52001DE755 /* FolioReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD968A25C03B52001DE755 /* FolioReaderViewController.swift */; };
-		2ADD969025C03BDD001DE755 /* Epub.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD968F25C03BDD001DE755 /* Epub.swift */; };
-		2ADD969825C03CE7001DE755 /* ReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD969725C03CE7001DE755 /* ReaderViewController.swift */; };
+		2ADD969825C03CE7001DE755 /* MyReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD969725C03CE7001DE755 /* MyReaderViewController.swift */; };
 		2ADD96A625C04784001DE755 /* BookButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD96A525C04784001DE755 /* BookButtonView.swift */; };
 		2ADD96B425C04882001DE755 /* ReaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADD96B325C04882001DE755 /* ReaderView.swift */; };
 		2ADDA36425C18232001DE755 /* Book.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADDA36325C18232001DE755 /* Book.swift */; };
-		2ADDA39525C2DF84001DE755 /* Bridge.js in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA37D25C2DF84001DE755 /* Bridge.js */; };
-		2ADDA39625C2DF84001DE755 /* Style.css in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA37E25C2DF84001DE755 /* Style.css */; };
-		2ADDA39725C2DF84001DE755 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA37F25C2DF84001DE755 /* Images.xcassets */; };
-		2ADDA39825C2DF84001DE755 /* Lato-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38225C2DF84001DE755 /* Lato-Italic.ttf */; };
-		2ADDA39925C2DF84001DE755 /* Lato-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38325C2DF84001DE755 /* Lato-Bold.ttf */; };
-		2ADDA39A25C2DF84001DE755 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38425C2DF84001DE755 /* Lato-Regular.ttf */; };
-		2ADDA39B25C2DF84001DE755 /* Lato-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38525C2DF84001DE755 /* Lato-BoldItalic.ttf */; };
-		2ADDA39C25C2DF84001DE755 /* Andada-Italic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38725C2DF84001DE755 /* Andada-Italic.otf */; };
-		2ADDA39D25C2DF84001DE755 /* Andada-Bold.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38825C2DF84001DE755 /* Andada-Bold.otf */; };
-		2ADDA39E25C2DF84001DE755 /* Andada-Regular.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38925C2DF84001DE755 /* Andada-Regular.otf */; };
-		2ADDA39F25C2DF84001DE755 /* Andada-BoldItalic.otf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38A25C2DF84001DE755 /* Andada-BoldItalic.otf */; };
-		2ADDA3A025C2DF84001DE755 /* Lora-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38C25C2DF84001DE755 /* Lora-Italic.ttf */; };
-		2ADDA3A125C2DF84001DE755 /* Lora-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38D25C2DF84001DE755 /* Lora-Bold.ttf */; };
-		2ADDA3A225C2DF84001DE755 /* Lora-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38E25C2DF84001DE755 /* Lora-BoldItalic.ttf */; };
-		2ADDA3A325C2DF84001DE755 /* Lora-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA38F25C2DF84001DE755 /* Lora-Regular.ttf */; };
-		2ADDA3A425C2DF84001DE755 /* Raleway-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA39125C2DF84001DE755 /* Raleway-BoldItalic.ttf */; };
-		2ADDA3A525C2DF84001DE755 /* Raleway-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA39225C2DF84001DE755 /* Raleway-Regular.ttf */; };
-		2ADDA3A625C2DF84001DE755 /* Raleway-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA39325C2DF84001DE755 /* Raleway-Italic.ttf */; };
-		2ADDA3A725C2DF84001DE755 /* Raleway-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2ADDA39425C2DF84001DE755 /* Raleway-Bold.ttf */; };
+		2CA704C6D260C9141797622F /* Pods_YetAnotherEBookReaderTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DDEAD2FD192058D3349F9E0B /* Pods_YetAnotherEBookReaderTests.framework */; };
+		D521B9968787D816FC60DB33 /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7EF92693BF2FF30C39B0F5DC /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,8 +89,15 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		12CE5BE6BF5F7016836A940D /* Pods-YetAnotherEBookReaderTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.debug.xcconfig"; sourceTree = "<group>"; };
+		1D29FC838865E5EC27CF04F7 /* Pods-YetAnotherEBookReader.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader.debug.xcconfig"; sourceTree = "<group>"; };
 		2A07541725F35D4D00A34306 /* EpubReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubReader.swift; sourceTree = "<group>"; };
 		2A07541D25F35FAB00A34306 /* EpubReaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubReaderContainer.swift; sourceTree = "<group>"; };
+		2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift .swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SwiftUI_Ad_Banner.swift .swift"; sourceTree = "<group>"; };
+		2A1A4BFD2619EBE300E95ED5 /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		2A65F38F261358A40064E3D8 /* SectionShelfController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SectionShelfController.swift; sourceTree = "<group>"; };
+		2A65F39326135BE80064E3D8 /* SectionShelfUI.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SectionShelfUI.swift; sourceTree = "<group>"; };
+		2A65F39B2614A77F0064E3D8 /* ServerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		2A890570260076780072B580 /* PDFOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFOptionView.swift; sourceTree = "<group>"; };
 		2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUIVC.swift; sourceTree = "<group>"; };
 		2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUI.swift; sourceTree = "<group>"; };
@@ -152,7 +111,7 @@
 		2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SectionShelfView.swift; sourceTree = "<group>"; };
 		2A8C278125CBD46E00FC7FC0 /* ShelfCellView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfCellView.swift; sourceTree = "<group>"; };
 		2A8C278225CBD46E00FC7FC0 /* Dimens.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Dimens.swift; sourceTree = "<group>"; };
-		2A8C278325CBD46E00FC7FC0 /* Utils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		2A8C278325CBD46E00FC7FC0 /* ShelfViewUtils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfViewUtils.swift; sourceTree = "<group>"; };
 		2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ShelfViewDelegate.swift; sourceTree = "<group>"; };
 		2A8C27BB25CBDD0600FC7FC0 /* PlainShelfController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PlainShelfController.swift; sourceTree = "<group>"; };
 		2A8C27C325CBDD7600FC7FC0 /* PlainShelfUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlainShelfUI.swift; sourceTree = "<group>"; };
@@ -171,71 +130,18 @@
 		2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelData.swift; sourceTree = "<group>"; };
 		2AC3EC6225BE7F3B004A6633 /* LibraryInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoView.swift; sourceTree = "<group>"; };
 		2AC3EC7D25BEBA0D004A6633 /* BookDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
-		2ADD95FA25C0342A001DE755 /* Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
-		2ADD95FB25C0342B001DE755 /* PageViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PageViewController.swift; sourceTree = "<group>"; };
-		2ADD95FC25C0342C001DE755 /* FolioReaderChapterListCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderChapterListCell.swift; sourceTree = "<group>"; };
-		2ADD95FD25C0342C001DE755 /* FolioReaderSharingProvider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderSharingProvider.swift; sourceTree = "<group>"; };
-		2ADD95FE25C0342D001DE755 /* FolioReaderQuoteShare.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderQuoteShare.swift; sourceTree = "<group>"; };
-		2ADD95FF25C0342E001DE755 /* FolioReaderCenter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderCenter.swift; sourceTree = "<group>"; };
-		2ADD960025C0342F001DE755 /* FolioReaderContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderContainer.swift; sourceTree = "<group>"; };
-		2ADD960125C03430001DE755 /* FolioReaderConfig.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderConfig.swift; sourceTree = "<group>"; };
-		2ADD960225C03431001DE755 /* FolioReaderWebView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderWebView.swift; sourceTree = "<group>"; };
-		2ADD960425C03432001DE755 /* FREpubParser.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FREpubParser.swift; sourceTree = "<group>"; };
-		2ADD960525C03432001DE755 /* FRTocReference.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRTocReference.swift; sourceTree = "<group>"; };
-		2ADD960625C03432001DE755 /* FRSpine.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRSpine.swift; sourceTree = "<group>"; };
-		2ADD960725C03432001DE755 /* FRBook.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRBook.swift; sourceTree = "<group>"; };
-		2ADD960825C03432001DE755 /* FRSmils.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRSmils.swift; sourceTree = "<group>"; };
-		2ADD960925C03432001DE755 /* FRResources.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRResources.swift; sourceTree = "<group>"; };
-		2ADD960A25C03432001DE755 /* MediaType.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MediaType.swift; sourceTree = "<group>"; };
-		2ADD960B25C03432001DE755 /* FRResource.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRResource.swift; sourceTree = "<group>"; };
-		2ADD960C25C03432001DE755 /* FRSmilElement.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRSmilElement.swift; sourceTree = "<group>"; };
-		2ADD960D25C03432001DE755 /* FRMetadata.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FRMetadata.swift; sourceTree = "<group>"; };
-		2ADD960E25C03433001DE755 /* FolioReaderKit.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderKit.swift; sourceTree = "<group>"; };
-		2ADD960F25C03434001DE755 /* FolioReaderFontsMenu.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderFontsMenu.swift; sourceTree = "<group>"; };
-		2ADD961025C03435001DE755 /* FolioReaderPageIndicator.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderPageIndicator.swift; sourceTree = "<group>"; };
-		2ADD961125C03436001DE755 /* FolioReaderChapterList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderChapterList.swift; sourceTree = "<group>"; };
-		2ADD961225C03437001DE755 /* FolioReaderPlayerMenu.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderPlayerMenu.swift; sourceTree = "<group>"; };
-		2ADD961425C03439001DE755 /* QuoteImage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = QuoteImage.swift; sourceTree = "<group>"; };
-		2ADD961625C0343A001DE755 /* Highlight.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Highlight.swift; sourceTree = "<group>"; };
-		2ADD961725C0343A001DE755 /* Highlight+Helper.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "Highlight+Helper.swift"; sourceTree = "<group>"; };
-		2ADD961825C0343A001DE755 /* FolioReaderHighlightList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderHighlightList.swift; sourceTree = "<group>"; };
-		2ADD961925C0343B001DE755 /* FolioReaderPage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderPage.swift; sourceTree = "<group>"; };
-		2ADD961A25C0343C001DE755 /* FolioReaderUserDefaults.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderUserDefaults.swift; sourceTree = "<group>"; };
-		2ADD961B25C0343D001DE755 /* FolioReaderAudioPlayer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderAudioPlayer.swift; sourceTree = "<group>"; };
-		2ADD961C25C0343E001DE755 /* FolioReaderKit.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = FolioReaderKit.h; sourceTree = "<group>"; };
-		2ADD961D25C0343F001DE755 /* FolioReaderAddHighlightNote.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderAddHighlightNote.swift; sourceTree = "<group>"; };
-		2ADD961E25C03440001DE755 /* ScrollScrubber.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ScrollScrubber.swift; sourceTree = "<group>"; };
-		2ADD964725C03510001DE755 /* YetAnotherEBookReader-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "YetAnotherEBookReader-Bridging-Header.h"; sourceTree = "<group>"; };
-		2ADD964825C03512001DE755 /* ZFModalTransitionAnimator.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ZFModalTransitionAnimator.h; sourceTree = "<group>"; };
-		2ADD964925C03513001DE755 /* ZFModalTransitionAnimator.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ZFModalTransitionAnimator.m; sourceTree = "<group>"; };
-		2ADD967325C039AD001DE755 /* SMSegment.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SMSegment.swift; sourceTree = "<group>"; };
-		2ADD967425C039AE001DE755 /* SMSegmentView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SMSegmentView.swift; sourceTree = "<group>"; };
-		2ADD967B25C039D6001DE755 /* HADiscreteSlider.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HADiscreteSlider.swift; sourceTree = "<group>"; };
 		2ADD968A25C03B52001DE755 /* FolioReaderViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FolioReaderViewController.swift; sourceTree = "<group>"; };
-		2ADD968F25C03BDD001DE755 /* Epub.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Epub.swift; sourceTree = "<group>"; };
-		2ADD969725C03CE7001DE755 /* ReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderViewController.swift; sourceTree = "<group>"; };
+		2ADD969725C03CE7001DE755 /* MyReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyReaderViewController.swift; sourceTree = "<group>"; };
 		2ADD96A525C04784001DE755 /* BookButtonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookButtonView.swift; sourceTree = "<group>"; };
 		2ADD96B325C04882001DE755 /* ReaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderView.swift; sourceTree = "<group>"; };
 		2ADDA36325C18232001DE755 /* Book.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Book.swift; sourceTree = "<group>"; };
-		2ADDA37D25C2DF84001DE755 /* Bridge.js */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.javascript; path = Bridge.js; sourceTree = "<group>"; };
-		2ADDA37E25C2DF84001DE755 /* Style.css */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.css; path = Style.css; sourceTree = "<group>"; };
-		2ADDA37F25C2DF84001DE755 /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Images.xcassets; sourceTree = "<group>"; };
-		2ADDA38225C2DF84001DE755 /* Lato-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lato-Italic.ttf"; sourceTree = "<group>"; };
-		2ADDA38325C2DF84001DE755 /* Lato-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lato-Bold.ttf"; sourceTree = "<group>"; };
-		2ADDA38425C2DF84001DE755 /* Lato-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lato-Regular.ttf"; sourceTree = "<group>"; };
-		2ADDA38525C2DF84001DE755 /* Lato-BoldItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lato-BoldItalic.ttf"; sourceTree = "<group>"; };
-		2ADDA38725C2DF84001DE755 /* Andada-Italic.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Andada-Italic.otf"; sourceTree = "<group>"; };
-		2ADDA38825C2DF84001DE755 /* Andada-Bold.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Andada-Bold.otf"; sourceTree = "<group>"; };
-		2ADDA38925C2DF84001DE755 /* Andada-Regular.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Andada-Regular.otf"; sourceTree = "<group>"; };
-		2ADDA38A25C2DF84001DE755 /* Andada-BoldItalic.otf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Andada-BoldItalic.otf"; sourceTree = "<group>"; };
-		2ADDA38C25C2DF84001DE755 /* Lora-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lora-Italic.ttf"; sourceTree = "<group>"; };
-		2ADDA38D25C2DF84001DE755 /* Lora-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lora-Bold.ttf"; sourceTree = "<group>"; };
-		2ADDA38E25C2DF84001DE755 /* Lora-BoldItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lora-BoldItalic.ttf"; sourceTree = "<group>"; };
-		2ADDA38F25C2DF84001DE755 /* Lora-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Lora-Regular.ttf"; sourceTree = "<group>"; };
-		2ADDA39125C2DF84001DE755 /* Raleway-BoldItalic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Raleway-BoldItalic.ttf"; sourceTree = "<group>"; };
-		2ADDA39225C2DF84001DE755 /* Raleway-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Raleway-Regular.ttf"; sourceTree = "<group>"; };
-		2ADDA39325C2DF84001DE755 /* Raleway-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Raleway-Italic.ttf"; sourceTree = "<group>"; };
-		2ADDA39425C2DF84001DE755 /* Raleway-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Raleway-Bold.ttf"; sourceTree = "<group>"; };
+		7EF92693BF2FF30C39B0F5DC /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A9D0D8D419628A653DDFCA2 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.release.xcconfig"; sourceTree = "<group>"; };
+		8EB4E63C76187F34FEF1A091 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; sourceTree = "<group>"; };
+		9DBFE4F8A54EF68CCFBD3F89 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; sourceTree = "<group>"; };
+		CE3B1E3098F4803E5377F278 /* Pods-YetAnotherEBookReader.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader.release.xcconfig"; sourceTree = "<group>"; };
+		DAAD088B00B456E9B7569E42 /* Pods_YetAnotherEBookReader.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReader.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		DDEAD2FD192058D3349F9E0B /* Pods_YetAnotherEBookReaderTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReaderTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -249,8 +155,10 @@
 				2ADD965225C03650001DE755 /* RealmSwift in Frameworks */,
 				2ADD965825C03706001DE755 /* MenuItemKit in Frameworks */,
 				2ADD965025C03650001DE755 /* Realm in Frameworks */,
+				2A762221261C07C50067EFD8 /* FolioReaderKit in Frameworks */,
 				2A8C27B825CBD73E00FC7FC0 /* KingfisherSwiftUI in Frameworks */,
 				2ADD966F25C0398A001DE755 /* FontBlaster in Frameworks */,
+				17C3957C8FAD6C8F240E2079 /* Pods_YetAnotherEBookReader.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -258,6 +166,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2CA704C6D260C9141797622F /* Pods_YetAnotherEBookReaderTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -265,12 +174,21 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D521B9968787D816FC60DB33 /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		2A1A4BF42616CCD900E95ED5 /* ADViews */ = {
+			isa = PBXGroup;
+			children = (
+				2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift .swift */,
+			);
+			path = ADViews;
+			sourceTree = "<group>";
+		};
 		2A8C26B325C54BA700FC7FC0 /* WebView */ = {
 			isa = PBXGroup;
 			children = (
@@ -295,6 +213,7 @@
 			isa = PBXGroup;
 			children = (
 				2A8C27BB25CBDD0600FC7FC0 /* PlainShelfController.swift */,
+				2A65F38F261358A40064E3D8 /* SectionShelfController.swift */,
 				2A8C278225CBD46E00FC7FC0 /* Dimens.swift */,
 				2A8C277E25CBD46D00FC7FC0 /* PlainShelfView.swift */,
 				2A8C278025CBD46D00FC7FC0 /* SectionShelfView.swift */,
@@ -302,8 +221,9 @@
 				2A8C277F25CBD46D00FC7FC0 /* ShelfHeaderCellView.swift */,
 				2A8C278425CBD46E00FC7FC0 /* ShelfViewDelegate.swift */,
 				2A8C277D25CBD46D00FC7FC0 /* ShelfViewModel.swift */,
-				2A8C278325CBD46E00FC7FC0 /* Utils.swift */,
+				2A8C278325CBD46E00FC7FC0 /* ShelfViewUtils.swift */,
 				2A8C27C325CBDD7600FC7FC0 /* PlainShelfUI.swift */,
+				2A65F39326135BE80064E3D8 /* SectionShelfUI.swift */,
 			);
 			path = ShelfView;
 			sourceTree = "<group>";
@@ -312,12 +232,11 @@
 			isa = PBXGroup;
 			children = (
 				2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */,
-				2ADDA37C25C2DF84001DE755 /* Resources */,
-				2ADD964625C03505001DE755 /* Libs */,
-				2ADD95F925C03404001DE755 /* FolioReaderKit */,
 				2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */,
 				2AC3EC3C25BDBC11004A6633 /* YetAnotherEBookReaderUITests */,
 				2AC3EC1925BDBC10004A6633 /* Products */,
+				83696F999EA7AD0B24084BCE /* Pods */,
+				8AF6E969197F21B99627BB3C /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -334,6 +253,7 @@
 		2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */ = {
 			isa = PBXGroup;
 			children = (
+				2A1A4BF42616CCD900E95ED5 /* ADViews */,
 				2AC3EC5325BE7486004A6633 /* Models */,
 				2AC3EC6125BE7F2B004A6633 /* Views */,
 				2A8C277C25CBD45400FC7FC0 /* ShelfView */,
@@ -380,6 +300,7 @@
 			children = (
 				2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */,
 				2ADDA36325C18232001DE755 /* Book.swift */,
+				2A1A4BFD2619EBE300E95ED5 /* Utils.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -392,180 +313,43 @@
 				2AC3EC7D25BEBA0D004A6633 /* BookDetailView.swift */,
 				2A07541725F35D4D00A34306 /* EpubReader.swift */,
 				2A07541D25F35FAB00A34306 /* EpubReaderContainer.swift */,
+				2A65F39B2614A77F0064E3D8 /* ServerView.swift */,
 			);
 			path = Views;
-			sourceTree = "<group>";
-		};
-		2ADD95F925C03404001DE755 /* FolioReaderKit */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD960325C03432001DE755 /* EPUBCore */,
-				2ADD95FA25C0342A001DE755 /* Extensions.swift */,
-				2ADD961D25C0343F001DE755 /* FolioReaderAddHighlightNote.swift */,
-				2ADD961B25C0343D001DE755 /* FolioReaderAudioPlayer.swift */,
-				2ADD95FF25C0342E001DE755 /* FolioReaderCenter.swift */,
-				2ADD961125C03436001DE755 /* FolioReaderChapterList.swift */,
-				2ADD95FC25C0342C001DE755 /* FolioReaderChapterListCell.swift */,
-				2ADD960125C03430001DE755 /* FolioReaderConfig.swift */,
-				2ADD960025C0342F001DE755 /* FolioReaderContainer.swift */,
-				2ADD960F25C03434001DE755 /* FolioReaderFontsMenu.swift */,
-				2ADD961825C0343A001DE755 /* FolioReaderHighlightList.swift */,
-				2ADD961C25C0343E001DE755 /* FolioReaderKit.h */,
-				2ADD960E25C03433001DE755 /* FolioReaderKit.swift */,
-				2ADD961925C0343B001DE755 /* FolioReaderPage.swift */,
-				2ADD961025C03435001DE755 /* FolioReaderPageIndicator.swift */,
-				2ADD961225C03437001DE755 /* FolioReaderPlayerMenu.swift */,
-				2ADD95FE25C0342D001DE755 /* FolioReaderQuoteShare.swift */,
-				2ADD95FD25C0342C001DE755 /* FolioReaderSharingProvider.swift */,
-				2ADD961A25C0343C001DE755 /* FolioReaderUserDefaults.swift */,
-				2ADD960225C03431001DE755 /* FolioReaderWebView.swift */,
-				2ADD961525C0343A001DE755 /* Models */,
-				2ADD95FB25C0342B001DE755 /* PageViewController.swift */,
-				2ADD961425C03439001DE755 /* QuoteImage.swift */,
-				2ADD961E25C03440001DE755 /* ScrollScrubber.swift */,
-			);
-			path = FolioReaderKit;
-			sourceTree = "<group>";
-		};
-		2ADD960325C03432001DE755 /* EPUBCore */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD960425C03432001DE755 /* FREpubParser.swift */,
-				2ADD960525C03432001DE755 /* FRTocReference.swift */,
-				2ADD960625C03432001DE755 /* FRSpine.swift */,
-				2ADD960725C03432001DE755 /* FRBook.swift */,
-				2ADD960825C03432001DE755 /* FRSmils.swift */,
-				2ADD960925C03432001DE755 /* FRResources.swift */,
-				2ADD960A25C03432001DE755 /* MediaType.swift */,
-				2ADD960B25C03432001DE755 /* FRResource.swift */,
-				2ADD960C25C03432001DE755 /* FRSmilElement.swift */,
-				2ADD960D25C03432001DE755 /* FRMetadata.swift */,
-			);
-			path = EPUBCore;
-			sourceTree = "<group>";
-		};
-		2ADD961525C0343A001DE755 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD961625C0343A001DE755 /* Highlight.swift */,
-				2ADD961725C0343A001DE755 /* Highlight+Helper.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
-		2ADD964625C03505001DE755 /* Libs */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD968125C039E9001DE755 /* ZFDragableModalTransition */,
-				2ADD968025C039DB001DE755 /* SMSegmentView */,
-				2ADD967A25C039D6001DE755 /* HAControls */,
-				2ADD964725C03510001DE755 /* YetAnotherEBookReader-Bridging-Header.h */,
-			);
-			path = Libs;
-			sourceTree = "<group>";
-		};
-		2ADD967A25C039D6001DE755 /* HAControls */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD967B25C039D6001DE755 /* HADiscreteSlider.swift */,
-			);
-			path = HAControls;
-			sourceTree = "<group>";
-		};
-		2ADD968025C039DB001DE755 /* SMSegmentView */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD967325C039AD001DE755 /* SMSegment.swift */,
-				2ADD967425C039AE001DE755 /* SMSegmentView.swift */,
-			);
-			path = SMSegmentView;
-			sourceTree = "<group>";
-		};
-		2ADD968125C039E9001DE755 /* ZFDragableModalTransition */ = {
-			isa = PBXGroup;
-			children = (
-				2ADD964825C03512001DE755 /* ZFModalTransitionAnimator.h */,
-				2ADD964925C03513001DE755 /* ZFModalTransitionAnimator.m */,
-			);
-			path = ZFDragableModalTransition;
 			sourceTree = "<group>";
 		};
 		2ADD968525C03AB7001DE755 /* ViewController */ = {
 			isa = PBXGroup;
 			children = (
-				2ADD968F25C03BDD001DE755 /* Epub.swift */,
 				2ADD968A25C03B52001DE755 /* FolioReaderViewController.swift */,
-				2ADD969725C03CE7001DE755 /* ReaderViewController.swift */,
+				2ADD969725C03CE7001DE755 /* MyReaderViewController.swift */,
 				2ADD96A525C04784001DE755 /* BookButtonView.swift */,
 				2ADD96B325C04882001DE755 /* ReaderView.swift */,
 			);
 			path = ViewController;
 			sourceTree = "<group>";
 		};
-		2ADDA37C25C2DF84001DE755 /* Resources */ = {
+		83696F999EA7AD0B24084BCE /* Pods */ = {
 			isa = PBXGroup;
 			children = (
-				2ADDA37D25C2DF84001DE755 /* Bridge.js */,
-				2ADDA37E25C2DF84001DE755 /* Style.css */,
-				2ADDA37F25C2DF84001DE755 /* Images.xcassets */,
-				2ADDA38025C2DF84001DE755 /* Fonts */,
+				1D29FC838865E5EC27CF04F7 /* Pods-YetAnotherEBookReader.debug.xcconfig */,
+				CE3B1E3098F4803E5377F278 /* Pods-YetAnotherEBookReader.release.xcconfig */,
+				9DBFE4F8A54EF68CCFBD3F89 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig */,
+				8EB4E63C76187F34FEF1A091 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig */,
+				12CE5BE6BF5F7016836A940D /* Pods-YetAnotherEBookReaderTests.debug.xcconfig */,
+				8A9D0D8D419628A653DDFCA2 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */,
 			);
-			path = Resources;
+			path = Pods;
 			sourceTree = "<group>";
 		};
-		2ADDA38025C2DF84001DE755 /* Fonts */ = {
+		8AF6E969197F21B99627BB3C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				2ADDA38125C2DF84001DE755 /* Lato */,
-				2ADDA38625C2DF84001DE755 /* Andada */,
-				2ADDA38B25C2DF84001DE755 /* Lora */,
-				2ADDA39025C2DF84001DE755 /* Raleway */,
+				DAAD088B00B456E9B7569E42 /* Pods_YetAnotherEBookReader.framework */,
+				7EF92693BF2FF30C39B0F5DC /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */,
+				DDEAD2FD192058D3349F9E0B /* Pods_YetAnotherEBookReaderTests.framework */,
 			);
-			path = Fonts;
-			sourceTree = "<group>";
-		};
-		2ADDA38125C2DF84001DE755 /* Lato */ = {
-			isa = PBXGroup;
-			children = (
-				2ADDA38225C2DF84001DE755 /* Lato-Italic.ttf */,
-				2ADDA38325C2DF84001DE755 /* Lato-Bold.ttf */,
-				2ADDA38425C2DF84001DE755 /* Lato-Regular.ttf */,
-				2ADDA38525C2DF84001DE755 /* Lato-BoldItalic.ttf */,
-			);
-			path = Lato;
-			sourceTree = "<group>";
-		};
-		2ADDA38625C2DF84001DE755 /* Andada */ = {
-			isa = PBXGroup;
-			children = (
-				2ADDA38725C2DF84001DE755 /* Andada-Italic.otf */,
-				2ADDA38825C2DF84001DE755 /* Andada-Bold.otf */,
-				2ADDA38925C2DF84001DE755 /* Andada-Regular.otf */,
-				2ADDA38A25C2DF84001DE755 /* Andada-BoldItalic.otf */,
-			);
-			path = Andada;
-			sourceTree = "<group>";
-		};
-		2ADDA38B25C2DF84001DE755 /* Lora */ = {
-			isa = PBXGroup;
-			children = (
-				2ADDA38C25C2DF84001DE755 /* Lora-Italic.ttf */,
-				2ADDA38D25C2DF84001DE755 /* Lora-Bold.ttf */,
-				2ADDA38E25C2DF84001DE755 /* Lora-BoldItalic.ttf */,
-				2ADDA38F25C2DF84001DE755 /* Lora-Regular.ttf */,
-			);
-			path = Lora;
-			sourceTree = "<group>";
-		};
-		2ADDA39025C2DF84001DE755 /* Raleway */ = {
-			isa = PBXGroup;
-			children = (
-				2ADDA39125C2DF84001DE755 /* Raleway-BoldItalic.ttf */,
-				2ADDA39225C2DF84001DE755 /* Raleway-Regular.ttf */,
-				2ADDA39325C2DF84001DE755 /* Raleway-Italic.ttf */,
-				2ADDA39425C2DF84001DE755 /* Raleway-Bold.ttf */,
-			);
-			path = Raleway;
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -575,10 +359,12 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2AC3EC4225BDBC11004A6633 /* Build configuration list for PBXNativeTarget "YetAnotherEBookReader" */;
 			buildPhases = (
+				273F1656481A1F89C8EEE058 /* [CP] Check Pods Manifest.lock */,
 				2AC3EC1425BDBC10004A6633 /* Sources */,
 				2AC3EC1525BDBC10004A6633 /* Frameworks */,
 				2AC3EC1625BDBC10004A6633 /* Resources */,
 				2A8C27AF25CBD66A00FC7FC0 /* Embed Frameworks */,
+				0DF34844153686FD9F7A44F0 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -594,6 +380,7 @@
 				2ADD966E25C0398A001DE755 /* FontBlaster */,
 				2A8C27B525CBD73E00FC7FC0 /* Kingfisher */,
 				2A8C27B725CBD73E00FC7FC0 /* KingfisherSwiftUI */,
+				2A762220261C07C50067EFD8 /* FolioReaderKit */,
 			);
 			productName = YetAnotherEBookReader;
 			productReference = 2AC3EC1825BDBC10004A6633 /* YetAnotherEBookReader.app */;
@@ -603,6 +390,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2AC3EC4525BDBC11004A6633 /* Build configuration list for PBXNativeTarget "YetAnotherEBookReaderTests" */;
 			buildPhases = (
+				F6774A231CA87F2781BD69ED /* [CP] Check Pods Manifest.lock */,
 				2AC3EC2A25BDBC11004A6633 /* Sources */,
 				2AC3EC2B25BDBC11004A6633 /* Frameworks */,
 				2AC3EC2C25BDBC11004A6633 /* Resources */,
@@ -621,9 +409,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2AC3EC4825BDBC11004A6633 /* Build configuration list for PBXNativeTarget "YetAnotherEBookReaderUITests" */;
 			buildPhases = (
+				0AFC43350327883AB355120E /* [CP] Check Pods Manifest.lock */,
 				2AC3EC3525BDBC11004A6633 /* Sources */,
 				2AC3EC3625BDBC11004A6633 /* Frameworks */,
 				2AC3EC3725BDBC11004A6633 /* Resources */,
+				F895A2C43CE31F65CACC6079 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -674,6 +464,7 @@
 				2ADD966425C037F3001DE755 /* XCRemoteSwiftPackageReference "ZipArchive" */,
 				2ADD966D25C0398A001DE755 /* XCRemoteSwiftPackageReference "FontBlaster" */,
 				2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */,
+				2A76221F261C07C50067EFD8 /* XCRemoteSwiftPackageReference "FolioReaderKit" */,
 			);
 			productRefGroup = 2AC3EC1925BDBC10004A6633 /* Products */;
 			projectDirPath = "";
@@ -691,27 +482,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2ADDA39925C2DF84001DE755 /* Lato-Bold.ttf in Resources */,
-				2ADDA3A225C2DF84001DE755 /* Lora-BoldItalic.ttf in Resources */,
-				2ADDA39525C2DF84001DE755 /* Bridge.js in Resources */,
-				2ADDA39725C2DF84001DE755 /* Images.xcassets in Resources */,
-				2ADDA3A525C2DF84001DE755 /* Raleway-Regular.ttf in Resources */,
-				2ADDA3A125C2DF84001DE755 /* Lora-Bold.ttf in Resources */,
-				2ADDA3A625C2DF84001DE755 /* Raleway-Italic.ttf in Resources */,
-				2ADDA3A725C2DF84001DE755 /* Raleway-Bold.ttf in Resources */,
-				2ADDA3A325C2DF84001DE755 /* Lora-Regular.ttf in Resources */,
-				2ADDA39B25C2DF84001DE755 /* Lato-BoldItalic.ttf in Resources */,
-				2ADDA39A25C2DF84001DE755 /* Lato-Regular.ttf in Resources */,
-				2ADDA39E25C2DF84001DE755 /* Andada-Regular.otf in Resources */,
-				2ADDA39625C2DF84001DE755 /* Style.css in Resources */,
 				2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */,
-				2ADDA3A025C2DF84001DE755 /* Lora-Italic.ttf in Resources */,
-				2ADDA39825C2DF84001DE755 /* Lato-Italic.ttf in Resources */,
-				2ADDA39C25C2DF84001DE755 /* Andada-Italic.otf in Resources */,
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,
-				2ADDA3A425C2DF84001DE755 /* Raleway-BoldItalic.ttf in Resources */,
-				2ADDA39D25C2DF84001DE755 /* Andada-Bold.otf in Resources */,
-				2ADDA39F25C2DF84001DE755 /* Andada-BoldItalic.otf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -731,76 +503,146 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0AFC43350327883AB355120E /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		0DF34844153686FD9F7A44F0 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		273F1656481A1F89C8EEE058 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-YetAnotherEBookReader-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		F6774A231CA87F2781BD69ED /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-YetAnotherEBookReaderTests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		F895A2C43CE31F65CACC6079 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		2AC3EC1425BDBC10004A6633 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift .swift in Sources */,
 				2A8C278625CBD46E00FC7FC0 /* PlainShelfView.swift in Sources */,
-				2ADD967625C039AE001DE755 /* SMSegmentView.swift in Sources */,
-				2ADD962E25C03440001DE755 /* MediaType.swift in Sources */,
-				2ADD962D25C03440001DE755 /* FRResources.swift in Sources */,
-				2ADD963625C03440001DE755 /* FolioReaderPlayerMenu.swift in Sources */,
+				2A65F39426135BE80064E3D8 /* SectionShelfUI.swift in Sources */,
 				2A07541825F35D4D00A34306 /* EpubReader.swift in Sources */,
-				2ADD962625C03440001DE755 /* FolioReaderConfig.swift in Sources */,
-				2ADD969025C03BDD001DE755 /* Epub.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
-				2ADD963D25C03440001DE755 /* FolioReaderAudioPlayer.swift in Sources */,
+				2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */,
 				2A8C278825CBD46E00FC7FC0 /* SectionShelfView.swift in Sources */,
 				2A8C278525CBD46E00FC7FC0 /* ShelfViewModel.swift in Sources */,
 				2A8C278725CBD46E00FC7FC0 /* ShelfHeaderCellView.swift in Sources */,
-				2ADD963725C03440001DE755 /* QuoteImage.swift in Sources */,
 				2A8C26D025C5A1E100FC7FC0 /* PDFViewController.swift in Sources */,
-				2ADD962F25C03440001DE755 /* FRResource.swift in Sources */,
-				2ADD963B25C03440001DE755 /* FolioReaderPage.swift in Sources */,
-				2ADD962825C03440001DE755 /* FREpubParser.swift in Sources */,
-				2ADD963525C03440001DE755 /* FolioReaderChapterList.swift in Sources */,
-				2ADD967525C039AE001DE755 /* SMSegment.swift in Sources */,
-				2ADD963F25C03440001DE755 /* ScrollScrubber.swift in Sources */,
-				2ADD963E25C03440001DE755 /* FolioReaderAddHighlightNote.swift in Sources */,
-				2ADD962025C03440001DE755 /* PageViewController.swift in Sources */,
-				2ADD962125C03440001DE755 /* FolioReaderChapterListCell.swift in Sources */,
-				2ADD964A25C03513001DE755 /* ZFModalTransitionAnimator.m in Sources */,
-				2ADD962A25C03440001DE755 /* FRSpine.swift in Sources */,
-				2ADD962725C03440001DE755 /* FolioReaderWebView.swift in Sources */,
 				2A8C278A25CBD46E00FC7FC0 /* Dimens.swift in Sources */,
-				2ADD962325C03440001DE755 /* FolioReaderQuoteShare.swift in Sources */,
-				2ADD962525C03440001DE755 /* FolioReaderContainer.swift in Sources */,
 				2AC3EC6325BE7F3B004A6633 /* LibraryInfoView.swift in Sources */,
-				2ADD963025C03440001DE755 /* FRSmilElement.swift in Sources */,
-				2ADD962225C03440001DE755 /* FolioReaderSharingProvider.swift in Sources */,
-				2ADD963825C03440001DE755 /* Highlight.swift in Sources */,
+				2A65F390261358A40064E3D8 /* SectionShelfController.swift in Sources */,
 				2A8C278C25CBD46E00FC7FC0 /* ShelfViewDelegate.swift in Sources */,
 				2ADD968B25C03B52001DE755 /* FolioReaderViewController.swift in Sources */,
 				2ADD96A625C04784001DE755 /* BookButtonView.swift in Sources */,
 				2ADD96B425C04882001DE755 /* ReaderView.swift in Sources */,
-				2ADD962B25C03440001DE755 /* FRBook.swift in Sources */,
-				2ADD962C25C03440001DE755 /* FRSmils.swift in Sources */,
 				2A8C27C425CBDD7600FC7FC0 /* PlainShelfUI.swift in Sources */,
-				2ADD962925C03440001DE755 /* FRTocReference.swift in Sources */,
 				2ADDA36425C18232001DE755 /* Book.swift in Sources */,
-				2ADD963C25C03440001DE755 /* FolioReaderUserDefaults.swift in Sources */,
-				2ADD963925C03440001DE755 /* Highlight+Helper.swift in Sources */,
-				2ADD963125C03440001DE755 /* FRMetadata.swift in Sources */,
 				2AC3EC4F25BDBDC6004A6633 /* MainView.swift in Sources */,
-				2ADD967C25C039D6001DE755 /* HADiscreteSlider.swift in Sources */,
 				2A8C26C325C589D900FC7FC0 /* PDFViewUI.swift in Sources */,
 				2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */,
-				2ADD969825C03CE7001DE755 /* ReaderViewController.swift in Sources */,
+				2ADD969825C03CE7001DE755 /* MyReaderViewController.swift in Sources */,
 				2A890571260076780072B580 /* PDFOptionView.swift in Sources */,
-				2ADD963225C03440001DE755 /* FolioReaderKit.swift in Sources */,
-				2ADD963A25C03440001DE755 /* FolioReaderHighlightList.swift in Sources */,
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
 				2A8C27BC25CBDD0600FC7FC0 /* PlainShelfController.swift in Sources */,
-				2ADD961F25C03440001DE755 /* Extensions.swift in Sources */,
 				2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */,
-				2ADD963325C03440001DE755 /* FolioReaderFontsMenu.swift in Sources */,
-				2A8C278B25CBD46E00FC7FC0 /* Utils.swift in Sources */,
+				2A8C278B25CBD46E00FC7FC0 /* ShelfViewUtils.swift in Sources */,
 				2AC3EC7E25BEBA0D004A6633 /* BookDetailView.swift in Sources */,
+				2A65F39C2614A77F0064E3D8 /* ServerView.swift in Sources */,
 				2A8C26D825C5A7D000FC7FC0 /* PDFViewContainer.swift in Sources */,
-				2ADD962425C03440001DE755 /* FolioReaderCenter.swift in Sources */,
 				2A07541E25F35FAB00A34306 /* EpubReaderContainer.swift in Sources */,
-				2ADD963425C03440001DE755 /* FolioReaderPageIndicator.swift in Sources */,
 				2A8C278925CBD46E00FC7FC0 /* ShelfCellView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -955,6 +797,7 @@
 		};
 		2AC3EC4325BDBC11004A6633 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 1D29FC838865E5EC27CF04F7 /* Pods-YetAnotherEBookReader.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -969,6 +812,63 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-l\"c++\"",
+					"-l\"sqlite3\"",
+					"-l\"z\"",
+					"-framework",
+					"\"AVFoundation\"",
+					"-framework",
+					"\"AudioToolbox\"",
+					"-framework",
+					"\"CFNetwork\"",
+					"-framework",
+					"\"CoreGraphics\"",
+					"-framework",
+					"\"CoreMedia\"",
+					"-framework",
+					"\"CoreTelephony\"",
+					"-framework",
+					"\"CoreVideo\"",
+					"-framework",
+					"\"FBLPromises\"",
+					"-framework",
+					"\"GoogleAppMeasurement\"",
+					"-framework",
+					"\"GoogleMobileAds\"",
+					"-framework",
+					"\"GoogleUtilities\"",
+					"-framework",
+					"\"MediaPlayer\"",
+					"-framework",
+					"\"MessageUI\"",
+					"-framework",
+					"\"MobileCoreServices\"",
+					"-framework",
+					"\"QuartzCore\"",
+					"-framework",
+					"\"Security\"",
+					"-framework",
+					"\"StoreKit\"",
+					"-framework",
+					"\"SystemConfiguration\"",
+					"-framework",
+					"\"UserMessagingPlatform\"",
+					"-framework",
+					"\"WebKit\"",
+					"-framework",
+					"\"nanopb\"",
+					"-weak_framework",
+					"\"AdSupport\"",
+					"-weak_framework",
+					"\"JavaScriptCore\"",
+					"-weak_framework",
+					"\"SafariServices\"",
+					"-weak_framework",
+					"\"WebKit\"",
+					"-ObjC",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -982,6 +882,7 @@
 		};
 		2AC3EC4425BDBC11004A6633 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CE3B1E3098F4803E5377F278 /* Pods-YetAnotherEBookReader.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -997,6 +898,63 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-l\"c++\"",
+					"-l\"sqlite3\"",
+					"-l\"z\"",
+					"-framework",
+					"\"AVFoundation\"",
+					"-framework",
+					"\"AudioToolbox\"",
+					"-framework",
+					"\"CFNetwork\"",
+					"-framework",
+					"\"CoreGraphics\"",
+					"-framework",
+					"\"CoreMedia\"",
+					"-framework",
+					"\"CoreTelephony\"",
+					"-framework",
+					"\"CoreVideo\"",
+					"-framework",
+					"\"FBLPromises\"",
+					"-framework",
+					"\"GoogleAppMeasurement\"",
+					"-framework",
+					"\"GoogleMobileAds\"",
+					"-framework",
+					"\"GoogleUtilities\"",
+					"-framework",
+					"\"MediaPlayer\"",
+					"-framework",
+					"\"MessageUI\"",
+					"-framework",
+					"\"MobileCoreServices\"",
+					"-framework",
+					"\"QuartzCore\"",
+					"-framework",
+					"\"Security\"",
+					"-framework",
+					"\"StoreKit\"",
+					"-framework",
+					"\"SystemConfiguration\"",
+					"-framework",
+					"\"UserMessagingPlatform\"",
+					"-framework",
+					"\"WebKit\"",
+					"-framework",
+					"\"nanopb\"",
+					"-weak_framework",
+					"\"AdSupport\"",
+					"-weak_framework",
+					"\"JavaScriptCore\"",
+					"-weak_framework",
+					"\"SafariServices\"",
+					"-weak_framework",
+					"\"WebKit\"",
+					"-ObjC",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
@@ -1008,6 +966,7 @@
 		};
 		2AC3EC4625BDBC11004A6633 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 12CE5BE6BF5F7016836A940D /* Pods-YetAnotherEBookReaderTests.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1029,6 +988,7 @@
 		};
 		2AC3EC4725BDBC11004A6633 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8A9D0D8D419628A653DDFCA2 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				BUNDLE_LOADER = "$(TEST_HOST)";
@@ -1050,6 +1010,7 @@
 		};
 		2AC3EC4925BDBC11004A6633 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9DBFE4F8A54EF68CCFBD3F89 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
@@ -1069,6 +1030,7 @@
 		};
 		2AC3EC4A25BDBC11004A6633 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 8EB4E63C76187F34FEF1A091 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_STYLE = Automatic;
@@ -1128,6 +1090,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		2A76221F261C07C50067EFD8 /* XCRemoteSwiftPackageReference "FolioReaderKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/drearycold/FolioReaderKit.git";
+			requirement = {
+				branch = peter_dev;
+				kind = branch;
+			};
+		};
 		2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/onevcat/Kingfisher";
@@ -1179,6 +1149,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		2A762220261C07C50067EFD8 /* FolioReaderKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2A76221F261C07C50067EFD8 /* XCRemoteSwiftPackageReference "FolioReaderKit" */;
+			productName = FolioReaderKit;
+		};
 		2A8C27B525CBD73E00FC7FC0 /* Kingfisher */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 2A8C27B425CBD73E00FC7FC0 /* XCRemoteSwiftPackageReference "Kingfisher" */;

@@ -10,20 +10,23 @@ import OSLog
 import SwiftUI
 import RealmSwift
 
+enum DownloadStatus: String, CaseIterable, Identifiable {
+    case INITIAL
+    case DOWNLOADING
+    case DOWNLOADED
+    
+    var id: String { self.rawValue }
+}
+
 @available(macCatalyst 14.0, *)
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
-    // @Environment(\.managedObjectContext) private var viewContext
-    
+    @Environment(\.horizontalSizeClass) var sizeClass
     
     @Binding var book: Book
-    //    var currentReadingPosition = BookDeviceReadingPosition(id: "")
-    //    @State private var bookTitle = ""
-    //    @State private var bookAuthors = ""
-    //    @State private var bookComments = ""
     
     @State private var readingPositions = [String]()
-    @State private var downloading = false
+    @State private var downloadStatus = DownloadStatus.INITIAL
     
     var defaultLog = Logger()
     
@@ -50,8 +53,8 @@ struct BookDetailView: View {
     
     var commentWebView = WebViewUI()
     
-    let rvc = ReaderViewController()
-    var pdfView = PDFViewUI()
+    // let rvc = ReaderViewController()
+    // var pdfView = PDFViewUI()
     
     class DownloadDelegate : NSObject, URLSessionTaskDelegate, URLSessionDownloadDelegate {
         func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
@@ -67,16 +70,16 @@ struct BookDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-//                HStack {
-//                    //TextField("Title", text: $book.title).font(.title)
-//                    Text(book.title).font(.title)
-//                    Spacer()
-//                }.padding()
                 
                 HStack {
                     Text(book.authors).font(.subheadline)
                     Spacer()
                 }
+                
+                AsyncImage(
+                    url: book.coverURL) {
+                    Text("Loading ...")
+                }.aspectRatio(contentMode: .fit)
                 
                 HStack {
                     Picker("Format", selection: $selectedFormat) {
@@ -88,9 +91,13 @@ struct BookDetailView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .onAppear() {
-                        Book.Format.allCases.forEach { format in
-                            if self.book.formats[format.rawValue] != nil {
-                                self.selectedFormat = format
+                        if self.book.formats[modelData.defaultFormat.rawValue] != nil {
+                            self.selectedFormat = modelData.defaultFormat
+                        } else {
+                            Book.Format.allCases.forEach { format in
+                                if self.book.formats[format.rawValue] != nil {
+                                    self.selectedFormat = format
+                                }
                             }
                         }
                     }
@@ -107,20 +114,27 @@ struct BookDetailView: View {
                 Picker("Position", selection: $selectedPosition) {
                     ForEach(self.book.readPos.getDevices(), id: \.self) { position in
                         HStack {
-                            Text(position.description)
+                            Text(position.id)
                                 .font(.body)
                                 .padding()
-                            Spacer()
                         }.tag(position.id)
                     }
                 }
-                .pickerStyle(WheelPickerStyle())
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                .onAppear() {
+                    if self.book.readPos.getDevices().count > 0 {
+                        self.selectedPosition = self.book.readPos.getDevices()[0].id
+                    }
+                }
                 .onChange(of: book) {_ in
                     getMetadata()
+                    if self.book.readPos.getDevices().count > 0 {
+                        self.selectedPosition = self.book.readPos.getDevices()[0].id
+                    }
                 }
                 
-                
-                .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                Text(self.book.readPos.getPosition(selectedPosition)?.description ?? UIDevice().name)
                 
 //                HStack {
 //                    Spacer()
@@ -139,11 +153,12 @@ struct BookDetailView: View {
 //                }
 //                .padding(EdgeInsets(top: 5, leading: 10, bottom: 10, trailing: 5))
                 
-                
+                Banner()
                 
                 VStack {
-                    rvc.frame(width: CGFloat(100), height: CGFloat(1), alignment: .center)
-                    pdfView.frame(width: CGFloat(100), height: CGFloat(1), alignment: .center)
+                    // rvc.frame(width: CGFloat(100), height: CGFloat(1), alignment: .center)
+                    // pdfView.frame(width: CGFloat(100), height: CGFloat(1), alignment: .center)
+                    
                     commentWebView
                         .frame(height: CGFloat(400), alignment: .center)
                         .onAppear {
@@ -161,8 +176,11 @@ struct BookDetailView: View {
         .navigationTitle(Text(book.title))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Delete") {
+                Button(action: {
                     alertItem = AlertItem(id: "Delete")
+                }) {
+                    Image(systemName: "trash")
+                        .accentColor(.red)
                 }
             }
 //            ToolbarItem(placement: .confirmationAction) {
@@ -171,40 +189,62 @@ struct BookDetailView: View {
 //                }
 //            }
             ToolbarItem(placement: .confirmationAction) {
-                Button(action: {showingReadSheet = true}) {
-                    Text("Read")
+                Button(action: {
+                    if let curIndex = modelData.filteredBookList.firstIndex(of: book.id), curIndex > 0 {
+                        modelData.currentBookId = modelData.filteredBookList[curIndex-1]
+                        
+                    }
+                }) {
+                    Image(systemName: "chevron.up")
                 }
-                
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: {}) {
+                    Image(systemName: "chevron.down")
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action: {showingReadSheet = true}) {
+                    Image(systemName: "book")
+                }
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
                     if book.inShelf {
                         modelData.libraryInfo.clearCache(book.id, book.libraryName, selectedFormat)
                         modelData.libraryInfo.removeFromShelf(book.id, book.libraryName)
-                    } else {
-                        if !downloading {
-                            downloading = modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { isSuccess in
-                                downloading = false
-                                if isSuccess {
-                                    modelData.libraryInfo.addToShelf(book.id, book.libraryName)
-                                } else {
-                                    alertItem = AlertItem(id: "DownloadFailure")
-                                }
+                        downloadStatus = .INITIAL
+                    } else if downloadStatus == .INITIAL {
+                        let downloading = modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { isSuccess in
+                            if isSuccess {
+                                downloadStatus = .DOWNLOADED
+                            } else {
+                                downloadStatus = .INITIAL
+                                alertItem = AlertItem(id: "DownloadFailure")
                             }
+                        }
+                        if downloading {
+                            downloadStatus = .DOWNLOADING
                         }
                     }
                     updater += 1
                 }) {
-                    if( downloading) {
+                    if downloadStatus == .DOWNLOADING {
                         Text("Downloading")
                     } else if book.inShelf {
-                        Text("Remove from Shelf").foregroundColor(.red)
+                        Image(systemName: "star.slash")
                     } else {
-                        Text("Add to Shelf")
+                        Image(systemName: "star")
                     }
                 }
             }
-        }.alert(item: $alertItem) { item in
+        }
+        .onChange(of: downloadStatus, perform: { value in
+            if downloadStatus == .DOWNLOADED {
+                modelData.libraryInfo.addToShelf(book.id, book.libraryName)
+            }
+        })
+        .alert(item: $alertItem) { item in
             if item.id == "Delete" {
                 return Alert(
                     title: Text("Confirm to Deleting"),
@@ -401,12 +441,25 @@ struct BookDetailView: View {
     
     
     func getSavedUrl() -> URL {
-        let downloadBaseURL = try!
+        var downloadBaseURL = try!
+            FileManager.default.url(for: .documentDirectory,
+                                    in: .userDomainMask,
+                                    appropriateFor: nil,
+                                    create: false)
+        var savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+        if FileManager.default.fileExists(atPath: savedURL.path) {
+            return savedURL
+        }
+        
+        downloadBaseURL = try!
             FileManager.default.url(for: .cachesDirectory,
                                     in: .userDomainMask,
                                     appropriateFor: nil,
                                     create: false)
-        let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+        savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+        if FileManager.default.fileExists(atPath: savedURL.path) {
+            return savedURL
+        }
         
         return savedURL
     }
@@ -440,12 +493,12 @@ struct BookDetailView: View {
             }
             
             // modelData.isReading = true;
-            if(selectedFormat == Book.Format.EPUB) {
-                rvc.openBook(savedURL, self)
-            }
-            if( selectedFormat == Book.Format.PDF) {
-                pdfView.open(pdfURL: savedURL, bookDetailView: self)
-             }
+//            if(selectedFormat == Book.Format.EPUB) {
+//                rvc.openBook(savedURL, self)
+//            }
+//            if( selectedFormat == Book.Format.PDF) {
+//                pdfView.open(pdfURL: savedURL, bookDetailView: self)
+//            }
         } catch {
             
         }

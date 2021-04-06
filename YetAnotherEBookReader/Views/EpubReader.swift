@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import SwiftUI
+import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 struct EpubReader: UIViewControllerRepresentable {
@@ -18,6 +19,8 @@ struct EpubReader: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         if bookURL.path.hasSuffix(".epub") {
             let readerConfiguration = self.readerConfiguration()
+            readerConfiguration.enableTTS = false
+            readerConfiguration.allowSharing = false
             let folioReader = FolioReader()
             let epubReaderContainer = EpubReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path)
             epubReaderContainer.bookDetailView = bookDetailView

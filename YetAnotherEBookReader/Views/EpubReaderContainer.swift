@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class EpubReaderContainer: FolioReaderContainer {
@@ -34,8 +35,8 @@ class EpubReaderContainer: FolioReaderContainer {
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willResignActiveNotification, object: nil)
-        NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
+        // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willResignActiveNotification, object: nil)
+        // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
         
         super.initialization()
     }

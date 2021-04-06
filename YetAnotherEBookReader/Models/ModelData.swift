@@ -10,12 +10,22 @@ import Combine
 import RealmSwift
 import SwiftUI
 import OSLog
+import GoogleMobileAds
 
 final class ModelData: ObservableObject {
     @Published var calibreServer = "http://calibre-server.lan:8080/"
+    @Published var calibreUsername = ""
+    @Published var calibrePassword = ""
+    @Published var calibreLibrary = ""
+    @Published var searchString = ""
     @Published var defaultFormat = Book.Format.PDF
+    @Published var serverInfos = [ServerInfo]()
     @Published var libraryInfo = LibraryInfo()
     @Published var filteredBookList = [Int32]()
+    
+    var calibreServerDescription: String {
+        return "\(calibreUsername)@\(calibreServer)"
+    }
     
     var currentBookId: Int32 = -1 {
             didSet {
@@ -28,6 +38,8 @@ final class ModelData: ObservableObject {
     private var defaultLog = Logger()
     
     init() {
+        GADMobileAds.sharedInstance().start(completionHandler: nil)
+        
         let realm = try! Realm(
             configuration: Realm.Configuration(
                 schemaVersion: 5,
@@ -39,6 +51,8 @@ final class ModelData: ObservableObject {
                     }
             )
         )
+        
+        
         
         let inShelf = realm.objects(BookRealm.self)
         print("In Shelf \(inShelf.count)")
@@ -74,9 +88,20 @@ final class ModelData: ObservableObject {
                 defaultFormat = Book.Format.EPUB
             case .pad:
                 defaultFormat = Book.Format.PDF
-            @unknown default:
+            default:
                 defaultFormat = Book.Format.EPUB
         }
+    }
+    
+    func getLibrary() -> Library? {
+        return libraryInfo.libraryMap[calibreLibrary]
+    }
+    
+    func updateFilteredBookList(searchString: String?) {
+        if searchString != nil {
+            self.searchString = searchString!
+        }
+        filteredBookList = getLibrary()?.filterBooks(self.searchString).map { $0.id } ?? []
     }
     
     func getBook(libraryName: String, bookId: Int32) -> Binding<Book> {
@@ -119,7 +144,13 @@ final class ModelData: ObservableObject {
         )
     }
 
+    func updateStoreReadingPosition(enabled: Bool, value: String) {
+        //TODO
+    }
     
+    func updateCustomDictViewer(enabled: Bool, value: String) {
+        //TODO
+    }
 }
 
 func load<T: Decodable>(_ filename: String) -> T {
@@ -142,4 +173,13 @@ func load<T: Decodable>(_ filename: String) -> T {
     } catch {
         fatalError("Couldn't parse \(filename) as \(T.self):\n\(error)")
     }
+}
+
+class ConfigurationRealm: Object {
+    @objc dynamic var id: Int32 = 0
+    @objc dynamic var libraryName = ""
+    @objc dynamic var title = ""
+    @objc dynamic var authors = ""
+    @objc dynamic var comments = ""
+    @objc dynamic var formatsData: NSData?
 }
