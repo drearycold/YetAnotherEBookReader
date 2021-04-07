@@ -6,11 +6,14 @@
 //  Copyright © 2018 CocoaPods. All rights reserved.
 //
 
+import ShelfView_iOS
+
 import SwiftUI
 import GoogleMobileAds
 
 class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
+    var books = [Book]()
     var bookModel = [BookModel]()
     var shelfView: SectionShelfView!
     var bannerView: GADBannerView!
@@ -19,6 +22,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     var modelData: ModelData!
     
     func updateBookModel() {
+        books.removeAll()
         bookModel.removeAll()
         
         modelData.libraryInfo.libraries.forEach { library in
@@ -28,11 +32,11 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             }).forEach { book in
                 let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
                 
+                books.append(book)
                 bookModel.append(
                     BookModel(
                         bookCoverSource: coverURL,
-                        libraryName: book.libraryName,
-                        bookId: book.id.description,
+                        bookId: book.bookModelId,
                         bookTitle: book.title))
             }
         }
@@ -48,7 +52,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 //        shelfView.topAnchor.constraint(equalTo: motherView.topAnchor, constant: 0).isActive = true
 //        shelfView.bottomAnchor.constraint(equalTo: motherView.bottomAnchor, constant: 0).isActive = true
         
-
+        self.updateBookModel()
     }
 
     override func viewDidLoad() {
@@ -61,8 +65,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                 bookModel.append(
                     BookModel(
                         bookCoverSource: coverURL,
-                        libraryName: book.libraryName,
-                        bookId: book.id.description,
+                        bookId: book.bookModelId,
                         bookTitle: book.title))
             }
         }
@@ -76,7 +79,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         //self.view = shelfView
         view.addSubview(shelfView)
         
-        bannerView = GADBannerView(adSize: kGADAdSizeBanner)
+        bannerView = GADBannerView()
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
         bannerView.load(GADRequest())
@@ -84,37 +87,40 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bannerView)
         
-
         NSLayoutConstraint.activate([
             shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             shelfView.topAnchor.constraint(equalTo: view.topAnchor),
-            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor)
-        ]) 
+            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
+            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
+        ])
+        bannerView.adSize = kGADAdSizeBanner
         
-        view.addConstraints(
-          [NSLayoutConstraint(item: bannerView,
-                              attribute: .bottom,
-                              relatedBy: .equal,
-                              toItem: bottomLayoutGuide,
-                              attribute: .top,
-                              multiplier: 1,
-                              constant: 0),
-           NSLayoutConstraint(item: bannerView,
-                              attribute: .centerX,
-                              relatedBy: .equal,
-                              toItem: view,
-                              attribute: .centerX,
-                              multiplier: 1,
-                              constant: 0)
-          ])
+//        view.addConstraints(
+//          [NSLayoutConstraint(item: bannerView!,
+//                              attribute: .bottom,
+//                              relatedBy: .equal,
+//                              toItem: bottomLayoutGuide,
+//                              attribute: .top,
+//                              multiplier: 1,
+//                              constant: 0),
+//           NSLayoutConstraint(item: bannerView!,
+//                              attribute: .centerX,
+//                              relatedBy: .equal,
+//                              toItem: view,
+//                              attribute: .centerX,
+//                              multiplier: 1,
+//                              constant: 0)
+//          ])
     }
 
     func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         let bookDetailView = BookDetailView(
-            book: modelData.getBook(libraryName: bookModel[index].libraryName, bookId: Int32(bookModel[index].bookId)!)).environmentObject(modelData)
+            book: modelData.getBook(libraryName: books[index].libraryName, bookId: books[index].id)).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )

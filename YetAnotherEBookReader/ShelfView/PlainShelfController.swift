@@ -6,17 +6,19 @@
 //  Copyright (c) 2017 tdscientist. All rights reserved.
 //
 
-// import ShelfView
+import ShelfView_iOS
 import SwiftUI
 
 class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
+    var books = [Book]()
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
 
     func updateBookModel() {
+        books.removeAll()
         bookModel.removeAll()
         
         modelData.libraryInfo.libraries.forEach { library in
@@ -26,11 +28,11 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
             }).forEach { book in
                 let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
                 
+                books.append(book)
                 bookModel.append(
                     BookModel(
                         bookCoverSource: coverURL,
-                        libraryName: book.libraryName,
-                        bookId: book.id.description,
+                        bookId: book.bookModelId,
                         bookTitle: book.title))
             }
         }
@@ -52,19 +54,6 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        modelData.libraryInfo.libraries.forEach { library in
-            library.books.forEach { book in
-                let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
-                
-                bookModel.append(
-                    BookModel(
-                        bookCoverSource: coverURL,
-                        libraryName: book.libraryName,
-                        bookId: book.id.description,
-                        bookTitle: book.title))
-            }
-        }
-        
         shelfView = PlainShelfView(frame: CGRect(x: 0, y: statusBarHeight, width: 350, height: 500), bookModel: bookModel, bookSource: PlainShelfView.BOOK_SOURCE_URL)
         
         shelfView.delegate = self
@@ -77,7 +66,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         
 //        let book = modelData.getBook(libraryName: bookModel[index].libraryName, bookId: Int32(bookModel[index].bookId)!)
         let bookDetailView = BookDetailView(
-            book: modelData.getBook(libraryName: bookModel[index].libraryName, bookId: Int32(bookModel[index].bookId)!)).environmentObject(modelData)
+            book: modelData.getBook(libraryName: books[index].libraryName, bookId: books[index].id)).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )

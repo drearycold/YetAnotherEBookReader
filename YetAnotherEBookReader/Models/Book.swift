@@ -274,6 +274,10 @@ struct Book: Hashable, Identifiable, Equatable {
         return URL(string: "\(serverInfo.calibreServer)/get/thumb/\(id)/\(libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
     }
     
+    var bookModelId : String {
+        return "\(id)^\(libraryName)"
+    }
+    
     var inShelf = false
     
     enum Format: String, CaseIterable, Identifiable {

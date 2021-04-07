@@ -105,7 +105,6 @@ final class ModelData: ObservableObject {
     }
     
     func getBook(libraryName: String, bookId: Int32) -> Binding<Book> {
-
         return Binding<Book>(
             get: {
                 let libraryInfo = self.libraryInfo
@@ -144,6 +143,16 @@ final class ModelData: ObservableObject {
         )
     }
 
+    func getBookByBookModelId(bookModelId: String) -> Binding<Book>? {
+        if let sepIndex = bookModelId.firstIndex(of: "^") {
+            let libraryNameStart = bookModelId.index(sepIndex, offsetBy: 1)
+            let libraryName = bookModelId[libraryNameStart..<bookModelId.endIndex]
+            if let bookId = Int32(String(bookModelId[bookModelId.startIndex..<sepIndex])) {
+                return getBook(libraryName: String(libraryName), bookId: bookId)
+            }
+        }
+        return nil
+    }
     func updateStoreReadingPosition(enabled: Bool, value: String) {
         //TODO
     }
