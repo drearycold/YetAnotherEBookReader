@@ -11,10 +11,13 @@ import OSLog
 struct ServerView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @State private var calibreServer = "http://calibre-server.lan:8080/"
+    @State private var calibreServerId = ""
+    @State private var calibreServerLibraryId = "Undetermined"
+    
+    @State private var calibreServer = ""
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
-    @State private var calibreLibrary = "Undetermined"
+    
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
     @State private var enableCustomDictViewer = false
@@ -52,15 +55,17 @@ struct ServerView: View {
                         }
                     }
                     
-                    Picker("Server: \(modelData.calibreServerDescription)", selection: $calibreServer) {
-                        ForEach(modelData.libraryInfo.libraries) { library in
-                            Text(library.id).tag(library.id)
+                    Picker("Server: \(modelData.currentCalibreServerId)", selection: $calibreServerId) {
+                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.id < rhs.id
+                        }), id: \.self) { server in
+                            Text(server.id).tag(server.id)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreLibrary, perform: { value in
-                        modelData.calibreLibrary = calibreLibrary
-                    })
+                    .onChange(of: calibreServerId) { value in
+                        modelData.currentCalibreServerId = calibreServerId
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -102,7 +107,7 @@ struct ServerView: View {
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
-                        Text(modelData.libraryInfo.description)
+                        //Text(modelData.libraryInfo.description) //TODO
                         
                         Button(action: { startLoad() }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -115,21 +120,23 @@ struct ServerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Switch Library")
                     
-                    Picker("Library: \(calibreLibrary)", selection: $calibreLibrary) {
-                        ForEach(modelData.libraryInfo.libraries) { library in
-                            Text(library.id).tag(library.id)
+                    Picker("Library: \(modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]?.name ?? "")", selection: $calibreServerLibraryId) {
+                        ForEach(modelData.calibreServerLibraries.values.sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.name < rhs.name
+                        })) { library in
+                            Text(library.name).tag(library.id)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreLibrary, perform: { value in
-                        modelData.calibreLibrary = calibreLibrary
+                    .onChange(of: calibreServerLibraryId, perform: { value in
+                        modelData.currentCalibreLibraryId = calibreServerLibraryId
                     })
                     
                         
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
-                        Text("\(modelData.getLibrary()?.books.count ?? 0) Book(s) in Library")
+                        Text("\(modelData.calibreServerLibraryBooks.count) Book(s) in Library")
                         
                         Button(action: { syncLibrary() }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -181,10 +188,8 @@ struct ServerView: View {
         }
         
         .onAppear() {
-            calibreServer = modelData.calibreServer
-            calibreUsername = modelData.calibreUsername
-            calibrePassword = modelData.calibrePassword
-            calibreLibrary = modelData.calibreLibrary
+            calibreServerId = modelData.currentCalibreServerId
+            calibreServerLibraryId = modelData.currentCalibreLibraryId
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)
@@ -200,10 +205,9 @@ struct ServerView: View {
     }
     
     func startLoad() {
-        modelData.calibreServer = calibreServer
-        modelData.calibreUsername = calibreUsername
-        modelData.calibrePassword = calibrePassword
-        let url = URL(string: calibreServer + "/ajax/library-info")!
+        guard let url = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/ajax/library-info") else {
+            return
+        }
         if calibreUsername.count > 0 && calibrePassword.count > 0 {
             let protectionSpace = URLProtectionSpace.init(host: url.host!,
                                                           port: url.port!,
@@ -234,34 +238,20 @@ struct ServerView: View {
                 DispatchQueue.main.async {
                     //self.webView.loadHTMLString(string, baseURL: url)
                     result = string
-                    handleLibraryInfo(jsonData: data)
+                    modelData.handleLibraryInfo(jsonData: data)
                 }
             }
         }
         task.resume()
     }
     
-    func handleLibraryInfo(jsonData: Data) {
-        do {
-            let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
-            defaultLog.info("libraryInfo: \(libraryInfo)")
-            
-            // modelData.libraryInfo.reset()
-            let libraryMap = libraryInfo["library_map"] as! [String: String]
-            libraryMap.forEach { (key, value) in
-                modelData.libraryInfo.getLibrary(name: key)
-            }
-            if libraryMap[calibreLibrary] == nil {
-                calibreLibrary = libraryInfo["default_library"] as? String ?? "Calibre Library"
-            }
-        } catch {
-        
-        }
-        
-    }
     
     private func syncLibrary() {
-        let endpointUrl = URL(string: modelData.calibreServer + "/cdb/cmd/list/0?library_id=" + calibreLibrary.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        print(modelData.calibreServerLibraries)
+        print(modelData.currentCalibreLibraryId)
+        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+            return
+        }
         let json:[Any] = [["title", "authors", "formats", "rating"], "", "", "", -1]
         do {
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -291,7 +281,7 @@ struct ServerView: View {
                         DispatchQueue.main.async {
                             //self.webView.loadHTMLString(string, baseURL: url)
                             //result = string
-                            handleLibraryBooks(json: data)
+                            modelData.handleLibraryBooks(json: data)
                         }
                     }
                 }
@@ -306,67 +296,7 @@ struct ServerView: View {
         
     }
     
-    func handleLibraryBooks(json: Data) {
-        guard let library = modelData.getLibrary() else {
-            return
-        }
-        var booksMap = library.booksMap
-        
-        do {
-            let root = try JSONSerialization.jsonObject(with: json, options: []) as! NSDictionary
-            let resultElement = root["result"] as! NSDictionary
-            let bookIds = resultElement["book_ids"] as! NSArray
-            
-            bookIds.forEach { idNum in
-                let id = (idNum as! NSNumber).int32Value
-                if booksMap[id] == nil {
-                    var book = Book(serverInfo: ServerInfo(calibreServer: modelData.calibreServer))
-                    book.id = id
-                    book.libraryName = calibreLibrary
-                    booksMap[book.id] = book
-                }
-            }
-            
-            let dataElement = resultElement["data"] as! NSDictionary
-            
-            let titles = dataElement["title"] as! NSDictionary
-            titles.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let title = value as! String
-                booksMap[id]!.title = title
-            }
-            
-            let authors = dataElement["authors"] as! NSDictionary
-            authors.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let authors = value as! NSArray
-                booksMap[id]!.authors = authors[0] as? String ?? "Unknown"
-            }
-            
-            let formats = dataElement["formats"] as! NSDictionary
-            formats.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let formats = value as! NSArray
-                formats.forEach { format in
-                    booksMap[id]!.formats[(format as! String)] = ""
-                }
-            }
-            
-            let ratings = dataElement["rating"] as! NSDictionary
-            ratings.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                if let rating = value as? NSNumber {
-                    booksMap[id]!.rating = rating.intValue
-                }
-            }
-            
-        } catch {
-        
-        }
-        
-        modelData.libraryInfo.libraryMap[calibreLibrary]!.updateBooks(booksMap)
-        
-    }
+    
 }
 
 struct SettingsView_Previews: PreviewProvider {

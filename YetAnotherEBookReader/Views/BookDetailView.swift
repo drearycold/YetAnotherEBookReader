@@ -23,7 +23,7 @@ struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.horizontalSizeClass) var sizeClass
     
-    @Binding var book: Book
+    @Binding var book: CalibreBook
     
     @State private var readingPositions = [String]()
     @State private var downloadStatus = DownloadStatus.INITIAL
@@ -46,7 +46,7 @@ struct BookDetailView: View {
 //    @State private var showingAlert = false
 //    @State private var showingRefreshAlert = false
 //    @State private var showingDownloadAlert = false
-    @State private var selectedFormat = Book.Format.EPUB
+    @State private var selectedFormat = CalibreBook.Format.EPUB
     @State private var selectedPosition = ""
     @State private var updater = 0
     @State private var showingReadSheet = false
@@ -83,7 +83,7 @@ struct BookDetailView: View {
                 
                 HStack {
                     Picker("Format", selection: $selectedFormat) {
-                        ForEach(Book.Format.allCases) { format in
+                        ForEach(CalibreBook.Format.allCases) { format in
                             if book.formats[format.rawValue] != nil {
                                 Text(format.rawValue).tag(format)
                             }
@@ -94,7 +94,7 @@ struct BookDetailView: View {
                         if self.book.formats[modelData.defaultFormat.rawValue] != nil {
                             self.selectedFormat = modelData.defaultFormat
                         } else {
-                            Book.Format.allCases.forEach { format in
+                            CalibreBook.Format.allCases.forEach { format in
                                 if self.book.formats[format.rawValue] != nil {
                                     self.selectedFormat = format
                                 }
@@ -162,7 +162,7 @@ struct BookDetailView: View {
                     commentWebView
                         .frame(height: CGFloat(400), alignment: .center)
                         .onAppear {
-                            commentWebView.setContent(self.book.comments, URL(string: self.book.serverInfo.calibreServer))
+                            commentWebView.setContent(self.book.comments, URL(string: self.book.library.server.baseUrl))
                         }
                 }
             }   //VStack
@@ -211,11 +211,11 @@ struct BookDetailView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
                     if book.inShelf {
-                        modelData.libraryInfo.clearCache(book.id, book.libraryName, selectedFormat)
-                        modelData.libraryInfo.removeFromShelf(book.id, book.libraryName)
+                        modelData.clearCache(inShelfId: book.inShelfId, selectedFormat)
+                        modelData.removeFromShelf(inShelfId: book.inShelfId)
                         downloadStatus = .INITIAL
                     } else if downloadStatus == .INITIAL {
-                        let downloading = modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { isSuccess in
+                        let downloading = modelData.downloadFormat(book.id, selectedFormat) { isSuccess in
                             if isSuccess {
                                 downloadStatus = .DOWNLOADED
                             } else {
@@ -241,7 +241,7 @@ struct BookDetailView: View {
         }
         .onChange(of: downloadStatus, perform: { value in
             if downloadStatus == .DOWNLOADED {
-                modelData.libraryInfo.addToShelf(book.id, book.libraryName)
+                modelData.addToShelf(book.id)
             }
         })
         .alert(item: $alertItem) { item in
@@ -271,7 +271,7 @@ struct BookDetailView: View {
                     title: Text("Need Download"),
                     message: Text("Please Download First"),
                     primaryButton: .default(Text("Download"), action: {
-                        modelData.libraryInfo.downloadFormat(book.id, book.libraryName, selectedFormat) { result in
+                        modelData.downloadFormat(book.id, selectedFormat) { result in
                             
                         }
                     }),
@@ -285,7 +285,7 @@ struct BookDetailView: View {
     }
 
     func getMetadata() {
-        let endpointUrl = URL(string: book.serverInfo.calibreServer + "/cdb/cmd/list/0?library_id=" + book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let endpointUrl = URL(string: book.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         let json:[Any] = [["all"], "", "", "id:\(book.id)", -1]
         do {
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -326,7 +326,7 @@ struct BookDetailView: View {
                             book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
                         }
                         
-                        commentWebView.setContent(book.comments, URL(string: book.serverInfo.calibreServer))
+                        commentWebView.setContent(book.comments, URL(string: book.library.server.baseUrl))
                         
                         readingPositions.removeAll()
                         book.readPos.getDevices().forEach { position in
@@ -334,7 +334,7 @@ struct BookDetailView: View {
                         }
                         
                         if( book.formats[selectedFormat.rawValue] == nil ) {
-                            Book.Format.allCases.forEach { format in
+                            CalibreBook.Format.allCases.forEach { format in
                                 if book.formats[format.rawValue] != nil {
                                     selectedFormat = format
                                 }
@@ -446,7 +446,7 @@ struct BookDetailView: View {
                                     in: .userDomainMask,
                                     appropriateFor: nil,
                                     create: false)
-        var savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+        var savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())")
         if FileManager.default.fileExists(atPath: savedURL.path) {
             return savedURL
         }
@@ -456,7 +456,7 @@ struct BookDetailView: View {
                                     in: .userDomainMask,
                                     appropriateFor: nil,
                                     create: false)
-        savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+        savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())")
         if FileManager.default.fileExists(atPath: savedURL.path) {
             return savedURL
         }
@@ -478,7 +478,7 @@ struct BookDetailView: View {
                                         in: .userDomainMask,
                                         appropriateFor: nil,
                                         create: false)
-            let savedURL = downloadBaseURL.appendingPathComponent("\(book.libraryName) - \(book.id).\(selectedFormat.rawValue.lowercased())")
+            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())")
             defaultLog.info("downloadBaseURL: \(downloadBaseURL.absoluteString)")
             defaultLog.info("savedURL: \(savedURL.absoluteString)")
             
@@ -536,7 +536,7 @@ struct BookDetailView: View {
             
             let readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString()
             
-            let endpointUrl = URL(string: book.serverInfo.calibreServer + "/cdb/cmd/set_metadata/0?library_id=" + book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+            let endpointUrl = URL(string: book.library.server.baseUrl + "/cdb/cmd/set_metadata/0?library_id=" + book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
             let json:[Any] = ["fields", book.id, [["#read_pos", readPosData]]]
             
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -588,7 +588,7 @@ struct BookDetailView: View {
     
     
     func deleteBook() {
-        let endpointUrl = URL(string: book.serverInfo.calibreServer + "/cdb/cmd/remove/0?library_id=" + book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let endpointUrl = URL(string: book.library.server.baseUrl + "/cdb/cmd/remove/0?library_id=" + book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         let json:[Any] = [[book.id], false]
         do {
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -628,7 +628,8 @@ struct BookDetailView: View {
     }
     
     func handleBookDeleted() {
-        modelData.libraryInfo.deleteBook(book: book)
+//        modelData.libraryInfo.deleteBook(book: book)
+        //TODO
         getMetadata()
     }
 }
@@ -636,7 +637,7 @@ struct BookDetailView: View {
 @available(macCatalyst 14.0, *)
 struct BookDetailView_Previews: PreviewProvider {
     static var modelData = ModelData()
-    @State static var book = Book(serverInfo: ServerInfo(calibreServer: modelData.calibreServer), title: "Some Title", authors: "Some Authors")
+    @State static var book = CalibreBook(id: 1, library: CalibreLibrary(server: CalibreServer(baseUrl: "", username: "", password: ""), name: "Local"), title: "Title", authors: "Author", comments: "", rating: 0, formats: ["EPUB":""], readPos: BookReadingPosition(), inShelf: true)
     static var previews: some View {
         BookDetailView(book: $book)
             .environmentObject(modelData)

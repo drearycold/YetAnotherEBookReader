@@ -34,8 +34,6 @@ struct LibraryInfoView: View {
     private var defaultLog = Logger()
     
     var body: some View {
-        
-        
         VStack {
             TextField("Search", text: $searchString, onCommit: {
                 modelData.updateFilteredBookList(searchString: searchString)
@@ -50,35 +48,13 @@ struct LibraryInfoView: View {
             
             NavigationView {
                 List(selection: $selectedBookIds) {
-//                    ForEach(modelData.libraryInfo.libraryMap[selectedLibrary]!.books.indices, id: \.self) { index in
-                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize).filter({ (bookId) -> Bool in
-                        var result = false
-                        if let library = modelData.getLibrary() {
-                            result = library.booksMap[bookId] != nil
-                        }
-                        return result
-                    })
-                    , id: \.self) { bookId in
-                        NavigationLink(destination: BookDetailView(book: Binding<Book>(
-                            get: {
-//                                var book = library.books[index]
-//                                if( !book.inShelf ) {
-//                                    print("INSHELF \(library) \(library.books) \(index) \(book.title) \(book.inShelf)")
-//                                }
-//                                return modelData.libraryInfo.libraryMap[selectedLibrary]!.books[index]
-                                if let library = modelData.getLibrary(), let book = library.booksMap[bookId] {
-                                    return book
-                                }
-                                var book = Book(serverInfo: ServerInfo(calibreServer: modelData.calibreServer))
-                                book.id = bookId
-                                book.libraryName = modelData.calibreLibrary
-                                return book
-                            },
-                            set: { newBook in
-                                modelData.libraryInfo.updateBook(book: newBook)
-                            }
-                        )), tag: bookId, selection: $modelData.selectionLibraryNav) {
-                            if let library = modelData.getLibrary(), let book = library.booksMap[bookId] {
+                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
+                        NavigationLink (
+                            destination: BookDetailView(book: modelData.getCurrentServerLibraryBook(bookId: bookId)),
+                            tag: bookId,
+                            selection: $modelData.selectionLibraryNav
+                        ) {
+                            if let book = modelData.calibreServerLibraryBooks[bookId] {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(book.title)").font(.headline)
                                     
@@ -164,13 +140,13 @@ struct LibraryInfoView: View {
                                     defaultLog.info("selected \(selectedBookIds.description)")
                                     selectedBookIds.forEach { bookId in
                                         var downloaded = false
-                                        Book.Format.allCases.forEach {
-                                            downloaded = downloaded || modelData.libraryInfo.downloadFormat(bookId, modelData.calibreLibrary, $0) { result in
+                                        CalibreBook.Format.allCases.forEach {
+                                            downloaded = downloaded || modelData.downloadFormat(bookId, $0) { result in
                                                 
                                             }
                                         }
                                         if downloaded {
-                                            modelData.libraryInfo.addToShelf(bookId, modelData.calibreLibrary)
+                                            modelData.addToShelf(bookId)
                                         }
                                     }
                                     selectedBookIds.removeAll()
@@ -181,10 +157,10 @@ struct LibraryInfoView: View {
                                 Button(action: {
                                     defaultLog.info("selected \(selectedBookIds.description)")
                                     selectedBookIds.forEach { bookId in
-                                        Book.Format.allCases.forEach {
-                                            modelData.libraryInfo.clearCache(bookId, modelData.calibreLibrary, $0)
+                                        CalibreBook.Format.allCases.forEach {
+                                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId, $0)
                                         }
-                                        modelData.libraryInfo.removeFromShelf(bookId, modelData.calibreLibrary)
+                                        modelData.removeFromShelf(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
                                     }
                                     selectedBookIds.removeAll()
                                 }) {
@@ -205,7 +181,7 @@ struct LibraryInfoView: View {
                     modelData.currentBookId = modelData.filteredBookList[0]
                 }
             }
-            .onChange(of: modelData.calibreLibrary) { value in
+            .onChange(of: modelData.currentCalibreLibraryId) { value in
 //                if( modelData.getLibrary().booksMap.isEmpty ) {
 //                    syncLibrary()
 //                }
@@ -272,7 +248,6 @@ extension EditMode {
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView_Previews: PreviewProvider {
     static private var modelData = ModelData()
-    @State static private var libraryInfo = LibraryInfo()
     static var previews: some View {
         LibraryInfoView()
             .environmentObject(ModelData())

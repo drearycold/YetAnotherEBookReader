@@ -230,7 +230,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
         
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
         let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: bookDetailView!.book.id), bookDetailView!.book.libraryName)
+            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: bookDetailView!.book.id), bookDetailView!.book.library.name)
         )
         if let pdfOptionsRealm = pdfOptionsRealmResult.first {
             pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
@@ -272,7 +272,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
         let pdfOptionsRealm = PDFOptionsRealm()
         pdfOptionsRealm.id = bookDetailView!.book.id
-        pdfOptionsRealm.libraryName = bookDetailView!.book.libraryName
+        pdfOptionsRealm.libraryName = bookDetailView!.book.library.name
         pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
         pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
         pdfOptionsRealm.hMarginAutoScaler = pdfOptions.hMarginAutoScaler

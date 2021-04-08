@@ -11,30 +11,18 @@ import SwiftUI
 
 class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
-    var books = [Book]()
+    var books = [CalibreBook]()
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
 
     func updateBookModel() {
-        books.removeAll()
-        bookModel.removeAll()
-        
-        modelData.libraryInfo.libraries.forEach { library in
-            print("LIBRARY \(library.name)")
-            library.books.filter({ book in
-                return book.inShelf
-            }).forEach { book in
-                let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
-                
-                books.append(book)
-                bookModel.append(
-                    BookModel(
-                        bookCoverSource: coverURL,
-                        bookId: book.bookModelId,
-                        bookTitle: book.title))
-            }
+        bookModel = modelData.booksInShelf.map { (key: String, value: CalibreBook) -> BookModel in
+            BookModel(
+                bookCoverSource: value.coverURL.absoluteString,
+                bookId: key,
+                bookTitle: value.title)
         }
         
         self.shelfView.reloadBooks(bookModel: bookModel)
@@ -66,7 +54,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         
 //        let book = modelData.getBook(libraryName: bookModel[index].libraryName, bookId: Int32(bookModel[index].bookId)!)
         let bookDetailView = BookDetailView(
-            book: modelData.getBook(libraryName: books[index].libraryName, bookId: books[index].id)).environmentObject(modelData)
+            book: modelData.getBookInShelf(inShelfId: bookId)).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
