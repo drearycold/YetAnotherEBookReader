@@ -19,13 +19,23 @@ final class ModelData: ObservableObject {
     @Published var calibreServers = [String: CalibreServer]()
     @Published var currentCalibreServerId = "" {
         didSet {
+            currentBookId = 0
+            filteredBookList.removeAll()
+            calibreServerLibraryBooks.removeAll()
             calibreServerLibraries.removeAll()
             populateServerLibraries()
         }
     }
     
     @Published var calibreServerLibraries = [String: CalibreLibrary]()
-    @Published var currentCalibreLibraryId = ""
+    @Published var currentCalibreLibraryId = "" {
+        didSet {
+            currentBookId = 0
+            filteredBookList.removeAll()
+            calibreServerLibraryBooks.removeAll()
+            populateServerLibraryBooks()
+        }
+    }
     
     @Published var calibreServerLibraryBooks = [Int32: CalibreBook]()
     
@@ -43,6 +53,8 @@ final class ModelData: ObservableObject {
         }
 
     @Published var selectionLibraryNav: Int32? = nil
+    
+    @Published var loadLibraryResult = "Waiting"
     
     private var defaultLog = Logger()
     
@@ -84,33 +96,22 @@ final class ModelData: ObservableObject {
         
         if currentCalibreServerId.isEmpty == false {
             let currentCalibreServer = calibreServers[currentCalibreServerId]!
-            
             populateServerLibraries()
-            
-            
         }
         
         if currentCalibreLibraryId.isEmpty == false {
             let currentCalibreLibrary = calibreServerLibraries[currentCalibreLibraryId]!
-            
-            let booksCached = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-                            currentCalibreLibrary.server.baseUrl,
-                            currentCalibreLibrary.server.username,
-                            currentCalibreLibrary.name
-                )
-            ).sorted(byKeyPath: "id")
-            booksCached.forEach { bookRealm in
-                calibreServerLibraryBooks[bookRealm.id] = self.convert(library: currentCalibreLibrary, bookRealm: bookRealm)
-            }
+            populateServerLibraryBooks()
         }
         
         let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "inShelf = true")
         )
+        
         booksInShelfRealm.forEach { (bookRealm) in
+            // print(bookRealm)
             let server = calibreServers[CalibreServer(baseUrl: bookRealm.serverUrl!, username: bookRealm.serverUsername!, password: "").id]!
-            let library = calibreServerLibraries[CalibreLibrary(server: server, name: bookRealm.libraryName!).id]!
+            let library = CalibreLibrary(server: server, name: bookRealm.libraryName!)
             let book = self.convert(library: library, bookRealm: bookRealm)
             self.booksInShelf[book.inShelfId] = book
         }
@@ -143,12 +144,33 @@ final class ModelData: ObservableObject {
                 currentCalibreLibraryId = calibreLibrary.id
             }
         }
+        if calibreServerLibraries[currentCalibreLibraryId] == nil {
+            let defaultLibrary = CalibreLibrary(server: currentCalibreServer, name: currentCalibreServer.defaultLibrary)
+            currentCalibreLibraryId = defaultLibrary.id
+        }
         
         if librariesCached.isEmpty && calibreServers.count == 1 {
             let localLibrary = CalibreLibrary(server: calibreServers.values.first!, name: "Local Library")
             calibreServerLibraries[localLibrary.id] = localLibrary
             updateLibraryRealm(library: localLibrary)
             currentCalibreLibraryId = localLibrary.id
+        }
+    }
+    
+    func populateServerLibraryBooks() {
+        guard let currentCalibreLibrary = calibreServerLibraries[currentCalibreLibraryId] else {
+            return
+        }
+        
+        let booksCached = realm.objects(CalibreBookRealm.self).filter(
+            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                        currentCalibreLibrary.server.baseUrl,
+                        currentCalibreLibrary.server.username,
+                        currentCalibreLibrary.name
+            )
+        ).sorted(byKeyPath: "id")
+        booksCached.forEach { bookRealm in
+            calibreServerLibraryBooks[bookRealm.id] = self.convert(library: currentCalibreLibrary, bookRealm: bookRealm)
         }
     }
     
@@ -175,20 +197,6 @@ final class ModelData: ObservableObject {
         return calibreBook
     }
     
-    func convert(book: CalibreBook) -> CalibreBookRealm {
-        let bookRealm = CalibreBookRealm()
-        bookRealm.id = book.id
-        bookRealm.serverUrl = book.library.server.baseUrl
-        bookRealm.serverUsername = book.library.server.username
-        bookRealm.libraryName = book.library.name
-        bookRealm.title = book.title
-        bookRealm.authors = book.authors
-        bookRealm.comments = book.comments
-        bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
-        
-        return bookRealm
-    }
-    
     func getBookInShelf(inShelfId: String) -> Binding<CalibreBook> {
         return getBook(library: booksInShelf[inShelfId]!.library, bookId: booksInShelf[inShelfId]!.id)
     }
@@ -200,27 +208,28 @@ final class ModelData: ObservableObject {
     func getBook(library: CalibreLibrary, bookId: Int32) -> Binding<CalibreBook> {
         return Binding<CalibreBook>(
             get: {
-                let booksRealm = self.realm.objects(CalibreBookRealm.self).filter(
-                    NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
-                                library.server.baseUrl,
-                                library.server.username,
-                                library.name,
-                                NSNumber(value: bookId))
-                    )
-                assert(booksRealm.isEmpty, "illegal params")
-                
-                return self.convert(library: library, bookRealm: booksRealm.first!)
+                if library.id == self.currentCalibreLibraryId {
+                    return self.calibreServerLibraryBooks[bookId]!
+                } else {
+                    let booksRealm = self.realm.objects(CalibreBookRealm.self).filter(
+                        NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
+                                    library.server.baseUrl,
+                                    library.server.username,
+                                    library.name,
+                                    NSNumber(value: bookId))
+                        )
+                    assert(!booksRealm.isEmpty, "illegal params")
+                    
+                    return self.convert(library: library, bookRealm: booksRealm.first!)
+                }
             },
             set: { [self] book in
-                let bookRealm = self.convert(book: book)
-                try! realm.write {
-                    realm.add(bookRealm, update: Realm.UpdatePolicy.all)
-                }
+                updateBookRealm(book: book)
                 if calibreServerLibraries[currentCalibreLibraryId] == library {
                     calibreServerLibraryBooks[book.id] = book
                 }
                 if book.inShelf {
-                    
+                    //TODO
                 }
             }
         )
@@ -233,6 +242,15 @@ final class ModelData: ObservableObject {
     
     func updateCustomDictViewer(enabled: Bool, value: String) {
         //TODO
+    }
+    
+    func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
+        calibreServers[server.id] = server
+        updateServerRealm(server: server)
+        
+        libraries.forEach { (library) in
+            updateLibraryRealm(library: library)
+        }
     }
     
     func updateServerRealm(server: CalibreServer) {
@@ -265,11 +283,64 @@ final class ModelData: ObservableObject {
         bookRealm.title = book.title
         bookRealm.authors = book.authors
         bookRealm.comments = book.comments
+        bookRealm.rating = book.rating
+        bookRealm.inShelf = book.inShelf
+        
         bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
+        
+        let deviceMapSerialize = book.readPos.getCopy().mapValues { (value) -> Any in
+            try! JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
+        }
+        
+        bookRealm.readPosData = try! JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
         
         try! realm.write {
             realm.add(bookRealm, update: .modified)
         }
+    }
+    
+    func startLoad(calibreServer: CalibreServer, success: @escaping (_ jsonData: Data) -> Void) -> Int {
+        guard let url = URL(string: calibreServer.baseUrl + "/ajax/library-info") else {
+            return 2
+        }
+        if calibreServer.username.count > 0 && calibreServer.password.count > 0 {
+            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+                                                          port: url.port ?? 0,
+                                                          protocol: url.scheme,
+                                                          realm: "calibre",
+                                                          authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+            let userCredential = URLCredential(user: calibreServer.username,
+                                               password: calibreServer.password,
+                                               persistence: .permanent)
+            URLCredentialStorage.shared.setDefaultCredential(userCredential, for: protectionSpace)
+        }
+        
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                // self.handleClientError(error)
+                print(error.localizedDescription)
+                self.loadLibraryResult = error.localizedDescription
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                (200...299).contains(httpResponse.statusCode) else {
+                // self.handleServerError(response)
+                self.loadLibraryResult = "not httpResponse"
+                return
+            }
+            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                let data = data,
+                let string = String(data: data, encoding: .utf8) {
+                DispatchQueue.main.async {
+                    //self.webView.loadHTMLString(string, baseURL: url)
+                    self.loadLibraryResult = string
+                    //self.handleLibraryInfo(jsonData: data)
+                    success(data)
+                }
+            }
+        }
+        task.resume()
+        return 0
     }
     
     func handleLibraryInfo(jsonData: Data) {
@@ -347,10 +418,13 @@ final class ModelData: ObservableObject {
                 }
             }
             
-            try! realm.write {
-                realm.add(calibreServerLibraryBooks.values.map({ (book) -> CalibreBookRealm in
-                    convert(book: book)
-                }), update: .modified)
+//            try! realm.write {
+//                realm.add(calibreServerLibraryBooks.values.map({ (book) -> CalibreBookRealm in
+//                    convert(book: book)
+//                }), update: .modified)
+//            }
+            calibreServerLibraryBooks.values.forEach { (book) in
+                updateBookRealm(book: book)
             }
         } catch {
         

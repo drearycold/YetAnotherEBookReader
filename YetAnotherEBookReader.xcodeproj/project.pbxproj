@@ -674,6 +674,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -735,6 +736,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				EMBED_ASSET_PACKS_IN_PRODUCT_BUNDLE = NO;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -830,7 +832,7 @@
 					"\"WebKit\"",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReaderM;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";
@@ -915,7 +917,7 @@
 					"\"WebKit\"",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReaderM;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";
@@ -1054,7 +1056,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/drearycold/FolioReaderKit.git";
 			requirement = {
-				branch = peter_dev;
+				branch = migration/wkwebview;
 				kind = branch;
 			};
 		};

@@ -30,14 +30,6 @@ struct BookDetailView: View {
     
     var defaultLog = Logger()
     
-    private var readingPositionsNew : [String] {
-        var tmp = [String]()
-        self.book.readPos.getDevices().forEach { position in
-            tmp.append("\(position.id) with \(position.readerName): \(position.lastPosition[0]) \(position.lastPosition[1]) \(position.lastPosition[2]) \(position.lastReadPage)")
-        }
-        return tmp
-    }
-    
     struct AlertItem : Identifiable {
         var id: String
     }
@@ -70,7 +62,6 @@ struct BookDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading) {
-                
                 HStack {
                     Text(book.authors).font(.subheadline)
                     Spacer()
@@ -104,13 +95,6 @@ struct BookDetailView: View {
                     Spacer()
                 }
                 
-                
-//                ForEach(readingPositions, id: \.self) { position in
-//                    Text(position)
-//                }
-//                ForEach(readingPositionsNew, id: \.self) { position in
-//                    Text(position)
-//                }
                 Picker("Position", selection: $selectedPosition) {
                     ForEach(self.book.readPos.getDevices(), id: \.self) { position in
                         HStack {
@@ -320,8 +304,6 @@ struct BookDetailView: View {
                         //book.comments = string
                         handleLibraryBooks(json: data)
                         
-                        //let readPos = modelData.getBook(libraryName: book.libraryName, bookId: book.id).readPos.wrappedValue
-                        //book.readPos = modelData.getBook(libraryName: book.libraryName, bookId: book.id).readPos.wrappedValue
                         if( book.readPos.getDevices().isEmpty) {
                             book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
                         }
@@ -342,7 +324,9 @@ struct BookDetailView: View {
                         }
                         
                         if( book.readPos.getPosition(selectedPosition) == nil ) {
-                            selectedPosition = book.readPos.getDevices()[0].id
+                            if !book.readPos.getDevices().isEmpty {
+                                selectedPosition = book.readPos.getDevices()[0].id
+                            }
                         }
                         
                         //                            if( book.readPos.deviceMap.isEmpty ) {

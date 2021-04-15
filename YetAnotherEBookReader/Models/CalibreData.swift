@@ -8,7 +8,7 @@
 import Foundation
 import RealmSwift
 
-struct CalibreServer:Hashable, Identifiable {
+struct CalibreServer: Hashable, Identifiable {
     var id: String {
         get {
             if username.isEmpty {
@@ -166,8 +166,35 @@ class CalibreBookRealm: Object {
     }
     
     func readPos() -> BookReadingPosition {
-        //TODO
         var readPos = BookReadingPosition()
+        
+        let readPosObject = try! JSONSerialization.jsonObject(with: readPosData! as Data, options: [])
+        let readPosDict = readPosObject as! NSDictionary
+        
+        let deviceMapObject = readPosDict["deviceMap"]
+        let deviceMapDict = deviceMapObject as! NSDictionary
+        deviceMapDict.forEach { key, value in
+            let deviceName = key as! String
+            let deviceReadingPositionDict = value as! [String: Any]
+            //TODO merge
+            
+            var deviceReadingPosition = readPos.getPosition(deviceName)
+            if( deviceReadingPosition == nil ) {
+                deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
+            }
+            
+            deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
+            deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+            deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+            deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+            deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+            deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+            if let lastPosition = deviceReadingPositionDict["lastPosition"] {
+                deviceReadingPosition!.lastPosition = lastPosition as! [Int]
+            }
+            
+            readPos.updatePosition(deviceName, deviceReadingPosition!)
+        }
         return readPos
     }
     
