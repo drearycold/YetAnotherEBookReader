@@ -34,32 +34,32 @@ struct LibraryInfoView: View {
     private var defaultLog = Logger()
     
     var body: some View {
-        VStack {
-            TextField("Search", text: $searchString, onCommit: {
-                modelData.updateFilteredBookList(searchString: searchString)
-                pageNo = 0
-                if let index = modelData.filteredBookList.firstIndex(of: modelData.selectionLibraryNav ?? -1) {
-                    modelData.currentBookId = modelData.filteredBookList[index]
-                } else if !modelData.filteredBookList.isEmpty {
-                    modelData.currentBookId = modelData.filteredBookList[0]
-                }
-            })
-            .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
-            
             NavigationView {
+                
                 List(selection: $selectedBookIds) {
+                    TextField("Search", text: $searchString, onCommit: {
+                        modelData.searchString = searchString
+                        pageNo = 0
+                        if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
+                            modelData.currentBookId = modelData.filteredBookList[index]
+                        } else if !modelData.filteredBookList.isEmpty {
+                            modelData.currentBookId = modelData.filteredBookList[0]
+                        }
+                    })
+                    .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
+                    
                     ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
                         NavigationLink (
                             destination: BookDetailView(book: modelData.getCurrentServerLibraryBook(bookId: bookId)),
                             tag: bookId,
-                            selection: $modelData.selectionLibraryNav
+                            selection: $modelData.selectedBookId
                         ) {
                             if let book = modelData.calibreServerLibraryBooks[bookId] {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text("\(book.title)").font(.headline)
                                     
                                     HStack {
-                                        Text("\(book.authors)").font(.subheadline)
+                                        Text("\(book.authorsDescriptionShort)").font(.subheadline)
                                         Spacer()
                                         if book.rating > 9 {
                                             Text("★★★★★").font(.subheadline)
@@ -91,7 +91,7 @@ struct LibraryInfoView: View {
                     }   //ForEach
                     .onDelete(perform: deleteFromList)
                 }   //List
-                .navigationTitle("Pick a Book")
+                .navigationTitle("Library")
                 .navigationBarTitleDisplayMode(.automatic)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -174,8 +174,8 @@ struct LibraryInfoView: View {
                 .environment(\.editMode, self.$editMode)
             }   //NavigationView
             .onAppear() {
-                modelData.updateFilteredBookList(searchString: searchString)
-                if let index = modelData.filteredBookList.firstIndex(of: modelData.selectionLibraryNav ?? -1) {
+                modelData.updateFilteredBookList()
+                if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
                     modelData.currentBookId = modelData.filteredBookList[index]
                 } else if !modelData.filteredBookList.isEmpty {
                     modelData.currentBookId = modelData.filteredBookList[0]
@@ -186,13 +186,13 @@ struct LibraryInfoView: View {
 //                    syncLibrary()
 //                }
                 pageNo = 0
-                modelData.updateFilteredBookList(searchString: searchString)
+                modelData.updateFilteredBookList()
             }
-            .onChange(of: modelData.selectionLibraryNav, perform: { value in
+            .onChange(of: modelData.selectedBookId, perform: { value in
                 
             })
             .navigationViewStyle(DefaultNavigationViewStyle())
-        }   //Body
+        //Body
     }   //View
     
     private var editButton: some View {

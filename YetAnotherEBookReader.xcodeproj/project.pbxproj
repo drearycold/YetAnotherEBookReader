@@ -832,7 +832,7 @@
 					"\"WebKit\"",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReaderM;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";
@@ -917,7 +917,7 @@
 					"\"WebKit\"",
 					"-ObjC",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReaderM;
+				PRODUCT_BUNDLE_IDENTIFIER = com.roswen9.YetAnotherEBookReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "Libs/YetAnotherEBookReader-Bridging-Header.h";

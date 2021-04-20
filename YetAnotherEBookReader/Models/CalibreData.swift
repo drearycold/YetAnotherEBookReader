@@ -103,10 +103,56 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     
     let id: Int32
     let library: CalibreLibrary
-    var title = ""
-    var authors = ""
-    var comments = ""
+    var title = "No Title"
+    var authors = [String]()
+    var authorsDescription: String {
+        if authors.count == 0 {
+            return "Unknown"
+        }
+        if authors.count == 1 {
+            return authors[0]
+        }
+        return authors.reduce("") { (desc, author) -> String in
+            if desc.count == 0 {
+                return author
+            } else {
+                return desc + ", " + author
+            }
+        }
+    }
+    var authorsDescriptionShort: String {
+        if authors.count == 0 {
+            return "Unknown"
+        }
+        if authors.count == 1 {
+            return authors[0]
+        }
+        return authors[0] + ", et al."
+    }
+    var comments = "Without Comments"
+    var publisher = "Unknown"
+    var series = ""
     var rating = 0
+    var size = 0
+    var pubDate = Date()
+    var timestamp = Date()
+    var lastModified = Date()
+    var tags = [String]()
+    var tagsDescription: String {
+        if tags.count == 0 {
+            return ""
+        }
+        if tags.count == 1 {
+            return authors[0]
+        }
+        return tags.reduce("") { (desc, tag) -> String in
+            if desc.count == 0 {
+                return tag
+            } else {
+                return desc + ", " + tag
+            }
+        }
+    }
     var formats = [String: String]()
     var readPos = BookReadingPosition()
     
@@ -153,11 +199,19 @@ class CalibreBookRealm: Object {
         }
     }
     @objc dynamic var title = ""
-    @objc dynamic var authors = ""
+    let authors = List<String>()
     @objc dynamic var comments = ""
+    @objc dynamic var publisher = ""
+    @objc dynamic var series = ""
+    @objc dynamic var rating = 0
+    @objc dynamic var size = 0
+    @objc dynamic var pubDate = Date()
+    @objc dynamic var timestamp = Date()
+    @objc dynamic var lastModified = Date()
+    let tags = List<String>()
     @objc dynamic var formatsData: NSData?
     @objc dynamic var readPosData: NSData?
-    @objc dynamic var rating = 0
+    
     @objc dynamic var inShelf = false
     
     func formats() -> [String: String] {
@@ -205,6 +259,10 @@ class CalibreBookRealm: Object {
     func updatePrimaryKey() {
         primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(libraryName ?? "-") ^ \(id)"
     }
+    
+    override static func indexedProperties() -> [String] {
+            return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf"]
+        }
 }
 
 struct BookReadingPosition {
@@ -271,4 +329,8 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var description: String {
         return "\(id) with \(readerName): \(lastPosition[0]) \(lastPosition[1]) \(lastPosition[2]) \(lastReadPage)"
     }
+}
+
+struct ServerErrorDelegate {
+    
 }

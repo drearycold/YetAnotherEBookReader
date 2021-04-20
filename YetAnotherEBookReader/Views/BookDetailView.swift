@@ -63,7 +63,22 @@ struct BookDetailView: View {
         ScrollView {
             VStack(alignment: .leading) {
                 HStack {
-                    Text(book.authors).font(.subheadline)
+                    Text(book.authorsDescription).font(.subheadline)
+                    Spacer()
+                    Text(book.publisher).font(.subheadline)
+                }
+                HStack {
+                    Text(book.series).font(.subheadline)
+                    Spacer()
+                    Text(book.pubDate.description).font(.subheadline)
+                }
+                HStack {
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(book.size), countStyle: .file)).font(.subheadline)
+                    Spacer()
+                    Text(book.lastModified.description).font(.subheadline)
+                }
+                HStack {
+                    Text(book.tagsDescription).font(.subheadline)
                     Spacer()
                 }
                 
@@ -352,75 +367,112 @@ struct BookDetailView: View {
     }
     
     func handleLibraryBooks(json: Data) {
-        do {
-            let root = try JSONSerialization.jsonObject(with: json, options: []) as! NSDictionary
-            let resultElement = root["result"] as! NSDictionary
-            let bookIds = resultElement["book_ids"] as! NSArray
-            let dataElement = resultElement["data"] as! NSDictionary
-            
-            let titles = dataElement["title"] as! NSDictionary
-            titles.forEach { (key, value) in
-                book.title = value as! String
+
+        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary,
+              let resultElement = root["result"] as? NSDictionary,
+              let bookIds = resultElement["book_ids"] as? NSArray,
+              let dataElement = resultElement["data"] as? NSDictionary,
+              let bookId = bookIds.firstObject as? NSNumber else {
+            self.alertItem = AlertItem(id: "Failed to Parse Calibre Server Response.")
+            return
+        }
+        
+        let bookIdKey = bookId.stringValue
+        
+        if let d = dataElement["title"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.title = v
+        }
+        if let d = dataElement["publisher"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.publisher = v
+        }
+        if let d = dataElement["series"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.series = v
+        }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime
+        if let d = dataElement["pubdate"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.pubDate = date
+        }
+        if let d = dataElement["last_modified"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.lastModified = date
+        }
+        if let d = dataElement["timestamp"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.timestamp = date
+        }
+        
+        if let d = dataElement["tags"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
+            book.tags = v.compactMap { (t) -> String? in
+                t as? String
             }
-            
-            let authors = dataElement["authors"] as! NSDictionary
-            authors.forEach { (key, value) in
-                let authors = value as! NSArray
-                book.authors = authors[0] as! String
-                //                bookAuthors = book.authors
-            }
-            
-            let comments = dataElement["comments"] as! NSDictionary
-            comments.forEach { (key, value) in
-                book.comments = value as? String ?? "Without Comments"
-            }
-            
-            do {
-                if( dataElement["#read_pos"] == nil ) {
-                    throw LibraryError.runtimeError("need #read_pos custom column")
+        }
+        if let d = dataElement["size"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
+            book.size = v.intValue
+        }
+        
+        if let d = dataElement["authors"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
+            book.authors = v.compactMap { (t) -> String? in
+                if let t = t as? String {
+                    return t
+                } else {
+                    return nil
                 }
-                let readPosElement = dataElement["#read_pos"] as! NSDictionary
-                try readPosElement.forEach { (key, value) in
-                    if( value is NSString ) {
-                        let readPosString = value as! NSString
-                        let readPosObject = try JSONSerialization.jsonObject(with: Data(base64Encoded: readPosString as String)!, options: [])
-                        let readPosDict = readPosObject as! NSDictionary
-                        defaultLog.info("readPosDict \(readPosDict)")
+            }
+        }
+//        authors.forEach { (key, value) in
+//            let authors = value as! NSArray
+//            book.authors = authors[0] as! String
+//            //                bookAuthors = book.authors
+//        }
+        
+        let comments = dataElement["comments"] as! NSDictionary
+        comments.forEach { (key, value) in
+            book.comments = value as? String ?? "Without Comments"
+        }
+        
+        do {
+            if( dataElement["#read_pos"] == nil ) {
+                throw LibraryError.runtimeError("need #read_pos custom column")
+            }
+            let readPosElement = dataElement["#read_pos"] as! NSDictionary
+            try readPosElement.forEach { (key, value) in
+                if( value is NSString ) {
+                    let readPosString = value as! NSString
+                    let readPosObject = try JSONSerialization.jsonObject(with: Data(base64Encoded: readPosString as String)!, options: [])
+                    let readPosDict = readPosObject as! NSDictionary
+                    defaultLog.info("readPosDict \(readPosDict)")
+                    
+                    let deviceMapObject = readPosDict["deviceMap"]
+                    let deviceMapDict = deviceMapObject as! NSDictionary
+                    deviceMapDict.forEach { key, value in
+                        let deviceName = key as! String
+                        let deviceReadingPositionDict = value as! [String: Any]
+                        //TODO merge
                         
-                        let deviceMapObject = readPosDict["deviceMap"]
-                        let deviceMapDict = deviceMapObject as! NSDictionary
-                        deviceMapDict.forEach { key, value in
-                            let deviceName = key as! String
-                            let deviceReadingPositionDict = value as! [String: Any]
-                            //TODO merge
-                            
-                            var deviceReadingPosition = book.readPos.getPosition(deviceName)
-                            if( deviceReadingPosition == nil ) {
-                                deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-                            }
-                            
-                            deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
-                            deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                            deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                            deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                            deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                            deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-                            if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                                deviceReadingPosition!.lastPosition = lastPosition as! [Int]
-                            }
-                            
-                            book.readPos.updatePosition(deviceName, deviceReadingPosition!)
-                            defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                        var deviceReadingPosition = book.readPos.getPosition(deviceName)
+                        if( deviceReadingPosition == nil ) {
+                            deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
                         }
+                        
+                        deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
+                        deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+                        deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                        deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+                        deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+                        deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+                        if let lastPosition = deviceReadingPositionDict["lastPosition"] {
+                            deviceReadingPosition!.lastPosition = lastPosition as! [Int]
+                        }
+                        
+                        book.readPos.updatePosition(deviceName, deviceReadingPosition!)
+                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                     }
                 }
-            } catch {
-                defaultLog.warning("handleLibraryBooks: \(error.localizedDescription)")
             }
-            
         } catch {
             defaultLog.warning("handleLibraryBooks: \(error.localizedDescription)")
         }
+
     }
     
     
@@ -621,7 +673,7 @@ struct BookDetailView: View {
 @available(macCatalyst 14.0, *)
 struct BookDetailView_Previews: PreviewProvider {
     static var modelData = ModelData()
-    @State static var book = CalibreBook(id: 1, library: CalibreLibrary(server: CalibreServer(baseUrl: "", username: "", password: ""), name: "Local"), title: "Title", authors: "Author", comments: "", rating: 0, formats: ["EPUB":""], readPos: BookReadingPosition(), inShelf: true)
+    @State static var book = CalibreBook(id: 1, library: CalibreLibrary(server: CalibreServer(baseUrl: "", username: "", password: ""), name: "Local"), title: "Title", authors: ["Author"], comments: "", rating: 0, formats: ["EPUB":""], readPos: BookReadingPosition(), inShelf: true)
     static var previews: some View {
         BookDetailView(book: $book)
             .environmentObject(modelData)
