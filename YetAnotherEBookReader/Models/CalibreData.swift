@@ -61,12 +61,18 @@ struct CalibreLibrary: Hashable, Identifiable {
         lhs.server == rhs.server && lhs.id == rhs.id
     }
     let server: CalibreServer
+    let key: String
     let name: String
 }
 
 class CalibreLibraryRealm: Object {
     @objc dynamic var primaryKey: String?
     
+    @objc dynamic var key: String? {
+        didSet {
+            
+        }
+    }
     @objc dynamic var name: String? {
         didSet {
             updatePrimaryKey()
@@ -157,7 +163,10 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var readPos = BookReadingPosition()
     
     var coverURL : URL {
-        return URL(string: "\(library.server.baseUrl)/get/thumb/\(id)/\(library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
+        return URL(string: "\(library.server.baseUrl)/get/thumb/\(id)/\(library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
+    }
+    var commentBaseURL : URL {  //fake
+        return URL(string: "\(library.server.baseUrl)/get/\(id)/\(library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")!
     }
     
     var inShelfId : String {

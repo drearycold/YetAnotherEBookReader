@@ -84,7 +84,9 @@ struct ServerView: View {
                         }
                         .pickerStyle(MenuPickerStyle())
                         .onChange(of: calibreServerId) { value in
-                            modelData.currentCalibreServerId = calibreServerId
+                            if modelData.currentCalibreServerId != calibreServerId {
+                                modelData.currentCalibreServerId = calibreServerId
+                            }
                         }
                         
                         Spacer()
@@ -161,7 +163,9 @@ struct ServerView: View {
                     }
                     .pickerStyle(MenuPickerStyle())
                     .onChange(of: calibreServerLibraryId, perform: { value in
-                        modelData.currentCalibreLibraryId = calibreServerLibraryId
+                        if modelData.currentCalibreLibraryId != calibreServerLibraryId {
+                            modelData.currentCalibreLibraryId = calibreServerLibraryId
+                        }
                     })
                     
                         
@@ -257,7 +261,9 @@ struct ServerView: View {
             if item.id == "AddServerExists" {
                 return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
             }
-            return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel())
+            return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel() {
+                item.action?()
+            })
         }
     }
     
@@ -266,7 +272,7 @@ struct ServerView: View {
     private func syncLibrary() {
         print(modelData.calibreServerLibraries)
         print(modelData.currentCalibreLibraryId)
-        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
             return
         }
         
@@ -387,7 +393,7 @@ struct ServerView: View {
                 calibreServerLibrariesEdit.removeAll()
                 libraryMap.forEach { (key, value) in
                     content += "\n\(value)"
-                    calibreServerLibrariesEdit.append(CalibreLibrary(server: calibreServer, name: value))
+                    calibreServerLibrariesEdit.append(CalibreLibrary(server: calibreServer, key: key, name: value))
                 }
                 
                 alertContent = content

@@ -40,17 +40,17 @@ struct LibraryInfoView: View {
                     TextField("Search", text: $searchString, onCommit: {
                         modelData.searchString = searchString
                         pageNo = 0
-                        if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
-                            modelData.currentBookId = modelData.filteredBookList[index]
-                        } else if !modelData.filteredBookList.isEmpty {
-                            modelData.currentBookId = modelData.filteredBookList[0]
-                        }
+//                        if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
+//                            modelData.currentBookId = modelData.filteredBookList[index]
+//                        } else if !modelData.filteredBookList.isEmpty {
+//                            modelData.currentBookId = modelData.filteredBookList[0]
+//                        }
                     })
                     .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
                     
                     ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
                         NavigationLink (
-                            destination: BookDetailView(book: modelData.getCurrentServerLibraryBook(bookId: bookId)),
+                            destination: BookDetailView(),
                             tag: bookId,
                             selection: $modelData.selectedBookId
                         ) {
@@ -91,106 +91,22 @@ struct LibraryInfoView: View {
                     }   //ForEach
                     .onDelete(perform: deleteFromList)
                 }   //List
-                .navigationTitle("Library")
+                .navigationTitle(modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.name)
                 .navigationBarTitleDisplayMode(.automatic)
+                .statusBar(hidden: false)
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack {
-                            Button(action:{
-                                if pageNo > 10 {
-                                    pageNo -= 10
-                                } else {
-                                    pageNo = 0
-                                }
-                            }) {
-                                Image(systemName: "chevron.backward.2")
-                            }
-                            Button(action:{
-                                if pageNo > 0 {
-                                    pageNo -= 1
-                                }
-                            }) {
-                                Image(systemName: "chevron.backward")
-                            }
-                            Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
-                            Button(action:{
-                                if ((pageNo + 1) * pageSize) < modelData.filteredBookList.count {
-                                    pageNo += 1
-                                }
-                            }) {
-                                Image(systemName: "chevron.forward")
-                            }
-                            Button(action:{
-                                for i in stride(from:10, to:1, by:-1) {
-                                    if ((pageNo + i) * pageSize) < modelData.filteredBookList.count {
-                                        pageNo += i
-                                        break
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "chevron.forward.2")
-                            }
-                        }
-                    }   //ToolbarItem
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        HStack {
-                            editButton
-                            if editMode == .active {
-                                Button(action: {
-                                    defaultLog.info("selected \(selectedBookIds.description)")
-                                    selectedBookIds.forEach { bookId in
-                                        var downloaded = false
-                                        CalibreBook.Format.allCases.forEach {
-                                            downloaded = downloaded || modelData.downloadFormat(bookId, $0) { result in
-                                                
-                                            }
-                                        }
-                                        if downloaded {
-                                            modelData.addToShelf(bookId)
-                                        }
-                                    }
-                                    selectedBookIds.removeAll()
-                                }
-                                ) {
-                                    Image(systemName: "star")
-                                }
-                                Button(action: {
-                                    defaultLog.info("selected \(selectedBookIds.description)")
-                                    selectedBookIds.forEach { bookId in
-                                        CalibreBook.Format.allCases.forEach {
-                                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId, $0)
-                                        }
-                                        modelData.removeFromShelf(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
-                                    }
-                                    selectedBookIds.removeAll()
-                                }) {
-                                    Image(systemName: "trash")
-                                }
-                            }
-                            
-                        }
-                    }   //ToolbarItem
+                    toolbarContent()
                 }   //List.toolbar
                 .environment(\.editMode, self.$editMode)
             }   //NavigationView
             .onAppear() {
-                modelData.updateFilteredBookList()
-                if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
-                    modelData.currentBookId = modelData.filteredBookList[index]
-                } else if !modelData.filteredBookList.isEmpty {
-                    modelData.currentBookId = modelData.filteredBookList[0]
-                }
-            }
-            .onChange(of: modelData.currentCalibreLibraryId) { value in
-//                if( modelData.getLibrary().booksMap.isEmpty ) {
-//                    syncLibrary()
+                //modelData.updateFilteredBookList()
+//                if let index = modelData.filteredBookList.firstIndex(of: modelData.selectedBookId ?? -1) {
+//                    modelData.currentBookId = modelData.filteredBookList[index]
+//                } else if !modelData.filteredBookList.isEmpty {
+//                    modelData.currentBookId = modelData.filteredBookList[0]
 //                }
-                pageNo = 0
-                modelData.updateFilteredBookList()
             }
-            .onChange(of: modelData.selectedBookId, perform: { value in
-                
-            })
             .navigationViewStyle(DefaultNavigationViewStyle())
         //Body
     }   //View
@@ -206,17 +122,96 @@ struct LibraryInfoView: View {
     }
     
     private var addDelButton: some View {
-            if editMode == .inactive {
-                return Button(action: {}) {
-                    Image(systemName: "star")
-                }
-            } else {
-                return Button(action: {}) {
-                    Image(systemName: "trash")
-                }
+        if editMode == .inactive {
+            return Button(action: {}) {
+                Image(systemName: "star")
+            }
+        } else {
+            return Button(action: {}) {
+                Image(systemName: "trash")
             }
         }
+    }
 
+    @ToolbarContentBuilder
+    private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .navigationBarTrailing) {
+            HStack {
+                Button(action:{
+                    if pageNo > 10 {
+                        pageNo -= 10
+                    } else {
+                        pageNo = 0
+                    }
+                }) {
+                    Image(systemName: "chevron.backward.2")
+                }
+                Button(action:{
+                    if pageNo > 0 {
+                        pageNo -= 1
+                    }
+                }) {
+                    Image(systemName: "chevron.backward")
+                }
+                Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
+                Button(action:{
+                    if ((pageNo + 1) * pageSize) < modelData.filteredBookList.count {
+                        pageNo += 1
+                    }
+                }) {
+                    Image(systemName: "chevron.forward")
+                }
+                Button(action:{
+                    for i in stride(from:10, to:1, by:-1) {
+                        if ((pageNo + i) * pageSize) < modelData.filteredBookList.count {
+                            pageNo += i
+                            break
+                        }
+                    }
+                }) {
+                    Image(systemName: "chevron.forward.2")
+                }
+            }
+        }   //ToolbarItem
+        ToolbarItem(placement: .navigationBarLeading) {
+            HStack {
+                editButton
+                if editMode == .active {
+                    Button(action: {
+                        defaultLog.info("selected \(selectedBookIds.description)")
+                        selectedBookIds.forEach { bookId in
+                            var downloaded = false
+                            CalibreBook.Format.allCases.forEach {
+                                downloaded = downloaded || modelData.downloadFormat(bookId, $0) { result in
+                                    
+                                }
+                            }
+                            if downloaded {
+                                modelData.addToShelf(bookId)
+                            }
+                        }
+                        selectedBookIds.removeAll()
+                    }
+                    ) {
+                        Image(systemName: "star")
+                    }
+                    Button(action: {
+                        defaultLog.info("selected \(selectedBookIds.description)")
+                        selectedBookIds.forEach { bookId in
+                            CalibreBook.Format.allCases.forEach {
+                                modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId, $0)
+                            }
+                            modelData.removeFromShelf(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
+                        }
+                        selectedBookIds.removeAll()
+                    }) {
+                        Image(systemName: "trash")
+                    }
+                }
+                
+            }
+        }   //ToolbarItem
+    }
     
     func deleteFromList(at offsets: IndexSet) {
         modelData.filteredBookList.remove(atOffsets: offsets)

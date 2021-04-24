@@ -7,25 +7,22 @@
 
 import Foundation
 import SwiftUI
+import WebKit
 
+struct WebViewUI : UIViewRepresentable {
 
-struct WebViewUI : UIViewControllerRepresentable {
-
-    var webView = WebViewUIVC()
     let headerString = "<head><meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no'></head>"
+    let content: String
+    let baseURL: URL?
     
-    func makeUIViewController(context: Context) -> WebViewUIVC {
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView()
         return webView
     }
     
-    func updateUIViewController(_ uiViewController: WebViewUIVC, context: Context) {
-        webView.webView.loadHTMLString(headerString + webView.content, baseURL: webView.baseURL)
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        uiView.loadHTMLString(headerString + content, baseURL: baseURL)
+        print("WebViewUI \(content) \(baseURL?.absoluteString)")
     }
     
-    func setContent(_ content: String, _ baseURL: URL?) {
-        webView.content = content
-        webView.baseURL = baseURL
-        webView.webView.loadHTMLString(headerString + webView.content, baseURL: webView.baseURL)
-        
-    }
 }

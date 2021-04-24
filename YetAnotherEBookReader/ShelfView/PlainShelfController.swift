@@ -53,8 +53,8 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
 //        let book = modelData.getBook(libraryName: bookModel[index].libraryName, bookId: Int32(bookModel[index].bookId)!)
-        let bookDetailView = BookDetailView(
-            book: modelData.getBookInShelf(inShelfId: bookId)).environmentObject(modelData)
+        modelData.readingBookInShelfId = bookId
+        let bookDetailView = BookDetailView().environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
@@ -72,6 +72,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
 
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
+        modelData.readingBookInShelfId = nil
     }
     
     func delay(_ delay: Double, closure: @escaping () -> ()) {

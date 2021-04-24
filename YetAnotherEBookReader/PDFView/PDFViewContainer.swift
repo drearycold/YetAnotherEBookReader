@@ -17,9 +17,7 @@ class PDFViewContainer : UIViewController {
         
     }
     
-    func open(pdfURL: URL, bookDetailView: BookDetailView) {
-        self.bookDetailView = bookDetailView
-        
+    func open(pdfURL: URL) {
         let pdfViewController = PDFViewController()
         
         let nav = UINavigationController(rootViewController: pdfViewController)
@@ -29,7 +27,7 @@ class PDFViewContainer : UIViewController {
         
         pdfViewController.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
-        pdfViewController.open(pdfURL: pdfURL, bookDetailView: bookDetailView)
+        pdfViewController.open(pdfURL: pdfURL)
         
         let stackView = UIStackView(frame: nav.toolbar.frame)
         stackView.distribution = .fill

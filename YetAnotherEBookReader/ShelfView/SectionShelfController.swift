@@ -79,8 +79,8 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
-        let bookDetailView = BookDetailView(
-            book: modelData.getBookInShelf(inShelfId: bookId)).environmentObject(modelData)
+        modelData.readingBookInShelfId = bookId
+        let bookDetailView = BookDetailView().environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
@@ -98,6 +98,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
+        modelData.readingBookInShelfId = nil
     }
     
     func delay(_ delay: Double, closure: @escaping () -> ()) {

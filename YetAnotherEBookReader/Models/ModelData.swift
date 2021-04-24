@@ -72,7 +72,24 @@ final class ModelData: ObservableObject {
         }
     }
 
-    @Published var selectedBookId: Int32? = nil
+    @Published var selectedBookId: Int32? = nil {
+        didSet {
+            self.readingBook = self.calibreServerLibraryBooks[selectedBookId ?? currentBookId]
+        }
+    }
+    
+    @Published var selectedPosition = ""
+    
+    var readingBookInShelfId: String? = nil {
+        didSet {
+            if readingBookInShelfId != nil {
+                readingBook = booksInShelf[readingBookInShelfId!]
+            }
+        }
+    }
+    @Published var readingBook: CalibreBook? = nil
+    
+    let readingBookReloadCover = PassthroughSubject<(), Never>()
     
     @Published var loadLibraryResult = "Waiting"
     
@@ -80,7 +97,7 @@ final class ModelData: ObservableObject {
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 10,
+        schemaVersion: 11,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -114,12 +131,10 @@ final class ModelData: ObservableObject {
         }
         
         if currentCalibreServerId.isEmpty == false {
-            let currentCalibreServer = calibreServers[currentCalibreServerId]!
             populateServerLibraries()
         }
         
         if currentCalibreLibraryId.isEmpty == false {
-            let currentCalibreLibrary = calibreServerLibraries[currentCalibreLibraryId]!
             DispatchQueue(label: "data").async {
                 let realm = try! Realm(configuration: self.realmConf)
                 self.populateServerLibraryBooks(realm: realm)
@@ -133,7 +148,7 @@ final class ModelData: ObservableObject {
         booksInShelfRealm.forEach { (bookRealm) in
             // print(bookRealm)
             let server = calibreServers[CalibreServer(baseUrl: bookRealm.serverUrl!, username: bookRealm.serverUsername!, password: "").id]!
-            let library = CalibreLibrary(server: server, name: bookRealm.libraryName!)
+            let library = CalibreLibrary(server: server, key: bookRealm.libraryName!, name: bookRealm.libraryName!)
             let book = self.convert(library: library, bookRealm: bookRealm)
             self.booksInShelf[book.inShelfId] = book
         }
@@ -158,12 +173,12 @@ final class ModelData: ObservableObject {
         ).sorted(byKeyPath: "name")
 
         librariesCached.forEach { libraryRealm in
-            let calibreLibrary = CalibreLibrary(server: currentCalibreServer, name: libraryRealm.name!)
+            let calibreLibrary = CalibreLibrary(server: currentCalibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!)
             calibreServerLibraries[calibreLibrary.id] = calibreLibrary
         }
         
         if librariesCached.isEmpty && calibreServers.count == 1 {
-            let localLibrary = CalibreLibrary(server: calibreServers.values.first!, name: "Local Library")
+            let localLibrary = CalibreLibrary(server: calibreServers.values.first!, key: "Local_Library", name: "Local Library")
             calibreServerLibraries[localLibrary.id] = localLibrary
             updateLibraryRealm(library: localLibrary)
             currentCalibreLibraryId = localLibrary.id
@@ -173,7 +188,7 @@ final class ModelData: ObservableObject {
             currentCalibreLibraryId = lastCalibreLibrary
 
         } else {
-            let defaultLibrary = CalibreLibrary(server: currentCalibreServer, name: currentCalibreServer.defaultLibrary)
+            let defaultLibrary = CalibreLibrary(server: currentCalibreServer, key: currentCalibreServer.defaultLibrary, name: currentCalibreServer.defaultLibrary)
             currentCalibreLibraryId = defaultLibrary.id
         }
         
@@ -228,6 +243,7 @@ final class ModelData: ObservableObject {
         } else {
             self.filteredBookList = filteredBookList
         }
+        print("updateFilteredBookList finished count=\(self.filteredBookList.count)")
     }
     
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
@@ -320,11 +336,25 @@ final class ModelData: ObservableObject {
     
     func updateLibraryRealm(library: CalibreLibrary) {
         let libraryRealm = CalibreLibraryRealm()
+        libraryRealm.key = library.key
         libraryRealm.name = library.name
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
         try! realm.write {
             realm.add(libraryRealm, update: .all)
+        }
+    }
+    
+    func updateBook(book: CalibreBook) {
+        updateBookRealm(book: book, realm: realm)
+        if currentCalibreLibraryId == book.library.id {
+            calibreServerLibraryBooks[book.id] = book
+        }
+        if readingBook?.inShelfId == book.inShelfId {
+            readingBook = book
+        }
+        if book.inShelf {
+            //TODO
         }
     }
     
@@ -367,7 +397,7 @@ final class ModelData: ObservableObject {
             
             let libraryMap = libraryInfo["library_map"] as! [String: String]
             libraryMap.forEach { (key, value) in
-                let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, name: value)
+                let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, key: key, name: value)
                 if calibreServerLibraries[library.id] == nil {
                     calibreServerLibraries[library.id] = library
                     
@@ -467,10 +497,10 @@ final class ModelData: ObservableObject {
             }
         }
         
-        self.updateFilteredBookList()
-        
         DispatchQueue.main.async {
             self.calibreServerLibraryBooks = calibreServerLibraryBooks
+            self.updateFilteredBookList()
+            
             self.calibreServerLibraryUpdating = false
             completionHandler(true)
         }
@@ -478,6 +508,7 @@ final class ModelData: ObservableObject {
     }
     
     func addToShelf(_ bookId: Int32) {
+        readingBook?.inShelf = true
         calibreServerLibraryBooks[bookId]!.inShelf = true
         
         updateBookRealm(book: calibreServerLibraryBooks[bookId]!, realm: self.realm)
@@ -485,6 +516,7 @@ final class ModelData: ObservableObject {
     }
     
     func removeFromShelf(inShelfId: String) {
+        readingBook?.inShelf = false
         booksInShelf[inShelfId]!.inShelf = false
         
         let book = booksInShelf[inShelfId]!
@@ -578,6 +610,102 @@ final class ModelData: ObservableObject {
         } catch {
             defaultLog.error("clearCache \(error.localizedDescription)")
         }
+    }
+    
+    func getSelectedReadingPosition() -> BookDeviceReadingPosition? {
+        return readingBook!.readPos.getPosition(selectedPosition)
+    }
+    
+    func updateCurrentPosition(_ position: [String: Any]?) {
+        guard (position != nil) else { return }
+        guard var readingBook = self.readingBook else {
+            return
+        }
+        do {
+            
+            let deviceName = UIDevice().name
+            
+            var deviceReadingPosition = readingBook.readPos.getPosition(deviceName)
+            if( deviceReadingPosition == nil ) {
+                deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
+            }
+            
+            defaultLog.info("pageNumber:  \(position!["pageNumber"]! as! Int)")
+            defaultLog.info("pageOffsetX: \(position!["pageOffsetX"]! as! CGFloat)")
+            defaultLog.info("pageOffsetY: \(position!["pageOffsetY"]! as! CGFloat)")
+            
+            deviceReadingPosition!.lastPosition[0] = position!["pageNumber"]! as! Int
+            deviceReadingPosition!.lastPosition[1] = Int((position!["pageOffsetX"]! as! CGFloat).rounded())
+            deviceReadingPosition!.lastPosition[2] = Int((position!["pageOffsetY"]! as! CGFloat).rounded())
+            deviceReadingPosition!.lastReadPage = position!["pageNumber"]! as! Int
+            
+            readingBook.readPos.updatePosition(deviceName, deviceReadingPosition!)
+            
+            var deviceMapSerialize = [String: Any]()
+            try readingBook.readPos.getCopy().forEach { key, value in
+                deviceMapSerialize[key] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
+            }
+            
+            
+            let readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString()
+            
+            let endpointUrl = URL(string: readingBook.library.server.baseUrl + "/cdb/cmd/set_metadata/0?library_id=" + readingBook.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+            let json:[Any] = ["fields", readingBook.id, [["#read_pos", readPosData]]]
+            
+            let data = try JSONSerialization.data(withJSONObject: json, options: [])
+            defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
+            
+            var request = URLRequest(url: endpointUrl)
+            request.httpMethod = "POST"
+            request.httpBody = data
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+                if let error = error {
+                    // self.handleClientError(error)
+                    defaultLog.warning("error: \(error.localizedDescription)")
+                    return
+                }
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode) else {
+                    // self.handleServerError(response)
+                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                    return
+                }
+                
+                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                   let data = data {
+                    DispatchQueue.main.async {
+                        //self.webView.loadHTMLString(string, baseURL: url)
+                        //result = string
+                        //                            defaultLog.warning("httpResponse: \(string)")
+                        self.updateBook(book: readingBook)
+                    }
+                }
+            }
+            
+            task.resume()
+        }catch{
+        }
+        
+        // modelData.isReading = false
+    }
+    
+    
+    func goToPreviousBook() {
+        if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
+            currentBookId = filteredBookList[curIndex-1]
+            
+        }
+    }
+    
+    func goToNextBook() {
+        print("currentBookId before \(currentBookId) \(selectedBookId)")
+        if let curIndex = filteredBookList.firstIndex(of: selectedBookId ?? currentBookId), curIndex < filteredBookList.count - 1 {
+            currentBookId = filteredBookList[curIndex + 1]
+        }
+        print("currentBookId after \(currentBookId) \(selectedBookId)")
     }
 }
 
