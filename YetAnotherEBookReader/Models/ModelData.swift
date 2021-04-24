@@ -10,7 +10,10 @@ import Combine
 import RealmSwift
 import SwiftUI
 import OSLog
+
+#if canImport(GoogleMobileAds)
 import GoogleMobileAds
+#endif
 
 final class ModelData: ObservableObject {
 //    @Published var calibreServer = "http://calibre-server.lan:8080/"
@@ -107,7 +110,9 @@ final class ModelData: ObservableObject {
             }
     )
     init() {
+        #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
+        #endif
         
         realm = try! Realm(
             configuration: realmConf

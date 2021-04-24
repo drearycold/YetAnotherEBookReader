@@ -213,7 +213,9 @@ struct BookDetailView: View {
             
             Text(book.readPos.getPosition(selectedPosition)?.description ?? UIDevice().name)
             
+            #if canImport(GoogleMobileAds)
             Banner()
+            #endif
             
             WebViewUI(content: book.comments, baseURL: book.commentBaseURL)
                 .frame(height: CGFloat(400), alignment: .center)

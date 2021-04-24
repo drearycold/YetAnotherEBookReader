@@ -7,15 +7,19 @@
 //
 
 import ShelfView_iOS
-
 import SwiftUI
+
+#if canImport(GoogleMobileAds)
 import GoogleMobileAds
+#endif
 
 class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var bookModel = [BookModel]()
     var shelfView: SectionShelfView!
+#if canImport(GoogleMobileAds)
     var bannerView: GADBannerView!
+#endif
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
@@ -53,6 +57,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         //self.view = shelfView
         view.addSubview(shelfView)
         
+        #if canImport(GoogleMobileAds)
         bannerView = GADBannerView()
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
@@ -71,6 +76,14 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
         ])
         bannerView.adSize = kGADAdSizeBanner
+        #else
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        #endif
         
         updateBookModel()
 
