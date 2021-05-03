@@ -133,7 +133,7 @@ struct ServerView: View {
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
-                        Text("\(modelData.calibreServerLibraries.count) Library(s) in Server")
+                        Text("\(modelData.calibreLibraries.values.filter({ (library) -> Bool in library.server.id == calibreServerId }).count) Library(s) in Server")
                         
                         Button(action: {
                             let ret = startLoadServerLibraries(
@@ -154,8 +154,10 @@ struct ServerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Switch Library")
                     
-                    Picker("Library: \(modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]?.name ?? "")", selection: $calibreServerLibraryId) {
-                        ForEach(modelData.calibreServerLibraries.values.sorted(by: { (lhs, rhs) -> Bool in
+                    Picker("Library: \(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "")", selection: $calibreServerLibraryId) {
+                        ForEach(modelData.calibreLibraries.values.filter({ (library) -> Bool in
+                            library.server.id == calibreServerId
+                        }).sorted(by: { (lhs, rhs) -> Bool in
                             lhs.name < rhs.name
                         })) { library in
                             Text(library.name).tag(library.id)
@@ -166,6 +168,9 @@ struct ServerView: View {
                         if modelData.currentCalibreLibraryId != calibreServerLibraryId {
                             modelData.currentCalibreLibraryId = calibreServerLibraryId
                         }
+                        
+                        enableStoreReadingPosition = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName != nil
+                        storeReadingPositionColumnName = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName ?? modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnNameDefault
                     })
                     
                         
@@ -186,7 +191,23 @@ struct ServerView: View {
                     }
                 }
                 
-                
+                Text("Library Settings")
+                Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
+                    .onChange(of: enableStoreReadingPosition) { value in
+                        modelData.updateStoreReadingPosition(enabled: value, value: storeReadingPositionColumnName)
+                    }
+                if enableStoreReadingPosition {
+                    HStack {
+                        Text("Column Name:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("#column", text: $storeReadingPositionColumnName, onCommit:  {
+                            modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
+                        })
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
+                    }
+                }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             .disabled(dataLoading)
@@ -197,19 +218,7 @@ struct ServerView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("More Settings")
                 
-                Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
-                if enableStoreReadingPosition {
-                    HStack {
-                        Text("Column Name:")
-                        TextField("#column", text: $storeReadingPositionColumnName, onCommit: {
-                            modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
-                        })
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                    }
-                }
+                
                 
                 Toggle("Enable Custom Dictionary Viewer", isOn: $enableCustomDictViewer)
                 if enableCustomDictViewer {
@@ -224,8 +233,6 @@ struct ServerView: View {
                             .border(Color(UIColor.separator))
                     }
                 }
-            }.onChange(of: enableStoreReadingPosition) { value in
-                modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
             }.onChange(of: enableCustomDictViewer) { value in
                 modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
             }.padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
@@ -236,6 +243,15 @@ struct ServerView: View {
         .onAppear() {
             calibreServerId = modelData.currentCalibreServerId
             calibreServerLibraryId = modelData.currentCalibreLibraryId
+            
+            if let library = modelData.calibreLibraries[calibreServerLibraryId] {
+                enableStoreReadingPosition = library.readPosColumnName != nil
+                storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
+                
+                print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
+            }
+            
+            
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)
@@ -270,9 +286,9 @@ struct ServerView: View {
     
     
     private func syncLibrary() {
-        print(modelData.calibreServerLibraries)
+        print(modelData.calibreLibraries)
         print(modelData.currentCalibreLibraryId)
-        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreLibraries[modelData.currentCalibreLibraryId]!.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
             return
         }
         

@@ -27,12 +27,12 @@ final class ModelData: ObservableObject {
             currentBookId = 0
             filteredBookList.removeAll()
             calibreServerLibraryBooks.removeAll()
-            calibreServerLibraries.removeAll()
-            populateServerLibraries()
+            //calibreServerLibraries.removeAll()
+            //populateServerLibraries()
         }
     }
     
-    @Published var calibreServerLibraries = [String: CalibreLibrary]()
+    @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var currentCalibreLibraryId = "" {
         didSet {
             UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
@@ -96,11 +96,15 @@ final class ModelData: ObservableObject {
     
     @Published var loadLibraryResult = "Waiting"
     
+    var updatingMetadataTask: URLSessionDataTask?
+    @Published var updatingMetadata = false
+    @Published var updatingMetadataStatus = ""
+    
     private var defaultLog = Logger()
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 11,
+        schemaVersion: 12,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -135,9 +139,7 @@ final class ModelData: ObservableObject {
             currentCalibreServerId = localServer.id
         }
         
-        if currentCalibreServerId.isEmpty == false {
-            populateServerLibraries()
-        }
+        populateLibraries()
         
         if currentCalibreLibraryId.isEmpty == false {
             DispatchQueue(label: "data").async {
@@ -168,43 +170,42 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func populateServerLibraries() {
+    func populateLibraries() {
         let currentCalibreServer = calibreServers[currentCalibreServerId]!
         
-        let librariesCached = realm.objects(CalibreLibraryRealm.self).filter(
-                    NSPredicate(format: "serverUrl = %@ AND serverUsername = %@",
-                                currentCalibreServer.baseUrl,
-                                currentCalibreServer.username)
-        ).sorted(byKeyPath: "name")
+        let librariesCached = realm.objects(CalibreLibraryRealm.self)
 
         librariesCached.forEach { libraryRealm in
-            let calibreLibrary = CalibreLibrary(server: currentCalibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!)
-            calibreServerLibraries[calibreLibrary.id] = calibreLibrary
+            guard let calibreServer = calibreServers[CalibreServer(baseUrl: libraryRealm.serverUrl!, username: libraryRealm.serverUsername!, password: "").id] else {
+                print("Unknown Server: \(libraryRealm)")
+                return
+            }
+            let calibreLibrary = CalibreLibrary(server: calibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!, readPosColumnName: libraryRealm.readPosColumnName)
+            calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
         
         if librariesCached.isEmpty && calibreServers.count == 1 {
             let localLibrary = CalibreLibrary(server: calibreServers.values.first!, key: "Local_Library", name: "Local Library")
-            calibreServerLibraries[localLibrary.id] = localLibrary
+            calibreLibraries[localLibrary.id] = localLibrary
             updateLibraryRealm(library: localLibrary)
             currentCalibreLibraryId = localLibrary.id
         }
         
-        if let lastCalibreLibrary = UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID), calibreServerLibraries[lastCalibreLibrary] != nil {
+        if let lastCalibreLibrary = UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID), calibreLibraries[lastCalibreLibrary] != nil {
             currentCalibreLibraryId = lastCalibreLibrary
-
         } else {
             let defaultLibrary = CalibreLibrary(server: currentCalibreServer, key: currentCalibreServer.defaultLibrary, name: currentCalibreServer.defaultLibrary)
             currentCalibreLibraryId = defaultLibrary.id
         }
         
-        
+        print("populateLibraries \(calibreLibraries)")
     }
     
     /**
             Must not run on main thread
      */
     func populateServerLibraryBooks(realm: Realm) {
-        guard let currentCalibreLibrary = calibreServerLibraries[currentCalibreLibraryId] else {
+        guard let currentCalibreLibrary = calibreLibraries[currentCalibreLibraryId] else {
             return
         }
         
@@ -277,7 +278,7 @@ final class ModelData: ObservableObject {
     }
     
     func getCurrentServerLibraryBook(bookId: Int32) -> Binding<CalibreBook> {
-        return getBook(library: calibreServerLibraries[currentCalibreLibraryId]!, bookId: bookId)
+        return getBook(library: calibreLibraries[currentCalibreLibraryId]!, bookId: bookId)
     }
     
     func getBook(library: CalibreLibrary, bookId: Int32) -> Binding<CalibreBook> {
@@ -300,7 +301,7 @@ final class ModelData: ObservableObject {
             },
             set: { [self] book in
                 updateBookRealm(book: book, realm: realm)
-                if calibreServerLibraries[currentCalibreLibraryId] == library {
+                if calibreLibraries[currentCalibreLibraryId] == library {
                     calibreServerLibraryBooks[book.id] = book
                 }
                 if book.inShelf {
@@ -312,7 +313,8 @@ final class ModelData: ObservableObject {
 
 
     func updateStoreReadingPosition(enabled: Bool, value: String) {
-        //TODO
+        calibreLibraries[currentCalibreLibraryId]!.readPosColumnName = enabled ? value : nil
+        updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
     }
     
     func updateCustomDictViewer(enabled: Bool, value: String) {
@@ -345,6 +347,7 @@ final class ModelData: ObservableObject {
         libraryRealm.name = library.name
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
+        libraryRealm.readPosColumnName = library.readPosColumnName
         try! realm.write {
             realm.add(libraryRealm, update: .all)
         }
@@ -359,7 +362,7 @@ final class ModelData: ObservableObject {
             readingBook = book
         }
         if book.inShelf {
-            //TODO
+            booksInShelf[book.inShelfId] = book
         }
     }
     
@@ -403,8 +406,8 @@ final class ModelData: ObservableObject {
             let libraryMap = libraryInfo["library_map"] as! [String: String]
             libraryMap.forEach { (key, value) in
                 let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, key: key, name: value)
-                if calibreServerLibraries[library.id] == nil {
-                    calibreServerLibraries[library.id] = library
+                if calibreLibraries[library.id] == nil {
+                    calibreLibraries[library.id] = library
                     
                     updateLibraryRealm(library: library)
                 }
@@ -426,7 +429,7 @@ final class ModelData: ObservableObject {
      run on background threads, call completionHandler on main thread
      */
     func handleLibraryBooks(json: Data, completionHandler: @escaping (Bool) -> Void) {
-        let library = calibreServerLibraries[currentCalibreLibraryId]!
+        let library = calibreLibraries[currentCalibreLibraryId]!
         
         DispatchQueue.main.async {
             self.calibreServerLibraryUpdating = true
@@ -511,6 +514,118 @@ final class ModelData: ObservableObject {
         }
         
     }
+    
+    func handleLibraryBookOne(oldbook: CalibreBook, json: Data) -> CalibreBook? {
+        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary,
+              let resultElement = root["result"] as? NSDictionary,
+              let bookIds = resultElement["book_ids"] as? NSArray,
+              let dataElement = resultElement["data"] as? NSDictionary,
+              let bookId = bookIds.firstObject as? NSNumber else {
+            updatingMetadataStatus = "Failed to Parse Calibre Server Response."
+            updatingMetadata = false
+            return nil
+        }
+        
+        let bookIdKey = bookId.stringValue
+        var book = oldbook
+        if let d = dataElement["title"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.title = v
+        }
+        if let d = dataElement["publisher"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.publisher = v
+        }
+        if let d = dataElement["series"] as? NSDictionary, let v = d[bookIdKey] as? String {
+            book.series = v
+        }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime
+        if let d = dataElement["pubdate"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.pubDate = date
+        }
+        if let d = dataElement["last_modified"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.lastModified = date
+        }
+        if let d = dataElement["timestamp"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
+            book.timestamp = date
+        }
+        
+        if let d = dataElement["tags"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
+            book.tags = v.compactMap { (t) -> String? in
+                t as? String
+            }
+        }
+        if let d = dataElement["size"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
+            book.size = v.intValue
+        }
+        
+        if let d = dataElement["authors"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
+            book.authors = v.compactMap { (t) -> String? in
+                if let t = t as? String {
+                    return t
+                } else {
+                    return nil
+                }
+            }
+        }
+//        authors.forEach { (key, value) in
+//            let authors = value as! NSArray
+//            book.authors = authors[0] as! String
+//            //                bookAuthors = book.authors
+//        }
+        
+        let comments = dataElement["comments"] as! NSDictionary
+        comments.forEach { (key, value) in
+            book.comments = value as? String ?? "Without Comments"
+        }
+        
+        do {
+            guard let readPosColumnName = calibreLibraries[oldbook.library.id]?.readPosColumnName else {
+                return book
+            }
+            guard let readPosDict = dataElement[readPosColumnName] as? NSDictionary else {
+                return book
+            }
+            try readPosDict.forEach { (key, value) in
+                if( value is NSString ) {
+                    let readPosString = value as! NSString
+                    let readPosObject = try JSONSerialization.jsonObject(with: Data(base64Encoded: readPosString as String)!, options: [])
+                    let readPosDict = readPosObject as! NSDictionary
+                    defaultLog.info("readPosDict \(readPosDict)")
+                    
+                    let deviceMapObject = readPosDict["deviceMap"]
+                    let deviceMapDict = deviceMapObject as! NSDictionary
+                    deviceMapDict.forEach { key, value in
+                        let deviceName = key as! String
+                        let deviceReadingPositionDict = value as! [String: Any]
+                        //TODO merge
+                        
+                        var deviceReadingPosition = book.readPos.getPosition(deviceName)
+                        if( deviceReadingPosition == nil ) {
+                            deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
+                        }
+                        
+                        deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
+                        deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+                        deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                        deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+                        deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+                        deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+                        if let lastPosition = deviceReadingPositionDict["lastPosition"] {
+                            deviceReadingPosition!.lastPosition = lastPosition as! [Int]
+                        }
+                        
+                        book.readPos.updatePosition(deviceName, deviceReadingPosition!)
+                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                    }
+                }
+            }
+        } catch {
+            defaultLog.warning("handleLibraryBooks: \(error.localizedDescription)")
+        }
+        return book
+    }
+    
     
     func addToShelf(_ bookId: Int32) {
         readingBook?.inShelf = true
@@ -621,6 +736,87 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getPosition(selectedPosition)
     }
     
+    func getMetadata(oldbook: CalibreBook) {
+        let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
+        do {
+            let data = try JSONSerialization.data(withJSONObject: json, options: [])
+            
+            var request = URLRequest(url: endpointUrl)
+            request.httpMethod = "POST"
+            request.httpBody = data
+            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.addValue("application/json", forHTTPHeaderField: "Accept")
+            
+            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+                if let error = error {
+                    defaultLog.warning("error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = error.localizedDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = response.debugDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                if !(200...299).contains(httpResponse.statusCode) {
+                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                
+                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                   let data = data,
+                   let string = String(data: data, encoding: .utf8) {
+                    DispatchQueue.main.async {
+                        //self.webView.loadHTMLString(string, baseURL: url)
+                        //                            defaultLog.warning("httpResponse: \(string)")
+                        //book.comments = string
+                        guard var book = handleLibraryBookOne(oldbook: oldbook, json: data) else {
+                            return
+                        }
+                        
+                        if( book.readPos.getDevices().isEmpty) {
+                            book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
+                        }
+                        
+                        updateBook(book: book)
+                        
+                        updatingMetadataStatus = "Success"
+                        updatingMetadata = false
+//                        if( book.formats[selectedFormat.rawValue] == nil ) {
+//                            CalibreBook.Format.allCases.forEach { format in
+//                                if book.formats[format.rawValue] != nil {
+//                                    selectedFormat = format
+//                                }
+//                            }
+//                        }
+//
+//                        if( book.readPos.getPosition(selectedPosition) == nil ) {
+//                            if !book.readPos.getDevices().isEmpty {
+//                                selectedPosition = book.readPos.getDevices()[0].id
+//                            }
+//                        }
+                    }
+                }
+            }
+            
+            updatingMetadata = true
+            task.resume()
+            
+        }catch{
+        }
+    }
+    
     func updateCurrentPosition(_ position: [String: Any]?) {
         guard (position != nil) else { return }
         guard var readingBook = self.readingBook else {
@@ -646,16 +842,21 @@ final class ModelData: ObservableObject {
             
             readingBook.readPos.updatePosition(deviceName, deviceReadingPosition!)
             
+            self.updateBook(book: readingBook)
+            
+            guard let readPosColumnName = calibreLibraries[readingBook.library.id]?.readPosColumnName else {
+                return
+            }
+            
             var deviceMapSerialize = [String: Any]()
             try readingBook.readPos.getCopy().forEach { key, value in
                 deviceMapSerialize[key] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
             }
             
-            
             let readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString()
             
             let endpointUrl = URL(string: readingBook.library.server.baseUrl + "/cdb/cmd/set_metadata/0?library_id=" + readingBook.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-            let json:[Any] = ["fields", readingBook.id, [["#read_pos", readPosData]]]
+            let json:[Any] = ["fields", readingBook.id, [[readPosColumnName, readPosData]]]
             
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
             defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
@@ -666,31 +867,90 @@ final class ModelData: ObservableObject {
             request.addValue("application/json", forHTTPHeaderField: "Content-Type")
             request.addValue("application/json", forHTTPHeaderField: "Accept")
             
-            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+            if updatingMetadata && updatingMetadataTask != nil {
+                updatingMetadataTask!.cancel()
+            }
+            updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
                 if let error = error {
                     // self.handleClientError(error)
                     defaultLog.warning("error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = error.localizedDescription
+                        updatingMetadata = false
+                    }
                     return
                 }
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    // self.handleServerError(response)
+                guard let httpResponse = response as? HTTPURLResponse else {
                     defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = response.debugDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                if !(200...299).contains(httpResponse.statusCode) {
+                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
+                    }
                     return
                 }
                 
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                   let data = data {
+                guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                      let data = data else {
                     DispatchQueue.main.async {
-                        //self.webView.loadHTMLString(string, baseURL: url)
-                        //result = string
-                        //                            defaultLog.warning("httpResponse: \(string)")
-                        self.updateBook(book: readingBook)
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
                     }
+                    return
+                }
+                
+                guard let root = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                
+                guard let result = root["result"] as? NSDictionary, let resultv = result["v"] as? NSDictionary else {
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
+                    }
+                    return
+                }
+                    
+                DispatchQueue.main.async {
+                    //self.webView.loadHTMLString(string, baseURL: url)
+                    //result = string
+                    //defaultLog.warning("httpResponse: \(string)")
+                    
+                    print("updateCurrentPosition result=\(result)")
+                    
+                    if let lastModifiedDict = resultv["last_modified"] as? NSDictionary, var lastModifiedV = lastModifiedDict["v"] as? String {
+                        print("last_modified \(lastModifiedV)")
+                        if let idxMilli = lastModifiedV.firstIndex(of: "."), let idxTZ = lastModifiedV.firstIndex(of: "+"), idxMilli < idxTZ {
+                            lastModifiedV = lastModifiedV.replacingCharacters(in: idxMilli..<idxTZ, with: "")
+                        }
+                        print("last_modified_new \(lastModifiedV)")
+                        
+                        let dateFormatter = ISO8601DateFormatter()
+                        dateFormatter.formatOptions = .withInternetDateTime
+                        if let date = dateFormatter.date(from: lastModifiedV) {
+                            readingBook.lastModified = date
+                            self.updateBook(book: readingBook)
+                        }
+                    }
+                    
+                    updatingMetadataStatus = "Success"
+                    updatingMetadata = false
                 }
             }
+            updatingMetadata = true
+            updatingMetadataTask!.resume()
             
-            task.resume()
         }catch{
         }
         
@@ -706,11 +966,9 @@ final class ModelData: ObservableObject {
     }
     
     func goToNextBook() {
-        print("currentBookId before \(currentBookId) \(selectedBookId)")
         if let curIndex = filteredBookList.firstIndex(of: selectedBookId ?? currentBookId), curIndex < filteredBookList.count - 1 {
             currentBookId = filteredBookList[curIndex + 1]
         }
-        print("currentBookId after \(currentBookId) \(selectedBookId)")
     }
 }
 
@@ -736,11 +994,7 @@ func load<T: Decodable>(_ filename: String) -> T {
     }
 }
 
-class ConfigurationRealm: Object {
-    @objc dynamic var id: Int32 = 0
-    @objc dynamic var libraryName = ""
-    @objc dynamic var title = ""
-    @objc dynamic var authors = ""
-    @objc dynamic var comments = ""
-    @objc dynamic var formatsData: NSData?
+enum LibraryError: Error {
+    case runtimeError(String)
 }
+

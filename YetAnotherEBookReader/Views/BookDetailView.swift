@@ -30,17 +30,17 @@ struct BookDetailView: View {
     
     struct AlertItem : Identifiable {
         var id: String
+        var msg: String?
     }
     @State private var alertItem: AlertItem?
 
-//    @State private var showingAlert = false
+//    @State private var presentingUpdateAlert = false
 //    @State private var showingRefreshAlert = false
 //    @State private var showingDownloadAlert = false
     @State private var selectedFormat = CalibreBook.Format.EPUB
     @State private var selectedPosition = ""
     @State private var updater = 0
     @State private var showingReadSheet = false
-    
     // var commentWebView = WebViewUI()
     
     // let rvc = ReaderViewController()
@@ -62,7 +62,7 @@ struct BookDetailView: View {
             if let book = modelData.readingBook {
                 viewContent(book: book)
                 .onAppear() {
-                    getMetadata(oldbook: book)
+                    modelData.getMetadata(oldbook: book)
                     // modelData.currentBookId = book.id
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
@@ -77,7 +77,7 @@ struct BookDetailView: View {
         }
         .onChange(of: modelData.readingBook) {book in
             if book != nil {
-                getMetadata(oldbook: book!)
+                modelData.getMetadata(oldbook: book!)
                 if book!.readPos.getDevices().count > 0 {
                     self.selectedPosition = book!.readPos.getDevices()[0].id
                 }
@@ -99,17 +99,6 @@ struct BookDetailView: View {
                     secondaryButton: .cancel()
                 )
             }
-            if item.id == "Refresh" {
-                return Alert(
-                    title: Text("Need Refresh"),
-                    message: Text("Please Refresh First"),
-                    primaryButton: .default(Text("Refresh")
-                    ) {
-                        getMetadata(oldbook: modelData.readingBook!)
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
             if item.id == "Download" {
                 return Alert(
                     title: Text("Need Download"),
@@ -122,10 +111,35 @@ struct BookDetailView: View {
                     secondaryButton: .cancel()
                 )
             }
+            if item.id == "Updating" {
+                let alert = Alert(title: Text("Updating"), message: Text("Update Book Metadata..."), dismissButton: .cancel() {
+                    if modelData.updatingMetadata && modelData.updatingMetadataTask != nil {
+                        modelData.updatingMetadataTask!.cancel()
+                    }
+                })
+                return alert
+            }
+            if item.id == "Updated" {
+                return Alert(title: Text("Updated"), message: Text(item.msg ?? "Success"))
+            }
             return Alert(title: Text(item.id))
-        }.fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
+        }
+        .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
             EpubReader(bookURL: getSavedUrl(book: modelData.readingBook!))
-        }.disabled(modelData.readingBook == nil)
+        }
+//        .popover(isPresented: $presentingUpdateAlert) {
+//            if modelData.updatingMetadata {
+//                VStack {
+//                    Text("Updating")
+//                }.frame(width: 200, height: 100, alignment: .center)
+//            } else {
+//                VStack {
+//                    Text("Updated")
+//                    Text("modelData.updatingMetadataStatus")
+//                }.frame(width: 200, height: 100, alignment: .center)
+//            }
+//        }
+        .disabled(modelData.readingBook == nil)
     }
     
     @ViewBuilder
@@ -144,7 +158,17 @@ struct BookDetailView: View {
             HStack {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(book.size), countStyle: .file)).font(.subheadline)
                 Spacer()
-                Text(book.lastModified.description).font(.subheadline)
+                if modelData.updatingMetadata {
+                    Text("Updating")
+                    Button(action: {
+                        
+                    }) {
+                        Image(systemName: "xmark")
+                    }
+                } else {
+                    Text(modelData.updatingMetadataStatus)
+                    Text(book.lastModified.description).font(.subheadline)
+                }
             }
             HStack {
                 Text(book.tagsDescription).font(.subheadline)
@@ -253,7 +277,10 @@ struct BookDetailView: View {
             }
         }
         ToolbarItem(placement: .confirmationAction) {
-            Button(action: {showingReadSheet = true}) {
+            Button(action: {
+                showingReadSheet = true
+                
+            }) {
                 Image(systemName: "book")
             }
         }
@@ -292,190 +319,6 @@ struct BookDetailView: View {
             }
         }
     }
-
-    func getMetadata(oldbook: CalibreBook) {
-        let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-        let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
-        do {
-            let data = try JSONSerialization.data(withJSONObject: json, options: [])
-            
-            var request = URLRequest(url: endpointUrl)
-            request.httpMethod = "POST"
-            request.httpBody = data
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("application/json", forHTTPHeaderField: "Accept")
-            
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    // self.handleClientError(error)
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    //book.comments = error.localizedDescription
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    // self.handleServerError(response)
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    //book.comments = response.debugDescription
-                    return
-                }
-                
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                   let data = data,
-                   let string = String(data: data, encoding: .utf8) {
-                    DispatchQueue.main.async {
-                        //self.webView.loadHTMLString(string, baseURL: url)
-                        //                            defaultLog.warning("httpResponse: \(string)")
-                        //book.comments = string
-                        guard var book = handleLibraryBooks(oldbook: oldbook, json: data) else {
-                            return
-                        }
-                        
-                        if( book.readPos.getDevices().isEmpty) {
-                            book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
-                        }
-                        
-                        modelData.updateBook(book: book)
-                        
-//                        commentWebView.setContent(book.comments, URL(string: book.library.server.baseUrl))
-                        
-                        if( book.formats[selectedFormat.rawValue] == nil ) {
-                            CalibreBook.Format.allCases.forEach { format in
-                                if book.formats[format.rawValue] != nil {
-                                    selectedFormat = format
-                                }
-                            }
-                        }
-                        
-                        if( book.readPos.getPosition(selectedPosition) == nil ) {
-                            if !book.readPos.getDevices().isEmpty {
-                                selectedPosition = book.readPos.getDevices()[0].id
-                            }
-                        }
-                        
-                        modelData.readingBookReloadCover.send()
-                    }
-                }
-            }
-            
-            task.resume()
-            
-        }catch{
-        }
-    }
-    
-    enum LibraryError: Error {
-        case runtimeError(String)
-    }
-    
-    func handleLibraryBooks(oldbook: CalibreBook, json: Data) -> CalibreBook? {
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary,
-              let resultElement = root["result"] as? NSDictionary,
-              let bookIds = resultElement["book_ids"] as? NSArray,
-              let dataElement = resultElement["data"] as? NSDictionary,
-              let bookId = bookIds.firstObject as? NSNumber else {
-            self.alertItem = AlertItem(id: "Failed to Parse Calibre Server Response.")
-            return nil
-        }
-        
-        let bookIdKey = bookId.stringValue
-        var book = oldbook
-        if let d = dataElement["title"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.title = v
-        }
-        if let d = dataElement["publisher"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.publisher = v
-        }
-        if let d = dataElement["series"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.series = v
-        }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime
-        if let d = dataElement["pubdate"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.pubDate = date
-        }
-        if let d = dataElement["last_modified"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.lastModified = date
-        }
-        if let d = dataElement["timestamp"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.timestamp = date
-        }
-        
-        if let d = dataElement["tags"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
-            book.tags = v.compactMap { (t) -> String? in
-                t as? String
-            }
-        }
-        if let d = dataElement["size"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
-            book.size = v.intValue
-        }
-        
-        if let d = dataElement["authors"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
-            book.authors = v.compactMap { (t) -> String? in
-                if let t = t as? String {
-                    return t
-                } else {
-                    return nil
-                }
-            }
-        }
-//        authors.forEach { (key, value) in
-//            let authors = value as! NSArray
-//            book.authors = authors[0] as! String
-//            //                bookAuthors = book.authors
-//        }
-        
-        let comments = dataElement["comments"] as! NSDictionary
-        comments.forEach { (key, value) in
-            book.comments = value as? String ?? "Without Comments"
-        }
-        
-        do {
-            if( dataElement["#read_pos"] == nil ) {
-                throw LibraryError.runtimeError("need #read_pos custom column")
-            }
-            let readPosElement = dataElement["#read_pos"] as! NSDictionary
-            try readPosElement.forEach { (key, value) in
-                if( value is NSString ) {
-                    let readPosString = value as! NSString
-                    let readPosObject = try JSONSerialization.jsonObject(with: Data(base64Encoded: readPosString as String)!, options: [])
-                    let readPosDict = readPosObject as! NSDictionary
-                    defaultLog.info("readPosDict \(readPosDict)")
-                    
-                    let deviceMapObject = readPosDict["deviceMap"]
-                    let deviceMapDict = deviceMapObject as! NSDictionary
-                    deviceMapDict.forEach { key, value in
-                        let deviceName = key as! String
-                        let deviceReadingPositionDict = value as! [String: Any]
-                        //TODO merge
-                        
-                        var deviceReadingPosition = book.readPos.getPosition(deviceName)
-                        if( deviceReadingPosition == nil ) {
-                            deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-                        }
-                        
-                        deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
-                        deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                        deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                        deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                        deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                        deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-                        if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                            deviceReadingPosition!.lastPosition = lastPosition as! [Int]
-                        }
-                        
-                        book.readPos.updatePosition(deviceName, deviceReadingPosition!)
-                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
-                    }
-                }
-            }
-        } catch {
-            defaultLog.warning("handleLibraryBooks: \(error.localizedDescription)")
-        }
-        return book
-    }
-    
     
     func getSavedUrl(book: CalibreBook) -> URL {
         var downloadBaseURL = try!

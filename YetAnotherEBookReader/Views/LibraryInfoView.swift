@@ -91,7 +91,7 @@ struct LibraryInfoView: View {
                     }   //ForEach
                     .onDelete(perform: deleteFromList)
                 }   //List
-                .navigationTitle(modelData.calibreServerLibraries[modelData.currentCalibreLibraryId]!.name)
+                .navigationTitle(modelData.calibreLibraries[modelData.currentCalibreLibraryId]!.name)
                 .navigationBarTitleDisplayMode(.automatic)
                 .statusBar(hidden: false)
                 .toolbar {

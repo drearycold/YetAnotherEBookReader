@@ -63,6 +63,15 @@ struct CalibreLibrary: Hashable, Identifiable {
     let server: CalibreServer
     let key: String
     let name: String
+    
+    var readPosColumnName: String?
+    var readPosColumnNameDefault: String {
+        if server.username.isEmpty {
+            return "#read_pos"
+        } else {
+            return "#read_pos_\(server.username)"
+        }
+    }
 }
 
 class CalibreLibraryRealm: Object {
@@ -96,6 +105,8 @@ class CalibreLibraryRealm: Object {
     func updatePrimaryKey() {
         primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
     }
+    
+    @objc dynamic var readPosColumnName: String?
 }
 
 struct CalibreBook: Hashable, Identifiable, Equatable {
