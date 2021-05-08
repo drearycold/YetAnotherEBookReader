@@ -25,7 +25,10 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     var modelData: ModelData!
     
     func updateBookModel() {
-        bookModel = modelData.booksInShelf.map { (key: String, value: CalibreBook) -> BookModel in
+        bookModel = modelData.booksInShelf
+            .sorted(
+                by: { $0.value.title < $1.value.title } )
+            .map { (key: String, value: CalibreBook) -> BookModel in
             BookModel(
                 bookCoverSource: value.coverURL.absoluteString,
                 bookId: key,
