@@ -7,43 +7,38 @@
 //
 
 import ShelfView_iOS
-
 import SwiftUI
+
+#if canImport(GoogleMobileAds)
 import GoogleMobileAds
+#endif
 
 class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
-    var books = [Book]()
     var bookModel = [BookModel]()
     var shelfView: SectionShelfView!
+#if canImport(GoogleMobileAds)
     var bannerView: GADBannerView!
+#endif
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
     
     func updateBookModel() {
-        books.removeAll()
-        bookModel.removeAll()
-        
-        modelData.libraryInfo.libraries.forEach { library in
-            print("LIBRARY \(library.name)")
-            library.books.filter({ book in
-                return book.inShelf
-            }).forEach { book in
-                let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
-                
-                books.append(book)
-                bookModel.append(
-                    BookModel(
-                        bookCoverSource: coverURL,
-                        bookId: book.bookModelId,
-                        bookTitle: book.title))
-            }
+        bookModel = modelData.booksInShelf
+            .sorted(
+                by: { $0.value.title < $1.value.title } )
+            .map { (key: String, value: CalibreBook) -> BookModel in
+            BookModel(
+                bookCoverSource: value.coverURL.absoluteString,
+                bookId: key,
+                bookTitle: value.title)
         }
         
         let bookModelSectionArray = [BookModelSection(sectionName: "Default", sectionId: "0", sectionBooks: bookModel)]
         self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)
     }
+    
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         shelfView.translatesAutoresizingMaskIntoConstraints = false
@@ -58,27 +53,14 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-         modelData.libraryInfo.libraries.forEach { library in
-            library.books.forEach { book in
-                let coverURL = "\(modelData!.calibreServer)/get/thumb/\(book.id)/\(book.libraryName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400"
-                
-                bookModel.append(
-                    BookModel(
-                        bookCoverSource: coverURL,
-                        bookId: book.bookModelId,
-                        bookTitle: book.title))
-            }
-        }
-        
-        let bookModelSectionArray = [BookModelSection(sectionName: "Default", sectionId: "0", sectionBooks: bookModel)]
-
-        shelfView = SectionShelfView(frame: CGRect(x: 0, y: statusBarHeight, width: 350, height: 500), bookModelSection: bookModelSectionArray, bookSource: SectionShelfView.BOOK_SOURCE_URL)
+        shelfView = SectionShelfView(frame: CGRect(x: 0, y: statusBarHeight, width: 350, height: 500), bookModelSection: [], bookSource: SectionShelfView.BOOK_SOURCE_URL)
 
         shelfView.delegate = self
 //        motherView.addSubview(shelfView)
         //self.view = shelfView
         view.addSubview(shelfView)
         
+        #if canImport(GoogleMobileAds)
         bannerView = GADBannerView()
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
@@ -97,30 +79,24 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
         ])
         bannerView.adSize = kGADAdSizeBanner
+        #else
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        #endif
         
-//        view.addConstraints(
-//          [NSLayoutConstraint(item: bannerView!,
-//                              attribute: .bottom,
-//                              relatedBy: .equal,
-//                              toItem: bottomLayoutGuide,
-//                              attribute: .top,
-//                              multiplier: 1,
-//                              constant: 0),
-//           NSLayoutConstraint(item: bannerView!,
-//                              attribute: .centerX,
-//                              relatedBy: .equal,
-//                              toItem: view,
-//                              attribute: .centerX,
-//                              multiplier: 1,
-//                              constant: 0)
-//          ])
+        updateBookModel()
+
     }
 
     func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
-        let bookDetailView = BookDetailView(
-            book: modelData.getBook(libraryName: books[index].libraryName, bookId: books[index].id)).environmentObject(modelData)
+        modelData.readingBookInShelfId = bookId
+        let bookDetailView = BookDetailView().environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
@@ -138,6 +114,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
+        modelData.readingBookInShelfId = nil
     }
     
     func delay(_ delay: Double, closure: @escaping () -> ()) {

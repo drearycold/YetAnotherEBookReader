@@ -11,20 +11,36 @@ import OSLog
 struct ServerView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @State private var calibreServer = "http://calibre-server.lan:8080/"
+    @State private var calibreServerId = ""
+    @State private var calibreServerLibraryId = "Undetermined"
+    
+    @State private var calibreServerUrl = ""
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
-    @State private var calibreLibrary = "Undetermined"
+    //@State private var calibreServerEdit = CalibreServer(baseUrl: "", username: "", password: "")
+    @State private var calibreServerLibrariesEdit = [CalibreLibrary]()
+    
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
     @State private var enableCustomDictViewer = false
     @State private var customDictViewerURL = ""
     @State private var calibreServerEditing = false
     
-    @State private var result = "Waiting"
+    @State private var presentingAlert = false
+    
+    @State private var dataLoading = false
+    
+    @State private var updater = 0
     
     var defaultLog = Logger()
 
+    struct AlertItem : Identifiable {
+        var id: String
+        var action: (() -> Void)?
+    }
+    @State private var alertItem: AlertItem?
+    @State private var alertContent: String = ""
+    
     var body: some View {
         VStack {
             HStack {
@@ -36,38 +52,52 @@ struct ServerView: View {
             
             Divider()
             
-            VStack(alignment: .leading, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
+                VStack(spacing: 8) {
                     HStack {
                         Text("Switch Server")
                         Spacer()
-                        Button(action:{ calibreServerEditing = true }) {
+                        Button(action:{
+                            calibreServerEditing = true
+                        }) {
                             Image(systemName: "plus")
                         }
-                        Button(action:{}) {
+                        Button(action:{
+                            //TODO remove current server
+                        }) {
                             Image(systemName: "minus")
                         }
-                        Button(action:{}) {
+                        Button(action:{
+                            //TODO modify current server
+                        }) {
                             Image(systemName: "square.and.pencil")
                         }
                     }
                     
-                    Picker("Server: \(modelData.calibreServerDescription)", selection: $calibreServer) {
-                        ForEach(modelData.libraryInfo.libraries) { library in
-                            Text(library.id).tag(library.id)
+                    HStack {
+                        Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
+                            ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                                lhs.id < rhs.id
+                            }), id: \.self) { server in
+                                Text(server.id).tag(server.id)
+                            }
                         }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: calibreServerId) { value in
+                            if modelData.currentCalibreServerId != calibreServerId {
+                                modelData.currentCalibreServerId = calibreServerId
+                            }
+                        }
+                        
+                        Spacer()
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreLibrary, perform: { value in
-                        modelData.calibreLibrary = calibreLibrary
-                    })
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
                     if calibreServerEditing {
                         HStack {
                             Text("Server:")
-                            TextField("Server", text: $calibreServer)
+                            TextField("Server", text: $calibreServerUrl)
                                 .keyboardType(.URL)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
@@ -85,6 +115,7 @@ struct ServerView: View {
                         HStack {
                             Text("Password:")
                             SecureField("Password", text: $calibrePassword)
+                                .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .border(Color(UIColor.separator))
                             
@@ -94,7 +125,7 @@ struct ServerView: View {
                             Button(action:{ calibreServerEditing = false }) {
                                 Image(systemName: "xmark")
                             }
-                            Button(action:{ }) {
+                            Button(action:{ addServerConfirmButtonAction() }) {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -102,9 +133,17 @@ struct ServerView: View {
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
-                        Text(modelData.libraryInfo.description)
+                        Text("\(modelData.calibreLibraries.values.filter({ (library) -> Bool in library.server.id == calibreServerId }).count) Library(s) in Server")
                         
-                        Button(action: { startLoad() }) {
+                        Button(action: {
+                            let ret = startLoadServerLibraries(
+                                calibreServer: modelData.calibreServers[modelData.currentCalibreServerId]!,
+                                success: modelData.handleLibraryInfo(jsonData:)
+                            )
+                            if ret != 0 {
+                                //TODO
+                            }
+                        }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                         }
                     }
@@ -115,76 +154,104 @@ struct ServerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Switch Library")
                     
-                    Picker("Library: \(calibreLibrary)", selection: $calibreLibrary) {
-                        ForEach(modelData.libraryInfo.libraries) { library in
-                            Text(library.id).tag(library.id)
+                    Picker("Library: \(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "")", selection: $calibreServerLibraryId) {
+                        ForEach(modelData.calibreLibraries.values.filter({ (library) -> Bool in
+                            library.server.id == calibreServerId
+                        }).sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.name < rhs.name
+                        })) { library in
+                            Text(library.name).tag(library.id)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreLibrary, perform: { value in
-                        modelData.calibreLibrary = calibreLibrary
+                    .onChange(of: calibreServerLibraryId, perform: { value in
+                        if modelData.currentCalibreLibraryId != calibreServerLibraryId {
+                            modelData.currentCalibreLibraryId = calibreServerLibraryId
+                        }
+                        
+                        enableStoreReadingPosition = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName != nil
+                        storeReadingPositionColumnName = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName ?? modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnNameDefault
                     })
                     
                         
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
-                        Text("\(modelData.getLibrary()?.books.count ?? 0) Book(s) in Library")
+                        if modelData.calibreServerLibraryUpdating {
+                            Text("Loading Books \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal), please wait a moment...")
+                        } else {
+                            Text("\(modelData.calibreServerLibraryBooks.count) Book(s) in Library")
+                        }
                         
                         Button(action: { syncLibrary() }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                         }
-                       
+                    }.onChange(of: modelData.calibreServerLibraryUpdatingProgress) {_ in
+                        updater += 1
                     }
                 }
                 
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("More Settings")
-                    
-                    Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
-                    if enableStoreReadingPosition {
-                        HStack {
-                            Text("Column Name:")
-                            TextField("#column", text: $storeReadingPositionColumnName, onCommit: {
-                                modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
-                            })
-                                .keyboardType(.alphabet)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .border(Color(UIColor.separator))
-                        }
+                Text("Library Settings")
+                Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
+                    .onChange(of: enableStoreReadingPosition) { value in
+                        modelData.updateStoreReadingPosition(enabled: value, value: storeReadingPositionColumnName)
                     }
-                    
-                    Toggle("Enable Custom Dictionary Viewer", isOn: $enableCustomDictViewer)
-                    if enableCustomDictViewer {
-                        HStack {
-                            Text("URL:")
-                            TextField("", text: $customDictViewerURL, onCommit: {
-                                modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
-                            })
-                                .keyboardType(.alphabet)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .border(Color(UIColor.separator))
-                        }
+                if enableStoreReadingPosition {
+                    HStack {
+                        Text("Column Name:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("#column", text: $storeReadingPositionColumnName, onCommit:  {
+                            modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
+                        })
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
                     }
-                }.onChange(of: enableStoreReadingPosition) { value in
-                    modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
-                }.onChange(of: enableCustomDictViewer) { value in
-                    modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
                 }
+            }
+            .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+            .disabled(dataLoading)
+            .disabled(modelData.calibreServerLibraryUpdating)
+            
+            Divider()
+            
+            VStack(alignment: .leading, spacing: 8) {
+                Text("More Settings")
                 
-                Spacer()
+                
+                
+                Toggle("Enable Custom Dictionary Viewer", isOn: $enableCustomDictViewer)
+                if enableCustomDictViewer {
+                    HStack {
+                        Text("URL:")
+                        TextField("", text: $customDictViewerURL, onCommit: {
+                            modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
+                        })
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
+                    }
+                }
+            }.onChange(of: enableCustomDictViewer) { value in
+                modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
             }.padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+            
+            Spacer()
         }
         
         .onAppear() {
-            calibreServer = modelData.calibreServer
-            calibreUsername = modelData.calibreUsername
-            calibrePassword = modelData.calibrePassword
-            calibreLibrary = modelData.calibreLibrary
+            calibreServerId = modelData.currentCalibreServerId
+            calibreServerLibraryId = modelData.currentCalibreLibraryId
+            
+            if let library = modelData.calibreLibraries[calibreServerLibraryId] {
+                enableStoreReadingPosition = library.readPosColumnName != nil
+                storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
+                
+                print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
+            }
+            
+            
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)
@@ -197,175 +264,184 @@ struct ServerView: View {
                 }
             }
         }
+        .alert(item: $alertItem) { item in
+            if item.id == "AddServer" {
+                return Alert(title: Text("Add Server"),
+                             message: Text(alertContent),
+                             primaryButton: .default(Text("Confirm")
+                             ) {
+                                 addServerConfirmed()
+                             },
+                             secondaryButton: .cancel())
+            }
+            if item.id == "AddServerExists" {
+                return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
+            }
+            return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel() {
+                item.action?()
+            })
+        }
     }
     
-    func startLoad() {
-        modelData.calibreServer = calibreServer
-        modelData.calibreUsername = calibreUsername
-        modelData.calibrePassword = calibrePassword
-        let url = URL(string: calibreServer + "/ajax/library-info")!
-        if calibreUsername.count > 0 && calibrePassword.count > 0 {
-            let protectionSpace = URLProtectionSpace.init(host: url.host!,
-                                                          port: url.port!,
-                                                          protocol: url.scheme,
-                                                          realm: "calibre",
-                                                          authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
-            let userCredential = URLCredential(user: calibreUsername,
-                                               password: calibrePassword,
-                                               persistence: .permanent)
-            URLCredentialStorage.shared.setDefaultCredential(userCredential, for: protectionSpace)
+    
+    
+    private func syncLibrary() {
+        print(modelData.calibreLibraries)
+        print(modelData.currentCalibreLibraryId)
+        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreLibraries[modelData.currentCalibreLibraryId]!.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+            return
         }
         
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        let json:[Any] = [["title", "authors", "formats", "rating"], "", "", "", -1]
+
+        let data = try! JSONSerialization.data(withJSONObject: json, options: [])
+        
+        var request = URLRequest(url: endpointUrl)
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
-                // self.handleClientError(error)
-                result = error.localizedDescription
+                self.alertItem = AlertItem(id: error.localizedDescription, action: {
+                    dataLoading = false
+                })
+                defaultLog.warning("error: \(error.localizedDescription)")
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse,
                 (200...299).contains(httpResponse.statusCode) else {
-                // self.handleServerError(response)
-                result = "not httpResponse"
+                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
+                    dataLoading = false
+                })
                 return
             }
+            
             if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                let data = data,
-                let string = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async {
-                    //self.webView.loadHTMLString(string, baseURL: url)
-                    result = string
-                    handleLibraryInfo(jsonData: data)
-                }
-            }
-        }
-        task.resume()
-    }
-    
-    func handleLibraryInfo(jsonData: Data) {
-        do {
-            let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
-            defaultLog.info("libraryInfo: \(libraryInfo)")
-            
-            // modelData.libraryInfo.reset()
-            let libraryMap = libraryInfo["library_map"] as! [String: String]
-            libraryMap.forEach { (key, value) in
-                modelData.libraryInfo.getLibrary(name: key)
-            }
-            if libraryMap[calibreLibrary] == nil {
-                calibreLibrary = libraryInfo["default_library"] as? String ?? "Calibre Library"
-            }
-        } catch {
-        
-        }
-        
-    }
-    
-    private func syncLibrary() {
-        let endpointUrl = URL(string: modelData.calibreServer + "/cdb/cmd/list/0?library_id=" + calibreLibrary.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-        let json:[Any] = [["title", "authors", "formats", "rating"], "", "", "", -1]
-        do {
-            let data = try JSONSerialization.data(withJSONObject: json, options: [])
-            
-            var request = URLRequest(url: endpointUrl)
-            request.httpMethod = "POST"
-            request.httpBody = data
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    // self.handleClientError(error)
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse,
-                    (200...299).contains(httpResponse.statusCode) else {
-                    // self.handleServerError(response)
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    return
-                }
-                
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                    let data = data,
-                    let string = String(data: data, encoding: .utf8) {
-                        DispatchQueue.main.async {
-                            //self.webView.loadHTMLString(string, baseURL: url)
-                            //result = string
-                            handleLibraryBooks(json: data)
+                let data = data {
+                DispatchQueue(label: "data").async {
+                        //self.webView.loadHTMLString(string, baseURL: url)
+                        //result = string
+                        modelData.handleLibraryBooks(json: data) { isSuccess in
+                            dataLoading = false
+                            
+                            if !isSuccess {
+                                self.alertItem = AlertItem(id: "Failed to parse calibre server response.")
+                            }
                         }
                     }
                 }
+            }
 
-            task.resume()
-                    
-        }catch{
-        }
+        dataLoading = true
+        task.resume()
+    }
+    
+    private func handleClientError(_ error: Error) {
+        
     }
     
     private func updateLibrary() {
         
     }
     
-    func handleLibraryBooks(json: Data) {
-        guard let library = modelData.getLibrary() else {
+    func startLoadServerLibraries(calibreServer: CalibreServer, success: @escaping (_ jsonData: Data) -> Void) -> Int {
+        if dataLoading {
+            return 1
+        }
+        guard let url = URL(string: calibreServer.baseUrl + "/ajax/library-info") else {
+            return 2
+        }
+        if calibreServer.username.count > 0 && calibreServer.password.count > 0 {
+            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+                                                          port: url.port ?? 0,
+                                                          protocol: url.scheme,
+                                                          realm: "calibre",
+                                                          authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+            let userCredential = URLCredential(user: calibreServer.username,
+                                               password: calibreServer.password,
+                                               persistence: .permanent)
+            URLCredentialStorage.shared.setDefaultCredential(userCredential, for: protectionSpace)
+        }
+        
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                print(error.localizedDescription)
+                self.alertItem = AlertItem(id: error.localizedDescription, action: {
+                    dataLoading = false
+                })
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                (200...299).contains(httpResponse.statusCode) else {
+                self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
+                    dataLoading = false
+                })
+                return
+            }
+            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                let data = data {
+                DispatchQueue.main.async {
+                    success(data)
+                    dataLoading = false
+                }
+            }
+        }
+        
+        dataLoading = true
+        task.resume()
+        return 0
+    }
+    
+    func handleLibraryInfo(jsonData: Data) {
+        var calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
+        
+        if let libraryInfo = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? NSDictionary {
+            defaultLog.info("libraryInfo: \(libraryInfo)")
+            
+            if let libraryMap = libraryInfo["library_map"] as? [String: String] {
+                if let defaultLibrary = libraryInfo["default_library"] as? String {
+                    calibreServer.defaultLibrary = defaultLibrary
+                }
+                var content = "Library List:"
+                calibreServerLibrariesEdit.removeAll()
+                libraryMap.forEach { (key, value) in
+                    content += "\n\(value)"
+                    calibreServerLibrariesEdit.append(CalibreLibrary(server: calibreServer, key: key, name: value))
+                }
+                
+                alertContent = content
+                alertItem = AlertItem(id: "AddServer")
+            }
+            
+        } else {
+            
+        }
+    }
+    
+    private func addServerConfirmButtonAction() {
+        let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
+        if modelData.calibreServers[calibreServer.id] != nil {
+            alertItem = AlertItem(id: "AddServerExists")
             return
         }
-        var booksMap = library.booksMap
-        
-        do {
-            let root = try JSONSerialization.jsonObject(with: json, options: []) as! NSDictionary
-            let resultElement = root["result"] as! NSDictionary
-            let bookIds = resultElement["book_ids"] as! NSArray
-            
-            bookIds.forEach { idNum in
-                let id = (idNum as! NSNumber).int32Value
-                if booksMap[id] == nil {
-                    var book = Book(serverInfo: ServerInfo(calibreServer: modelData.calibreServer))
-                    book.id = id
-                    book.libraryName = calibreLibrary
-                    booksMap[book.id] = book
-                }
-            }
-            
-            let dataElement = resultElement["data"] as! NSDictionary
-            
-            let titles = dataElement["title"] as! NSDictionary
-            titles.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let title = value as! String
-                booksMap[id]!.title = title
-            }
-            
-            let authors = dataElement["authors"] as! NSDictionary
-            authors.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let authors = value as! NSArray
-                booksMap[id]!.authors = authors[0] as? String ?? "Unknown"
-            }
-            
-            let formats = dataElement["formats"] as! NSDictionary
-            formats.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                let formats = value as! NSArray
-                formats.forEach { format in
-                    booksMap[id]!.formats[(format as! String)] = ""
-                }
-            }
-            
-            let ratings = dataElement["rating"] as! NSDictionary
-            ratings.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                if let rating = value as? NSNumber {
-                    booksMap[id]!.rating = rating.intValue
-                }
-            }
-            
-        } catch {
-        
+        print(calibreServer.password)
+        let ret = startLoadServerLibraries(calibreServer: calibreServer, success: self.handleLibraryInfo(jsonData:))
+        switch(ret) {
+        case 2: //URL malformed
+            alertItem = AlertItem(id: "Server URL is not well formed")
+            break;
+        default:
+            break;
         }
+    }
+    
+    private func addServerConfirmed() {
+        let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
         
-        modelData.libraryInfo.libraryMap[calibreLibrary]!.updateBooks(booksMap)
-        
+        modelData.addServer(server: calibreServer, libraries: calibreServerLibrariesEdit)
     }
 }
 

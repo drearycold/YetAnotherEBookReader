@@ -11,14 +11,13 @@ import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class EpubReaderContainer: FolioReaderContainer {
-    var myFolioReaderCenterDelegate = MyFolioReaderCenterDelegate()
     var savedPositionObserver: NSKeyValueObservation?
-    var bookDetailView: BookDetailView?
+    var modelData: ModelData?
 
     func open() {
         readerConfig.loadSavedPositionForCurrentBook = true
         
-        let bookReadingPosition = bookDetailView?.getSelectedReadingPosition()
+        let bookReadingPosition = modelData?.getSelectedReadingPosition()
         if( bookReadingPosition != nil ) {
             var position = [String: Any]()
             position["pageNumber"] = bookReadingPosition!.lastPosition[0]
@@ -29,7 +28,7 @@ class EpubReaderContainer: FolioReaderContainer {
         
         savedPositionObserver = folioReader.observe(\.savedPositionForCurrentBook, options: .new) { reader, change in
             guard let position = change.newValue else { return }
-            self.bookDetailView?.updateCurrentPosition(position)
+            self.modelData?.updateCurrentPosition(position)
         }
         
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)

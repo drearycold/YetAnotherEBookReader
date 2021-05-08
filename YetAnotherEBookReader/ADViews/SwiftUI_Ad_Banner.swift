@@ -5,9 +5,10 @@
 //  Created by 京太郎 on 2021/4/2.
 //
 
+#if canImport(GoogleMobileAds)
 import SwiftUI
-import GoogleMobileAds
 import UIKit
+import GoogleMobileAds
 
 final private class BannerVC: UIViewControllerRepresentable  {
 
@@ -42,3 +43,5 @@ struct Banner_Previews: PreviewProvider {
         Banner()
     }
 }
+
+#endif

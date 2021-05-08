@@ -15,9 +15,8 @@ import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate {
+    var modelData: ModelData?
     var pdfView: PDFView?
-    var bookDetailView: BookDetailView?
-    // var starDictView = StarDictViewContainer()
     var mDictView = MDictViewContainer()
     var lastScale = CGFloat(-1.0)
     
@@ -39,9 +38,8 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
         
     var bookTitle: String!
 
-    func open(pdfURL: URL, bookDetailView: BookDetailView) {
-        self.bookDetailView = bookDetailView
-        self.bookTitle = bookDetailView.book.title
+    func open(pdfURL: URL) {
+        self.bookTitle = modelData?.readingBook?.title
         
         pdfView = PDFView()
         
@@ -230,7 +228,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
         
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
         let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: bookDetailView!.book.id), bookDetailView!.book.libraryName)
+            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: modelData!.readingBook!.id), modelData!.readingBook!.library.name)
         )
         if let pdfOptionsRealm = pdfOptionsRealmResult.first {
             pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
@@ -243,7 +241,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
         }
         
-        var destPageNum = (bookDetailView?.getSelectedReadingPosition()?.lastPosition[0] ?? 1) - 1
+        var destPageNum = (modelData?.getSelectedReadingPosition()?.lastPosition[0] ?? 1) - 1
         if destPageNum < 0 {
             destPageNum = 0
         }
@@ -266,13 +264,13 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             let navFrameInPDF = pdfView!.convert(navigationController!.navigationBar.frame, to: curDest.page!)
             print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
             position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
-            bookDetailView?.updateCurrentPosition(position)
+            modelData?.updateCurrentPosition(position)
         }
         
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
         let pdfOptionsRealm = PDFOptionsRealm()
-        pdfOptionsRealm.id = bookDetailView!.book.id
-        pdfOptionsRealm.libraryName = bookDetailView!.book.libraryName
+        pdfOptionsRealm.id = modelData!.readingBook!.id
+        pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
         pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
         pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
         pdfOptionsRealm.hMarginAutoScaler = pdfOptions.hMarginAutoScaler
@@ -463,7 +461,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 
                 print("BEFORE POINT curPoint=\(curPoint) newDestPoint=\(newDest.point) \(boundsForCropBox)")
                 
-                if pdfOptions.rememberInPagePosition && notification.object != nil, let lastPosition = bookDetailView?.getSelectedReadingPosition()?.lastPosition, page.pageRef?.pageNumber == lastPosition[0] {
+                if pdfOptions.rememberInPagePosition && notification.object != nil, let lastPosition = modelData?.getSelectedReadingPosition()?.lastPosition, page.pageRef?.pageNumber == lastPosition[0] {
                     let lastDest = PDFDestination(
                         page: page,
                         at: CGPoint(

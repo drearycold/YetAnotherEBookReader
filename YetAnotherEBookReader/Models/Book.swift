@@ -10,12 +10,14 @@ import RealmSwift
 import SwiftUI
 import OSLog
 
+@available(*, deprecated)
 struct ServerInfo {
     var calibreServer: String
     var calibreUsername = ""
     var calibrePassword = ""
 }
 
+@available(*, deprecated)
 struct LibraryInfo {
     // var serverInfo: ServerInfo
     var libraryMap = [String: Library]()
@@ -218,6 +220,7 @@ struct LibraryInfo {
     
 }
 
+@available(*, deprecated)
 struct Library: Hashable, Identifiable {
     var id: String {
         get { return name }
@@ -251,6 +254,7 @@ struct Library: Hashable, Identifiable {
     }
 }
 
+@available(*, deprecated)
 struct Book: Hashable, Identifiable, Equatable {
     static func == (lhs: Book, rhs: Book) -> Bool {
         lhs.id == rhs.id && lhs.libraryName == rhs.libraryName

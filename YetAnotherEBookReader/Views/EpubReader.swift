@@ -14,7 +14,7 @@ import FolioReaderKit
 struct EpubReader: UIViewControllerRepresentable {
     
     let bookURL : URL
-    let bookDetailView: BookDetailView
+    @EnvironmentObject var modelData: ModelData
     
     func makeUIViewController(context: Context) -> UIViewController {
         if bookURL.path.hasSuffix(".epub") {
@@ -23,7 +23,7 @@ struct EpubReader: UIViewControllerRepresentable {
             readerConfiguration.allowSharing = false
             let folioReader = FolioReader()
             let epubReaderContainer = EpubReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path)
-            epubReaderContainer.bookDetailView = bookDetailView
+            epubReaderContainer.modelData = modelData
             epubReaderContainer.open()
             return epubReaderContainer
         }
@@ -36,7 +36,8 @@ struct EpubReader: UIViewControllerRepresentable {
             nav.navigationBar.isTranslucent = false
             nav.setToolbarHidden(false, animated: true)
             
-            pdfViewController.open(pdfURL: bookURL, bookDetailView: bookDetailView)
+            pdfViewController.open(pdfURL: bookURL)
+            pdfViewController.modelData = modelData
             
             let stackView = UIStackView(frame: nav.toolbar.frame)
             stackView.distribution = .fill
