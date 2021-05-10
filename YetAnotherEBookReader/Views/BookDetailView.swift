@@ -23,6 +23,7 @@ enum DownloadStatus: String, CaseIterable, Identifiable {
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.horizontalSizeClass) var sizeClass
+    @Environment(\.openURL) var openURL
         
     @State private var downloadStatus = DownloadStatus.INITIAL
     
@@ -173,6 +174,13 @@ struct BookDetailView: View {
             HStack {
                 Text(book.tagsDescription).font(.subheadline)
                 Spacer()
+                if let goodreads_id = book.identifiers["goodreads"] {
+                    Button(action:{
+                        openURL(URL(string: "https://www.goodreads.com/book/show/\(goodreads_id)")!)
+                    }) {
+                        Image("goodreads")
+                    }
+                }
             }
             
             HStack {
@@ -278,14 +286,6 @@ struct BookDetailView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                showingReadSheet = true
-                
-            }) {
-                Image(systemName: "book")
-            }
-        }
-        ToolbarItem(placement: .cancellationAction) {
-            Button(action: {
                 guard let book = modelData.readingBook else {
                     assert(false, "modelData.readingBook is nil")
                     return
@@ -317,6 +317,14 @@ struct BookDetailView: View {
                     Image(systemName: "star")
                 }
             }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button(action: {
+                showingReadSheet = true
+                
+            }) {
+                Image(systemName: "book")
+            }.disabled(modelData.readingBook?.inShelf == false)
         }
     }
     

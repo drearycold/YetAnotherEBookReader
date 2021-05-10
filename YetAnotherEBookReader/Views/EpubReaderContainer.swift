@@ -27,8 +27,9 @@ class EpubReaderContainer: FolioReaderContainer {
         }
         
         savedPositionObserver = folioReader.observe(\.savedPositionForCurrentBook, options: .new) { reader, change in
-            guard let position = change.newValue else { return }
-            self.modelData?.updateCurrentPosition(position)
+            if let bookProgress = reader.readerCenter?.getBookProgress(), let newValue = change.newValue, let position = newValue {
+                self.modelData?.updateCurrentPosition(progress: bookProgress, position: position)
+            }
         }
         
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)

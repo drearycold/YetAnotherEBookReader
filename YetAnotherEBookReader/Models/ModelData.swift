@@ -104,7 +104,7 @@ final class ModelData: ObservableObject {
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 12,
+        schemaVersion: 14,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -180,7 +180,7 @@ final class ModelData: ObservableObject {
                 print("Unknown Server: \(libraryRealm)")
                 return
             }
-            let calibreLibrary = CalibreLibrary(server: calibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!, readPosColumnName: libraryRealm.readPosColumnName)
+            let calibreLibrary = CalibreLibrary(server: calibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!, readPosColumnName: libraryRealm.readPosColumnName, goodreadsSyncProfileName: libraryRealm.goodreadsSyncProfileName)
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
         
@@ -268,6 +268,9 @@ final class ModelData: ObservableObject {
             formats: bookRealm.formats(),
             readPos: bookRealm.readPos(),
             inShelf: bookRealm.inShelf)
+        if bookRealm.identifiersData != nil {
+            calibreBook.identifiers = bookRealm.identifiers()
+        }
         calibreBook.authors.append(contentsOf: bookRealm.authors)
         calibreBook.tags.append(contentsOf: bookRealm.tags)
         return calibreBook
@@ -317,6 +320,11 @@ final class ModelData: ObservableObject {
         updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
     }
     
+    func updateGoodreadsSyncProfileName(enabled: Bool, value: String) {
+        calibreLibraries[currentCalibreLibraryId]!.goodreadsSyncProfileName = enabled ? value : nil
+        updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
+    }
+    
     func updateCustomDictViewer(enabled: Bool, value: String) {
         //TODO
     }
@@ -326,6 +334,7 @@ final class ModelData: ObservableObject {
         updateServerRealm(server: server)
         
         libraries.forEach { (library) in
+            calibreLibraries[library.id] = library
             updateLibraryRealm(library: library)
         }
     }
@@ -348,6 +357,7 @@ final class ModelData: ObservableObject {
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
         libraryRealm.readPosColumnName = library.readPosColumnName
+        libraryRealm.goodreadsSyncProfileName = library.goodreadsSyncProfileName
         try! realm.write {
             realm.add(libraryRealm, update: .all)
         }
@@ -386,6 +396,8 @@ final class ModelData: ObservableObject {
         bookRealm.inShelf = book.inShelf
         
         bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
+        
+        bookRealm.identifiersData = try! JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
         
         let deviceMapSerialize = book.readPos.getCopy().compactMapValues { (value) -> Any? in
             try? JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
@@ -489,6 +501,8 @@ final class ModelData: ObservableObject {
             }
         }
         
+        let identifiers = dataElement["identifiers"] as! NSDictionary
+        
         let ratings = dataElement["rating"] as! NSDictionary
         ratings.forEach { (key, value) in
             let id = (key as! NSString).intValue
@@ -568,11 +582,12 @@ final class ModelData: ObservableObject {
                 }
             }
         }
-//        authors.forEach { (key, value) in
-//            let authors = value as! NSArray
-//            book.authors = authors[0] as! String
-//            //                bookAuthors = book.authors
-//        }
+
+        if let d = dataElement["identifiers"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary {
+            if let ids = v as? [String: String] {
+                book.identifiers = ids
+            }
+        }
         
         let comments = dataElement["comments"] as! NSDictionary
         comments.forEach { (key, value) in
@@ -608,6 +623,7 @@ final class ModelData: ObservableObject {
                         deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
                         deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
                         deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                        deviceReadingPosition!.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
                         deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
                         deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
                         deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
@@ -633,6 +649,11 @@ final class ModelData: ObservableObject {
         
         updateBookRealm(book: calibreServerLibraryBooks[bookId]!, realm: self.realm)
         booksInShelf[calibreServerLibraryBooks[bookId]!.inShelfId] = calibreServerLibraryBooks[bookId]!
+        
+        if let book = readingBook, let library = calibreLibraries[book.library.id], let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
+            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+            let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
+        }
     }
     
     func removeFromShelf(inShelfId: String) {
@@ -645,6 +666,15 @@ final class ModelData: ObservableObject {
             calibreServerLibraryBooks[book.id]!.inShelf = false
         }
         booksInShelf.removeValue(forKey: inShelfId)
+        
+        if let book = readingBook, let library = calibreLibraries[book.library.id], let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
+            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+            let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
+            
+            if let position = book.readPos.getPosition(UIDevice().name), position.lastProgress > 99.99 {
+                connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
+            }
+        }
     }
     
     func downloadFormat(_ bookId: Int32, _ format: CalibreBook.Format, complete: @escaping (Bool) -> Void) -> Bool {
@@ -817,8 +847,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func updateCurrentPosition(_ position: [String: Any]?) {
-        guard (position != nil) else { return }
+    func updateCurrentPosition(progress: Double, position: [String: Any]) {
         guard var readingBook = self.readingBook else {
             return
         }
@@ -831,14 +860,15 @@ final class ModelData: ObservableObject {
                 deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
             }
             
-            defaultLog.info("pageNumber:  \(position!["pageNumber"]! as! Int)")
-            defaultLog.info("pageOffsetX: \(position!["pageOffsetX"]! as! CGFloat)")
-            defaultLog.info("pageOffsetY: \(position!["pageOffsetY"]! as! CGFloat)")
+            defaultLog.info("pageNumber:  \(position["pageNumber"]! as! Int)")
+            defaultLog.info("pageOffsetX: \(position["pageOffsetX"]! as! CGFloat)")
+            defaultLog.info("pageOffsetY: \(position["pageOffsetY"]! as! CGFloat)")
             
-            deviceReadingPosition!.lastPosition[0] = position!["pageNumber"]! as! Int
-            deviceReadingPosition!.lastPosition[1] = Int((position!["pageOffsetX"]! as! CGFloat).rounded())
-            deviceReadingPosition!.lastPosition[2] = Int((position!["pageOffsetY"]! as! CGFloat).rounded())
-            deviceReadingPosition!.lastReadPage = position!["pageNumber"]! as! Int
+            deviceReadingPosition!.lastPosition[0] = position["pageNumber"]! as! Int
+            deviceReadingPosition!.lastPosition[1] = Int((position["pageOffsetX"]! as! CGFloat).rounded())
+            deviceReadingPosition!.lastPosition[2] = Int((position["pageOffsetY"]! as! CGFloat).rounded())
+            deviceReadingPosition!.lastReadPage = position["pageNumber"]! as! Int
+            deviceReadingPosition!.lastProgress = progress
             
             readingBook.readPos.updatePosition(deviceName, deviceReadingPosition!)
             
@@ -946,6 +976,12 @@ final class ModelData: ObservableObject {
                     
                     updatingMetadataStatus = "Success"
                     updatingMetadata = false
+                    
+                    if let library = calibreLibraries[readingBook.library.id], let goodreadsId = readingBook.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
+                        let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+                        connector.updateReadingProgress(goodreads_id: goodreadsId, progress: progress)
+                    }
+                        
                 }
             }
             updatingMetadata = true
@@ -956,7 +992,6 @@ final class ModelData: ObservableObject {
         
         // modelData.isReading = false
     }
-    
     
     func goToPreviousBook() {
         if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {

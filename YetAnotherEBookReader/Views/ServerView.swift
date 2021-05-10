@@ -22,6 +22,10 @@ struct ServerView: View {
     
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
+    
+    @State private var enableGoodreadsSync = false
+    @State private var goodreadsSyncProfileName = ""
+    
     @State private var enableCustomDictViewer = false
     @State private var customDictViewerURL = ""
     @State private var calibreServerEditing = false
@@ -171,6 +175,9 @@ struct ServerView: View {
                         
                         enableStoreReadingPosition = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName != nil
                         storeReadingPositionColumnName = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName ?? modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnNameDefault
+                        
+                        enableGoodreadsSync = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName != nil
+                        goodreadsSyncProfileName = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName ?? modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileNameDefault
                     })
                     
                         
@@ -198,9 +205,26 @@ struct ServerView: View {
                     }
                 if enableStoreReadingPosition {
                     HStack {
-                        Text("Column Name:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                        TextField("#column", text: $storeReadingPositionColumnName, onCommit:  {
+                        Text("Column:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("#name", text: $storeReadingPositionColumnName, onCommit:  {
                             modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
+                        })
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
+                    }
+                }
+                
+                Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
+                    .onChange(of: enableGoodreadsSync, perform: { value in
+                        modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
+                    })
+                if enableGoodreadsSync {
+                    HStack {
+                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("Name", text: $goodreadsSyncProfileName, onCommit:  {
+                            modelData.updateGoodreadsSyncProfileName(enabled: true, value: goodreadsSyncProfileName)
                         })
                             .keyboardType(.alphabet)
                             .autocapitalization(.none)
@@ -248,6 +272,8 @@ struct ServerView: View {
                 enableStoreReadingPosition = library.readPosColumnName != nil
                 storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
                 
+                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
                 print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
             }
             
