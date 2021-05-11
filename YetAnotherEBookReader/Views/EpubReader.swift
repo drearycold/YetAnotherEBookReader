@@ -66,7 +66,7 @@ struct EpubReader: UIViewControllerRepresentable {
     }
     
     private func readerConfiguration() -> FolioReaderConfig {
-        let config = FolioReaderConfig(withIdentifier: "READER")
+        let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
         config.shouldHideNavigationOnTap = false
         config.scrollDirection = FolioReaderScrollDirection.vertical
 
