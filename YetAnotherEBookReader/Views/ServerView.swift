@@ -318,7 +318,7 @@ struct ServerView: View {
             return
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating"], "", "", "", -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "identifiers"], "", "", "", -1]
 
         let data = try! JSONSerialization.data(withJSONObject: json, options: [])
         

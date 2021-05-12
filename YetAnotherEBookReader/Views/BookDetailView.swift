@@ -174,12 +174,31 @@ struct BookDetailView: View {
             HStack {
                 Text(book.tagsDescription).font(.subheadline)
                 Spacer()
-                if let goodreads_id = book.identifiers["goodreads"] {
+                if let id = book.identifiers["goodreads"] {
                     Button(action:{
-                        openURL(URL(string: "https://www.goodreads.com/book/show/\(goodreads_id)")!)
+                        openURL(URL(string: "https://www.goodreads.com/book/show/\(id)")!)
                     }) {
-                        Image("goodreads")
+                        Image("icon-goodreads").resizable().frame(width: 24, height: 24, alignment: .center)
                     }
+                } else {
+                    Button(action:{
+                        openURL(URL(string: "https://www.goodreads.com/")!)
+                    }) {
+                        Image("icon-goodreads").resizable().frame(width: 24, height: 24, alignment: .center)
+                    }.hidden()
+                }
+                if let id = book.identifiers["amazon"] {
+                    Button(action:{
+                        openURL(URL(string: "http://www.amazon.com/dp/\(id)")!)
+                    }) {
+                        Image("icon-amazon").resizable().frame(width: 24, height: 24, alignment: .center)
+                    }
+                } else {
+                    Button(action:{
+                        openURL(URL(string: "https://www.amazon.com/")!)
+                    }) {
+                        Image("icon-amazon").resizable().frame(width: 24, height: 24, alignment: .center)
+                    }.hidden()
                 }
             }
             
