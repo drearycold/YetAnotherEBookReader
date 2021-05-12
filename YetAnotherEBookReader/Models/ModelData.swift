@@ -65,6 +65,22 @@ final class ModelData: ObservableObject {
             updateFilteredBookList()
         }
     }
+    @Published var filterCriteriaRating = Set<String>() {
+        didSet {
+            updateFilteredBookList()
+        }
+    }
+    
+    @Published var filterCriteriaFormat = Set<String>() {
+        didSet {
+            updateFilteredBookList()
+        }
+    }
+    @Published var filterCriteriaIdentifier = Set<String>() {
+        didSet {
+            updateFilteredBookList()
+        }
+    }
     @Published var filteredBookList = [Int32]()
     
     @Published var booksInShelf = [String: CalibreBook]()
@@ -237,8 +253,21 @@ final class ModelData: ObservableObject {
     
     func updateFilteredBookList() {
         let filteredBookList = calibreServerLibraryBooks.values.filter { [self] (book) -> Bool in
-            return (book.formats["EPUB"] != nil || book.formats["PDF"] != nil )
-                && (searchString.isEmpty || book.title.contains(searchString))
+            if !(searchString.isEmpty || book.title.contains(searchString) || book.authors.reduce(into: false, { result, author in
+                result = result || author.contains(searchString)
+            })) {
+                return false
+            }
+            if !(filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription)) {
+                return false
+            }
+            if !filterCriteriaFormat.isEmpty && filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty {
+                return false
+            }
+            if !filterCriteriaIdentifier.isEmpty && filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty {
+                return false
+            }
+            return true
         }.sorted { (lhs, rhs) -> Bool in
             lhs.title < rhs.title
         }.map({ $0.id })
@@ -501,7 +530,14 @@ final class ModelData: ObservableObject {
             }
         }
         
-        let identifiers = dataElement["identifiers"] as! NSDictionary
+        if let identifiers = dataElement["identifiers"] as? NSDictionary {
+            identifiers.forEach { (key, value) in
+                let id = (key as! NSString).intValue
+                if let idDict = value as? NSDictionary {
+                    calibreServerLibraryBooks[id]!.identifiers = idDict as! [String: String]
+                }
+            }
+        }
         
         let ratings = dataElement["rating"] as! NSDictionary
         ratings.forEach { (key, value) in

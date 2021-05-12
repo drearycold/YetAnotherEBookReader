@@ -156,6 +156,21 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var publisher = "Unknown"
     var series = ""
     var rating = 0
+    var ratingDescription: String {
+        if rating > 9 {
+            return "★★★★★"
+        } else if rating > 7 {
+            return "★★★★"
+        } else if rating > 5 {
+            return "★★★"
+        } else if rating > 3 {
+            return "★★"
+        } else if rating > 1 {
+            return "★"
+        } else {
+            return "☆"
+        }
+    }
     var size = 0
     var pubDate = Date()
     var timestamp = Date()
