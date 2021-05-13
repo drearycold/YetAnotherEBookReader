@@ -57,7 +57,7 @@ struct ServerView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Switch Server")
                         Spacer()
@@ -67,7 +67,7 @@ struct ServerView: View {
                             Image(systemName: "plus")
                         }
                         Button(action:{
-                            //TODO remove current server
+                            alertItem = AlertItem(id: "DelServer")
                         }) {
                             Image(systemName: "minus")
                         }
@@ -78,23 +78,20 @@ struct ServerView: View {
                         }
                     }
                     
-                    HStack {
-                        Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
-                            ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
-                                lhs.id < rhs.id
-                            }), id: \.self) { server in
-                                Text(server.id).tag(server.id)
-                            }
+                    Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
+                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.id < rhs.id
+                        }), id: \.self) { server in
+                            Text(server.id).tag(server.id)
                         }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: calibreServerId) { value in
-                            if modelData.currentCalibreServerId != calibreServerId {
-                                modelData.currentCalibreServerId = calibreServerId
-                            }
-                        }
-                        
-                        Spacer()
                     }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: calibreServerId) { value in
+                        if modelData.currentCalibreServerId != calibreServerId {
+                            modelData.currentCalibreServerId = calibreServerId
+                        }
+                    }
+                        
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -303,6 +300,16 @@ struct ServerView: View {
             if item.id == "AddServerExists" {
                 return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
             }
+            if item.id == "DelServer" {
+                return Alert(
+                    title: Text("Remove Server"),
+                    message: Text("Will Remove Cached Libraries and Books from App"),
+                    primaryButton: .default(Text("Confirm")) {
+                        delServerConfirmed()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
             return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel() {
                 item.action?()
             })
@@ -468,6 +475,17 @@ struct ServerView: View {
         let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
         
         modelData.addServer(server: calibreServer, libraries: calibreServerLibrariesEdit)
+        calibreServerId = calibreServer.id
+        if let defaultLibraryId = calibreServerLibrariesEdit.filter({
+            $0.name == $0.server.defaultLibrary
+        }).first?.id {
+            calibreServerLibraryId = defaultLibraryId
+        }
+        calibreServerEditing = false
+    }
+
+    private func delServerConfirmed() {
+        
     }
 }
 
