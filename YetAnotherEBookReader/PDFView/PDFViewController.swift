@@ -265,7 +265,16 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
             print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
             position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
             let progress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
-            modelData?.updateCurrentPosition(progress: progress, position: position)
+            
+            modelData?.updatedReadingPosition.lastPosition[0] = curDest.page!.pageRef?.pageNumber ?? 1
+            modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
+            modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
+            modelData?.updatedReadingPosition.lastReadPage = curDest.page!.pageRef?.pageNumber ?? 1
+            modelData?.updatedReadingPosition.lastProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
+            modelData?.updatedReadingPosition.lastReadChapter = titleInfoButton.currentTitle ?? "Unknown Title"
+            modelData?.updatedReadingPosition.readerName = "YabrPDFView"
+            
+//            modelData?.updateCurrentPosition(progress: progress, position: position)
         }
         
         let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))

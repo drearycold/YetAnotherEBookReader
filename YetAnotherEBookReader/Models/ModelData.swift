@@ -10,6 +10,7 @@ import Combine
 import RealmSwift
 import SwiftUI
 import OSLog
+import Kingfisher
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -98,6 +99,7 @@ final class ModelData: ObservableObject {
     }
     
     @Published var selectedPosition = ""
+    @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "")
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -113,8 +115,22 @@ final class ModelData: ObservableObject {
     @Published var loadLibraryResult = "Waiting"
     
     var updatingMetadataTask: URLSessionDataTask?
-    @Published var updatingMetadata = false
-    @Published var updatingMetadataStatus = ""
+    @Published var updatingMetadata = false {
+        didSet {
+            if updatingMetadata {
+                updatingMetadataSucceed = false
+                updatingMetadataStatus = "Updating"
+            }
+        }
+    }
+    @Published var updatingMetadataStatus = "" {
+        didSet {
+            if updatingMetadataStatus == "Success" {
+                updatingMetadataSucceed = true
+            }
+        }
+    }
+    @Published var updatingMetadataSucceed = false
     
     private var defaultLog = Logger()
     
@@ -129,6 +145,9 @@ final class ModelData: ObservableObject {
                 }
             }
     )
+    
+    let kfImageCache = ImageCache.default
+    
     init() {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -137,6 +156,8 @@ final class ModelData: ObservableObject {
         realm = try! Realm(
             configuration: realmConf
         )
+        
+        kfImageCache.diskStorage.config.expiration = .never
         
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in
@@ -883,7 +904,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func updateCurrentPosition(progress: Double, position: [String: Any]) {
+    func updateCurrentPosition() {
         guard var readingBook = self.readingBook else {
             return
         }
@@ -896,17 +917,11 @@ final class ModelData: ObservableObject {
                 deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
             }
             
-            defaultLog.info("pageNumber:  \(position["pageNumber"]! as! Int)")
-            defaultLog.info("pageOffsetX: \(position["pageOffsetX"]! as! CGFloat)")
-            defaultLog.info("pageOffsetY: \(position["pageOffsetY"]! as! CGFloat)")
+            defaultLog.info("pageNumber:  \(self.updatedReadingPosition.lastPosition[0])")
+            defaultLog.info("pageOffsetX: \(self.updatedReadingPosition.lastPosition[1])")
+            defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
             
-            deviceReadingPosition!.lastPosition[0] = position["pageNumber"]! as! Int
-            deviceReadingPosition!.lastPosition[1] = Int((position["pageOffsetX"]! as! CGFloat).rounded())
-            deviceReadingPosition!.lastPosition[2] = Int((position["pageOffsetY"]! as! CGFloat).rounded())
-            deviceReadingPosition!.lastReadPage = position["pageNumber"]! as! Int
-            deviceReadingPosition!.lastProgress = progress
-            
-            readingBook.readPos.updatePosition(deviceName, deviceReadingPosition!)
+            readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
             
             self.updateBook(book: readingBook)
             
@@ -1015,9 +1030,8 @@ final class ModelData: ObservableObject {
                     
                     if let library = calibreLibraries[readingBook.library.id], let goodreadsId = readingBook.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
                         let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
-                        connector.updateReadingProgress(goodreads_id: goodreadsId, progress: progress)
+                        connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
                     }
-                        
                 }
             }
             updatingMetadata = true
@@ -1025,8 +1039,6 @@ final class ModelData: ObservableObject {
             
         }catch{
         }
-        
-        // modelData.isReading = false
     }
     
     func goToPreviousBook() {
@@ -1041,6 +1053,7 @@ final class ModelData: ObservableObject {
             currentBookId = filteredBookList[curIndex + 1]
         }
     }
+    
 }
 
 func load<T: Decodable>(_ filename: String) -> T {

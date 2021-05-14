@@ -77,10 +77,14 @@ struct BookDetailView: View {
             toolbarContent()
         }
         .onChange(of: modelData.readingBook) {book in
-            if book != nil {
-                modelData.getMetadata(oldbook: book!)
-                if book!.readPos.getDevices().count > 0 {
-                    self.selectedPosition = book!.readPos.getDevices()[0].id
+            if let book = book {
+                modelData.getMetadata(oldbook: book)
+                if book.readPos.getDevices().count > 0 {
+                    if let position = book.readPos.getPosition(UIDevice().name) {
+                        self.selectedPosition = position.id
+                    } else {
+                        self.selectedPosition = book.readPos.getDevices()[0].id
+                    }
                 }
             }
         }
@@ -123,6 +127,22 @@ struct BookDetailView: View {
             if item.id == "Updated" {
                 return Alert(title: Text("Updated"), message: Text(item.msg ?? "Success"))
             }
+            if item.id == "ForwardProgress" {
+                return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    modelData.updateCurrentPosition()
+                }), secondaryButton: .cancel())
+            }
+            if item.id == "BackwardProgress" {
+                return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    modelData.updateCurrentPosition()
+                }), secondaryButton: .cancel())
+            }
+            if item.id == "ReadingPosition" {
+                return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    let selectedPosition = modelData.readingBook?.readPos.getPosition(selectedPosition)
+                    readBook(position: selectedPosition!)
+                }), secondaryButton: .cancel())
+            }
             return Alert(title: Text(item.id))
         }
         .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
@@ -159,17 +179,27 @@ struct BookDetailView: View {
             HStack {
                 Text(ByteCountFormatter.string(fromByteCount: Int64(book.size), countStyle: .file)).font(.subheadline)
                 Spacer()
+                
+                    
+                Text(modelData.updatingMetadataStatus)
                 if modelData.updatingMetadata {
-                    Text("Updating")
                     Button(action: {
-                        
+                        //TODO cancel
                     }) {
                         Image(systemName: "xmark")
                     }
                 } else {
-                    Text(modelData.updatingMetadataStatus)
-                    Text(book.lastModified.description).font(.subheadline)
+                    Button(action: {
+                        if let book = modelData.readingBook {
+                            modelData.kfImageCache.removeImage(forKey: book.coverURL.absoluteString)
+                            modelData.getMetadata(oldbook: book)
+                        }
+                    }) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
                 }
+                Text(book.lastModified.description).font(.subheadline)
+                
             }
             HStack {
                 Text(book.tagsDescription).font(.subheadline)
@@ -255,11 +285,30 @@ struct BookDetailView: View {
             .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
             .onAppear() {
                 if book.readPos.getDevices().count > 0 {
-                    self.selectedPosition = book.readPos.getDevices()[0].id
+                    if let position = book.readPos.getPosition(UIDevice().name) {
+                        self.selectedPosition = position.id
+                    } else {
+                        self.selectedPosition = book.readPos.getDevices()[0].id
+                    }
                 }
             }
             .onChange(of: selectedPosition) { value in
                 modelData.selectedPosition = selectedPosition
+            }
+            .onChange(of: modelData.updatedReadingPosition) { value in
+                if let selectedPosition = book.readPos.getPosition(selectedPosition) {
+                    if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
+                        return
+                    }
+                    if modelData.updatedReadingPosition < selectedPosition {
+                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                    } else if selectedPosition << modelData.updatedReadingPosition {
+                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                    }
+                    else {
+                        modelData.updateCurrentPosition()
+                    }
+                }
             }
             
             Text(book.readPos.getPosition(selectedPosition)?.description ?? UIDevice().name)
@@ -287,21 +336,21 @@ struct BookDetailView: View {
             }) {
                 Image(systemName: "trash")
                     .accentColor(.red)
-            }
+            }.disabled(!modelData.updatingMetadataSucceed)
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 modelData.goToPreviousBook()
             }) {
                 Image(systemName: "chevron.up")
-            }
+            }.disabled(!modelData.updatingMetadataSucceed)
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 modelData.goToNextBook()
             }) {
                 Image(systemName: "chevron.down")
-            }
+            }.disabled(!modelData.updatingMetadataSucceed)
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
@@ -335,11 +384,35 @@ struct BookDetailView: View {
                 } else {
                     Image(systemName: "star")
                 }
-            }
+            }.disabled(!modelData.updatingMetadataSucceed)
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                showingReadSheet = true
+                if let readingBook = modelData.readingBook {
+                    let devicePosition = readingBook.readPos.getPosition(UIDevice().name)
+                    let selectedPosition = modelData.readingBook?.readPos.getPosition(selectedPosition)
+                    
+                    if devicePosition == nil && selectedPosition == nil {
+                        readBook(position: BookDeviceReadingPosition(id: UIDevice().name, readerName: ""))
+                        return
+                    }
+                    if devicePosition == nil && selectedPosition != nil {
+                        readBook(position: selectedPosition!)
+                        return
+                    }
+                    if devicePosition != nil && selectedPosition == nil {
+                        readBook(position: devicePosition!)
+                        return
+                    }
+                    if devicePosition! == selectedPosition! {
+                        readBook(position: devicePosition!)
+                        return
+                    } else {
+                        alertItem = AlertItem(id: "ReadingPosition", msg: "You have picked a different reading position than that of this device, please confirm.\n\(devicePosition!.description) VS \(selectedPosition!.description)")
+                    }
+                }
+                
+                
                 
             }) {
                 Image(systemName: "book")
@@ -411,8 +484,11 @@ struct BookDetailView: View {
             
         }catch{
         }
-        
-        
+    }
+    
+    func readBook(position: BookDeviceReadingPosition) {
+        modelData.updatedReadingPosition.update(with: position)
+        showingReadSheet = true
     }
     
     func handleBookDeleted() {

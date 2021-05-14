@@ -358,7 +358,10 @@ struct BookReadingPosition {
 
 struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     static func == (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
-        lhs.id == rhs.id && lhs.readerName == rhs.readerName
+        lhs.id == rhs.id
+            && lhs.readerName == rhs.readerName
+            && lhs.lastReadPage == rhs.lastReadPage
+            && lhs.lastProgress == rhs.lastProgress
     }
     
     func hash(into hasher: inout Hasher) {
@@ -378,7 +381,39 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var lastPosition = [0, 0, 0]
     
     var description: String {
-        return "\(id) with \(readerName): \(lastReadPage) \(String(format: "%.2f", lastProgress))% (\(lastPosition[0]) \(lastPosition[1]) \(lastPosition[2]))"
+        return "\(id) with \(readerName): \(lastReadPage) \(String(format: "%.2f", lastProgress))% \(lastReadChapter) (\(lastPosition[0]):\(lastPosition[1]):\(lastPosition[2]))"
+    }
+    
+    static func < (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+        if lhs.lastReadPage < rhs.lastReadPage {
+            return true
+        }
+        if lhs.lastProgress < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    static func << (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+        if (lhs.lastProgress + 10) < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    mutating func update(with other: BookDeviceReadingPosition) {
+        maxPage = other.maxPage
+        lastReadPage = other.lastReadPage
+        lastReadChapter = other.lastReadChapter
+        lastProgress = other.lastProgress
+        lastPosition = other.lastPosition
+    }
+    
+    func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
+        if lastReadPage == other.lastReadPage && lastProgress == other.lastProgress {
+            return true
+        }
+        return false
     }
 }
 
