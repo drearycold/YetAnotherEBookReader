@@ -208,6 +208,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     
     var inShelf = false
+    var inShelfName = ""
     
     enum Format: String, CaseIterable, Identifiable {
         case EPUB
@@ -257,6 +258,7 @@ class CalibreBookRealm: Object {
     @objc dynamic var identifiersData: NSData?
     
     @objc dynamic var inShelf = false
+    @objc dynamic var inShelfName = ""
     
     func formats() -> [String: String] {
         let formats = try! JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as! [String: String]

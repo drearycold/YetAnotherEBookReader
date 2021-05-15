@@ -42,6 +42,9 @@ struct BookDetailView: View {
     @State private var selectedPosition = ""
     @State private var updater = 0
     @State private var showingReadSheet = false
+    
+    @State private var shelfName = ""
+    @State private var customizedShelfName = false
     // var commentWebView = WebViewUI()
     
     // let rvc = ReaderViewController()
@@ -250,28 +253,53 @@ struct BookDetailView: View {
             
             }
             
+            VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Picker("Format", selection: $selectedFormat) {
-                    ForEach(CalibreBook.Format.allCases) { format in
-                        if book.formats[format.rawValue] != nil {
-                            Text(format.rawValue).tag(format)
+                Text("Shelf Name")
+                
+                if customizedShelfName {
+                    TextField("Shelf Name", text: $shelfName)
+                } else {
+                    Picker(shelfName, selection: $shelfName) {
+                        ForEach(book.tags, id:\.self) {
+                            Text($0).tag($0)
                         }
                     }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .onAppear() {
-                    if book.formats[modelData.defaultFormat.rawValue] != nil {
-                        self.selectedFormat = modelData.defaultFormat
-                    } else {
-                        CalibreBook.Format.allCases.forEach { format in
-                            if book.formats[format.rawValue] != nil {
-                                self.selectedFormat = format
-                            }
-                        }
+                    .pickerStyle(MenuPickerStyle())
+                    .onAppear() {
+                        shelfName = book.inShelfName
                     }
                 }
-                Spacer()
+            }.onChange(of: shelfName) { value in
+                modelData.readingBook!.inShelfName = value
+                modelData.updateBook(book: modelData.readingBook!)
             }
+            
+            Toggle("Customize Shelf Name", isOn: $customizedShelfName)
+                .onAppear() {
+                    customizedShelfName = !book.tags.contains(book.inShelfName)
+                }
+            
+            Picker("Format", selection: $selectedFormat) {
+                ForEach(CalibreBook.Format.allCases) { format in
+                    if book.formats[format.rawValue] != nil {
+                        Text(format.rawValue).tag(format)
+                    }
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .onAppear() {
+                if book.formats[modelData.defaultFormat.rawValue] != nil {
+                    self.selectedFormat = modelData.defaultFormat
+                } else {
+                    CalibreBook.Format.allCases.forEach { format in
+                        if book.formats[format.rawValue] != nil {
+                            self.selectedFormat = format
+                        }
+                    }
+                }
+            }
+                
             
             Picker("Position", selection: $selectedPosition) {
                 ForEach(book.readPos.getDevices(), id: \.self) { position in
@@ -320,7 +348,7 @@ struct BookDetailView: View {
             
             WebViewUI(content: book.comments, baseURL: book.commentBaseURL)
                 .frame(height: CGFloat(400), alignment: .center)
-            
+            }
 //            commentWebView
 //                .frame(height: CGFloat(400), alignment: .center)
 //                .onAppear {

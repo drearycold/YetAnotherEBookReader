@@ -138,7 +138,7 @@ final class ModelData: ObservableObject {
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 14,
+        schemaVersion: 15,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -319,7 +319,8 @@ final class ModelData: ObservableObject {
             lastModified: bookRealm.lastModified,
             formats: bookRealm.formats(),
             readPos: bookRealm.readPos(),
-            inShelf: bookRealm.inShelf)
+            inShelf: bookRealm.inShelf,
+            inShelfName: bookRealm.inShelfName)
         if bookRealm.identifiersData != nil {
             calibreBook.identifiers = bookRealm.identifiers()
         }
@@ -446,6 +447,7 @@ final class ModelData: ObservableObject {
         bookRealm.lastModified = book.lastModified
         bookRealm.tags.append(objectsIn: book.tags)
         bookRealm.inShelf = book.inShelf
+        bookRealm.inShelfName = book.inShelfName
         
         bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
         
@@ -705,6 +707,10 @@ final class ModelData: ObservableObject {
     func addToShelf(_ bookId: Int32) {
         readingBook?.inShelf = true
         calibreServerLibraryBooks[bookId]!.inShelf = true
+        if readingBook?.inShelfName.isEmpty ?? false, let tag = readingBook?.tags.first {
+            readingBook?.inShelfName = tag
+            calibreServerLibraryBooks[bookId]!.inShelfName = tag
+        }
         
         updateBookRealm(book: calibreServerLibraryBooks[bookId]!, realm: self.realm)
         booksInShelf[calibreServerLibraryBooks[bookId]!.inShelfId] = calibreServerLibraryBooks[bookId]!
