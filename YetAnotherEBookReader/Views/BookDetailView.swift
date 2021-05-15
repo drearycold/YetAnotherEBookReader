@@ -79,12 +79,13 @@ struct BookDetailView: View {
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
                 modelData.getMetadata(oldbook: book)
-                if book.readPos.getDevices().count > 0 {
-                    if let position = book.readPos.getPosition(UIDevice().name) {
-                        self.selectedPosition = position.id
-                    } else {
-                        self.selectedPosition = book.readPos.getDevices()[0].id
-                    }
+                
+                if let position = modelData.getDeviceReadingPosition() {
+                    self.selectedPosition = position.id
+                } else if let position = modelData.getLatestReadingPosition() {
+                    self.selectedPosition = position.id
+                } else {
+                    self.selectedPosition = modelData.getInitialReadingPosition().id
                 }
             }
         }
@@ -139,7 +140,7 @@ struct BookDetailView: View {
             }
             if item.id == "ReadingPosition" {
                 return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    let selectedPosition = modelData.readingBook?.readPos.getPosition(selectedPosition)
+                    let selectedPosition = modelData.getSelectedReadingPosition()
                     readBook(position: selectedPosition!)
                 }), secondaryButton: .cancel())
             }
@@ -284,19 +285,19 @@ struct BookDetailView: View {
             .pickerStyle(SegmentedPickerStyle())
             .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
             .onAppear() {
-                if book.readPos.getDevices().count > 0 {
-                    if let position = book.readPos.getPosition(UIDevice().name) {
-                        self.selectedPosition = position.id
-                    } else {
-                        self.selectedPosition = book.readPos.getDevices()[0].id
-                    }
+                if let position = modelData.getDeviceReadingPosition() {
+                    self.selectedPosition = position.id
+                } else if let position = modelData.getLatestReadingPosition() {
+                    self.selectedPosition = position.id
+                } else {
+                    self.selectedPosition = modelData.getInitialReadingPosition().id
                 }
             }
             .onChange(of: selectedPosition) { value in
                 modelData.selectedPosition = selectedPosition
             }
             .onChange(of: modelData.updatedReadingPosition) { value in
-                if let selectedPosition = book.readPos.getPosition(selectedPosition) {
+                if let selectedPosition = modelData.getSelectedReadingPosition() {
                     if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
                         return
                     }
@@ -311,7 +312,7 @@ struct BookDetailView: View {
                 }
             }
             
-            Text(book.readPos.getPosition(selectedPosition)?.description ?? UIDevice().name)
+            Text(modelData.getSelectedReadingPosition()?.description ?? modelData.getDeviceReadingPosition()?.description ?? modelData.deviceName)
             
             #if canImport(GoogleMobileAds)
             Banner()
@@ -388,32 +389,27 @@ struct BookDetailView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                if let readingBook = modelData.readingBook {
-                    let devicePosition = readingBook.readPos.getPosition(UIDevice().name)
-                    let selectedPosition = modelData.readingBook?.readPos.getPosition(selectedPosition)
-                    
-                    if devicePosition == nil && selectedPosition == nil {
-                        readBook(position: BookDeviceReadingPosition(id: UIDevice().name, readerName: ""))
-                        return
-                    }
-                    if devicePosition == nil && selectedPosition != nil {
-                        readBook(position: selectedPosition!)
-                        return
-                    }
-                    if devicePosition != nil && selectedPosition == nil {
-                        readBook(position: devicePosition!)
-                        return
-                    }
-                    if devicePosition! == selectedPosition! {
-                        readBook(position: devicePosition!)
-                        return
-                    } else {
-                        alertItem = AlertItem(id: "ReadingPosition", msg: "You have picked a different reading position than that of this device, please confirm.\n\(devicePosition!.description) VS \(selectedPosition!.description)")
-                    }
+                let devicePosition = modelData.getDeviceReadingPosition()
+                let selectedPosition = modelData.getSelectedReadingPosition()
+                
+                if devicePosition == nil && selectedPosition == nil {
+                    readBook(position: BookDeviceReadingPosition(id: modelData.deviceName, readerName: ""))
+                    return
                 }
-                
-                
-                
+                if devicePosition == nil && selectedPosition != nil {
+                    readBook(position: selectedPosition!)
+                    return
+                }
+                if devicePosition != nil && selectedPosition == nil {
+                    readBook(position: devicePosition!)
+                    return
+                }
+                if devicePosition! == selectedPosition! {
+                    readBook(position: devicePosition!)
+                    return
+                } else {
+                    alertItem = AlertItem(id: "ReadingPosition", msg: "You have picked a different reading position than that of this device, please confirm.\n\(devicePosition!.description) VS \(selectedPosition!.description)")
+                }
             }) {
                 Image(systemName: "book")
             }.disabled(modelData.readingBook?.inShelf == false)

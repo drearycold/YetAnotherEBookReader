@@ -20,6 +20,8 @@ final class ModelData: ObservableObject {
 //    @Published var calibreServer = "http://calibre-server.lan:8080/"
 //    @Published var calibreUsername = ""
 //    @Published var calibrePassword = ""
+    @Published var deviceName = UIDevice().name
+    
     @Published var calibreServers = [String: CalibreServer]()
     @Published var currentCalibreServerId = "" {
         didSet {
@@ -669,26 +671,26 @@ final class ModelData: ObservableObject {
                     let deviceMapDict = deviceMapObject as! NSDictionary
                     deviceMapDict.forEach { key, value in
                         let deviceName = key as! String
+                        if deviceName == self.deviceName && getDeviceReadingPosition() != nil {
+                            //ignore server, trust local record
+                            return
+                        }
+                        
                         let deviceReadingPositionDict = value as! [String: Any]
                         //TODO merge
+                        var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
                         
-                        var deviceReadingPosition = book.readPos.getPosition(deviceName)
-                        if( deviceReadingPosition == nil ) {
-                            deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-                        }
-                        
-                        deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
-                        deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                        deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                        deviceReadingPosition!.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-                        deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                        deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                        deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+                        deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+                        deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                        deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
+                        deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+                        deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+                        deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
                         if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                            deviceReadingPosition!.lastPosition = lastPosition as! [Int]
+                            deviceReadingPosition.lastPosition = lastPosition as! [Int]
                         }
+                        book.readPos.updatePosition(deviceName, deviceReadingPosition)
                         
-                        book.readPos.updatePosition(deviceName, deviceReadingPosition!)
                         defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                     }
                 }
@@ -728,7 +730,7 @@ final class ModelData: ObservableObject {
             let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
             let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
-            if let position = book.readPos.getPosition(UIDevice().name), position.lastProgress > 99.99 {
+            if let position = getDeviceReadingPosition(), position.lastProgress > 99 {
                 connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
             }
         }
@@ -823,6 +825,18 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getPosition(selectedPosition)
     }
     
+    func getDeviceReadingPosition() -> BookDeviceReadingPosition? {
+        return readingBook!.readPos.getPosition(deviceName)
+    }
+    
+    func getInitialReadingPosition() -> BookDeviceReadingPosition {
+        return BookDeviceReadingPosition(id: deviceName, readerName: "YABR")
+    }
+    
+    func getLatestReadingPosition() -> BookDeviceReadingPosition? {
+        return readingBook!.readPos.getDevices().first
+    }
+    
     func getMetadata(oldbook: CalibreBook) {
         let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
@@ -909,10 +923,7 @@ final class ModelData: ObservableObject {
             return
         }
         do {
-            
-            let deviceName = UIDevice().name
-            
-            var deviceReadingPosition = readingBook.readPos.getPosition(deviceName)
+            var deviceReadingPosition = getDeviceReadingPosition()
             if( deviceReadingPosition == nil ) {
                 deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
             }
