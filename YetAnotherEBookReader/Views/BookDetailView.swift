@@ -66,8 +66,7 @@ struct BookDetailView: View {
             if let book = modelData.readingBook {
                 viewContent(book: book)
                 .onAppear() {
-                    modelData.getMetadata(oldbook: book)
-                    // modelData.currentBookId = book.id
+                    modelData.getMetadata(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(modelData.readingBook!.title))
@@ -81,20 +80,12 @@ struct BookDetailView: View {
         }
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
-                modelData.getMetadata(oldbook: book)
-                
-                if let position = modelData.getDeviceReadingPosition() {
-                    self.selectedPosition = position.id
-                } else if let position = modelData.getLatestReadingPosition() {
-                    self.selectedPosition = position.id
-                } else {
-                    self.selectedPosition = modelData.getInitialReadingPosition().id
-                }
+                modelData.getMetadata(oldbook: book, completion: initStates(book:))
             }
         }
         .onChange(of: downloadStatus, perform: { value in
             if downloadStatus == .DOWNLOADED {
-                modelData.addToShelf(modelData.readingBook!.id)
+                modelData.addToShelf(modelData.readingBook!.id, shelfName: shelfName)
             }
         })
         .alert(item: $alertItem) { item in
@@ -196,7 +187,7 @@ struct BookDetailView: View {
                     Button(action: {
                         if let book = modelData.readingBook {
                             modelData.kfImageCache.removeImage(forKey: book.coverURL.absoluteString)
-                            modelData.getMetadata(oldbook: book)
+                            modelData.getMetadata(oldbook: book, completion: initStates(book:))
                         }
                     }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -265,20 +256,14 @@ struct BookDetailView: View {
                             Text($0).tag($0)
                         }
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .onAppear() {
-                        shelfName = book.inShelfName
-                    }
+                    .pickerStyle(SegmentedPickerStyle())
                 }
             }.onChange(of: shelfName) { value in
-                modelData.readingBook!.inShelfName = value
+                modelData.readingBook!.inShelfName = value.trimmingCharacters(in: .whitespacesAndNewlines)
                 modelData.updateBook(book: modelData.readingBook!)
             }
             
             Toggle("Customize Shelf Name", isOn: $customizedShelfName)
-                .onAppear() {
-                    customizedShelfName = !book.tags.contains(book.inShelfName)
-                }
             
             Picker("Format", selection: $selectedFormat) {
                 ForEach(CalibreBook.Format.allCases) { format in
@@ -288,18 +273,6 @@ struct BookDetailView: View {
                 }
             }
             .pickerStyle(SegmentedPickerStyle())
-            .onAppear() {
-                if book.formats[modelData.defaultFormat.rawValue] != nil {
-                    self.selectedFormat = modelData.defaultFormat
-                } else {
-                    CalibreBook.Format.allCases.forEach { format in
-                        if book.formats[format.rawValue] != nil {
-                            self.selectedFormat = format
-                        }
-                    }
-                }
-            }
-                
             
             Picker("Position", selection: $selectedPosition) {
                 ForEach(book.readPos.getDevices(), id: \.self) { position in
@@ -312,15 +285,6 @@ struct BookDetailView: View {
             }
             .pickerStyle(SegmentedPickerStyle())
             .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-            .onAppear() {
-                if let position = modelData.getDeviceReadingPosition() {
-                    self.selectedPosition = position.id
-                } else if let position = modelData.getLatestReadingPosition() {
-                    self.selectedPosition = position.id
-                } else {
-                    self.selectedPosition = modelData.getInitialReadingPosition().id
-                }
-            }
             .onChange(of: selectedPosition) { value in
                 modelData.selectedPosition = selectedPosition
             }
@@ -349,11 +313,7 @@ struct BookDetailView: View {
             WebViewUI(content: book.comments, baseURL: book.commentBaseURL)
                 .frame(height: CGFloat(400), alignment: .center)
             }
-//            commentWebView
-//                .frame(height: CGFloat(400), alignment: .center)
-//                .onAppear {
-//                    commentWebView.setContent(book.comments, URL(string: book.library.server.baseUrl))
-//                }
+
         }   //VStack
     }
     
@@ -508,6 +468,29 @@ struct BookDetailView: View {
             
         }catch{
         }
+    }
+    
+    func initStates(book: CalibreBook) {
+        if book.formats[modelData.defaultFormat.rawValue] != nil {
+            self.selectedFormat = modelData.defaultFormat
+        } else {
+            CalibreBook.Format.allCases.forEach { format in
+                if book.formats[format.rawValue] != nil {
+                    self.selectedFormat = format
+                }
+            }
+        }
+        
+        if let position = modelData.getDeviceReadingPosition() {
+            self.selectedPosition = position.id
+        } else if let position = modelData.getLatestReadingPosition() {
+            self.selectedPosition = position.id
+        } else {
+            self.selectedPosition = modelData.getInitialReadingPosition().id
+        }
+        
+        shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
+        customizedShelfName = !book.tags.contains(shelfName)
     }
     
     func readBook(position: BookDeviceReadingPosition) {

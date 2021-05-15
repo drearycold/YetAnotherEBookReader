@@ -634,6 +634,10 @@ final class ModelData: ObservableObject {
             book.size = v.intValue
         }
         
+        if let d = dataElement["rating"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
+            book.rating = v.intValue
+        }
+        
         if let d = dataElement["authors"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
             book.authors = v.compactMap { (t) -> String? in
                 if let t = t as? String {
@@ -704,12 +708,17 @@ final class ModelData: ObservableObject {
     }
     
     
-    func addToShelf(_ bookId: Int32) {
+    func addToShelf(_ bookId: Int32, shelfName: String? = nil) {
         readingBook?.inShelf = true
         calibreServerLibraryBooks[bookId]!.inShelf = true
-        if readingBook?.inShelfName.isEmpty ?? false, let tag = readingBook?.tags.first {
+        if let shelfName = shelfName {
+            readingBook?.inShelfName = shelfName
+            calibreServerLibraryBooks[bookId]!.inShelfName = shelfName
+        } else if readingBook?.inShelfName.isEmpty ?? false, let tag = readingBook?.tags.first {
             readingBook?.inShelfName = tag
             calibreServerLibraryBooks[bookId]!.inShelfName = tag
+        } else {
+            
         }
         
         updateBookRealm(book: calibreServerLibraryBooks[bookId]!, realm: self.realm)
@@ -843,7 +852,7 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getDevices().first
     }
     
-    func getMetadata(oldbook: CalibreBook) {
+    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
         do {
@@ -861,6 +870,7 @@ final class ModelData: ObservableObject {
                     DispatchQueue.main.async {
                         updatingMetadataStatus = error.localizedDescription
                         updatingMetadata = false
+                        completion?(oldbook)
                     }
                     return
                 }
@@ -869,6 +879,7 @@ final class ModelData: ObservableObject {
                     DispatchQueue.main.async {
                         updatingMetadataStatus = response.debugDescription
                         updatingMetadata = false
+                        completion?(oldbook)
                     }
                     return
                 }
@@ -877,6 +888,7 @@ final class ModelData: ObservableObject {
                     DispatchQueue.main.async {
                         updatingMetadataStatus = httpResponse.debugDescription
                         updatingMetadata = false
+                        completion?(oldbook)
                     }
                     return
                 }
@@ -889,6 +901,7 @@ final class ModelData: ObservableObject {
                         //                            defaultLog.warning("httpResponse: \(string)")
                         //book.comments = string
                         guard var book = handleLibraryBookOne(oldbook: oldbook, json: data) else {
+                            completion?(oldbook)
                             return
                         }
                         
@@ -900,19 +913,8 @@ final class ModelData: ObservableObject {
                         
                         updatingMetadataStatus = "Success"
                         updatingMetadata = false
-//                        if( book.formats[selectedFormat.rawValue] == nil ) {
-//                            CalibreBook.Format.allCases.forEach { format in
-//                                if book.formats[format.rawValue] != nil {
-//                                    selectedFormat = format
-//                                }
-//                            }
-//                        }
-//
-//                        if( book.readPos.getPosition(selectedPosition) == nil ) {
-//                            if !book.readPos.getDevices().isEmpty {
-//                                selectedPosition = book.readPos.getDevices()[0].id
-//                            }
-//                        }
+                        
+                        completion?(book)
                     }
                 }
             }
