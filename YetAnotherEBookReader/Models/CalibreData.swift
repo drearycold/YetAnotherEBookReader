@@ -72,6 +72,11 @@ struct CalibreLibrary: Hashable, Identifiable {
             return "#read_pos_\(server.username)"
         }
     }
+    
+    var goodreadsSyncProfileName: String?
+    var goodreadsSyncProfileNameDefault: String {
+        return "Default"
+    }
 }
 
 class CalibreLibraryRealm: Object {
@@ -107,6 +112,7 @@ class CalibreLibraryRealm: Object {
     }
     
     @objc dynamic var readPosColumnName: String?
+    @objc dynamic var goodreadsSyncProfileName: String?
 }
 
 struct CalibreBook: Hashable, Identifiable, Equatable {
@@ -150,6 +156,21 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var publisher = "Unknown"
     var series = ""
     var rating = 0
+    var ratingDescription: String {
+        if rating > 9 {
+            return "★★★★★"
+        } else if rating > 7 {
+            return "★★★★"
+        } else if rating > 5 {
+            return "★★★"
+        } else if rating > 3 {
+            return "★★"
+        } else if rating > 1 {
+            return "★"
+        } else {
+            return "☆"
+        }
+    }
     var size = 0
     var pubDate = Date()
     var timestamp = Date()
@@ -160,7 +181,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
             return ""
         }
         if tags.count == 1 {
-            return authors[0]
+            return tags[0]
         }
         return tags.reduce("") { (desc, tag) -> String in
             if desc.count == 0 {
@@ -172,6 +193,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     var formats = [String: String]()
     var readPos = BookReadingPosition()
+    
+    var identifiers = [String: String]()
     
     var coverURL : URL {
         return URL(string: "\(library.server.baseUrl)/get/thumb/\(id)/\(library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
@@ -185,6 +208,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     
     var inShelf = false
+    var inShelfName = ""
     
     enum Format: String, CaseIterable, Identifiable {
         case EPUB
@@ -231,12 +255,19 @@ class CalibreBookRealm: Object {
     let tags = List<String>()
     @objc dynamic var formatsData: NSData?
     @objc dynamic var readPosData: NSData?
+    @objc dynamic var identifiersData: NSData?
     
     @objc dynamic var inShelf = false
+    @objc dynamic var inShelfName = ""
     
     func formats() -> [String: String] {
         let formats = try! JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as! [String: String]
         return formats
+    }
+    
+    func identifiers() -> [String: String] {
+        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
+        return identifiers
     }
     
     func readPos() -> BookReadingPosition {
@@ -250,24 +281,21 @@ class CalibreBookRealm: Object {
         deviceMapDict.forEach { key, value in
             let deviceName = key as! String
             let deviceReadingPositionDict = value as! [String: Any]
-            //TODO merge
             
-            var deviceReadingPosition = readPos.getPosition(deviceName)
-            if( deviceReadingPosition == nil ) {
-                deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-            }
+            var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
             
-            deviceReadingPosition!.readerName = deviceReadingPositionDict["readerName"] as! String
-            deviceReadingPosition!.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-            deviceReadingPosition!.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-            deviceReadingPosition!.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-            deviceReadingPosition!.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-            deviceReadingPosition!.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+            deviceReadingPosition.readerName = deviceReadingPositionDict["readerName"] as! String
+            deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+            deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+            deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
+            deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+            deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+            deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
             if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                deviceReadingPosition!.lastPosition = lastPosition as! [Int]
+                deviceReadingPosition.lastPosition = lastPosition as! [Int]
             }
             
-            readPos.updatePosition(deviceName, deviceReadingPosition!)
+            readPos.updatePosition(deviceName, deviceReadingPosition)
         }
         return readPos
     }
@@ -328,7 +356,10 @@ struct BookReadingPosition {
 
 struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     static func == (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
-        lhs.id == rhs.id && lhs.readerName == rhs.readerName
+        lhs.id == rhs.id
+            && lhs.readerName == rhs.readerName
+            && lhs.lastReadPage == rhs.lastReadPage
+            && lhs.lastProgress == rhs.lastProgress
     }
     
     func hash(into hasher: inout Hasher) {
@@ -342,12 +373,45 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var maxPage = 0
     var lastReadPage = 0
     var lastReadChapter = ""
+    var lastProgress = 0.0
     var furthestReadPage = 0
     var furthestReadChapter = ""
     var lastPosition = [0, 0, 0]
     
     var description: String {
-        return "\(id) with \(readerName): \(lastPosition[0]) \(lastPosition[1]) \(lastPosition[2]) \(lastReadPage)"
+        return "\(id) with \(readerName): \(lastReadPage) \(String(format: "%.2f", lastProgress))% \(lastReadChapter) (\(lastPosition[0]):\(lastPosition[1]):\(lastPosition[2]))"
+    }
+    
+    static func < (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+        if lhs.lastReadPage < rhs.lastReadPage {
+            return true
+        }
+        if lhs.lastProgress < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    static func << (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+        if (lhs.lastProgress + 10) < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    mutating func update(with other: BookDeviceReadingPosition) {
+        maxPage = other.maxPage
+        lastReadPage = other.lastReadPage
+        lastReadChapter = other.lastReadChapter
+        lastProgress = other.lastProgress
+        lastPosition = other.lastPosition
+    }
+    
+    func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
+        if lastReadPage == other.lastReadPage && lastProgress == other.lastProgress {
+            return true
+        }
+        return false
     }
 }
 

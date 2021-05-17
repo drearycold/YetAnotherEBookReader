@@ -47,7 +47,7 @@ struct LibraryInfoView: View {
 //                        }
                     })
                     .padding(EdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8))
-                    
+                        
                     ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
                         NavigationLink (
                             destination: BookDetailView(),
@@ -61,28 +61,65 @@ struct LibraryInfoView: View {
                                     HStack {
                                         Text("\(book.authorsDescriptionShort)").font(.subheadline)
                                         Spacer()
-                                        if book.rating > 9 {
-                                            Text("★★★★★").font(.subheadline)
-                                        } else if book.rating > 7 {
-                                            Text("★★★★").font(.subheadline)
-                                        } else if book.rating > 5 {
-                                            Text("★★★").font(.subheadline)
-                                        } else if book.rating > 3 {
-                                            Text("★★").font(.subheadline)
-                                        } else if book.rating > 1 {
-                                            Text("★").font(.subheadline)
-                                        } else {
-                                            Text("☆").font(.subheadline)
-                                        }
-                                        
-                                        if book.formats["PDF"] != nil {
-                                            Image("PDF").resizable().aspectRatio(contentMode: .fit).frame(width: 20, height: 20, alignment: .center)
-                                        }
-                                        if book.formats["EPUB"] != nil {
-                                            Image("EPUB").resizable().aspectRatio(contentMode: .fit).frame(width: 20, height: 20, alignment: .center)
-                                        }
+                                        Text(book.ratingDescription).font(.subheadline)
+                                    }
+                                
+                                    HStack {
                                         if book.inShelf {
                                             Image(systemName: "books.vertical")
+                                        } else {
+                                            Image(systemName: "books.vertical")
+                                                .hidden()
+                                        }
+                                        if book.identifiers["goodreads"] != nil {
+                                            Image("icon-goodreads")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                        } else {
+                                            Image("icon-goodreads")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                                .hidden()
+                                        }
+                                        if book.identifiers["amazon"] != nil {
+                                            Image("icon-amazon")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                        } else {
+                                            Image("icon-amazon")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                                .hidden()
+                                        }
+                                        Spacer()
+                                        if book.formats["PDF"] != nil {
+                                            Image("PDF")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                        } else {
+                                            Image("PDF")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                                .hidden()
+                                        }
+                                        
+                                        if book.formats["EPUB"] != nil {
+                                            Image("EPUB")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                        } else {
+                                            Image("EPUB")
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(width: 20, height: 20, alignment: .center)
+                                                .hidden()
                                         }
                                     }
                                 }
@@ -171,6 +208,63 @@ struct LibraryInfoView: View {
                 }) {
                     Image(systemName: "chevron.forward.2")
                 }
+                Menu {
+                    Button(action: {
+                        modelData.filterCriteriaRating.removeAll()
+                        modelData.filterCriteriaFormat.removeAll()
+                        modelData.filterCriteriaIdentifier.removeAll()
+                    }) {
+                        Text("Reset")
+                    }
+                    Menu("Rating ...") {
+                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                            result[value.ratingDescription] = 1
+                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                            Button(action: {
+                                if modelData.filterCriteriaRating.contains(id) {
+                                    modelData.filterCriteriaRating.remove(id)
+                                } else {
+                                    modelData.filterCriteriaRating.insert(id)
+                                }
+                            }, label: {
+                                Text(id + (modelData.filterCriteriaRating.contains(id) ? "✓" : ""))
+                            })
+                        }
+                    }
+                    Menu("Format ...") {
+                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                            value.formats.forEach { result[$0.key] = 1 }
+                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                            Button(action: {
+                                if modelData.filterCriteriaFormat.contains(id) {
+                                    modelData.filterCriteriaFormat.remove(id)
+                                } else {
+                                    modelData.filterCriteriaFormat.insert(id)
+                                }
+                            }, label: {
+                                Text(id + (modelData.filterCriteriaFormat.contains(id) ? "✓" : ""))
+                            })
+                        }
+                    }
+                    Menu("Linked with ...") {
+                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                            value.identifiers.forEach { result[$0.key] = 1 }
+                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                            Button(action: {
+                                if modelData.filterCriteriaIdentifier.contains(id) {
+                                    modelData.filterCriteriaIdentifier.remove(id)
+                                } else {
+                                    modelData.filterCriteriaIdentifier.insert(id)
+                                }
+                            }, label: {
+                                Text(id + (modelData.filterCriteriaIdentifier.contains(id) ? "✓" : ""))
+                            })
+                        }
+                    }
+                } label: {
+                    Image(systemName: "line.horizontal.3.decrease.circle")
+                }
+
             }
         }   //ToolbarItem
         ToolbarItem(placement: .navigationBarLeading) {
@@ -216,7 +310,6 @@ struct LibraryInfoView: View {
     func deleteFromList(at offsets: IndexSet) {
         modelData.filteredBookList.remove(atOffsets: offsets)
     }
-    
     
 }
 

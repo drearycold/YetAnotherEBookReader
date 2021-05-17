@@ -22,6 +22,10 @@ struct ServerView: View {
     
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
+    
+    @State private var enableGoodreadsSync = false
+    @State private var goodreadsSyncProfileName = ""
+    
     @State private var enableCustomDictViewer = false
     @State private var customDictViewerURL = ""
     @State private var calibreServerEditing = false
@@ -53,7 +57,7 @@ struct ServerView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Text("Switch Server")
                         Spacer()
@@ -63,7 +67,7 @@ struct ServerView: View {
                             Image(systemName: "plus")
                         }
                         Button(action:{
-                            //TODO remove current server
+                            alertItem = AlertItem(id: "DelServer")
                         }) {
                             Image(systemName: "minus")
                         }
@@ -74,23 +78,20 @@ struct ServerView: View {
                         }
                     }
                     
-                    HStack {
-                        Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
-                            ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
-                                lhs.id < rhs.id
-                            }), id: \.self) { server in
-                                Text(server.id).tag(server.id)
-                            }
+                    Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
+                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.id < rhs.id
+                        }), id: \.self) { server in
+                            Text(server.id).tag(server.id)
                         }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: calibreServerId) { value in
-                            if modelData.currentCalibreServerId != calibreServerId {
-                                modelData.currentCalibreServerId = calibreServerId
-                            }
-                        }
-                        
-                        Spacer()
                     }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: calibreServerId) { value in
+                        if modelData.currentCalibreServerId != calibreServerId {
+                            modelData.currentCalibreServerId = calibreServerId
+                        }
+                    }
+                        
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -171,6 +172,9 @@ struct ServerView: View {
                         
                         enableStoreReadingPosition = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName != nil
                         storeReadingPositionColumnName = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName ?? modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnNameDefault
+                        
+                        enableGoodreadsSync = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName != nil
+                        goodreadsSyncProfileName = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName ?? modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileNameDefault
                     })
                     
                         
@@ -198,9 +202,26 @@ struct ServerView: View {
                     }
                 if enableStoreReadingPosition {
                     HStack {
-                        Text("Column Name:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                        TextField("#column", text: $storeReadingPositionColumnName, onCommit:  {
+                        Text("Column:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("#name", text: $storeReadingPositionColumnName, onCommit:  {
                             modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
+                        })
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
+                    }
+                }
+                
+                Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
+                    .onChange(of: enableGoodreadsSync, perform: { value in
+                        modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
+                    })
+                if enableGoodreadsSync {
+                    HStack {
+                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                        TextField("Name", text: $goodreadsSyncProfileName, onCommit:  {
+                            modelData.updateGoodreadsSyncProfileName(enabled: true, value: goodreadsSyncProfileName)
                         })
                             .keyboardType(.alphabet)
                             .autocapitalization(.none)
@@ -248,6 +269,8 @@ struct ServerView: View {
                 enableStoreReadingPosition = library.readPosColumnName != nil
                 storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
                 
+                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
                 print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
             }
             
@@ -277,6 +300,16 @@ struct ServerView: View {
             if item.id == "AddServerExists" {
                 return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
             }
+            if item.id == "DelServer" {
+                return Alert(
+                    title: Text("Remove Server"),
+                    message: Text("Will Remove Cached Libraries and Books from App"),
+                    primaryButton: .default(Text("Confirm")) {
+                        delServerConfirmed()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
             return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel() {
                 item.action?()
             })
@@ -292,7 +325,7 @@ struct ServerView: View {
             return
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating"], "", "", "", -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "identifiers"], "", "", "", -1]
 
         let data = try! JSONSerialization.data(withJSONObject: json, options: [])
         
@@ -442,6 +475,17 @@ struct ServerView: View {
         let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
         
         modelData.addServer(server: calibreServer, libraries: calibreServerLibrariesEdit)
+        calibreServerId = calibreServer.id
+        if let defaultLibraryId = calibreServerLibrariesEdit.filter({
+            $0.name == $0.server.defaultLibrary
+        }).first?.id {
+            calibreServerLibraryId = defaultLibraryId
+        }
+        calibreServerEditing = false
+    }
+
+    private func delServerConfirmed() {
+        
     }
 }
 

@@ -15,7 +15,7 @@ import GoogleMobileAds
 
 class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
-    var bookModel = [BookModel]()
+    var bookModel = [String: [BookModel]]()
     var shelfView: SectionShelfView!
 #if canImport(GoogleMobileAds)
     var bannerView: GADBannerView!
@@ -25,6 +25,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     var modelData: ModelData!
     
     func updateBookModel() {
+        /*
         bookModel = modelData.booksInShelf
             .sorted(
                 by: { $0.value.title < $1.value.title } )
@@ -36,6 +37,27 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         }
         
         let bookModelSectionArray = [BookModelSection(sectionName: "Default", sectionId: "0", sectionBooks: bookModel)]
+        self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)
+         */
+        
+        bookModel = modelData.booksInShelf
+            .sorted { $0.value.lastModified > $1.value.lastModified }
+            .reduce(into: [String: [BookModel]]()) {
+                let newBook = BookModel(
+                    bookCoverSource: $1.value.coverURL.absoluteString,
+                    bookId: $1.key,
+                    bookTitle: $1.value.title)
+                let shelfName = $1.value.inShelfName.isEmpty ? ($1.value.tags.first ?? "Untagged") : $1.value.inShelfName
+                if $0[shelfName] != nil {
+                    $0[shelfName]!.append(newBook)
+                } else {
+                    $0[shelfName] = [newBook]
+                }
+            }
+        let bookModelSectionArray = bookModel.sorted { $0.key < $1.key }.map {
+            BookModelSection(sectionName: $0.key, sectionId: $0.key, sectionBooks: $0.value)
+        }
+        
         self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)
     }
     
