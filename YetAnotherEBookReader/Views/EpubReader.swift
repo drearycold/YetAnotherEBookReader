@@ -22,7 +22,7 @@ struct EpubReader: UIViewControllerRepresentable {
             readerConfiguration.enableTTS = false
             readerConfiguration.allowSharing = false
             let folioReader = FolioReader()
-            let epubReaderContainer = EpubReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path)
+            let epubReaderContainer = EpubReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path, removeEpub: false)
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open()
             return epubReaderContainer
@@ -69,6 +69,7 @@ struct EpubReader: UIViewControllerRepresentable {
         let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
         config.shouldHideNavigationOnTap = false
         config.scrollDirection = FolioReaderScrollDirection.vertical
+        
         #if DEBUG
         config.debug = 1
         #endif

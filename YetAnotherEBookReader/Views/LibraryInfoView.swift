@@ -276,7 +276,7 @@ struct LibraryInfoView: View {
                         selectedBookIds.forEach { bookId in
                             var downloaded = false
                             CalibreBook.Format.allCases.forEach {
-                                downloaded = downloaded || modelData.downloadFormat(bookId, $0) { result in
+                                downloaded = downloaded || modelData.downloadFormat(book: modelData.calibreServerLibraryBooks[bookId]!, format: $0) { result in
                                     
                                 }
                             }

@@ -39,6 +39,12 @@ struct BookDetailView: View {
 //    @State private var showingRefreshAlert = false
 //    @State private var showingDownloadAlert = false
     @State private var selectedFormat = CalibreBook.Format.EPUB
+    @State private var selectedFormatSize:UInt64 = 0
+    @State private var selectedFormatMTime = Date()
+    @State private var selectedFormatCached = false
+    @State private var selectedFormatCachedSize:UInt64 = 0
+    @State private var selectedFormatCachedMTime = Date()
+    
     @State private var selectedPosition = ""
     @State private var updater = 0
     @State private var showingReadSheet = false
@@ -66,6 +72,7 @@ struct BookDetailView: View {
             if let book = modelData.readingBook {
                 viewContent(book: book)
                 .onAppear() {
+                    resetStates()
                     modelData.getMetadata(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
@@ -80,14 +87,38 @@ struct BookDetailView: View {
         }
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
+                resetStates()
                 modelData.getMetadata(oldbook: book, completion: initStates(book:))
             }
         }
-        .onChange(of: downloadStatus, perform: { value in
+        .onChange(of: downloadStatus) { value in
             if downloadStatus == .DOWNLOADED {
                 modelData.addToShelf(modelData.readingBook!.id, shelfName: shelfName)
             }
-        })
+        }
+        .onChange(of: selectedFormat) { newFormat in
+            if newFormat == CalibreBook.Format.UNKNOWN {
+                return
+            }
+            print("selectedFormat \(selectedFormat.rawValue)")
+            if let book = modelData.readingBook {
+                if let fValStr = book.formats[newFormat.rawValue],
+                   let fValData = Data(base64Encoded: fValStr),
+                   let fVal = try? JSONSerialization.jsonObject(with: fValData, options: []) as? NSDictionary {
+                    if let sizeVal = fVal["size"] as? NSNumber {
+                        self.selectedFormatSize = sizeVal.uint64Value
+                    }
+                    if let mtimeVal = fVal["mtime"] as? String {
+                        let dateFormatter = ISO8601DateFormatter()
+                        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+                        if let mtime = dateFormatter.date(from: mtimeVal) {
+                            self.selectedFormatMTime = mtime
+                        }
+                    }
+                }
+                initCacheStates(book: book, format: newFormat)
+            }
+        }
         .alert(item: $alertItem) { item in
             if item.id == "Delete" {
                 return Alert(
@@ -104,7 +135,7 @@ struct BookDetailView: View {
                     title: Text("Need Download"),
                     message: Text("Please Download First"),
                     primaryButton: .default(Text("Download"), action: {
-                        modelData.downloadFormat(modelData.readingBook!.id, selectedFormat) { result in
+                        modelData.downloadFormat(book: modelData.readingBook!, format: selectedFormat) { result in
                             
                         }
                     }),
@@ -187,7 +218,8 @@ struct BookDetailView: View {
                     Button(action: {
                         if let book = modelData.readingBook {
                             modelData.kfImageCache.removeImage(forKey: book.coverURL.absoluteString)
-                            modelData.getMetadata(oldbook: book, completion: initStates(book:))
+                            resetStates()
+                            modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
                         }
                     }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -265,46 +297,87 @@ struct BookDetailView: View {
             
             Toggle("Customize Shelf Name", isOn: $customizedShelfName)
             
-            Picker("Format", selection: $selectedFormat) {
-                ForEach(CalibreBook.Format.allCases) { format in
-                    if book.formats[format.rawValue] != nil {
-                        Text(format.rawValue).tag(format)
+            VStack(alignment: .leading, spacing: 0) {
+                Picker("Format", selection: $selectedFormat) {
+                    ForEach(CalibreBook.Format.allCases) { format in
+                        if book.formats[format.rawValue] != nil {
+                            Text(format.rawValue).tag(format)
+                        }
                     }
                 }
+                .pickerStyle(SegmentedPickerStyle())
+                
+                HStack {
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(selectedFormatSize), countStyle: .file)).font(.subheadline)
+                    Spacer()
+                    if selectedFormatCached {
+                        Text(ByteCountFormatter.string(fromByteCount: Int64(selectedFormatCachedSize), countStyle: .file)).font(.subheadline)
+                    }
+                }
+                HStack {
+                    Text(selectedFormatMTime.description)
+                    Spacer()
+                    if selectedFormatCached {
+                        Text(selectedFormatCachedMTime.description)
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button(action:{
+                        if let book = modelData.readingBook {
+                            modelData.clearCache(book: book, format: selectedFormat)
+                            modelData.downloadFormat(book: book, format: selectedFormat, modificationDate: selectedFormatMTime) { success in
+                                initCacheStates(book: book, format: selectedFormat)
+                            }
+                        }
+                    }) {
+                        Image(systemName: "tray.and.arrow.down")
+                    }
+                    Button(action:{
+                        if let book = modelData.readingBook {
+                            modelData.clearCache(book: book, format: selectedFormat)
+                            initCacheStates(book: book, format: selectedFormat)
+                        }
+                    }) {
+                        Image(systemName: "tray.and.arrow.up")
+                    }.disabled(!selectedFormatCached)
+                }
+                
+                Picker("Position", selection: $selectedPosition) {
+                    ForEach(book.readPos.getDevices(), id: \.self) { position in
+                        HStack {
+                            Text(position.id)
+                                .font(.body)
+                                .padding()
+                        }.tag(position.id)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                .onChange(of: selectedPosition) { value in
+                    modelData.selectedPosition = selectedPosition
+                }
+                .onChange(of: modelData.updatedReadingPosition) { value in
+                    if let selectedPosition = modelData.getSelectedReadingPosition() {
+                        if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
+                            return
+                        }
+                        if modelData.updatedReadingPosition < selectedPosition {
+                            alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                        } else if selectedPosition << modelData.updatedReadingPosition {
+                            alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                        }
+                        else {
+                            modelData.updateCurrentPosition()
+                        }
+                    }
+                }
+                
+                Text(modelData.getSelectedReadingPosition()?.description ?? modelData.getDeviceReadingPosition()?.description ?? modelData.deviceName)
             }
-            .pickerStyle(SegmentedPickerStyle())
             
-            Picker("Position", selection: $selectedPosition) {
-                ForEach(book.readPos.getDevices(), id: \.self) { position in
-                    HStack {
-                        Text(position.id)
-                            .font(.body)
-                            .padding()
-                    }.tag(position.id)
-                }
-            }
-            .pickerStyle(SegmentedPickerStyle())
-            .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-            .onChange(of: selectedPosition) { value in
-                modelData.selectedPosition = selectedPosition
-            }
-            .onChange(of: modelData.updatedReadingPosition) { value in
-                if let selectedPosition = modelData.getSelectedReadingPosition() {
-                    if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
-                        return
-                    }
-                    if modelData.updatedReadingPosition < selectedPosition {
-                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
-                    } else if selectedPosition << modelData.updatedReadingPosition {
-                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
-                    }
-                    else {
-                        modelData.updateCurrentPosition()
-                    }
-                }
-            }
             
-            Text(modelData.getSelectedReadingPosition()?.description ?? modelData.getDeviceReadingPosition()?.description ?? modelData.deviceName)
+            
             
             #if canImport(GoogleMobileAds)
             Banner()
@@ -352,7 +425,7 @@ struct BookDetailView: View {
                     modelData.removeFromShelf(inShelfId: book.inShelfId)
                     downloadStatus = .INITIAL
                 } else if downloadStatus == .INITIAL {
-                    let downloading = modelData.downloadFormat(book.id, selectedFormat) { isSuccess in
+                    let downloading = modelData.downloadFormat(book: book, format: selectedFormat) { isSuccess in
                         if isSuccess {
                             downloadStatus = .DOWNLOADED
                         } else {
@@ -470,6 +543,10 @@ struct BookDetailView: View {
         }
     }
     
+    func resetStates() {
+        selectedFormat = CalibreBook.Format.UNKNOWN
+    }
+    
     func initStates(book: CalibreBook) {
         if book.formats[modelData.defaultFormat.rawValue] != nil {
             self.selectedFormat = modelData.defaultFormat
@@ -491,6 +568,17 @@ struct BookDetailView: View {
         
         shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
         customizedShelfName = !book.tags.contains(shelfName)
+    }
+    
+    func initCacheStates(book: CalibreBook, format: CalibreBook.Format) {
+        if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
+            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(self.selectedFormatSize) \(self.selectedFormatMTime)")
+            selectedFormatCached = true
+            selectedFormatCachedSize = cacheInfo.0
+            selectedFormatCachedMTime = cacheInfo.1!
+        } else {
+            selectedFormatCached = false
+        }
     }
     
     func readBook(position: BookDeviceReadingPosition) {

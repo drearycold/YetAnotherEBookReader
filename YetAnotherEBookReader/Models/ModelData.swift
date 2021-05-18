@@ -707,6 +707,110 @@ final class ModelData: ObservableObject {
         return book
     }
     
+    func handleLibraryBookOneNew(oldbook: CalibreBook, json: Data) -> CalibreBook? {
+        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
+            updatingMetadataStatus = "Failed to Parse Calibre Server Response."
+            updatingMetadata = false
+            return nil
+        }
+        
+        var book = oldbook
+        if let v = root["title"] as? String {
+            book.title = v
+        }
+        if let v = root["publisher"] as? String {
+            book.publisher = v
+        }
+        if let v = root["series"] as? String {
+            book.series = v
+        }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime
+        if let v = root["pubdate"] as? String, let date = dateFormatter.date(from: v) {
+            book.pubDate = date
+        }
+        if let v = root["last_modified"] as? String, let date = dateFormatter.date(from: v) {
+            book.lastModified = date
+        }
+        if let v = root["timestamp"] as? String, let date = dateFormatter.date(from: v) {
+            book.timestamp = date
+        }
+        
+        if let v = root["tags"] as? NSArray {
+            book.tags = v.compactMap { (t) -> String? in
+                t as? String
+            }
+        }
+        
+        if let v = root["format_metadata"] as? NSDictionary {
+            book.formats = v.reduce(into: [String: String]()) { result, format in
+                if let fKey = format.key as? String, let fVal = format.value as? NSDictionary, let fValData = try? JSONSerialization.data(withJSONObject: fVal, options: []) {
+                    result[fKey.uppercased()] = fValData.base64EncodedString()
+                }
+            }
+        }
+        
+        book.size = 0   //parse later
+        
+        if let v = root["rating"] as? NSNumber {
+            book.rating = v.intValue
+        }
+        
+        if let v = root["authors"] as? NSArray {
+            book.authors = v.compactMap { (t) -> String? in
+                t as? String
+            }
+        }
+
+        if let v = root["identifiers"] as? NSDictionary {
+            if let ids = v as? [String: String] {
+                book.identifiers = ids
+            }
+        }
+        
+        if let v = root["comments"] as? String {
+            book.comments = v
+        }
+        
+        
+        //Parse Reading Position
+        if let readPosColumnName = calibreLibraries[oldbook.library.id]?.readPosColumnName,
+              let userMetadata = root["user_metadata"] as? NSDictionary,
+              let userMetadataReadPosDict = userMetadata[readPosColumnName] as? NSDictionary,
+              let readPosString = userMetadataReadPosDict["#value#"] as? String,
+              let readPosData = Data(base64Encoded: readPosString),
+              let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+              let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
+            deviceMapDict.forEach { key, value in
+                let deviceName = key as! String
+                
+                if deviceName == self.deviceName && getDeviceReadingPosition() != nil {
+                    //ignore server, trust local record
+                    return
+                }
+                
+                let deviceReadingPositionDict = value as! [String: Any]
+                //TODO merge
+                var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
+                
+                deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+                deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
+                deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+                deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+                deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+                if let lastPosition = deviceReadingPositionDict["lastPosition"] {
+                    deviceReadingPosition.lastPosition = lastPosition as! [Int]
+                }
+                book.readPos.updatePosition(deviceName, deviceReadingPosition)
+                
+                defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+            }
+        }
+                
+        return book
+    }
     
     func addToShelf(_ bookId: Int32, shelfName: String? = nil) {
         readingBook?.inShelf = true
@@ -751,8 +855,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func downloadFormat(_ bookId: Int32, _ format: CalibreBook.Format, complete: @escaping (Bool) -> Void) -> Bool {
-        let book = calibreServerLibraryBooks[bookId]!
+    func downloadFormat(book: CalibreBook, format: CalibreBook.Format, modificationDate: Date? = nil, overwrite: Bool = false, complete: @escaping (Bool) -> Void) -> Bool {
         guard book.formats[format.rawValue] != nil else {
             complete(false)
             return false
@@ -772,7 +875,7 @@ final class ModelData: ObservableObject {
         let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
         
         self.defaultLog.info("savedURL: \(savedURL.absoluteString)")
-        if FileManager.default.fileExists(atPath: savedURL.path) {
+        if FileManager.default.fileExists(atPath: savedURL.path) && !overwrite {
             complete(true)
             return false
         }
@@ -787,12 +890,19 @@ final class ModelData: ObservableObject {
             do {
                 self.defaultLog.info("fileURL: \(fileURL.absoluteString)")
                 
+                if FileManager.default.fileExists(atPath: savedURL.path) {
+                    try FileManager.default.removeItem(at: savedURL)
+                }
                 try FileManager.default.moveItem(at: fileURL, to: savedURL)
+                if let modificationDate = modificationDate {
+                    let attributes = [FileAttributeKey.modificationDate: modificationDate]
+                    try FileManager.default.setAttributes(attributes, ofItemAtPath: savedURL.path)
+                }
                 
                 let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
                 self.defaultLog.info("isFileExist: \(isFileExist)")
                 
-                complete(true)
+                complete(isFileExist)
             } catch {
                 print ("file error: \(error)")
                 complete(false)
@@ -834,6 +944,61 @@ final class ModelData: ObservableObject {
         } catch {
             defaultLog.error("clearCache \(error.localizedDescription)")
         }
+    }
+    
+    func clearCache(book: CalibreBook, format: CalibreBook.Format) {
+        do {
+            let documentURL = try FileManager.default.url(for: .documentDirectory,
+                                                          in: .userDomainMask,
+                                                          appropriateFor: nil,
+                                                          create: false)
+            let savedURL = documentURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
+            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
+            if( isFileExist) {
+                try FileManager.default.removeItem(at: savedURL)
+            }
+        } catch {
+            defaultLog.error("clearCache \(error.localizedDescription)")
+        }
+        
+        do {
+            let downloadBaseURL = try FileManager.default.url(for: .cachesDirectory,
+                                                          in: .userDomainMask,
+                                                          appropriateFor: nil,
+                                                          create: false)
+            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
+            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
+            if( isFileExist) {
+                try FileManager.default.removeItem(at: savedURL)
+            }
+        } catch {
+            defaultLog.error("clearCache \(error.localizedDescription)")
+        }
+    }
+    
+    func getCacheInfo(book: CalibreBook, format: CalibreBook.Format) -> (UInt64, Date?)? {
+        var resultStorage: ObjCBool = false
+        if let documentURL = try? FileManager.default.url(for: .documentDirectory,
+                                                      in: .userDomainMask,
+                                                      appropriateFor: nil,
+                                                      create: false) {
+            let savedURL = documentURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
+            if FileManager.default.fileExists(atPath: savedURL.path, isDirectory: &resultStorage), resultStorage.boolValue == false, let attribs = try? FileManager.default.attributesOfItem(atPath: savedURL.path) as NSDictionary {
+                return (attribs.fileSize(), attribs.fileModificationDate())
+            }
+        }
+        
+        if let downloadBaseURL = try? FileManager.default.url(for: .cachesDirectory,
+                                                             in: .userDomainMask,
+                                                             appropriateFor: nil,
+                                                             create: false) {
+            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
+            if FileManager.default.fileExists(atPath: savedURL.path), let attribs = try? FileManager.default.attributesOfItem(atPath: savedURL.path) as NSDictionary {
+                return (attribs.fileSize(), attribs.fileModificationDate())
+            }
+        }
+        
+        return nil
     }
     
     func getSelectedReadingPosition() -> BookDeviceReadingPosition? {
@@ -1055,6 +1220,73 @@ final class ModelData: ObservableObject {
             }
             updatingMetadata = true
             updatingMetadataTask!.resume()
+            
+        }catch{
+        }
+    }
+    
+    func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
+        let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        do {
+            let request = URLRequest(url: endpointUrl)
+            
+            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+                if let error = error {
+                    defaultLog.warning("error: \(error.localizedDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = error.localizedDescription
+                        updatingMetadata = false
+                        completion?(oldbook)
+                    }
+                    return
+                }
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = response.debugDescription
+                        updatingMetadata = false
+                        completion?(oldbook)
+                    }
+                    return
+                }
+                if !(200...299).contains(httpResponse.statusCode) {
+                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                    DispatchQueue.main.async {
+                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadata = false
+                        completion?(oldbook)
+                    }
+                    return
+                }
+                
+                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                   let data = data,
+                   let string = String(data: data, encoding: .utf8) {
+                    DispatchQueue.main.async {
+                        //self.webView.loadHTMLString(string, baseURL: url)
+                        //                            defaultLog.warning("httpResponse: \(string)")
+                        //book.comments = string
+                        guard var book = handleLibraryBookOneNew(oldbook: oldbook, json: data) else {
+                            completion?(oldbook)
+                            return
+                        }
+                        
+                        if( book.readPos.getDevices().isEmpty) {
+                            book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
+                        }
+                        
+                        updateBook(book: book)
+                        
+                        updatingMetadataStatus = "Success"
+                        updatingMetadata = false
+                        
+                        completion?(book)
+                    }
+                }
+            }
+            
+            updatingMetadata = true
+            task.resume()
             
         }catch{
         }

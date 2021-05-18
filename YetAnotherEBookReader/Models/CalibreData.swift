@@ -214,6 +214,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         case EPUB
         case PDF
         
+        case UNKNOWN
+        
         var id: String { self.rawValue }
     }
 }
