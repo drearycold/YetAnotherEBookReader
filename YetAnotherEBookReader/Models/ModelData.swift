@@ -1292,6 +1292,56 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func getBookManifest(book: CalibreBook, format: CalibreBook.Format, completion: ((_ manifest: Data) -> Void)? = nil) {
+        let endpointUrl = URL(string: book.library.server.baseUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+
+        let request = URLRequest(url: endpointUrl)
+        
+        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+            let emptyData = "{}".data(using: .ascii)!
+            if let error = error {
+                defaultLog.warning("error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = error.localizedDescription
+                    updatingMetadata = false
+                    completion?(emptyData)
+                }
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = response.debugDescription
+                    updatingMetadata = false
+                    completion?(emptyData)
+                }
+                return
+            }
+            if !(200...299).contains(httpResponse.statusCode) {
+                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = httpResponse.debugDescription
+                    updatingMetadata = false
+                    completion?(emptyData)
+                }
+                return
+            }
+            
+            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+               let data = data {
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = "Success"
+                    updatingMetadata = false
+                    
+                    completion?(data)
+                }
+            }
+        }
+        
+        updatingMetadata = true
+        task.resume()
+    }
+    
     func goToPreviousBook() {
         if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
             currentBookId = filteredBookList[curIndex-1]

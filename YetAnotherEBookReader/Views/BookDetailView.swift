@@ -44,6 +44,7 @@ struct BookDetailView: View {
     @State private var selectedFormatCached = false
     @State private var selectedFormatCachedSize:UInt64 = 0
     @State private var selectedFormatCachedMTime = Date()
+    @State private var selectedFormatTOC = "Uninitialized"
     
     @State private var selectedPosition = ""
     @State private var updater = 0
@@ -73,7 +74,7 @@ struct BookDetailView: View {
                 viewContent(book: book)
                 .onAppear() {
                     resetStates()
-                    modelData.getMetadata(oldbook: book, completion: initStates(book:))
+                    modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(modelData.readingBook!.title))
@@ -88,7 +89,7 @@ struct BookDetailView: View {
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
                 resetStates()
-                modelData.getMetadata(oldbook: book, completion: initStates(book:))
+                modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
             }
         }
         .onChange(of: downloadStatus) { value in
@@ -117,6 +118,10 @@ struct BookDetailView: View {
                     }
                 }
                 initCacheStates(book: book, format: newFormat)
+                
+                modelData.getBookManifest(book: book, format: newFormat) { manifest in
+                    parseManifestToTOC(json: manifest)
+                }
             }
         }
         .alert(item: $alertItem) { item in
@@ -203,7 +208,7 @@ struct BookDetailView: View {
                 Text(book.pubDate.description).font(.subheadline)
             }
             HStack {
-                Text(ByteCountFormatter.string(fromByteCount: Int64(book.size), countStyle: .file)).font(.subheadline)
+                Text(ByteCountFormatter.string(fromByteCount: Int64(selectedFormatSize), countStyle: .file)).font(.subheadline)
                 Spacer()
                 
                     
@@ -219,7 +224,12 @@ struct BookDetailView: View {
                         if let book = modelData.readingBook {
                             modelData.kfImageCache.removeImage(forKey: book.coverURL.absoluteString)
                             resetStates()
-                            modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
+                            modelData.getMetadataNew(oldbook: book) { newbook in
+                                initStates(book: newbook)
+                                modelData.getBookManifest(book: newbook, format: selectedFormat) { manifest in
+                                    self.parseManifestToTOC(json: manifest)
+                                }
+                            }
                         }
                     }) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -266,6 +276,11 @@ struct BookDetailView: View {
                     .placeholder {
                         Text("Loading Cover ...")
                     }
+                
+                ScrollView {
+                    Text(selectedFormatTOC)
+                }
+                .frame(height: 400, alignment: .center)
                 
                 Spacer()
 //                AsyncImage(
@@ -590,6 +605,38 @@ struct BookDetailView: View {
 //        modelData.libraryInfo.deleteBook(book: book)
         //TODO
         //getMetadata()
+    }
+    
+    func parseManifestToTOC(json: Data) {
+        selectedFormatTOC = "Without TOC"
+        
+        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
+            #if DEBUG
+            selectedFormatTOC = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
+            #endif
+            return
+        }
+        
+        guard let tocNode = root["toc"] as? NSDictionary else {
+            #if DEBUG
+            selectedFormatTOC = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
+            #endif
+            
+            if let jobStatus = root["job_status"] as? String, jobStatus == "waiting" || jobStatus == "running" {
+                selectedFormatTOC = "Generating TOC, Please try again later"
+            }
+            return
+        }
+        
+        guard let childrenNode = tocNode["children"] as? NSArray else {
+            return
+        }
+        
+        let tocString = childrenNode.reduce(into: String()) { result, childNode in
+            result = result + ((childNode as! NSDictionary)["title"] as! String) + "\n"
+        }
+        
+        selectedFormatTOC = tocString
     }
 }
 
