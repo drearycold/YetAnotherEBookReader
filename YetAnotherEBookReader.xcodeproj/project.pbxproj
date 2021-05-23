@@ -1308,7 +1308,7 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/drearycold/FolioReaderKit.git";
 			requirement = {
-				branch = migration/wkwebview;
+				branch = options_revamp;
 				kind = branch;
 			};
 		};
