@@ -688,6 +688,7 @@ final class ModelData: ObservableObject {
                         
                         deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
                         deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                        deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
                         deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
                         deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
                         deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
@@ -796,6 +797,7 @@ final class ModelData: ObservableObject {
                 
                 deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
                 deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
                 deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
                 deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
                 deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
@@ -1228,7 +1230,7 @@ final class ModelData: ObservableObject {
     func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         do {
-            let request = URLRequest(url: endpointUrl)
+            let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
             
             let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
                 if let error = error {

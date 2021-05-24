@@ -13,7 +13,7 @@ import FolioReaderKit
 class EpubReaderContainer: FolioReaderContainer, FolioReaderDelegate {
 //    var savedPositionObserver: NSKeyValueObservation?
     var modelData: ModelData?
-    var updatedReadingPosition = (Double(), [String: Any](), "")
+    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
     
     func open() {
         readerConfig.loadSavedPositionForCurrentBook = true
@@ -61,19 +61,25 @@ class EpubReaderContainer: FolioReaderContainer, FolioReaderDelegate {
 //    }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
-        if let bookProgress = folioReader.readerCenter?.getBookProgress() {
-            updatedReadingPosition.0 = bookProgress
-            updatedReadingPosition.1 = folioReader.savedPositionForCurrentBook!
+        if let chapterProgress = folioReader.readerCenter?.getCurrentPageProgress(),
+           let bookProgress = folioReader.readerCenter?.getBookProgress() {
+            updatedReadingPosition.0 = chapterProgress
+            updatedReadingPosition.1 = bookProgress
+            updatedReadingPosition.2 = folioReader.savedPositionForCurrentBook!
             if let currentChapterName = folioReader.readerCenter?.getCurrentChapterName() {
-                updatedReadingPosition.2 = currentChapterName
+                updatedReadingPosition.3 = currentChapterName
             }
             
-            modelData?.updatedReadingPosition.lastPosition[0] = updatedReadingPosition.1["pageNumber"]! as! Int
-            modelData?.updatedReadingPosition.lastPosition[1] = Int((updatedReadingPosition.1["pageOffsetX"]! as! CGFloat).rounded())
-            modelData?.updatedReadingPosition.lastPosition[2] = Int((updatedReadingPosition.1["pageOffsetY"]! as! CGFloat).rounded())
-            modelData?.updatedReadingPosition.lastReadPage = updatedReadingPosition.1["pageNumber"]! as! Int
-            modelData?.updatedReadingPosition.lastProgress = updatedReadingPosition.0
-            modelData?.updatedReadingPosition.lastReadChapter = updatedReadingPosition.2
+            modelData?.updatedReadingPosition.lastChapterProgress = updatedReadingPosition.0
+            modelData?.updatedReadingPosition.lastProgress = updatedReadingPosition.1
+            
+            modelData?.updatedReadingPosition.lastPosition[0] = updatedReadingPosition.2["pageNumber"]! as! Int
+            modelData?.updatedReadingPosition.lastPosition[1] = Int((updatedReadingPosition.2["pageOffsetX"]! as! CGFloat).rounded())
+            modelData?.updatedReadingPosition.lastPosition[2] = Int((updatedReadingPosition.2["pageOffsetY"]! as! CGFloat).rounded())
+            modelData?.updatedReadingPosition.lastReadPage = updatedReadingPosition.2["pageNumber"]! as! Int
+            
+            modelData?.updatedReadingPosition.lastReadChapter = updatedReadingPosition.3
+            
             modelData?.updatedReadingPosition.readerName = "FolioReader"
         }
     }

@@ -289,6 +289,7 @@ class CalibreBookRealm: Object {
             deviceReadingPosition.readerName = deviceReadingPositionDict["readerName"] as! String
             deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
             deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+            deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
             deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
             deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
             deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
@@ -375,17 +376,26 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var maxPage = 0
     var lastReadPage = 0
     var lastReadChapter = ""
+    var lastChapterProgress = 0.0
     var lastProgress = 0.0
     var furthestReadPage = 0
     var furthestReadChapter = ""
     var lastPosition = [0, 0, 0]
     
     var description: String {
-        return "\(id) with \(readerName): \(lastReadPage) \(String(format: "%.2f", lastProgress))% \(lastReadChapter) (\(lastPosition[0]):\(lastPosition[1]):\(lastPosition[2]))"
+        return """
+            \(id) with \(readerName):
+                Chapter: \(lastReadChapter), \(String(format: "%.2f", 100 - lastChapterProgress))% Left
+                Book: Page \(lastReadPage), \(String(format: "%.2f", 100 - lastProgress))% Left
+                (\(lastPosition[0]):\(lastPosition[1]):\(lastPosition[2]))
+            """
     }
     
     static func < (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
         if lhs.lastReadPage < rhs.lastReadPage {
+            return true
+        }
+        if lhs.lastChapterProgress < rhs.lastChapterProgress {
             return true
         }
         if lhs.lastProgress < rhs.lastProgress {
@@ -405,12 +415,15 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         maxPage = other.maxPage
         lastReadPage = other.lastReadPage
         lastReadChapter = other.lastReadChapter
+        lastChapterProgress = other.lastChapterProgress
         lastProgress = other.lastProgress
         lastPosition = other.lastPosition
     }
     
     func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
-        if lastReadPage == other.lastReadPage && lastProgress == other.lastProgress {
+        if lastReadPage == other.lastReadPage
+            && lastChapterProgress == other.lastChapterProgress
+            && lastProgress == other.lastProgress {
             return true
         }
         return false

@@ -30,6 +30,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     var pagePrevButton = UIButton()
     
     let titleInfoButton = UIButton()
+    var tocList = [(String, Int)]()
     
     let thumbImageView = UIImageView()
     let thumbController = UIViewController()
@@ -150,6 +151,7 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
                 outlineRoot = outlineRoot.child(at: 0)!
             }
             for i in (0..<outlineRoot.numberOfChildren) {
+                tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
                 tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { (action) in
                     if let dest = outlineRoot.child(at: i)?.destination {
                         if let curPage = self.pdfView?.currentPage {
@@ -256,22 +258,40 @@ class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate 
     }
 
     override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        
         var position = [String : Any]()
         if let curDest = pdfView?.currentDestination {
-            position["pageNumber"] = curDest.page!.pageRef?.pageNumber ?? 1
+            let pageNum = curDest.page!.pageRef?.pageNumber ?? 1
+            position["pageNumber"] = pageNum
             position["pageOffsetX"] = curDest.point.x
             let viewFrameInPDF = pdfView!.convert(pdfView!.frame, to: curDest.page!)
             let navFrameInPDF = pdfView!.convert(navigationController!.navigationBar.frame, to: curDest.page!)
             print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
             position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
-            let progress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
+            
+            let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
+            
+            var chapterProgress = 0.0
+            let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
+            if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
+                let curIndex = firstIndex.advanced(by: 0)
+                let nextIndex = firstIndex.advanced(by: 1)
+                let chapterStartPageNum = tocList[curIndex].1
+                let chapterEndPageNum = nextIndex < tocList.count ?
+                    tocList[nextIndex].1 + 1 : pdfView!.document!.pageCount + 1
+                if chapterEndPageNum > chapterStartPageNum {
+                    chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
+                }
+            }
             
             modelData?.updatedReadingPosition.lastPosition[0] = curDest.page!.pageRef?.pageNumber ?? 1
             modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
             modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
             modelData?.updatedReadingPosition.lastReadPage = curDest.page!.pageRef?.pageNumber ?? 1
-            modelData?.updatedReadingPosition.lastProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
-            modelData?.updatedReadingPosition.lastReadChapter = titleInfoButton.currentTitle ?? "Unknown Title"
+            modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
+            modelData?.updatedReadingPosition.lastProgress = bookProgress
+            modelData?.updatedReadingPosition.lastReadChapter = chapterName
             modelData?.updatedReadingPosition.readerName = "YabrPDFView"
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
