@@ -394,9 +394,13 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     static func < (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
         if lhs.lastReadPage < rhs.lastReadPage {
             return true
+        } else if lhs.lastReadPage > rhs.lastReadPage {
+            return false
         }
         if lhs.lastChapterProgress < rhs.lastChapterProgress {
             return true
+        } else if lhs.lastChapterProgress > rhs.lastChapterProgress {
+            return false
         }
         if lhs.lastProgress < rhs.lastProgress {
             return true

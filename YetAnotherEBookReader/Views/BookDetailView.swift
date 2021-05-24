@@ -428,9 +428,13 @@ struct BookDetailView: View {
                                     return
                                 }
                                 if modelData.updatedReadingPosition < selectedPosition {
-                                    alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                                    }
                                 } else if selectedPosition << modelData.updatedReadingPosition {
-                                    alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                                    }
                                 }
                                 else {
                                     modelData.updateCurrentPosition()
@@ -617,9 +621,17 @@ struct BookDetailView: View {
     }
     
     func initStates(book: CalibreBook) {
-        if book.formats[modelData.defaultFormat.rawValue] != nil {
+        CalibreBook.Format.allCases.forEach { format in
+            if book.formats[format.rawValue] != nil && modelData.getCacheInfo(book: book, format: format) != nil {
+                self.selectedFormat = format
+            }
+        }
+        
+        if self.selectedFormat == CalibreBook.Format.UNKNOWN, book.formats[modelData.defaultFormat.rawValue] != nil {
             self.selectedFormat = modelData.defaultFormat
-        } else {
+        }
+        
+        if self.selectedFormat == CalibreBook.Format.UNKNOWN {
             CalibreBook.Format.allCases.forEach { format in
                 if book.formats[format.rawValue] != nil {
                     self.selectedFormat = format
