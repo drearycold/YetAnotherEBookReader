@@ -47,6 +47,8 @@ struct BookDetailView: View {
     @State private var selectedFormatCachedSize:UInt64 = 0
     @State private var selectedFormatCachedMTime = Date()
     @State private var selectedFormatTOC = "Uninitialized"
+    @State private var selectedFormatReader = ReaderType.UNSUPPORTED
+    @State private var selectedFormatReaderShowDetail = false
     
     @State private var selectedPositionShowDetail = false
     @State private var selectedPosition = ""
@@ -181,7 +183,11 @@ struct BookDetailView: View {
             return Alert(title: Text(item.id))
         }
         .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
-            EpubReader(bookURL: getSavedUrl(book: modelData.readingBook!))
+            EBookReader(
+                bookURL: getSavedUrl(book: modelData.readingBook!),
+                bookFormat: selectedFormat,
+                bookReader: selectedFormatReader
+            )
         }
 //        .popover(isPresented: $presentingUpdateAlert) {
 //            if modelData.updatingMetadata {
@@ -406,6 +412,7 @@ struct BookDetailView: View {
                         }
                     }
                     
+                    
                     HStack {
                         Text("Read At")
                         Picker("Position", selection: $selectedPosition) {
@@ -421,6 +428,12 @@ struct BookDetailView: View {
                         .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                         .onChange(of: selectedPosition) { value in
                             modelData.selectedPosition = selectedPosition
+                            guard let readers = modelData.formatReaderMap[selectedFormat] else { return }
+                            selectedFormatReader = readers.reduce(into: readers.first!) {
+                                if $1.rawValue == book.readPos.getPosition(self.selectedPosition)?.readerName {
+                                    $0 = $1
+                                }
+                            }
                         }
                         .onChange(of: modelData.updatedReadingPosition) { value in
                             if let selectedPosition = modelData.getSelectedReadingPosition() {
@@ -454,6 +467,29 @@ struct BookDetailView: View {
                         Text(modelData.getSelectedReadingPosition()?.description ?? modelData.getDeviceReadingPosition()?.description ?? modelData.deviceName)
                             .frame(height: 120)
                     }
+                    
+                    HStack {
+                        Text("Reader")
+                        
+                        Picker("Reader", selection: $selectedFormatReader) {
+                            ForEach(ReaderType.allCases) { type in
+                                if let types = modelData.formatReaderMap[selectedFormat],
+                                   types.contains(type) {
+                                    Text(type.rawValue).tag(type)
+                                }
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        
+                        Button(action:{ selectedFormatReaderShowDetail.toggle() }) {
+                            if selectedFormatReaderShowDetail {
+                                Image(systemName: "chevron.up")
+                            } else {
+                                Image(systemName: "chevron.down")
+                            }
+                        }.hidden()
+                    }
+                    
                 }
             
                 WebViewUI(content: book.comments, baseURL: book.commentBaseURL)
@@ -618,6 +654,8 @@ struct BookDetailView: View {
     
     func resetStates() {
         selectedFormat = CalibreBook.Format.UNKNOWN
+        selectedPosition = ""
+        selectedFormatReader = ReaderType.UNSUPPORTED
     }
     
     func initStates(book: CalibreBook) {

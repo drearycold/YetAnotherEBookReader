@@ -14,7 +14,7 @@ import SwiftUI
 import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
-class PDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate {
+class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate {
     var modelData: ModelData?
     var pdfView: PDFView?
     var mDictView = MDictViewContainer()
