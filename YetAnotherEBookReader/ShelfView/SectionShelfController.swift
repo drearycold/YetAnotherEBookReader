@@ -54,8 +54,11 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                     $0[shelfName] = [newBook]
                 }
             }
-        let bookModelSectionArray = bookModel.sorted { $0.key < $1.key }.map {
+        var bookModelSectionArray = bookModel.sorted { $0.key < $1.key }.map {
             BookModelSection(sectionName: $0.key, sectionId: $0.key, sectionBooks: $0.value)
+        }
+        if bookModelSectionArray.isEmpty {
+            bookModelSectionArray.append(BookModelSection(sectionName: "Default", sectionId: "Default", sectionBooks: []))
         }
         
         self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)

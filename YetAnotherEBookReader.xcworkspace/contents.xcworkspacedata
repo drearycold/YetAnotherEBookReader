@@ -2,6 +2,18 @@
 <Workspace
    version = "1.0">
    <FileRef
+      location = "group:Carthage/Checkouts/r2-streamer-swift/r2-streamer-swift.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Carthage/Checkouts/r2-shared-swift/r2-shared-swift.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Carthage/Checkouts/r2-opds-swift/readium-opds.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Carthage/Checkouts/r2-navigator-swift/r2-navigator-swift.xcodeproj">
+   </FileRef>
+   <FileRef
       location = "group:YetAnotherEBookReader.xcodeproj">
    </FileRef>
    <FileRef

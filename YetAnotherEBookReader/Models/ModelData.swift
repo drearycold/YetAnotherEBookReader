@@ -20,7 +20,7 @@ final class ModelData: ObservableObject {
 //    @Published var calibreServer = "http://calibre-server.lan:8080/"
 //    @Published var calibreUsername = ""
 //    @Published var calibrePassword = ""
-    @Published var deviceName = UIDevice().name
+    @Published var deviceName = UIDevice.current.name
     
     @Published var calibreServers = [String: CalibreServer]()
     @Published var currentCalibreServerId = "" {
@@ -63,6 +63,8 @@ final class ModelData: ObservableObject {
     
     //for LibraryInfoView
     @Published var defaultFormat = CalibreBook.Format.PDF
+    var formatReaderMap = [CalibreBook.Format: [ReaderType]]()
+    
     @Published var searchString = "" {
         didSet {
             updateFilteredBookList()
@@ -96,7 +98,8 @@ final class ModelData: ObservableObject {
 
     @Published var selectedBookId: Int32? = nil {
         didSet {
-            self.readingBook = self.calibreServerLibraryBooks[selectedBookId ?? currentBookId]
+            guard let selectedBookId = selectedBookId else { return }
+            self.readingBook = self.calibreServerLibraryBooks[selectedBookId]
         }
     }
     
@@ -207,6 +210,11 @@ final class ModelData: ObservableObject {
             default:
                 defaultFormat = CalibreBook.Format.EPUB
         }
+        
+        formatReaderMap[CalibreBook.Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumReader]
+        formatReaderMap[CalibreBook.Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumReader]
+        formatReaderMap[CalibreBook.Format.CBZ] = [ReaderType.ReadiumReader]
+
     }
     
     func populateLibraries() {
@@ -755,7 +763,7 @@ final class ModelData: ObservableObject {
         book.size = 0   //parse later
         
         if let v = root["rating"] as? NSNumber {
-            book.rating = v.intValue
+            book.rating = v.intValue * 2
         }
         
         if let v = root["authors"] as? NSArray {
@@ -1073,7 +1081,7 @@ final class ModelData: ObservableObject {
                         }
                         
                         if( book.readPos.getDevices().isEmpty) {
-                            book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
+                            book.readPos.addInitialPosition(UIDevice.current.name, defaultReaderForDefaultFormat(book: book).rawValue)
                         }
                         
                         updateBook(book: book)
@@ -1098,11 +1106,6 @@ final class ModelData: ObservableObject {
             return
         }
         do {
-            var deviceReadingPosition = getDeviceReadingPosition()
-            if( deviceReadingPosition == nil ) {
-                deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-            }
-            
             defaultLog.info("pageNumber:  \(self.updatedReadingPosition.lastPosition[0])")
             defaultLog.info("pageOffsetX: \(self.updatedReadingPosition.lastPosition[1])")
             defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
@@ -1274,7 +1277,7 @@ final class ModelData: ObservableObject {
                         }
                         
                         if( book.readPos.getDevices().isEmpty) {
-                            book.readPos.addInitialPosition(UIDevice().name, "FolioReader")
+                            book.readPos.addInitialPosition(deviceName, defaultReaderForDefaultFormat(book: book).rawValue)
                         }
                         
                         updateBook(book: book)
@@ -1357,6 +1360,18 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func defaultReaderForDefaultFormat(book: CalibreBook) -> ReaderType {
+        if book.formats.contains(where: { $0.key == defaultFormat.rawValue }) {
+            return formatReaderMap[defaultFormat]!.first!
+        } else {
+            return book.formats.keys.compactMap {
+                CalibreBook.Format(rawValue: $0)
+            }
+            .reversed()
+            .reduce(ReaderType.UNSUPPORTED) { formatReaderMap[$1]!.first! }
+        }
+    }
+    
 }
 
 func load<T: Decodable>(_ filename: String) -> T {
@@ -1380,8 +1395,3 @@ func load<T: Decodable>(_ filename: String) -> T {
         fatalError("Couldn't parse \(filename) as \(T.self):\n\(error)")
     }
 }
-
-enum LibraryError: Error {
-    case runtimeError(String)
-}
-

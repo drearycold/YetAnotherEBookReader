@@ -8,7 +8,7 @@
 import Foundation
 
 @available(macCatalyst 14.0, *)
-class PDFViewContainer : UIViewController {
+class YabrPDFViewContainer : UIViewController {
     
     var bookDetailView: BookDetailView?
     
@@ -18,7 +18,7 @@ class PDFViewContainer : UIViewController {
     }
     
     func open(pdfURL: URL) {
-        let pdfViewController = PDFViewController()
+        let pdfViewController = YabrPDFViewController()
         
         let nav = UINavigationController(rootViewController: pdfViewController)
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen

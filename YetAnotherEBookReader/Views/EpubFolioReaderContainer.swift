@@ -10,7 +10,7 @@ import UIKit
 import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
-class EpubReaderContainer: FolioReaderContainer, FolioReaderDelegate {
+class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
 //    var savedPositionObserver: NSKeyValueObservation?
     var modelData: ModelData?
     var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
@@ -18,12 +18,11 @@ class EpubReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     func open() {
         readerConfig.loadSavedPositionForCurrentBook = true
         
-        let bookReadingPosition = modelData?.getSelectedReadingPosition()
-        if( bookReadingPosition != nil ) {
+        if let bookReadingPosition = modelData?.getSelectedReadingPosition() {
             var position = [String: Any]()
-            position["pageNumber"] = bookReadingPosition!.lastPosition[0]
-            position["pageOffsetX"] = CGFloat(bookReadingPosition!.lastPosition[1])
-            position["pageOffsetY"] = CGFloat(bookReadingPosition!.lastPosition[2])
+            position["pageNumber"] = bookReadingPosition.lastPosition[0]
+            position["pageOffsetX"] = CGFloat(bookReadingPosition.lastPosition[1])
+            position["pageOffsetY"] = CGFloat(bookReadingPosition.lastPosition[2])
             readerConfig.savedPositionForCurrentBook = position
         }
         

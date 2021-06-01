@@ -35,7 +35,7 @@ struct PDFOptions: Equatable {
 }
 
 struct PDFOptionView: View {
-    var pdfViewController: PDFViewController?
+    var pdfViewController: YabrPDFViewController?
     
     @State private var pdfOptions = PDFOptions()
     

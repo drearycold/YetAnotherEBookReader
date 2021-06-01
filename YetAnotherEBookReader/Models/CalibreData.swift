@@ -211,10 +211,12 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var inShelfName = ""
     
     enum Format: String, CaseIterable, Identifiable {
+        case UNKNOWN
+        
         case EPUB
         case PDF
+        case CBZ
         
-        case UNKNOWN
         
         var id: String { self.rawValue }
     }
@@ -436,4 +438,14 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
 
 struct ServerErrorDelegate {
     
+}
+
+enum ReaderType: String, CaseIterable, Identifiable {
+    case UNSUPPORTED
+    
+    case FolioReader
+    case YabrPDFView
+    case ReadiumReader
+    
+    var id: String { self.rawValue }
 }
