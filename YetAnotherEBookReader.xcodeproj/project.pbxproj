@@ -1519,7 +1519,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 12258FD16B47F383FC0BE545 /* Pods-YetAnotherEBookReader.debug.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = YetAnotherEBookReader/YetAnotherEBookReader.entitlements;
@@ -1608,7 +1607,6 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CF185A53A025D8EEA47F5F54 /* Pods-YetAnotherEBookReader.release.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = YetAnotherEBookReader/YetAnotherEBookReader.entitlements;

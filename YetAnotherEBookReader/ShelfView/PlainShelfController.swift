@@ -10,11 +10,18 @@ import ShelfView_iOS
 import SwiftUI
 import FolioReaderKit
 
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
+
 class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
-    var books = [CalibreBook]()
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
+#if canImport(GoogleMobileAds)
+    var bannerView: GADBannerView!
+#endif
+
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
 
@@ -22,7 +29,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         true
     }
     
-    func updateBookModel() {
+    @objc func updateBookModel() {
         bookModel = modelData.booksInShelf
             .filter { $0.value.library.server.isLocal }
             .sorted { $0.value.title < $1.value.title }
@@ -55,7 +62,37 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         shelfView.delegate = self
         updateBookModel()
         // motherView.addSubview(shelfView)
-        self.view = shelfView
+        view.addSubview(shelfView)
+        
+        #if canImport(GoogleMobileAds)
+        bannerView = GADBannerView()
+        bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
+        bannerView.rootViewController = self
+        bannerView.load(GADRequest())
+
+        bannerView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(bannerView)
+        
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
+            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
+        ])
+        bannerView.adSize = kGADAdSizeBanner
+        #else
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+        #endif
+        
+        NotificationCenter.default.addObserver(modelData.$booksInShelf, selector: #selector(updateBookModel), name: nil, object: nil)
     }
 
     func onBookClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String) {
@@ -81,6 +118,8 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
 
     @objc func refreshBook(_ sender: Any?) {
         print("refreshBook")
+        
+        updateBookModel()
     }
     
     @objc func deleteBook(_ sender: Any?) {
@@ -110,5 +149,5 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
             execute: closure
         )
     }
-    
+
 }

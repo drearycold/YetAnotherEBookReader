@@ -11,8 +11,6 @@ import SwiftUI
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @State private var activeTab = 0
-    
     struct AlertItem : Identifiable {
         var id: String
         var msg: String?
@@ -20,7 +18,7 @@ struct MainView: View {
     @State private var alertItem: AlertItem?
     
     var body: some View {
-        TabView(selection: $activeTab) {
+        TabView(selection: $modelData.activeTab) {
             PlainShelfUI()
                 .fullScreenCover(isPresented: $modelData.presentingEBookReaderForPlainShelf, onDismiss: { modelData.presentingEBookReaderForPlainShelf = false }) {
                     if let book = modelData.readingBook,
@@ -76,7 +74,7 @@ struct MainView: View {
                     Image(systemName: "doc.text.fill")
                     Text("Local")
                 }
-                .tag(1)
+                .tag(0)
                 
             
             SectionShelfUI()
@@ -84,7 +82,7 @@ struct MainView: View {
                     Image(systemName: "books.vertical.fill")
                     Text("Shelf")
                 }
-                .tag(0)
+                .tag(1)
                 
             LibraryInfoView()
                 .tabItem {
@@ -102,6 +100,10 @@ struct MainView: View {
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
+        .onOpenURL { url in
+            print("onOpenURL \(url)")
+            modelData.onOpenURL(url: url)
+        }
         
     }
     

@@ -12,14 +12,13 @@ struct PlainShelfUI: UIViewControllerRepresentable {
     @EnvironmentObject var modelData: ModelData
 
     func makeUIViewController(context: Context) -> PlainShelfController {
-        let ps = PlainShelfController()
-        ps.modelData = modelData
-        return ps
+        let shelfController = PlainShelfController()
+        shelfController.modelData = modelData
+        return shelfController
     }
     
     func updateUIViewController(_ uiView: PlainShelfController, context: Context) {
-        
+        uiView.updateBookModel()
     }
-    
     
 }

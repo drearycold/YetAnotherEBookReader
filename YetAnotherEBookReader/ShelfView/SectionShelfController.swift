@@ -23,23 +23,12 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
+
+    override var canBecomeFirstResponder: Bool {
+        true
+    }
     
     func updateBookModel() {
-        /*
-        bookModel = modelData.booksInShelf
-            .sorted(
-                by: { $0.value.title < $1.value.title } )
-            .map { (key: String, value: CalibreBook) -> BookModel in
-            BookModel(
-                bookCoverSource: value.coverURL.absoluteString,
-                bookId: key,
-                bookTitle: value.title)
-        }
-        
-        let bookModelSectionArray = [BookModelSection(sectionName: "Default", sectionId: "0", sectionBooks: bookModel)]
-        self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)
-         */
-        
         bookModel = modelData.booksInShelf
             .filter { $0.value.library.server.isLocal == false}
             .sorted { $0.value.lastModified > $1.value.lastModified }

@@ -20,9 +20,6 @@ import GoogleMobileAds
 #endif
 
 final class ModelData: ObservableObject {
-//    @Published var calibreServer = "http://calibre-server.lan:8080/"
-//    @Published var calibreUsername = ""
-//    @Published var calibrePassword = ""
     @Published var deviceName = UIDevice.current.name
     
     @Published var calibreServers = [String: CalibreServer]()
@@ -63,6 +60,10 @@ final class ModelData: ObservableObject {
     @Published var calibreServerLibraryUpdatingTotal = 0
     
     @Published var calibreServerLibraryBooks = [Int32: CalibreBook]()
+    
+    @Published var activeTab = 0
+    var documentServer: CalibreServer?
+    var localLibrary: CalibreLibrary?
     
     //for LibraryInfoView
     @Published var defaultFormat = CalibreBook.Format.PDF
@@ -285,7 +286,7 @@ final class ModelData: ObservableObject {
         }
         
         let tmpServer = CalibreServer(baseUrl: ".", username: "", password: "")
-        var documentServer = calibreServers[tmpServer.id]
+        documentServer = calibreServers[tmpServer.id]
         if documentServer == nil {
             calibreServers[tmpServer.id] = tmpServer
             documentServer = calibreServers[tmpServer.id]
@@ -309,7 +310,7 @@ final class ModelData: ObservableObject {
             server: documentServer!,
             key: localLibraryURL.lastPathComponent,
             name: localLibraryURL.lastPathComponent)
-        var localLibrary = calibreLibraries[tmpLibrary.id]
+        localLibrary = calibreLibraries[tmpLibrary.id]
         if localLibrary == nil {
             calibreLibraries[tmpLibrary.id] = tmpLibrary
             localLibrary = calibreLibraries[tmpLibrary.id]
@@ -329,82 +330,24 @@ final class ModelData: ObservableObject {
                 return
             }
             
-            CalibreBook.Format.allCases.forEach { format in
-                guard fileName.hasSuffix(".\(format.ext)") else {
-                    return
-                }
-                
-                let fileURL = documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-                guard let md5 = fileName.data(using: .utf8)?.md5() else {
-                    return
-                }
-                let bookId = Int32(bigEndian: md5.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
-                
-                var book = CalibreBook(
-                    id: bookId,
-                    library: localLibrary!
-                )
-                
-                guard booksInShelf[book.inShelfId] == nil else {
-                    return  //already loaded
-                }
-                let streamer = Streamer()
-                streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
-                    guard let publication = try? result.get() else {
-                        print("Streamer \(fileURL)")
-                        return
-                    }
-                    
-                    var formatVal: [String: Any] = [:]
-                    formatVal["filename"] = fileName
-                    
-                    guard let formatData = try? JSONSerialization.data(withJSONObject: formatVal, options: []).base64EncodedString() else {
-                        return
-                    }
-                    book.formats[format.rawValue] = formatData
-                    
-                    book.inShelf = true
-                    
-                    book.title = publication.metadata.title
-                    if let cover = publication.cover, let coverData = cover.pngData() {
-                        self.kfImageCache.storeToDisk(coverData, forKey: book.coverURL.absoluteString)
-                    }
-                    
-                    
-                    book.readPos.addInitialPosition(
-                        self.deviceName,
-                        self.formatReaderMap[format]!.first!.rawValue
-                    )
-                    
-                    self.booksInShelf[book.inShelfId] = book
-                }
-                    
-            }
-            
+            loadLocalLibraryBookMetadata(fileName: fileName, in: localLibrary!, on: documentServer!)
         }
         
         let removedBooks: [CalibreBook] = booksInShelf.compactMap { inShelfId, book in
-            guard let localBaseUrl = book.library.server.localBaseUrl else {
-                return nil
-            }
-            
+            guard book.library.server.isLocal else { return nil }
             let existingFormats: [String] = book.formats.compactMap {
-                guard let formatData = Data(base64Encoded: $1),
-                   let formatVal = try? JSONSerialization.jsonObject(with: formatData, options: []) as? [String: Any],
-                   let localFilename = formatVal["filename"] as? String else {
-                    return nil
-                }
+                guard let format = CalibreBook.Format(rawValue: $0.key),
+                      let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
                 
-                let fileURL = localBaseUrl.appendingPathComponent(book.library.key, isDirectory: true).appendingPathComponent(localFilename, isDirectory: false)
                 var isDirectory : ObjCBool = false
-                guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory) else {
+                guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
                     return nil
                 }
                 guard isDirectory.boolValue == false else {
                     return nil
                 }
                 
-                return $0
+                return $0.key
             }
 
             guard existingFormats.isEmpty else {
@@ -1165,6 +1108,79 @@ final class ModelData: ObservableObject {
         }
         
         return nil
+    }
+    
+    func onOpenURL(url: URL) {
+        guard let documentDirectoryURL = try? FileManager.default.url(
+                for: .documentDirectory,
+                in: .userDomainMask,
+                appropriateFor: nil,
+                create: false) else { return }
+        
+        
+        if url.isFileURL && !url.isAppFile {
+            do {
+                try FileManager.default.copyItem(at: url, to: documentDirectoryURL.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false))
+                
+                loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary!, on: documentServer!)
+            } catch {
+                print(error)
+            }
+        }
+    }
+    
+    func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
+        CalibreBook.Format.allCases.forEach { format in
+            guard fileName.hasSuffix(".\(format.ext)") else {
+                return
+            }
+            
+            let fileURL = server.localBaseUrl!.appendingPathComponent(library.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+            guard let md5 = fileName.data(using: .utf8)?.md5() else {
+                return
+            }
+            let bookId = Int32(bigEndian: md5.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
+            
+            var book = CalibreBook(
+                id: bookId,
+                library: library
+            )
+            
+            guard booksInShelf[book.inShelfId] == nil else {
+                return  //already loaded
+            }
+            let streamer = Streamer()
+            streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
+                guard let publication = try? result.get() else {
+                    print("Streamer \(fileURL)")
+                    return
+                }
+                
+                var formatVal: [String: Any] = [:]
+                formatVal["filename"] = fileName
+                
+                guard let formatData = try? JSONSerialization.data(withJSONObject: formatVal, options: []).base64EncodedString() else {
+                    return
+                }
+                book.formats[format.rawValue] = formatData
+                
+                book.inShelf = true
+                
+                book.title = publication.metadata.title
+                if let cover = publication.cover, let coverData = cover.pngData() {
+                    self.kfImageCache.storeToDisk(coverData, forKey: book.coverURL.absoluteString)
+                }
+                
+                
+                book.readPos.addInitialPosition(
+                    self.deviceName,
+                    self.formatReaderMap[format]!.first!.rawValue
+                )
+                
+                self.booksInShelf[book.inShelfId] = book
+            }
+                
+        }
     }
     
     func deleteLocalLibraryBook(book: CalibreBook, format: CalibreBook.Format) {

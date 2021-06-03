@@ -10,15 +10,15 @@ import SwiftUI
 
 struct SectionShelfUI: UIViewControllerRepresentable {
     @EnvironmentObject var modelData: ModelData
-    let shelfController = SectionShelfController()
-    
+
     func makeUIViewController(context: Context) -> SectionShelfController {
+        let shelfController = SectionShelfController()
         shelfController.modelData = modelData
         return shelfController
     }
     
     func updateUIViewController(_ uiView: SectionShelfController, context: Context) {
-        // shelfController.updateBookModel()
+        uiView.updateBookModel()
     }
     
 }
