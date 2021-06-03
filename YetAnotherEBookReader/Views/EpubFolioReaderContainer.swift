@@ -28,16 +28,6 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         
         self.folioReader.delegate = self
         
-//        savedPositionObserver = folioReader.observe(\.savedPositionForCurrentBook, options: .new) { [self] reader, change in
-//            if let bookProgress = reader.readerCenter?.getBookProgress(), let newValue = change.newValue, let position = newValue {
-//                updatedReadingPosition.0 = bookProgress
-//                updatedReadingPosition.1 = position
-//                if let currentChapterName = reader.readerCenter?.getCurrentChapterName() {
-//                    updatedReadingPosition.2 = currentChapterName
-//                }
-//            }
-//        }
-        
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
         
@@ -60,26 +50,25 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
 //    }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
-        if let chapterProgress = folioReader.readerCenter?.getCurrentPageProgress(),
-           let bookProgress = folioReader.readerCenter?.getBookProgress() {
-            updatedReadingPosition.0 = chapterProgress
-            updatedReadingPosition.1 = bookProgress
-            updatedReadingPosition.2 = folioReader.savedPositionForCurrentBook!
-            if let currentChapterName = folioReader.readerCenter?.getCurrentChapterName() {
-                updatedReadingPosition.3 = currentChapterName
-            }
-            
-            modelData?.updatedReadingPosition.lastChapterProgress = updatedReadingPosition.0
-            modelData?.updatedReadingPosition.lastProgress = updatedReadingPosition.1
-            
-            modelData?.updatedReadingPosition.lastPosition[0] = updatedReadingPosition.2["pageNumber"]! as! Int
-            modelData?.updatedReadingPosition.lastPosition[1] = Int((updatedReadingPosition.2["pageOffsetX"]! as! CGFloat).rounded())
-            modelData?.updatedReadingPosition.lastPosition[2] = Int((updatedReadingPosition.2["pageOffsetY"]! as! CGFloat).rounded())
-            modelData?.updatedReadingPosition.lastReadPage = updatedReadingPosition.2["pageNumber"]! as! Int
-            
-            modelData?.updatedReadingPosition.lastReadChapter = updatedReadingPosition.3
-            
-            modelData?.updatedReadingPosition.readerName = "FolioReader"
+        guard let chapterProgress = folioReader.readerCenter?.getCurrentPageProgress(),
+           let bookProgress = folioReader.readerCenter?.getBookProgress() else {
+            return
         }
+        
+        if let currentChapterName = folioReader.readerCenter?.getCurrentChapterName() {
+            modelData?.updatedReadingPosition.lastReadChapter = currentChapterName
+        }
+        
+        modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
+        modelData?.updatedReadingPosition.lastProgress = bookProgress
+        
+        modelData?.updatedReadingPosition.lastPosition[0] = folioReader.savedPositionForCurrentBook!["pageNumber"]! as! Int
+        modelData?.updatedReadingPosition.lastPosition[1] = Int((folioReader.savedPositionForCurrentBook!["pageOffsetX"]! as! CGFloat).rounded())
+        modelData?.updatedReadingPosition.lastPosition[2] = Int((folioReader.savedPositionForCurrentBook!["pageOffsetY"]! as! CGFloat).rounded())
+        modelData?.updatedReadingPosition.lastReadPage = folioReader.savedPositionForCurrentBook!["pageNumber"]! as! Int
+        
+        modelData?.updatedReadingPosition.readerName = "FolioReader"
     }
+    
+
 }

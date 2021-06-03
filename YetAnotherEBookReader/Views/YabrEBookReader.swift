@@ -13,7 +13,7 @@ import R2Shared
 import R2Streamer
 
 @available(macCatalyst 14.0, *)
-struct EBookReaderSwiftUI: UIViewControllerRepresentable {
+struct YabrEBookReader: UIViewControllerRepresentable {
     
     let bookURL : URL
     let bookFormat: CalibreBook.Format
@@ -263,5 +263,4 @@ struct EBookReaderSwiftUI: UIViewControllerRepresentable {
         return config
     }
 
-    
 }

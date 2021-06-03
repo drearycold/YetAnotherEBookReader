@@ -183,24 +183,18 @@ struct BookDetailView: View {
             return Alert(title: Text(item.id))
         }
         .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
-            EBookReader(
-                bookURL: getSavedUrl(book: modelData.readingBook!),
-                bookFormat: selectedFormat,
-                bookReader: selectedFormatReader
-            )
+            if let book = modelData.readingBook,
+               let bookFileUrl = getSavedUrl(book: book, format: selectedFormat) {
+                YabrEBookReader(
+                    bookURL: bookFileUrl,
+                    bookFormat: selectedFormat,
+                    bookReader: selectedFormatReader
+                )
+            } else {
+                Text("Nil Book")
+            }
         }
-//        .popover(isPresented: $presentingUpdateAlert) {
-//            if modelData.updatingMetadata {
-//                VStack {
-//                    Text("Updating")
-//                }.frame(width: 200, height: 100, alignment: .center)
-//            } else {
-//                VStack {
-//                    Text("Updated")
-//                    Text("modelData.updatingMetadataStatus")
-//                }.frame(width: 200, height: 100, alignment: .center)
-//            }
-//        }
+
         .disabled(modelData.readingBook == nil)
     }
     
@@ -584,30 +578,6 @@ struct BookDetailView: View {
                 Image(systemName: "book")
             }.disabled(modelData.readingBook?.inShelf == false)
         }
-    }
-    
-    func getSavedUrl(book: CalibreBook) -> URL {
-        var downloadBaseURL = try!
-            FileManager.default.url(for: .documentDirectory,
-                                    in: .userDomainMask,
-                                    appropriateFor: nil,
-                                    create: false)
-        var savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())")
-        if FileManager.default.fileExists(atPath: savedURL.path) {
-            return savedURL
-        }
-        
-        downloadBaseURL = try!
-            FileManager.default.url(for: .cachesDirectory,
-                                    in: .userDomainMask,
-                                    appropriateFor: nil,
-                                    create: false)
-        savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())")
-        if FileManager.default.fileExists(atPath: savedURL.path) {
-            return savedURL
-        }
-        
-        return savedURL
     }
     
     func deleteBook() {

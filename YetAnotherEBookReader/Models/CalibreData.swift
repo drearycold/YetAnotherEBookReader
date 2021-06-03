@@ -19,7 +19,22 @@ struct CalibreServer: Hashable, Identifiable {
         }
     }
     
+    var isLocal: Bool {
+        baseUrl.hasPrefix(".")
+    }
+    
+    var localBaseUrl: URL? {
+        guard isLocal else {
+            return nil
+        }
+        guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false) else {
+            return nil
+        }
+        return documentDirectoryURL
+    }
+    
     var baseUrl: String
+    var alternativeUrls = [String]()
     var username: String
     var password: String
     var defaultLibrary = ""
@@ -64,7 +79,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     let key: String
     let name: String
     
-    var readPosColumnName: String?
+    var readPosColumnName: String? = nil
     var readPosColumnNameDefault: String {
         if server.username.isEmpty {
             return "#read_pos"
@@ -73,7 +88,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         }
     }
     
-    var goodreadsSyncProfileName: String?
+    var goodreadsSyncProfileName: String? = nil
     var goodreadsSyncProfileNameDefault: String {
         return "Default"
     }
@@ -219,6 +234,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         
         
         var id: String { self.rawValue }
+        
+        var ext: String { self.rawValue.lowercased() }
     }
 }
 

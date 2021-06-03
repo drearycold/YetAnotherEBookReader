@@ -41,6 +41,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
          */
         
         bookModel = modelData.booksInShelf
+            .filter { $0.value.library.server.isLocal == false}
             .sorted { $0.value.lastModified > $1.value.lastModified }
             .reduce(into: [String: [BookModel]]()) {
                 let newBook = BookModel(

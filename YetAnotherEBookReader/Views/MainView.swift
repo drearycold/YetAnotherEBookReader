@@ -13,54 +13,97 @@ struct MainView: View {
     
     @State private var activeTab = 0
     
+    struct AlertItem : Identifiable {
+        var id: String
+        var msg: String?
+    }
+    @State private var alertItem: AlertItem?
+    
     var body: some View {
         TabView(selection: $activeTab) {
+            PlainShelfUI()
+                .fullScreenCover(isPresented: $modelData.presentingEBookReaderForPlainShelf, onDismiss: { modelData.presentingEBookReaderForPlainShelf = false }) {
+                    if let book = modelData.readingBook,
+                       let bookFormatRaw = book.formats.first?.key,
+                       let bookFormat = CalibreBook.Format(rawValue: bookFormatRaw),
+                       let bookFormatReaderType = modelData.formatReaderMap[bookFormat]?.first,
+                       let bookFileUrl = getSavedUrl(book: book, format: bookFormat)
+                       {
+                        YabrEBookReader(
+                            bookURL: bookFileUrl,
+                            bookFormat: bookFormat,
+                            bookReader: bookFormatReaderType
+                        )
+                    } else {
+                        Text("Nil Book")
+                    }
+                }
+                .onChange(of: modelData.presentingEBookReaderForPlainShelf) { presenting in
+                    guard presenting == false else {
+                        return
+                    }
+                    let originalPosition = modelData.getLatestReadingPosition() ?? modelData.getInitialReadingPosition()
+                    if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
+                        return
+                    }
+                    if modelData.updatedReadingPosition < originalPosition {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(originalPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                        }
+                    } else if originalPosition << modelData.updatedReadingPosition {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(originalPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                        }
+                    }
+                    else {
+                        modelData.updateCurrentPosition()
+                    }
+                }
+                .alert(item: $alertItem) { item in
+                    if item.id == "ForwardProgress" {
+                        return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                            modelData.updateCurrentPosition()
+                        }), secondaryButton: .cancel())
+                    }
+                    if item.id == "BackwardProgress" {
+                        return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                            modelData.updateCurrentPosition()
+                        }), secondaryButton: .cancel())
+                    }
+                    return Alert(title: Text(item.id))
+                }
+                .tabItem {
+                    Image(systemName: "doc.text.fill")
+                    Text("Local")
+                }
+                .tag(1)
+                
+            
             SectionShelfUI()
                 .tabItem {
-                    Image(systemName: "0.square.fill")
+                    Image(systemName: "books.vertical.fill")
                     Text("Shelf")
                 }
                 .tag(0)
                 
-            PlainShelfUI()
-                .tabItem {
-                    Image(systemName: "1.square.fill")
-                    Text("Shelf")
-                }
-                .tag(1)
-            
-            
             LibraryInfoView()
                 .tabItem {
-                    Image(systemName: "2.square.fill")
+                    Image(systemName: "building.columns.fill")
                     Text("Library")
                 }
                 .tag(2)
             
             ServerView()
                 .tabItem {
-                    Image(systemName: "3.square.fill")
+                    Image(systemName: "server.rack")
                     Text("Server")
                 }
                 .tag(3)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
-        .onChange(of: activeTab, perform: { index in
-            if index == 1 {
-                
-            }
-            
-            if index == 3 {
-                // startLoad()
-            }
-        })
-        
         
     }
-    
-    
-    
     
 }
 

@@ -243,7 +243,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
             pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
         }
         
-        var destPageNum = (modelData?.getSelectedReadingPosition()?.lastPosition[0] ?? 1) - 1
+        var destPageNum = (modelData?.updatedReadingPosition.lastPosition[0] ?? 1) - 1
         if destPageNum < 0 {
             destPageNum = 0
         }
@@ -258,65 +258,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     }
 
     override func viewDidDisappear(_ animated: Bool) {
+        updateReadingProgress()
+        
         super.viewDidDisappear(animated)
-        
-        var position = [String : Any]()
-        if let curDest = pdfView?.currentDestination {
-            let pageNum = curDest.page!.pageRef?.pageNumber ?? 1
-            position["pageNumber"] = pageNum
-            position["pageOffsetX"] = curDest.point.x
-            let viewFrameInPDF = pdfView!.convert(pdfView!.frame, to: curDest.page!)
-            let navFrameInPDF = pdfView!.convert(navigationController!.navigationBar.frame, to: curDest.page!)
-            print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
-            position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
-            
-            let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
-            
-            var chapterProgress = 0.0
-            let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
-            if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
-                let curIndex = firstIndex.advanced(by: 0)
-                let nextIndex = firstIndex.advanced(by: 1)
-                let chapterStartPageNum = tocList[curIndex].1
-                let chapterEndPageNum = nextIndex < tocList.count ?
-                    tocList[nextIndex].1 + 1 : pdfView!.document!.pageCount + 1
-                if chapterEndPageNum > chapterStartPageNum {
-                    chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
-                }
-            }
-            
-            modelData?.updatedReadingPosition.lastPosition[0] = curDest.page!.pageRef?.pageNumber ?? 1
-            modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
-            modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
-            modelData?.updatedReadingPosition.lastReadPage = curDest.page!.pageRef?.pageNumber ?? 1
-            modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
-            modelData?.updatedReadingPosition.lastProgress = bookProgress
-            modelData?.updatedReadingPosition.lastReadChapter = chapterName
-            modelData?.updatedReadingPosition.readerName = "YabrPDFView"
-            
-//            modelData?.updateCurrentPosition(progress: progress, position: position)
-        }
-        
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
-        let pdfOptionsRealm = PDFOptionsRealm()
-        pdfOptionsRealm.id = modelData!.readingBook!.id
-        pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
-        pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
-        pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
-        pdfOptionsRealm.hMarginAutoScaler = pdfOptions.hMarginAutoScaler
-        pdfOptionsRealm.vMarginAutoScaler = pdfOptions.vMarginAutoScaler
-        pdfOptionsRealm.hMarginDetectStrength = pdfOptions.hMarginDetectStrength
-        pdfOptionsRealm.vMarginDetectStrength = pdfOptions.vMarginDetectStrength
-        pdfOptionsRealm.lastScale = pdfOptions.lastScale
-        pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
-        
-        let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: pdfOptionsRealm.id), pdfOptionsRealm.libraryName)
-        )
-        try! realm.write {
-            realm.delete(pdfOptionsRealmResult)
-            realm.add(pdfOptionsRealm)
-        }
     }
     
     class PDFPageWithBackground : PDFPage {
@@ -491,7 +435,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
                 
                 print("BEFORE POINT curPoint=\(curPoint) newDestPoint=\(newDest.point) \(boundsForCropBox)")
                 
-                if pdfOptions.rememberInPagePosition && notification.object != nil, let lastPosition = modelData?.getSelectedReadingPosition()?.lastPosition, page.pageRef?.pageNumber == lastPosition[0] {
+                if pdfOptions.rememberInPagePosition && notification.object != nil, let lastPosition = modelData?.updatedReadingPosition.lastPosition, page.pageRef?.pageNumber == lastPosition[0] {
                     let lastDest = PDFDestination(
                         page: page,
                         at: CGPoint(
@@ -722,7 +666,69 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
+        updateReadingProgress()
+        
         self.dismiss(animated: true, completion: nil)
+    }
+    
+    func updateReadingProgress() {
+        var position = [String : Any]()
+        if let curDest = pdfView?.currentDestination {
+            let pageNum = curDest.page!.pageRef?.pageNumber ?? 1
+            position["pageNumber"] = pageNum
+            position["pageOffsetX"] = curDest.point.x
+            let viewFrameInPDF = pdfView!.convert(pdfView!.frame, to: curDest.page!)
+            let navFrameInPDF = pdfView!.convert(navigationController!.navigationBar.frame, to: curDest.page!)
+            print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
+            position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
+            
+            let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
+            
+            var chapterProgress = 0.0
+            let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
+            if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
+                let curIndex = firstIndex.advanced(by: 0)
+                let nextIndex = firstIndex.advanced(by: 1)
+                let chapterStartPageNum = tocList[curIndex].1
+                let chapterEndPageNum = nextIndex < tocList.count ?
+                    tocList[nextIndex].1 + 1 : pdfView!.document!.pageCount + 1
+                if chapterEndPageNum > chapterStartPageNum {
+                    chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
+                }
+            }
+            
+            modelData?.updatedReadingPosition.lastPosition[0] = curDest.page!.pageRef?.pageNumber ?? 1
+            modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
+            modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
+            modelData?.updatedReadingPosition.lastReadPage = curDest.page!.pageRef?.pageNumber ?? 1
+            modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
+            modelData?.updatedReadingPosition.lastProgress = bookProgress
+            modelData?.updatedReadingPosition.lastReadChapter = chapterName
+            modelData?.updatedReadingPosition.readerName = "YabrPDFView"
+            
+//            modelData?.updateCurrentPosition(progress: progress, position: position)
+        }
+        
+        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
+        let pdfOptionsRealm = PDFOptionsRealm()
+        pdfOptionsRealm.id = modelData!.readingBook!.id
+        pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
+        pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
+        pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
+        pdfOptionsRealm.hMarginAutoScaler = pdfOptions.hMarginAutoScaler
+        pdfOptionsRealm.vMarginAutoScaler = pdfOptions.vMarginAutoScaler
+        pdfOptionsRealm.hMarginDetectStrength = pdfOptions.hMarginDetectStrength
+        pdfOptionsRealm.vMarginDetectStrength = pdfOptions.vMarginDetectStrength
+        pdfOptionsRealm.lastScale = pdfOptions.lastScale
+        pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+        
+        let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
+            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: pdfOptionsRealm.id), pdfOptionsRealm.libraryName)
+        )
+        try! realm.write {
+            realm.delete(pdfOptionsRealmResult)
+            realm.add(pdfOptionsRealm)
+        }
     }
     
 //    @objc func lookupStarDict() {
