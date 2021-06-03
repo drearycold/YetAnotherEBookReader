@@ -146,7 +146,7 @@ struct BookDetailView: View {
                     title: Text("Need Download"),
                     message: Text("Please Download First"),
                     primaryButton: .default(Text("Download"), action: {
-                        modelData.downloadFormat(book: modelData.readingBook!, format: selectedFormat) { result in
+                        modelData.downloadFormat(book: modelData.readingBook!, format: selectedFormat, modificationDate: selectedFormatMTime) { result in
                             
                         }
                     }),
@@ -527,10 +527,12 @@ struct BookDetailView: View {
                     modelData.clearCache(inShelfId: book.inShelfId, selectedFormat)
                     modelData.removeFromShelf(inShelfId: book.inShelfId)
                     downloadStatus = .INITIAL
+                    initCacheStates(book: book, format: selectedFormat)
                 } else if downloadStatus == .INITIAL {
-                    let downloading = modelData.downloadFormat(book: book, format: selectedFormat) { isSuccess in
+                    let downloading = modelData.downloadFormat(book: book, format: selectedFormat, modificationDate: selectedFormatMTime) { isSuccess in
                         if isSuccess {
                             downloadStatus = .DOWNLOADED
+                            initCacheStates(book: book, format: selectedFormat)
                         } else {
                             downloadStatus = .INITIAL
                             alertItem = AlertItem(id: "DownloadFailure")

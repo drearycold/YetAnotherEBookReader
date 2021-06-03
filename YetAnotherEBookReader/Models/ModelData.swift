@@ -196,9 +196,13 @@ final class ModelData: ObservableObject {
         booksInShelfRealm.forEach {
             // print(bookRealm)
             guard let server = calibreServers[CalibreServer(baseUrl: $0.serverUrl!, username: $0.serverUsername!, password: "").id] else {
+                print("ERROR booksInShelfRealm missing server \($0)")
                 return
             }
-            let library = CalibreLibrary(server: server, key: $0.libraryName!, name: $0.libraryName!)
+            guard let library = calibreLibraries[CalibreLibrary(server: server, key: $0.libraryName!, name: $0.libraryName!).id] else {
+                print("ERROR booksInShelfRealm missing library \($0)")
+                return
+            }
             let book = self.convert(library: library, bookRealm: $0)
             self.booksInShelf[book.inShelfId] = book
             
@@ -965,31 +969,36 @@ final class ModelData: ObservableObject {
     }
     
     func downloadFormat(book: CalibreBook, format: CalibreBook.Format, modificationDate: Date? = nil, overwrite: Bool = false, complete: @escaping (Bool) -> Void) -> Bool {
-        guard book.formats[format.rawValue] != nil else {
+        guard book.formats.contains(where: { $0.key == format.rawValue }) else {
             complete(false)
             return false
         }
         
-        let url = URL(string: book.library.server.baseUrl + "/get/\(format.rawValue)/\(book.id)/\(book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")
-        defaultLog.info("downloadURL: \(url!.absoluteString)")
-        
-        let downloadBaseURL = try!
-            FileManager.default.url(for: .cachesDirectory,
-                                    in: .userDomainMask,
-                                    appropriateFor: nil,
-                                    create: false)
-        if !FileManager.default.fileExists(atPath: downloadBaseURL.path) {
-            try! FileManager.default.createDirectory(atPath: downloadBaseURL.path, withIntermediateDirectories: true)
+        guard let url = URL(string: book.library.server.baseUrl)?
+                .appendingPathComponent("get", isDirectory: true)
+                .appendingPathComponent(format.rawValue, isDirectory: true)
+                .appendingPathComponent(book.id.description, isDirectory: true)
+                .appendingPathComponent(book.library.key, isDirectory: false)
+                else {
+            complete(false)
+            return false
         }
-        let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
+//        let url = URL(string: book.library.server.baseUrl + "/get/\(format.rawValue)/\(book.id)/\(book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")
+        defaultLog.info("downloadURL: \(url.absoluteString)")
+        
+        guard let savedURL = getSavedUrl(book: book, format: format) else {
+            complete(false)
+            return false
+        }
         
         self.defaultLog.info("savedURL: \(savedURL.absoluteString)")
+        
         if FileManager.default.fileExists(atPath: savedURL.path) && !overwrite {
             complete(true)
             return false
         }
         
-        let downloadTask = URLSession.shared.downloadTask(with: url!) {
+        let downloadTask = URLSession.shared.downloadTask(with: url) {
             urlOrNil, responseOrNil, errorOrNil in
             // check for and handle errors:
             // * errorOrNil should be nil
@@ -1026,101 +1035,43 @@ final class ModelData: ObservableObject {
             return
         }
         
-        do {
-            let documentURL = try FileManager.default.url(for: .documentDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = documentURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
-            }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
-        }
+        clearCache(book: book,  format: format)
         
-        do {
-            let downloadBaseURL = try FileManager.default.url(for: .cachesDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
-            }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
-        }
     }
     
     func clearCache(book: CalibreBook, format: CalibreBook.Format) {
-        do {
-            let documentURL = try FileManager.default.url(for: .documentDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = documentURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
-            }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
-        }
+        guard let bookFileURL = getSavedUrl(book: book, format: format) else { return }
         
-        do {
-            let downloadBaseURL = try FileManager.default.url(for: .cachesDirectory,
-                                                          in: .userDomainMask,
-                                                          appropriateFor: nil,
-                                                          create: false)
-            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-            if( isFileExist) {
-                try FileManager.default.removeItem(at: savedURL)
+        if FileManager.default.fileExists(atPath: bookFileURL.path) {
+            do {
+                try FileManager.default.removeItem(at: bookFileURL)
+            } catch {
+                defaultLog.error("clearCache \(error.localizedDescription)")
             }
-        } catch {
-            defaultLog.error("clearCache \(error.localizedDescription)")
         }
     }
     
     func getCacheInfo(book: CalibreBook, format: CalibreBook.Format) -> (UInt64, Date?)? {
         var resultStorage: ObjCBool = false
-        if let documentURL = try? FileManager.default.url(for: .documentDirectory,
-                                                      in: .userDomainMask,
-                                                      appropriateFor: nil,
-                                                      create: false) {
-            let savedURL = documentURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            if FileManager.default.fileExists(atPath: savedURL.path, isDirectory: &resultStorage), resultStorage.boolValue == false, let attribs = try? FileManager.default.attributesOfItem(atPath: savedURL.path) as NSDictionary {
-                return (attribs.fileSize(), attribs.fileModificationDate())
-            }
+        guard let bookFileURL = getSavedUrl(book: book, format: format) else {
+            return nil
         }
         
-        if let downloadBaseURL = try? FileManager.default.url(for: .cachesDirectory,
-                                                             in: .userDomainMask,
-                                                             appropriateFor: nil,
-                                                             create: false) {
-            let savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-            if FileManager.default.fileExists(atPath: savedURL.path), let attribs = try? FileManager.default.attributesOfItem(atPath: savedURL.path) as NSDictionary {
-                return (attribs.fileSize(), attribs.fileModificationDate())
-            }
+        if FileManager.default.fileExists(atPath: bookFileURL.path, isDirectory: &resultStorage),
+           resultStorage.boolValue == false,
+           let attribs = try? FileManager.default.attributesOfItem(atPath: bookFileURL.path) as NSDictionary {
+            return (attribs.fileSize(), attribs.fileModificationDate())
         }
         
         return nil
     }
     
     func onOpenURL(url: URL) {
-        guard let documentDirectoryURL = try? FileManager.default.url(
-                for: .documentDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: false) else { return }
-        
+        guard let localBaseUrl = documentServer?.localBaseUrl else { return }
         
         if url.isFileURL && !url.isAppFile {
             do {
-                try FileManager.default.copyItem(at: url, to: documentDirectoryURL.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false))
+                try FileManager.default.copyItem(at: url, to: localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false))
                 
                 loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary!, on: documentServer!)
             } catch {
@@ -1178,6 +1129,8 @@ final class ModelData: ObservableObject {
                 )
                 
                 self.booksInShelf[book.inShelfId] = book
+                
+                self.updateBook(book: book)
             }
                 
         }

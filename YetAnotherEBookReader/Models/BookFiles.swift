@@ -8,35 +8,39 @@
 import Foundation
 
 func getSavedUrl(book: CalibreBook, format: CalibreBook.Format) -> URL? {
-    var downloadBaseURL = try!
-        FileManager.default.url(for: .documentDirectory,
-                                in: .userDomainMask,
-                                appropriateFor: nil,
-                                create: false)
-    var savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-    if FileManager.default.fileExists(atPath: savedURL.path) {
-        return savedURL
+    if book.library.server.isLocal {
+        if let localBaseUrl = book.library.server.localBaseUrl,
+           let formatDataEncoded = book.formats[format.rawValue],
+           let formatData = Data(base64Encoded: formatDataEncoded),
+           let formatVal = try? JSONSerialization.jsonObject(with: formatData, options: []) as? [String: Any],
+           let localFilename = formatVal["filename"] as? String {
+            return localBaseUrl
+                    .appendingPathComponent(book.library.key, isDirectory: true)
+                    .appendingPathComponent(localFilename, isDirectory: false)
+        }
+    } else {
+        if let downloadBaseURL =
+            try? FileManager.default.url(for: .documentDirectory,
+                                    in: .userDomainMask,
+                                    appropriateFor: nil,
+                                    create: false)
+            .appendingPathComponent("Downloaded Books", isDirectory: true) {
+            if FileManager.default.fileExists(atPath: downloadBaseURL.path) == false {
+                do {
+                    try FileManager.default.createDirectory(at: downloadBaseURL, withIntermediateDirectories: true, attributes: nil)
+                } catch {
+                    print(error)
+                    return nil
+                }
+            }
+            let savedURL = downloadBaseURL
+                .appendingPathComponent("\(book.library.key) - \(book.id).\(format.rawValue.lowercased())")
+            
+            return savedURL
+        }
     }
     
-    downloadBaseURL = try!
-        FileManager.default.url(for: .cachesDirectory,
-                                in: .userDomainMask,
-                                appropriateFor: nil,
-                                create: false)
-    savedURL = downloadBaseURL.appendingPathComponent("\(book.library.name) - \(book.id).\(format.rawValue.lowercased())")
-    if FileManager.default.fileExists(atPath: savedURL.path) {
-        return savedURL
-    }
-    
-    if let localBaseUrl = book.library.server.localBaseUrl,
-       let formatDataEncoded = book.formats[format.rawValue],
-       let formatData = Data(base64Encoded: formatDataEncoded),
-       let formatVal = try? JSONSerialization.jsonObject(with: formatData, options: []) as? [String: Any],
-       let localFilename = formatVal["filename"] as? String {
-        return localBaseUrl.appendingPathComponent(book.library.key, isDirectory: true).appendingPathComponent(localFilename, isDirectory: false)
-    }
-    
-    return savedURL
+    return nil
 }
 
 func makeFolioReaderUnzipPath() -> URL? {
