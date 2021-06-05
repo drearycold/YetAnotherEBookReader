@@ -127,14 +127,29 @@ final class ModelData: ObservableObject {
     
     var readingBookInShelfId: String? = nil {
         didSet {
-            if readingBookInShelfId != nil {
-                readingBook = booksInShelf[readingBookInShelfId!]
+            guard let readingBookInShelfId = readingBookInShelfId else {
+                readingBook = nil
+                return
+            }
+            guard readingBook?.inShelfId != readingBookInShelfId else { return }
+            readingBook = booksInShelf[readingBookInShelfId]
+        }
+    }
+    @Published var readingBook: CalibreBook? = nil {
+        didSet {
+            guard readingBook != nil else { return }
+            
+            if let position = getDeviceReadingPosition() {
+                self.selectedPosition = position.id
+            } else if let position = getLatestReadingPosition() {
+                self.selectedPosition = position.id
+            } else {
+                self.selectedPosition = getInitialReadingPosition().id
             }
         }
     }
-    @Published var readingBook: CalibreBook? = nil
     
-    @Published var presentingEBookReaderForPlainShelf = false
+    @Published var presentingEBookReaderFromShelf = false
     
     let readingBookReloadCover = PassthroughSubject<(), Never>()
     
@@ -241,9 +256,9 @@ final class ModelData: ObservableObject {
                 defaultFormat = CalibreBook.Format.EPUB
         }
         
-        formatReaderMap[CalibreBook.Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumReader]
-        formatReaderMap[CalibreBook.Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumReader]
-        formatReaderMap[CalibreBook.Format.CBZ] = [ReaderType.ReadiumReader]
+        formatReaderMap[CalibreBook.Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
+        formatReaderMap[CalibreBook.Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
+        formatReaderMap[CalibreBook.Format.CBZ] = [ReaderType.ReadiumCBZ]
 
     }
     
@@ -1091,13 +1106,20 @@ final class ModelData: ObservableObject {
         guard let localBaseUrl = documentServer?.localBaseUrl else { return }
         
         if url.isFileURL && !url.isAppFile {
+            guard url.startAccessingSecurityScopedResource() else {
+                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
+                return
+            }
+
             do {
                 try FileManager.default.copyItem(at: url, to: localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false))
                 
                 loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary!, on: documentServer!)
             } catch {
-                print(error)
+                print("onOpenURL \(error)")
             }
+            
+            url.stopAccessingSecurityScopedResource()
         }
     }
     

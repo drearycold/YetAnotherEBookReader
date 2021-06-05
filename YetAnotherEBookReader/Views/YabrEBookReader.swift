@@ -23,7 +23,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIViewController {
         let nav = UINavigationController()
-        if bookFormat == CalibreBook.Format.EPUB && bookReader == ReaderType.ReadiumReader {
+        if bookFormat == CalibreBook.Format.EPUB && bookReader == ReaderType.ReadiumEPUB {
             
             guard let server = PublicationServer() else {
                 return nav
@@ -85,7 +85,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return epubReaderContainer
         }
         
-        if bookFormat == CalibreBook.Format.PDF && bookReader == ReaderType.ReadiumReader {
+        if bookFormat == CalibreBook.Format.PDF && bookReader == ReaderType.ReadiumPDF {
             let nav = UINavigationController()
             
             guard let server = PublicationServer() else {
@@ -166,7 +166,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return nav
         }
         
-        if bookFormat == CalibreBook.Format.CBZ && bookReader == ReaderType.ReadiumReader {
+        if bookFormat == CalibreBook.Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
             let nav = UINavigationController()
             
             guard let server = PublicationServer() else {

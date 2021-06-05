@@ -8,6 +8,7 @@
 
 import ShelfView_iOS
 import SwiftUI
+import Combine
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -17,13 +18,14 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var bookModel = [String: [BookModel]]()
     var shelfView: SectionShelfView!
+    var shelfBookSink: AnyCancellable?
+
 #if canImport(GoogleMobileAds)
     var bannerView: GADBannerView!
 #endif
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
-
     override var canBecomeFirstResponder: Bool {
         true
     }
@@ -103,14 +105,31 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         ])
         #endif
         
-        updateBookModel()
-
+        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
+            self?.updateBookModel()
+        }
     }
 
     func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         modelData.readingBookInShelfId = bookId
+        guard modelData.getSelectedReadingPosition() != nil else {
+            //TODO
+            return
+        }
+        modelData.presentingEBookReaderFromShelf = true
+    }
+
+    func onBookLongClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+        print("I just clicked longer \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
+
+        modelData.readingBookInShelfId = bookId
+//        let detailMenuItem = UIMenuItem(title: "Details", action: #selector(onBookLongClickedDetailMenuItem(_:)))
+//        UIMenuController.shared.menuItems = [detailMenuItem]
+//        becomeFirstResponder()
+//        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
+        
         let bookDetailView = BookDetailView().environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
@@ -126,10 +145,15 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         
         self.present(nav, animated: true, completion: nil)
     }
-
+    
+    @objc func onBookLongClickedDetailMenuItem(_ sender: Any?) {
+        
+    }
+    
     @objc func finishReading(sender: UIBarButtonItem) {
-        self.dismiss(animated: true, completion: nil)
-        modelData.readingBookInShelfId = nil
+        self.dismiss(animated: true) {
+            self.modelData.readingBookInShelfId = nil
+        }
     }
     
     func delay(_ delay: Double, closure: @escaping () -> ()) {

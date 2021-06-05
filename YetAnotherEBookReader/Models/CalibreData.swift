@@ -465,7 +465,9 @@ enum ReaderType: String, CaseIterable, Identifiable {
     
     case FolioReader
     case YabrPDFView
-    case ReadiumReader
+    case ReadiumEPUB
+    case ReadiumPDF
+    case ReadiumCBZ
     
     var id: String { self.rawValue }
 }

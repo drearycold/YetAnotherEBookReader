@@ -9,6 +9,7 @@
 import ShelfView_iOS
 import SwiftUI
 import FolioReaderKit
+import Combine
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -18,6 +19,8 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
+    var shelfBookSink: AnyCancellable?
+    
 #if canImport(GoogleMobileAds)
     var bannerView: GADBannerView!
 #endif
@@ -92,16 +95,18 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         ])
         #endif
         
-        NotificationCenter.default.addObserver(modelData.$booksInShelf, selector: #selector(updateBookModel), name: nil, object: nil)
+//        NotificationCenter.default.addObserver(modelData.$booksInShelf, selector: #selector(updateBookModel), name: nil, object: nil)
+        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
+            self?.updateBookModel()
+        }
     }
 
     func onBookClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        modelData.updatedReadingPosition = modelData.getLatestReadingPosition() ?? modelData.getInitialReadingPosition()
         
-        modelData.presentingEBookReaderForPlainShelf = true
+        modelData.presentingEBookReaderFromShelf = true
 
     }
     
