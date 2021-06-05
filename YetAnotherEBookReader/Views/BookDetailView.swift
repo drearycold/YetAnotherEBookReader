@@ -385,6 +385,23 @@ struct BookDetailView: View {
                         }
                         HStack {
                             Spacer()
+                            #if DEBUG
+                            Button(action: {
+                                // move from cache to downloaded
+                                do {
+                                    let cacheDir = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+                                    let oldURL = cacheDir.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())", isDirectory: false)
+                                    if FileManager.default.fileExists(atPath: oldURL.path), let newURL = getSavedUrl(book: book, format: selectedFormat) {
+                                        try FileManager.default.moveItem(at: oldURL, to: newURL)
+                                        initCacheStates(book: book, format: selectedFormat)
+                                    }
+                                } catch {
+                                    print(error)
+                                }
+                            }) {
+                                Image(systemName: "wrench.and.screwdriver")
+                            }
+                            #endif
                             Button(action:{
                                 if let book = modelData.readingBook {
                                     modelData.clearCache(book: book, format: selectedFormat)

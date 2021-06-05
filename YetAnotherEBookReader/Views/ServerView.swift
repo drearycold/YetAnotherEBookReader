@@ -59,8 +59,22 @@ struct ServerView: View {
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Switch Server")
+                        Picker("Switch Server", selection: $calibreServerId) {
+                            ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                                lhs.id < rhs.id
+                            }), id: \.self) { server in
+                                Text(server.id).tag(server.id)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: calibreServerId) { value in
+                            if modelData.currentCalibreServerId != calibreServerId {
+                                modelData.currentCalibreServerId = calibreServerId
+                            }
+                        }
+                        
                         Spacer()
+                        
                         Button(action:{
                             calibreServerEditing = true
                         }) {
@@ -78,19 +92,7 @@ struct ServerView: View {
                         }
                     }
                     
-                    Picker("Server: \(calibreServerId)", selection: $calibreServerId) {
-                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
-                            lhs.id < rhs.id
-                        }), id: \.self) { server in
-                            Text(server.id).tag(server.id)
-                        }
-                    }
-                    .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreServerId) { value in
-                        if modelData.currentCalibreServerId != calibreServerId {
-                            modelData.currentCalibreServerId = calibreServerId
-                        }
-                    }
+                    Text("Current Server: \(modelData.currentCalibreServerId)")
                         
                 }
                 
@@ -153,9 +155,7 @@ struct ServerView: View {
                 Divider()
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Switch Library")
-                    
-                    Picker("Library: \(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "")", selection: $calibreServerLibraryId) {
+                    Picker("Switch Library", selection: $calibreServerLibraryId) {
                         ForEach(modelData.calibreLibraries.values.filter({ (library) -> Bool in
                             library.server.id == calibreServerId
                         }).sorted(by: { (lhs, rhs) -> Bool in
@@ -170,14 +170,16 @@ struct ServerView: View {
                             modelData.currentCalibreLibraryId = calibreServerLibraryId
                         }
                         
-                        enableStoreReadingPosition = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName != nil
-                        storeReadingPositionColumnName = modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnName ?? modelData.calibreLibraries[calibreServerLibraryId]!.readPosColumnNameDefault
+                        guard let library = modelData.calibreLibraries[calibreServerLibraryId] else { return }
                         
-                        enableGoodreadsSync = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName != nil
-                        goodreadsSyncProfileName = modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileName ?? modelData.calibreLibraries[calibreServerLibraryId]!.goodreadsSyncProfileNameDefault
+                        enableStoreReadingPosition = library.readPosColumnName != nil
+                        storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
+                        
+                        enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+                        goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
                     })
                     
-                        
+                    Text("Current Library: \(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "")")
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
@@ -237,9 +239,7 @@ struct ServerView: View {
             Divider()
             
             VStack(alignment: .leading, spacing: 8) {
-                Text("More Settings")
-                
-                
+                Text("Reader Settings")
                 
                 Toggle("Enable Custom Dictionary Viewer", isOn: $enableCustomDictViewer)
                 if enableCustomDictViewer {

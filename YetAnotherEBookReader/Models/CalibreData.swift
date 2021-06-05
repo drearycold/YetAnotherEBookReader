@@ -11,7 +11,10 @@ import RealmSwift
 struct CalibreServer: Hashable, Identifiable {
     var id: String {
         get {
-            if username.isEmpty {
+            if isLocal {
+                return "Document"
+            }
+            else if username.isEmpty {
                 return baseUrl
             } else {
                 return "\(username) @ \(baseUrl)"

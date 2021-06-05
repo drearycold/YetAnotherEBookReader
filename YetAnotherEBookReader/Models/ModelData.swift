@@ -30,6 +30,21 @@ final class ModelData: ObservableObject {
             currentBookId = 0
             filteredBookList.removeAll()
             calibreServerLibraryBooks.removeAll()
+            
+            guard let server = calibreServers[currentCalibreServerId] else { return }
+            
+            
+            let tmpLibrary = CalibreLibrary(server: server, key: server.defaultLibrary, name: server.defaultLibrary)
+            
+            if let library = calibreLibraries[tmpLibrary.id] {
+                currentCalibreLibraryId = library.id
+            } else {
+                let serverLibraryIDs = calibreLibraries.compactMap {
+                    guard $0.value.server.id == server.id else { return nil }
+                    return $0.key
+                } as [String]
+                currentCalibreLibraryId = serverLibraryIDs.first ?? "Empty Server"
+            }
             //calibreServerLibraries.removeAll()
             //populateServerLibraries()
         }
@@ -172,7 +187,13 @@ final class ModelData: ObservableObject {
         
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in
-            let calibreServer = CalibreServer(baseUrl: serverRealm.baseUrl!, username: serverRealm.username!, password: serverRealm.password!)
+            guard serverRealm.baseUrl != nil else { return }
+            let calibreServer = CalibreServer(
+                baseUrl: serverRealm.baseUrl!,
+                username: serverRealm.username ?? "",
+                password: serverRealm.password ?? "",
+                defaultLibrary: serverRealm.defaultLibrary ?? ""
+            )
             calibreServers[calibreServer.id] = calibreServer
         }
         
