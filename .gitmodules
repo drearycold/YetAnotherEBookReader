@@ -1,0 +1,69 @@
+[submodule "Carthage/Checkouts/Minizip"]
+	path = Carthage/Checkouts/Minizip
+	url = https://github.com/dexman/Minizip.git
+[submodule "Carthage/Checkouts/ZIPFoundation"]
+	path = Carthage/Checkouts/ZIPFoundation
+	url = https://github.com/weichsel/ZIPFoundation.git
+[submodule "Carthage/Checkouts/ZFDragableModalTransition"]
+	path = Carthage/Checkouts/ZFDragableModalTransition
+	url = https://github.com/alexpopov/ZFDragableModalTransition.git
+[submodule "Carthage/Checkouts/Kingfisher"]
+	path = Carthage/Checkouts/Kingfisher
+	url = https://github.com/onevcat/Kingfisher.git
+[submodule "Carthage/Checkouts/SwiftSoup"]
+	path = Carthage/Checkouts/SwiftSoup
+	url = https://github.com/scinfu/SwiftSoup.git
+[submodule "Carthage/Checkouts/CryptoSwift"]
+	path = Carthage/Checkouts/CryptoSwift
+	url = https://github.com/krzyzanowskim/CryptoSwift.git
+[submodule "Carthage/Checkouts/Fuzi"]
+	path = Carthage/Checkouts/Fuzi
+	url = https://github.com/cezheng/Fuzi.git
+[submodule "Carthage/Checkouts/r2-navigator-swift"]
+	path = Carthage/Checkouts/r2-navigator-swift
+	url = https://github.com/readium/r2-navigator-swift.git
+[submodule "Carthage/Checkouts/r2-lcp-swift"]
+	path = Carthage/Checkouts/r2-lcp-swift
+	url = https://github.com/readium/r2-lcp-swift.git
+[submodule "Carthage/Checkouts/realm-cocoa"]
+	path = Carthage/Checkouts/realm-cocoa
+	url = https://github.com/realm/realm-cocoa.git
+[submodule "Carthage/Checkouts/AEXML"]
+	path = Carthage/Checkouts/AEXML
+	url = https://github.com/tadija/AEXML.git
+[submodule "Carthage/Checkouts/SQLite.swift"]
+	path = Carthage/Checkouts/SQLite.swift
+	url = https://github.com/stephencelis/SQLite.swift.git
+[submodule "Carthage/Checkouts/r2-testapp-swift"]
+	path = Carthage/Checkouts/r2-testapp-swift
+	url = https://github.com/readium/r2-testapp-swift.git
+[submodule "Carthage/Checkouts/FolioReaderKit"]
+	path = Carthage/Checkouts/FolioReaderKit
+	url = https://github.com/drearycold/FolioReaderKit.git
+[submodule "Carthage/Checkouts/MBProgressHUD"]
+	path = Carthage/Checkouts/MBProgressHUD
+	url = https://github.com/jdg/MBProgressHUD.git
+[submodule "Carthage/Checkouts/r2-streamer-swift"]
+	path = Carthage/Checkouts/r2-streamer-swift
+	url = https://github.com/readium/r2-streamer-swift.git
+[submodule "Carthage/Checkouts/ZipArchive"]
+	path = Carthage/Checkouts/ZipArchive
+	url = https://github.com/ZipArchive/ZipArchive.git
+[submodule "Carthage/Checkouts/FontBlaster"]
+	path = Carthage/Checkouts/FontBlaster
+	url = https://github.com/ArtSabintsev/FontBlaster.git
+[submodule "Carthage/Checkouts/GCDWebServer"]
+	path = Carthage/Checkouts/GCDWebServer
+	url = https://github.com/edrlab/GCDWebServer.git
+[submodule "Carthage/Checkouts/MenuItemKit"]
+	path = Carthage/Checkouts/MenuItemKit
+	url = https://github.com/cxa/MenuItemKit.git
+[submodule "Carthage/Checkouts/r2-opds-swift"]
+	path = Carthage/Checkouts/r2-opds-swift
+	url = https://github.com/readium/r2-opds-swift.git
+[submodule "Carthage/Checkouts/r2-shared-swift"]
+	path = Carthage/Checkouts/r2-shared-swift
+	url = https://github.com/readium/r2-shared-swift.git
+[submodule "Carthage/Checkouts/ShelfView-iOS"]
+	path = Carthage/Checkouts/ShelfView-iOS
+	url = https://github.com/drearycold/ShelfView-iOS.git
