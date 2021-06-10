@@ -1549,6 +1549,22 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func prepareBookReading(book: CalibreBook) ->(URL, CalibreBook.Format, ReaderType)? {
+        guard let position = getSelectedReadingPosition() else { return nil }
+        
+        let formatReaderPairArray = formatReaderMap.compactMap {
+            guard let index = $0.value.firstIndex(where: { $0.rawValue == position.readerName }) else { return nil }
+            return ($0.key, $0.value[index])
+        } as [(CalibreBook.Format, ReaderType)]
+        
+        guard let formatReaderPair = formatReaderPairArray.first else { return nil }
+        guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }
+        guard FileManager.default.fileExists(atPath: savedURL.path) else {
+            return nil
+        }
+        
+        return (savedURL, formatReaderPair.0, formatReaderPair.1)
+    }
 }
 
 func load<T: Decodable>(_ filename: String) -> T {

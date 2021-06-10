@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 
 @available(macCatalyst 14.0, *)
 class YabrPDFViewContainer : UIViewController {

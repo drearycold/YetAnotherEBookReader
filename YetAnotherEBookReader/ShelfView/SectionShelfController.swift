@@ -6,7 +6,7 @@
 //  Copyright © 2018 CocoaPods. All rights reserved.
 //
 
-import ShelfView_iOS
+import ShelfView
 import SwiftUI
 import Combine
 
@@ -16,11 +16,14 @@ import GoogleMobileAds
 
 class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
+    var tabBarHeight = CGFloat(0)
+    
     var bookModel = [String: [BookModel]]()
     var shelfView: SectionShelfView!
     var shelfBookSink: AnyCancellable?
 
 #if canImport(GoogleMobileAds)
+    var bannerSize = kGADAdSizeBanner
     var bannerView: GADBannerView!
 #endif
 
@@ -32,9 +35,16 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     
     func updateBookModel() {
         bookModel = modelData.booksInShelf
-            .filter { $0.value.library.server.isLocal == false}
-            .sorted { $0.value.lastModified > $1.value.lastModified }
+            .filter { $0.value.library.server.isLocal == false }
+            .sorted {
+                if $0.value.lastModified == $1.value.lastModified {
+                    return $0.value.title < $1.value.title
+                } else {
+                    return $0.value.lastModified > $1.value.lastModified
+                }
+            }
             .reduce(into: [String: [BookModel]]()) {
+                print("updateBookModel \($1.value.title) \($1.value.lastModified)")
                 let newBook = BookModel(
                     bookCoverSource: $1.value.coverURL.absoluteString,
                     bookId: $1.key,
@@ -58,32 +68,48 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        shelfView.translatesAutoresizingMaskIntoConstraints = false
-//        shelfView.leftAnchor.constraint(equalTo: motherView.leftAnchor, constant: 0).isActive = true
-//        shelfView.rightAnchor.constraint(equalTo: motherView.rightAnchor, constant: 0).isActive = true
-//        shelfView.topAnchor.constraint(equalTo: motherView.topAnchor, constant: 0).isActive = true
-//        shelfView.bottomAnchor.constraint(equalTo: motherView.bottomAnchor, constant: 0).isActive = true
         
+        resizeSubviews(to: view.frame.size, to: traitCollection)
+
         self.updateBookModel()
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        shelfView = SectionShelfView(frame: CGRect(x: 0, y: statusBarHeight, width: 350, height: 500), bookModelSection: [], bookSource: SectionShelfView.BOOK_SOURCE_URL)
-
+        
+        if let tabBarController = self.tabBarController {
+            tabBarHeight = tabBarController.tabBar.frame.height
+        }
+        #if canImport(GoogleMobileAds)
+        shelfView = SectionShelfView(
+            frame: CGRect(
+                x: 0,
+                y: 0,
+                width: view.frame.width,
+                height: view.frame.height - kGADAdSizeBanner.size.height
+            ),
+            bookModelSection: [],
+            bookSource: SectionShelfView.BOOK_SOURCE_URL)
+        shelfView.translatesAutoresizingMaskIntoConstraints = false
+        
+        print("SECTIONFRAME \(view.frame) \(kGADAdSizeBanner.size) \(tabBarHeight)")
+        
         shelfView.delegate = self
-//        motherView.addSubview(shelfView)
-        //self.view = shelfView
         view.addSubview(shelfView)
         
-        #if canImport(GoogleMobileAds)
-        bannerView = GADBannerView()
+        bannerView = GADBannerView(
+            frame: CGRect(
+                x: 0,
+                y: shelfView.frame.maxY,
+                width:  kGADAdSizeBanner.size.width,
+                height: kGADAdSizeBanner.size.height))
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
+        
         bannerView.load(GADRequest())
 
         bannerView.translatesAutoresizingMaskIntoConstraints = false
+        bannerView.adSize = kGADAdSizeBanner
         view.addSubview(bannerView)
         
         NSLayoutConstraint.activate([
@@ -93,10 +119,21 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
             bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
+//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
         ])
-        bannerView.adSize = kGADAdSizeBanner
+        
         #else
+        shelfView = SectionShelfView(
+            frame: CGRect(
+                x: 0,
+                y: statusBarHeight,
+                width: view.frame.width,
+                height: view.frame.height - statusBarHeight
+            ),
+            bookModelSection: [],
+            bookSource: SectionShelfView.BOOK_SOURCE_URL)
+        shelfView.delegate = self
+        view.addSubview(shelfView)
         NSLayoutConstraint.activate([
             shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -110,6 +147,63 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         }
     }
 
+    func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
+        if let tabBarController = self.tabBarController {
+            tabBarHeight = tabBarController.tabBar.frame.height
+        }
+        
+        if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .regular {
+            bannerSize = kGADAdSizeLeaderboard
+        }
+        if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .regular {
+            bannerSize = kGADAdSizeLargeBanner
+        }
+        if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .compact {
+            bannerSize = kGADAdSizeFullBanner
+        }
+        if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .compact {
+            bannerSize = kGADAdSizeBanner
+        }
+        
+        bannerView.adSize = bannerSize
+        
+        shelfView.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height - bannerSize.size.height
+        )
+        bannerView.frame = CGRect(
+            x: (size.width - bannerSize.size.width) / 2,
+            y: size.height - bannerSize.size.height,
+            width: bannerSize.size.width,
+            height: bannerSize.size.height
+        )
+        
+        print("SECTIONFRAME \(view.frame) \(shelfView.frame) \(bannerView.frame) \(tabBarHeight) \(bannerSize.size)")
+    }
+    
+    override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
+        coordinator.animate { _ in
+            
+        } completion: { _ in
+            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
+        }
+
+        
+    }
+    
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        
+        coordinator.animate { _ in
+            
+        } completion: { _ in
+            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
+        }
+        
+    }
+    
     func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         

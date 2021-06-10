@@ -15,10 +15,10 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     var modelData: ModelData?
     var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
     
-    func open() {
+    func open(bookReadingPosition: BookDeviceReadingPosition? = nil) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
-        if let bookReadingPosition = modelData?.getSelectedReadingPosition() {
+        if let bookReadingPosition = bookReadingPosition ?? modelData?.getSelectedReadingPosition() {
             var position = [String: Any]()
             position["pageNumber"] = bookReadingPosition.lastPosition[0]
             position["pageOffsetX"] = CGFloat(bookReadingPosition.lastPosition[1])

@@ -71,9 +71,12 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         }
         
         if bookFormat == CalibreBook.Format.EPUB && bookReader == ReaderType.FolioReader {
-            let readerConfiguration = self.readerConfiguration()
+            let readerConfiguration = FolioReaderConfiguration(bookURL: bookURL)
             readerConfiguration.enableTTS = false
             readerConfiguration.allowSharing = false
+//            readerConfiguration.hideBars = true
+//            readerConfiguration.hidePageIndicator = true
+//            readerConfiguration.shouldHideNavigationOnTap = true
             guard let unzipPath = makeFolioReaderUnzipPath() else {
                 return nav
             }
@@ -223,19 +226,23 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
         // vc.bookDetailView = bookDetailView
         // uiViewController.open(epubURL: bookURL)
-        print("EBookReader updateUIViewController \(context)")
+        // print("EBookReader updateUIViewController \(context)")
     }
     
-    private func readerConfiguration() -> FolioReaderConfig {
-        let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
-        config.shouldHideNavigationOnTap = false
-        config.scrollDirection = FolioReaderScrollDirection.vertical
-        config.allowSharing = true
-        
-        #if DEBUG
-        config.debug = 1
-        #endif
-        // See more at FolioReaderConfig.swift
+}
+
+func FolioReaderConfiguration(bookURL: URL) -> FolioReaderConfig {
+    let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
+    config.shouldHideNavigationOnTap = false
+    config.scrollDirection = FolioReaderScrollDirection.vertical
+    config.allowSharing = true
+    config.displayTitle = true
+    
+    #if DEBUG
+    //config.debug.formUnion([.borderHighlight, .viewTransition, .functionTrace])
+    config.debug.formUnion([.htmlStyling, .borderHighlight])
+    #endif
+    // See more at FolioReaderConfig.swift
 //        config.canChangeScrollDirection = false
 //        config.enableTTS = false
 //        config.displayTitle = true
@@ -248,19 +255,17 @@ struct YabrEBookReader: UIViewControllerRepresentable {
 //        config.hidePageIndicator = true
 //        config.realmConfiguration = Realm.Configuration(fileURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("highlights.realm"))
 
-        // Custom sharing quote background
-        config.quoteCustomBackgrounds = []
-        if let image = UIImage(named: "demo-bg") {
-            let customImageQuote = QuoteImage(withImage: image, alpha: 0.6, backgroundColor: UIColor.black)
-            config.quoteCustomBackgrounds.append(customImageQuote)
-        }
-
-        let textColor = UIColor(red:0.86, green:0.73, blue:0.70, alpha:1.0)
-        let customColor = UIColor(red:0.30, green:0.26, blue:0.20, alpha:1.0)
-        let customQuote = QuoteImage(withColor: customColor, alpha: 1.0, textColor: textColor)
-        config.quoteCustomBackgrounds.append(customQuote)
-
-        return config
+    // Custom sharing quote background
+    config.quoteCustomBackgrounds = []
+    if let image = UIImage(named: "demo-bg") {
+        let customImageQuote = QuoteImage(withImage: image, alpha: 0.6, backgroundColor: UIColor.black)
+        config.quoteCustomBackgrounds.append(customImageQuote)
     }
 
+    let textColor = UIColor(red:0.86, green:0.73, blue:0.70, alpha:1.0)
+    let customColor = UIColor(red:0.30, green:0.26, blue:0.20, alpha:1.0)
+    let customQuote = QuoteImage(withColor: customColor, alpha: 1.0, textColor: textColor)
+    config.quoteCustomBackgrounds.append(customQuote)
+
+    return config
 }

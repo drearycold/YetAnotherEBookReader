@@ -1,0 +1,88 @@
+PODS:
+  - Google-Mobile-Ads-SDK (8.5.0):
+    - GoogleAppMeasurement (< 9.0, >= 7.0)
+    - GoogleUserMessagingPlatform (>= 1.1)
+  - GoogleAppMeasurement (8.1.0):
+    - GoogleAppMeasurement/AdIdSupport (= 8.1.0)
+    - GoogleUtilities/AppDelegateSwizzler (~> 7.4)
+    - GoogleUtilities/MethodSwizzler (~> 7.4)
+    - GoogleUtilities/Network (~> 7.4)
+    - "GoogleUtilities/NSData+zlib (~> 7.4)"
+    - nanopb (~> 2.30908.0)
+  - GoogleAppMeasurement/AdIdSupport (8.1.0):
+    - GoogleUtilities/AppDelegateSwizzler (~> 7.4)
+    - GoogleUtilities/MethodSwizzler (~> 7.4)
+    - GoogleUtilities/Network (~> 7.4)
+    - "GoogleUtilities/NSData+zlib (~> 7.4)"
+    - nanopb (~> 2.30908.0)
+  - GoogleUserMessagingPlatform (2.0.0)
+  - GoogleUtilities/AppDelegateSwizzler (7.4.1):
+    - GoogleUtilities/Environment
+    - GoogleUtilities/Logger
+    - GoogleUtilities/Network
+  - GoogleUtilities/Environment (7.4.1):
+    - PromisesObjC (~> 1.2)
+  - GoogleUtilities/Logger (7.4.1):
+    - GoogleUtilities/Environment
+  - GoogleUtilities/MethodSwizzler (7.4.1):
+    - GoogleUtilities/Logger
+  - GoogleUtilities/Network (7.4.1):
+    - GoogleUtilities/Logger
+    - "GoogleUtilities/NSData+zlib"
+    - GoogleUtilities/Reachability
+  - "GoogleUtilities/NSData+zlib (7.4.1)"
+  - GoogleUtilities/Reachability (7.4.1):
+    - GoogleUtilities/Logger
+  - Kingfisher (5.15.8):
+    - Kingfisher/Core (= 5.15.8)
+  - Kingfisher/Core (5.15.8)
+  - nanopb (2.30908.0):
+    - nanopb/decode (= 2.30908.0)
+    - nanopb/encode (= 2.30908.0)
+  - nanopb/decode (2.30908.0)
+  - nanopb/encode (2.30908.0)
+  - PromisesObjC (1.2.12)
+  - ShelfView (1.1):
+    - Kingfisher (~> 5.0)
+  - SSZipArchive (2.4.2)
+
+DEPENDENCIES:
+  - Google-Mobile-Ads-SDK
+  - ShelfView (from `https://github.com/drearycold/ShelfView-iOS`, branch `peter_dev`)
+  - SSZipArchive
+
+SPEC REPOS:
+  trunk:
+    - Google-Mobile-Ads-SDK
+    - GoogleAppMeasurement
+    - GoogleUserMessagingPlatform
+    - GoogleUtilities
+    - Kingfisher
+    - nanopb
+    - PromisesObjC
+    - SSZipArchive
+
+EXTERNAL SOURCES:
+  ShelfView:
+    :branch: peter_dev
+    :git: https://github.com/drearycold/ShelfView-iOS
+
+CHECKOUT OPTIONS:
+  ShelfView:
+    :commit: 8910714229e9ba675537651c9ffdb06f2399bae2
+    :git: https://github.com/drearycold/ShelfView-iOS
+
+SPEC CHECKSUMS:
+  Google-Mobile-Ads-SDK: 6f5c41bf73db1656e5b203ba9c31e3d0899a128d
+  GoogleAppMeasurement: 9ff7b9e23cced93a5a41736c09bdeb5b5b7fb111
+  GoogleUserMessagingPlatform: ab890ce5f6620f293a21b6bdd82e416a2c73aeca
+  GoogleUtilities: f8a43108b38a68eebe8b3540e1f4f2d28843ce20
+  Kingfisher: a3c03d702433fa6cfedabb2bddbe076fb8f2e902
+  nanopb: a0ba3315591a9ae0a16a309ee504766e90db0c96
+  PromisesObjC: 3113f7f76903778cf4a0586bd1ab89329a0b7b97
+  ShelfView: 7df6fe27387501b4db96df095f3d50afe3682863
+  SSZipArchive: e7b4f3d9e780c2acc1764cd88fbf2de28f26e5b2
+
+PODFILE CHECKSUM: 1fff28b3f8d5cc5c4f29db29a3987139c20cfc0e
+
+COCOAPODS: 1.10.1

@@ -407,6 +407,17 @@ struct BookDetailView: View {
                                     modelData.clearCache(book: book, format: selectedFormat)
                                     modelData.downloadFormat(book: book, format: selectedFormat, modificationDate: selectedFormatMTime) { success in
                                         initCacheStates(book: book, format: selectedFormat)
+                                        guard selectedFormat == CalibreBook.Format.EPUB,
+                                           let savedURL = getSavedUrl(book: book, format: selectedFormat),
+                                           let folioUnzippedPath = makeFolioReaderUnzipPath(),
+                                           FileManager.default.fileExists(atPath: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true).path)
+                                           else { return }
+                                        do {
+                                            try FileManager.default.removeItem(at: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true))
+                                        } catch {
+                                            print(error)
+                                        }
+                                        
                                     }
                                 }
                             }) {

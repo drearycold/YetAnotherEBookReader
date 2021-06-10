@@ -20,21 +20,21 @@ struct MainView: View {
     
     var body: some View {
         TabView(selection: $modelData.activeTab) {
-            PlainShelfUI()
-                .tabItem {
-                    Image(systemName: "doc.text.fill")
-                    Text("Local")
-                }
-                .tag(0)
-                
-            
             SectionShelfUI()
                 .tabItem {
                     Image(systemName: "books.vertical.fill")
                     Text("Shelf")
                 }
+                .tag(0)
+                
+            PlainShelfUI()
+                .tabItem {
+                    Image(systemName: "doc.text.fill")
+                    Text("Local")
+                }
                 .tag(1)
                 
+            
             LibraryInfoView()
                 .tabItem {
                     Image(systemName: "building.columns.fill")
@@ -52,7 +52,7 @@ struct MainView: View {
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: { modelData.presentingEBookReaderFromShelf = false }) {
             
             if let book = modelData.readingBook,
-               let readerInfo = prepareBookReading(book: book)
+               let readerInfo = modelData.prepareBookReading(book: book)
                {
                 YabrEBookReader(
                     bookURL: readerInfo.0,
@@ -104,20 +104,6 @@ struct MainView: View {
             modelData.onOpenURL(url: url)
         }
         
-    }
-    
-    func prepareBookReading(book: CalibreBook) ->(URL, CalibreBook.Format, ReaderType)? {
-        guard let position = modelData.getSelectedReadingPosition() else { return nil }
-        
-        let formatReaderPairArray = modelData.formatReaderMap.compactMap {
-            guard let index = $0.value.firstIndex(where: { $0.rawValue == position.readerName }) else { return nil }
-            return ($0.key, $0.value[index])
-        } as [(CalibreBook.Format, ReaderType)]
-        
-        guard let formatReaderPair = formatReaderPairArray.first else { return nil }
-        guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }
-        
-        return (savedURL, formatReaderPair.0, formatReaderPair.1)
     }
     
 }
