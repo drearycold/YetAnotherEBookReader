@@ -18,7 +18,9 @@ struct SectionShelfUI: UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiView: SectionShelfController, context: Context) {
+        uiView.resizeSubviews(to: uiView.view.frame.size, to: uiView.traitCollection)
         uiView.updateBookModel()
+        uiView.reloadBookModel()
     }
     
 }

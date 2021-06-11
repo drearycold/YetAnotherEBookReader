@@ -19,6 +19,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     var tabBarHeight = CGFloat(0)
     
     var bookModel = [String: [BookModel]]()
+    var bookModelSectionsArray = [BookModelSection]()
     var shelfView: SectionShelfView!
     var shelfBookSink: AnyCancellable?
 
@@ -56,22 +57,36 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                     $0[shelfName] = [newBook]
                 }
             }
-        var bookModelSectionArray = bookModel.sorted { $0.key < $1.key }.map {
+        bookModelSectionsArray = bookModel.sorted { $0.key < $1.key }.map {
             BookModelSection(sectionName: $0.key, sectionId: $0.key, sectionBooks: $0.value)
         }
-        if bookModelSectionArray.isEmpty {
-            bookModelSectionArray.append(BookModelSection(sectionName: "Default", sectionId: "Default", sectionBooks: []))
+        if bookModelSectionsArray.isEmpty {
+            bookModelSectionsArray.append(BookModelSection(sectionName: "Default", sectionId: "Default", sectionBooks: []))
         }
+    }
         
-        self.shelfView.reloadBooks(bookModelSection: bookModelSectionArray)
+    func reloadBookModel() {
+        self.shelfView.reloadBooks(bookModelSection: bookModelSectionsArray)
     }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
         resizeSubviews(to: view.frame.size, to: traitCollection)
-
-        self.updateBookModel()
+        
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
+            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
+        ])
+        
+        bannerView.load(GADRequest())
+        
+        //self.updateBookModel()
     }
 
     override func viewDidLoad() {
@@ -80,6 +95,8 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         if let tabBarController = self.tabBarController {
             tabBarHeight = tabBarController.tabBar.frame.height
         }
+        updateBookModel()
+        
         #if canImport(GoogleMobileAds)
         shelfView = SectionShelfView(
             frame: CGRect(
@@ -88,13 +105,18 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                 width: view.frame.width,
                 height: view.frame.height - kGADAdSizeBanner.size.height
             ),
-            bookModelSection: [],
+            bookModelSection: bookModelSectionsArray,
             bookSource: SectionShelfView.BOOK_SOURCE_URL)
         shelfView.translatesAutoresizingMaskIntoConstraints = false
         
         print("SECTIONFRAME \(view.frame) \(kGADAdSizeBanner.size) \(tabBarHeight)")
         
         shelfView.delegate = self
+//        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
+//            DispatchQueue.main.async {
+//                self?.updateBookModel()
+//            }
+//        }
         view.addSubview(shelfView)
         
         bannerView = GADBannerView(
@@ -106,21 +128,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
         
-        bannerView.load(GADRequest())
-
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         bannerView.adSize = kGADAdSizeBanner
         view.addSubview(bannerView)
-        
-        NSLayoutConstraint.activate([
-            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
-            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
-            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
-        ])
         
         #else
         shelfView = SectionShelfView(
@@ -141,10 +151,6 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         #endif
-        
-        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
-            self?.updateBookModel()
-        }
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
