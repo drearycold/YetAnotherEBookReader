@@ -20,20 +20,19 @@ struct MainView: View {
     
     var body: some View {
         TabView(selection: $modelData.activeTab) {
-            SectionShelfUI()
-                .tabItem {
-                    Image(systemName: "books.vertical.fill")
-                    Text("Shelf")
-                }
-                .tag(0)
-                
             PlainShelfUI()
                 .tabItem {
                     Image(systemName: "doc.text.fill")
                     Text("Local")
                 }
-                .tag(1)
+                .tag(0)
                 
+            SectionShelfUI()
+                .tabItem {
+                    Image(systemName: "books.vertical.fill")
+                    Text("Shelf")
+                }
+                .tag(1)
             
             LibraryInfoView()
                 .tabItem {
@@ -49,24 +48,8 @@ struct MainView: View {
                 }
                 .tag(3)
         }
-        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: { modelData.presentingEBookReaderFromShelf = false }) {
-            
-            if let book = modelData.readingBook,
-               let readerInfo = modelData.prepareBookReading(book: book)
-               {
-                YabrEBookReader(
-                    bookURL: readerInfo.0,
-                    bookFormat: readerInfo.1,
-                    bookReader: readerInfo.2
-                )
-            } else {
-                Text("Nil Book")
-            }
-        }
-        .onChange(of: modelData.presentingEBookReaderFromShelf) { presenting in
-            guard presenting == false else {
-                return
-            }
+        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
+            modelData.presentingEBookReaderFromShelf = false
             let originalPosition = modelData.getLatestReadingPosition() ?? modelData.getInitialReadingPosition()
             if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
                 return
@@ -82,6 +65,19 @@ struct MainView: View {
             }
             else {
                 modelData.updateCurrentPosition()
+            }
+        }) {
+            
+            if let book = modelData.readingBook,
+               let readerInfo = modelData.prepareBookReading(book: book)
+               {
+                YabrEBookReader(
+                    bookURL: readerInfo.0,
+                    bookFormat: readerInfo.1,
+                    bookReader: readerInfo.2
+                )
+            } else {
+                Text("Nil Book")
             }
         }
         .alert(item: $alertItem) { item in
