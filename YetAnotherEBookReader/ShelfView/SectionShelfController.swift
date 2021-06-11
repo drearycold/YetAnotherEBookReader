@@ -26,6 +26,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 #if canImport(GoogleMobileAds)
     var bannerSize = kGADAdSizeBanner
     var bannerView: GADBannerView!
+    var gadRequestInitialized = false
 #endif
 
     // @IBOutlet var motherView: UIView!
@@ -74,19 +75,12 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         
         resizeSubviews(to: view.frame.size, to: traitCollection)
         
-        NSLayoutConstraint.activate([
-            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
-            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
-            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
-        ])
-        
-        bannerView.load(GADRequest())
-        
         //self.updateBookModel()
+        guard gadRequestInitialized == false else { return }
+        gadRequestInitialized = true
+        let gadRequest = GADRequest()
+        gadRequest.scene = self.view.window?.windowScene
+        bannerView.load(gadRequest)
     }
 
     override func viewDidLoad() {
@@ -130,7 +124,18 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         bannerView.adSize = kGADAdSizeBanner
+        
         view.addSubview(bannerView)
+        
+        NSLayoutConstraint.activate([
+            shelfView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            shelfView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            shelfView.topAnchor.constraint(equalTo: view.topAnchor),
+            shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
+            bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
+        ])
         
         #else
         shelfView = SectionShelfView(

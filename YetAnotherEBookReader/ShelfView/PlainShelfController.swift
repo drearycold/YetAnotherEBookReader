@@ -25,6 +25,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
 #if canImport(GoogleMobileAds)
     var bannerSize = kGADAdSizeBanner
     var bannerView: GADBannerView!
+    var gadRequestInitialized = false
 #endif
 
     // @IBOutlet var motherView: UIView!
@@ -52,13 +53,13 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         super.viewDidAppear(animated)
         
         resizeSubviews(to: view.frame.size, to: traitCollection)
-
-        // shelfView.leftAnchor.constraint(equalTo: motherView.leftAnchor, constant: 0).isActive = true
-        // shelfView.rightAnchor.constraint(equalTo: motherView.rightAnchor, constant: 0).isActive = true
-        // shelfView.topAnchor.constraint(equalTo: motherView.topAnchor, constant: 0).isActive = true
-        // shelfView.bottomAnchor.constraint(equalTo: motherView.bottomAnchor, constant: 0).isActive = true
         
-        updateBookModel()
+        //updateBookModel()
+        guard gadRequestInitialized == false else { return }
+        gadRequestInitialized = true
+        let gadRequest = GADRequest()
+        gadRequest.scene = self.view.window?.windowScene
+        bannerView.load(gadRequest)
     }
 
     override func viewDidLoad() {
@@ -90,8 +91,6 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         bannerView.rootViewController = self
         
-        bannerView.load(GADRequest())
-
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         bannerView.adSize = kGADAdSizeBanner
 
