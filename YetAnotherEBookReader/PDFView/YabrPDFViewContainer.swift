@@ -11,14 +11,7 @@ import UIKit
 @available(macCatalyst 14.0, *)
 class YabrPDFViewContainer : UIViewController {
     
-    var bookDetailView: BookDetailView?
-    
-    override func loadView() {
-        super.loadView()
-        
-    }
-    
-    func open(pdfURL: URL) {
+    func open(pdfURL: URL, position: BookDeviceReadingPosition) {
         let pdfViewController = YabrPDFViewController()
         
         let nav = UINavigationController(rootViewController: pdfViewController)
@@ -28,7 +21,7 @@ class YabrPDFViewContainer : UIViewController {
         
         pdfViewController.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
-        pdfViewController.open(pdfURL: pdfURL)
+        pdfViewController.open(pdfURL: pdfURL, position: position)
         
         let stackView = UIStackView(frame: nav.toolbar.frame)
         stackView.distribution = .fill

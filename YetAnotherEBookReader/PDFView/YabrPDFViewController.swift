@@ -38,8 +38,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     var pdfOptions = PDFOptions()
         
     var bookTitle: String!
+    
+    var initialPosition: BookDeviceReadingPosition!
 
-    func open(pdfURL: URL) {
+    func open(pdfURL: URL, position: BookDeviceReadingPosition) {
         self.bookTitle = modelData?.readingBook?.title
         
         pdfView = PDFView()
@@ -67,6 +69,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         let pdfDoc = PDFDocument(url: pdfURL)
         pdfDoc?.delegate = self
         logger.info("pdfDoc: \(pdfDoc?.majorVersion ?? -1) \(pdfDoc?.minorVersion ?? -1)")
+        
+        initialPosition = position
         
         pdfView!.document = pdfDoc
         pdfView!.autoScales = false
@@ -243,7 +247,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
             pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
         }
         
-        var destPageNum = (modelData?.updatedReadingPosition.lastPosition[0] ?? 1) - 1
+        var destPageNum = initialPosition.lastPosition[0] - 1
         if destPageNum < 0 {
             destPageNum = 0
         }
