@@ -149,7 +149,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             nav.navigationBar.isTranslucent = false
             nav.setToolbarHidden(false, animated: true)
             
-            pdfViewController.open(pdfURL: bookURL)
+            pdfViewController.open(pdfURL: bookURL, position: modelData.getSelectedReadingPosition() ?? modelData.getInitialReadingPosition())
             pdfViewController.modelData = modelData
             
             let stackView = UIStackView(frame: nav.toolbar.frame)
