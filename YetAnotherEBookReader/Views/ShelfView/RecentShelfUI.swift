@@ -8,16 +8,16 @@
 import Foundation
 import SwiftUI
 
-struct PlainShelfUI: UIViewControllerRepresentable {
+struct RecentShelfUI: UIViewControllerRepresentable {
     @EnvironmentObject var modelData: ModelData
 
-    func makeUIViewController(context: Context) -> PlainShelfController {
-        let shelfController = PlainShelfController()
+    func makeUIViewController(context: Context) -> RecentShelfController {
+        let shelfController = RecentShelfController()
         shelfController.modelData = modelData
         return shelfController
     }
     
-    func updateUIViewController(_ uiView: PlainShelfController, context: Context) {
+    func updateUIViewController(_ uiView: RecentShelfController, context: Context) {
         uiView.updateBookModel()
     }
     

@@ -14,7 +14,7 @@ import Combine
 import GoogleMobileAds
 #endif
 
-class PlainShelfController: UIViewController, PlainShelfViewDelegate {
+class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var tabBarHeight = CGFloat(0)
 
@@ -37,8 +37,8 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     
     @objc func updateBookModel() {
         bookModel = modelData.booksInShelf
-            .filter { $0.value.library.server.isLocal }
-            .sorted { $0.value.title < $1.value.title }
+            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) }
+            .sorted { $0.value.lastModified > $1.value.lastModified }
             .map { (key: String, value: CalibreBook) -> BookModel in
             BookModel(
                 bookCoverSource: value.coverURL.absoluteString,
@@ -189,11 +189,30 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked longer \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
-        let deleteMenuItem = UIMenuItem(title: "Delete", action: #selector(deleteBook(_:)))
-        UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
-        becomeFirstResponder()
-        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
+        guard let book = modelData.readingBook else { return }
+        
+        if book.library.server.isLocal {
+            let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
+            let deleteMenuItem = UIMenuItem(title: "Delete", action: #selector(deleteBook(_:)))
+            UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
+            becomeFirstResponder()
+            UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
+        } else {
+            let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
+            let detailView = UIHostingController(
+                rootView: bookDetailView
+            )
+            
+            let nav = UINavigationController(rootViewController: detailView)
+            nav.modalPresentationStyle = .fullScreen
+            nav.navigationBar.isTranslucent = true
+            nav.navigationBar.prefersLargeTitles = true
+            //nav.setToolbarHidden(false, animated: true)
+            
+            detailView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
+            
+            self.present(nav, animated: true, completion: nil)
+        }
     }
 
     @objc func refreshBook(_ sender: Any?) {
@@ -205,7 +224,7 @@ class PlainShelfController: UIViewController, PlainShelfViewDelegate {
     @objc func deleteBook(_ sender: Any?) {
         print("deleteBook")
         guard let inShelfId = modelData.readingBookInShelfId,
-              let book = modelData.booksInShelf[inShelfId] else { return }
+              let book = modelData.readingBook else { return }
         
         book.formats.keys.forEach {
             guard let format = CalibreBook.Format(rawValue: $0) else { return }

@@ -15,6 +15,7 @@ struct ServerView: View {
     @State private var calibreServerLibraryId = "Undetermined"
     
     @State private var calibreServerUrl = ""
+    @State private var calibreServerNeedAuth = false
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
     //@State private var calibreServerEdit = CalibreServer(baseUrl: "", username: "", password: "")
@@ -26,8 +27,7 @@ struct ServerView: View {
     @State private var enableGoodreadsSync = false
     @State private var goodreadsSyncProfileName = ""
     
-    @State private var enableCustomDictViewer = false
-    @State private var customDictViewerURL = ""
+    
     @State private var calibreServerEditing = false
     
     @State private var presentingAlert = false
@@ -37,7 +37,7 @@ struct ServerView: View {
     @State private var updater = 0
     
     var defaultLog = Logger()
-
+    
     struct AlertItem : Identifiable {
         var id: String
         var action: (() -> Void)?
@@ -46,54 +46,40 @@ struct ServerView: View {
     @State private var alertContent: String = ""
     
     var body: some View {
-        VStack {
-            HStack {
-                Spacer()
-                Button(action: {} ) {
-                    Image(systemName: "ellipsis.circle")
-                }
-            }.padding(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 8))
-            
-            Divider()
-            
+        ScrollView {
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Picker("Switch Server", selection: $calibreServerId) {
-                            ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
-                                lhs.id < rhs.id
-                            }), id: \.self) { server in
-                                Text(server.id).tag(server.id)
-                            }
+                HStack {
+                    Picker("Switch Server", selection: $calibreServerId) {
+                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
+                            lhs.id < rhs.id
+                        }), id: \.self) { server in
+                            Text(server.id).tag(server.id)
                         }
-                        .pickerStyle(MenuPickerStyle())
-                        .onChange(of: calibreServerId) { value in
-                            if modelData.currentCalibreServerId != calibreServerId {
-                                modelData.currentCalibreServerId = calibreServerId
-                            }
-                        }
-                        
-                        Spacer()
-                        
-                        Button(action:{
-                            calibreServerEditing = true
-                        }) {
-                            Image(systemName: "plus")
-                        }
-                        Button(action:{
-                            alertItem = AlertItem(id: "DelServer")
-                        }) {
-                            Image(systemName: "minus")
-                        }
-                        Button(action:{
-                            //TODO modify current server
-                        }) {
-                            Image(systemName: "square.and.pencil")
+                    }
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: calibreServerId) { value in
+                        if modelData.currentCalibreServerId != calibreServerId {
+                            modelData.currentCalibreServerId = calibreServerId
                         }
                     }
                     
-                    Text("Current Server: \(modelData.currentCalibreServerId)")
-                        
+                    Spacer()
+                    
+                    Button(action:{
+                        calibreServerEditing = true
+                    }) {
+                        Image(systemName: "plus")
+                    }
+                    Button(action:{
+                        alertItem = AlertItem(id: "DelServer")
+                    }) {
+                        Image(systemName: "minus")
+                    }
+                    Button(action:{
+                        //TODO modify current server
+                    }) {
+                        Image(systemName: "square.and.pencil")
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -105,24 +91,29 @@ struct ServerView: View {
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .border(Color(UIColor.separator))
-
-                        }
-                        HStack {
-                            Text("Username:")
-                            TextField("Username", text: $calibreUsername)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .border(Color(UIColor.separator))
-                        }
-                        HStack {
-                            Text("Password:")
-                            SecureField("Password", text: $calibrePassword)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .border(Color(UIColor.separator))
                             
                         }
+                        
+                        Toggle("Auth?", isOn: $calibreServerNeedAuth)
+                        
+                        if calibreServerNeedAuth {
+                            HStack {
+                                Text("Username:")
+                                TextField("Username", text: $calibreUsername)
+                                    .keyboardType(.emailAddress)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .border(Color(UIColor.separator))
+                            }
+                            HStack {
+                                Text("Password:")
+                                SecureField("Password", text: $calibrePassword)
+                                    .autocapitalization(.none)
+                                    .disableAutocorrection(true)
+                                    .border(Color(UIColor.separator))
+                            }
+                        }
+                        
                         HStack {
                             Spacer()
                             Button(action:{ calibreServerEditing = false }) {
@@ -132,22 +123,27 @@ struct ServerView: View {
                                 Image(systemName: "checkmark")
                             }
                         }
-                    }
-                    HStack(alignment: .center, spacing: 8) {
-                        Spacer()
                         
-                        Text("\(modelData.calibreLibraries.values.filter({ (library) -> Bool in library.server.id == calibreServerId }).count) Library(s) in Server")
                         
-                        Button(action: {
-                            let ret = startLoadServerLibraries(
-                                calibreServer: modelData.calibreServers[modelData.currentCalibreServerId]!,
-                                success: modelData.handleLibraryInfo(jsonData:)
-                            )
-                            if ret != 0 {
-                                //TODO
+                    } else {
+                        Text("Current Server: \(modelData.currentCalibreServerId)")
+                        
+                        HStack(alignment: .center, spacing: 8) {
+                            Spacer()
+                            
+                            Text("\(modelData.calibreLibraries.values.filter({ (library) -> Bool in library.server.id == calibreServerId }).count) Library(s) in Server")
+                            
+                            Button(action: {
+                                let ret = startLoadServerLibraries(
+                                    calibreServer: modelData.calibreServers[modelData.currentCalibreServerId]!,
+                                    success: modelData.handleLibraryInfo(jsonData:)
+                                )
+                                if ret != 0 {
+                                    //TODO
+                                }
+                            }) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
                             }
-                        }) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
                         }
                     }
                 }
@@ -197,38 +193,51 @@ struct ServerView: View {
                     }
                 }
                 
-                Text("Library Settings")
-                Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
-                    .onChange(of: enableStoreReadingPosition) { value in
-                        modelData.updateStoreReadingPosition(enabled: value, value: storeReadingPositionColumnName)
-                    }
-                if enableStoreReadingPosition {
-                    HStack {
-                        Text("Column:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                        TextField("#name", text: $storeReadingPositionColumnName, onCommit:  {
-                            modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
-                        })
+                VStack(alignment:.leading, spacing: 4) {
+                    Divider()
+                    
+                    Text("Library Settings")
+                    Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
+                        .onChange(of: enableStoreReadingPosition) { enabled in
+                            modelData.updateStoreReadingPosition(enabled: enabled, value: storeReadingPositionColumnName)
+                            if enabled {
+                                
+                            }
+                        }
+                    Text("Therefore reading positions can be synced between devices.")
+                        .font(.caption)
+                    if enableStoreReadingPosition {
+                        HStack {
+                            Text("Column:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                            TextField("#name", text: $storeReadingPositionColumnName, onCommit:  {
+                                modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
+                            })
                             .keyboardType(.alphabet)
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
                             .border(Color(UIColor.separator))
+                        }
+                        Text("Please add a custom column of type \"Long text\" on calibre server.\nIf there are multiple users, it's better to add a unique column for each user.")
+                            .font(.caption)
                     }
-                }
-                
-                Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
-                    .onChange(of: enableGoodreadsSync, perform: { value in
-                        modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
-                    })
-                if enableGoodreadsSync {
-                    HStack {
-                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                        TextField("Name", text: $goodreadsSyncProfileName, onCommit:  {
-                            modelData.updateGoodreadsSyncProfileName(enabled: true, value: goodreadsSyncProfileName)
+                    
+                    Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
+                        .onChange(of: enableGoodreadsSync, perform: { value in
+                            modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
                         })
+                    Text("This is a Work-in-Progress, please stay tuned!")
+                        .font(.caption)
+                    if enableGoodreadsSync {
+                        HStack {
+                            Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
+                            TextField("Name", text: $goodreadsSyncProfileName, onCommit:  {
+                                modelData.updateGoodreadsSyncProfileName(enabled: true, value: goodreadsSyncProfileName)
+                            })
                             .keyboardType(.alphabet)
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
                             .border(Color(UIColor.separator))
+                        }
                     }
                 }
             }
@@ -236,31 +245,8 @@ struct ServerView: View {
             .disabled(dataLoading)
             .disabled(modelData.calibreServerLibraryUpdating)
             
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Reader Settings")
-                
-                Toggle("Enable Custom Dictionary Viewer", isOn: $enableCustomDictViewer)
-                if enableCustomDictViewer {
-                    HStack {
-                        Text("URL:")
-                        TextField("", text: $customDictViewerURL, onCommit: {
-                            modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
-                        })
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                    }
-                }
-            }.onChange(of: enableCustomDictViewer) { value in
-                modelData.updateCustomDictViewer(enabled: enableCustomDictViewer, value: customDictViewerURL)
-            }.padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
-            
             Spacer()
         }
-        
         .onAppear() {
             calibreServerId = modelData.currentCalibreServerId
             calibreServerLibraryId = modelData.currentCalibreLibraryId
@@ -273,27 +259,16 @@ struct ServerView: View {
                 goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
                 print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
             }
-            
-            
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action:{
-                    
-                }) {
-                    Image(systemName: "ellipsis.circle")
-                }
-            }
-        }
         .alert(item: $alertItem) { item in
             if item.id == "AddServer" {
                 return Alert(title: Text("Add Server"),
                              message: Text(alertContent),
                              primaryButton: .default(Text("Confirm")
                              ) {
-                                 addServerConfirmed()
+                                addServerConfirmed()
                              },
                              secondaryButton: .cancel())
             }
@@ -325,8 +300,8 @@ struct ServerView: View {
             return
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "identifiers"], "", "", "", -1]
-
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "identifiers"], "", "", "", -1]
+        
         let data = try! JSONSerialization.data(withJSONObject: json, options: [])
         
         var request = URLRequest(url: endpointUrl)
@@ -334,7 +309,7 @@ struct ServerView: View {
         request.httpBody = data
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
-
+        
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
                 self.alertItem = AlertItem(id: error.localizedDescription, action: {
@@ -344,7 +319,7 @@ struct ServerView: View {
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse,
-                (200...299).contains(httpResponse.statusCode) else {
+                  (200...299).contains(httpResponse.statusCode) else {
                 defaultLog.warning("not httpResponse: \(response.debugDescription)")
                 self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
                     dataLoading = false
@@ -353,21 +328,21 @@ struct ServerView: View {
             }
             
             if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                let data = data {
+               let data = data {
                 DispatchQueue(label: "data").async {
-                        //self.webView.loadHTMLString(string, baseURL: url)
-                        //result = string
-                        modelData.handleLibraryBooks(json: data) { isSuccess in
-                            dataLoading = false
-                            
-                            if !isSuccess {
-                                self.alertItem = AlertItem(id: "Failed to parse calibre server response.")
-                            }
+                    //self.webView.loadHTMLString(string, baseURL: url)
+                    //result = string
+                    modelData.handleLibraryBooks(json: data) { isSuccess in
+                        dataLoading = false
+                        
+                        if !isSuccess {
+                            self.alertItem = AlertItem(id: "Failed to parse calibre server response.")
                         }
                     }
                 }
             }
-
+        }
+        
         dataLoading = true
         task.resume()
     }
@@ -408,14 +383,14 @@ struct ServerView: View {
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse,
-                (200...299).contains(httpResponse.statusCode) else {
+                  (200...299).contains(httpResponse.statusCode) else {
                 self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
                     dataLoading = false
                 })
                 return
             }
             if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                let data = data {
+               let data = data {
                 DispatchQueue.main.async {
                     success(data)
                     dataLoading = false
@@ -437,6 +412,9 @@ struct ServerView: View {
             if let libraryMap = libraryInfo["library_map"] as? [String: String] {
                 if let defaultLibrary = libraryInfo["default_library"] as? String {
                     calibreServer.defaultLibrary = defaultLibrary
+                }
+                if calibreServer.lastLibrary.isEmpty {
+                    calibreServer.lastLibrary = calibreServer.defaultLibrary
                 }
                 var content = "Library List:"
                 calibreServerLibrariesEdit.removeAll()
@@ -483,13 +461,13 @@ struct ServerView: View {
         }
         calibreServerEditing = false
     }
-
+    
     private func delServerConfirmed() {
         
     }
 }
 
-struct SettingsView_Previews: PreviewProvider {
+struct ServerView_Previews: PreviewProvider {
     static private var modelData = ModelData()
     
     static var previews: some View {

@@ -25,6 +25,8 @@ final class ModelData: ObservableObject {
     @Published var calibreServers = [String: CalibreServer]()
     @Published var currentCalibreServerId = "" {
         didSet {
+            guard oldValue != currentCalibreServerId else { return }
+            
             UserDefaults.standard.set(currentCalibreServerId, forKey: Constants.KEY_DEFAULTS_SELECTED_SERVER_ID)
             
             currentBookId = 0
@@ -33,26 +35,39 @@ final class ModelData: ObservableObject {
             
             guard let server = calibreServers[currentCalibreServerId] else { return }
             
-            
-            let tmpLibrary = CalibreLibrary(server: server, key: server.defaultLibrary, name: server.defaultLibrary)
-            
-            if let library = calibreLibraries[tmpLibrary.id] {
+            let tmpLastLibrary = CalibreLibrary(server: server, key: server.lastLibrary, name: server.lastLibrary)
+            if let library = calibreLibraries[tmpLastLibrary.id] {
                 currentCalibreLibraryId = library.id
-            } else {
-                let serverLibraryIDs = calibreLibraries.compactMap {
-                    guard $0.value.server.id == server.id else { return nil }
-                    return $0.key
-                } as [String]
-                currentCalibreLibraryId = serverLibraryIDs.first ?? "Empty Server"
+                return
             }
-            //calibreServerLibraries.removeAll()
-            //populateServerLibraries()
+            
+            let tmpDefaultLibrary = CalibreLibrary(server: server, key: server.defaultLibrary, name: server.defaultLibrary)
+            
+            if let library = calibreLibraries[tmpDefaultLibrary.id] {
+                currentCalibreLibraryId = library.id
+                return
+            }
+            
+            let serverLibraryIDs = calibreLibraries.compactMap {
+                guard $0.value.server.id == server.id else { return nil }
+                return $0.key
+            } as [String]
+            currentCalibreLibraryId = serverLibraryIDs.first ?? "Empty Server"
+            
         }
     }
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var currentCalibreLibraryId = "" {
         didSet {
+            guard oldValue != currentCalibreLibraryId else { return }
+            
+            guard let library = calibreLibraries[currentCalibreLibraryId] else { return }
+            guard var server = calibreServers[currentCalibreServerId] else { return }
+            
+            server.lastLibrary = library.name
+            updateServerRealm(server: server)
+            
             UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
             
             calibreServerLibraryUpdating = true
@@ -86,25 +101,48 @@ final class ModelData: ObservableObject {
     
     @Published var searchString = "" {
         didSet {
-            updateFilteredBookList()
+            if searchString != oldValue {
+                updateFilteredBookList()
+            }
         }
     }
     @Published var filterCriteriaRating = Set<String>() {
         didSet {
-            updateFilteredBookList()
+            if filterCriteriaRating != oldValue {
+                updateFilteredBookList()
+            }
         }
     }
     
     @Published var filterCriteriaFormat = Set<String>() {
         didSet {
-            updateFilteredBookList()
+            if filterCriteriaFormat != oldValue {
+                updateFilteredBookList()
+            }
         }
     }
     @Published var filterCriteriaIdentifier = Set<String>() {
         didSet {
-            updateFilteredBookList()
+            if filterCriteriaIdentifier != oldValue {
+                updateFilteredBookList()
+            }
         }
     }
+    @Published var filterCriteriaShelved = FilterCriteriaShelved.none {
+        didSet {
+            if filterCriteriaShelved != oldValue {
+                updateFilteredBookList()
+            }
+        }
+    }
+    @Published var filterCriteriaSeries = Set<String>() {
+        didSet {
+            if filterCriteriaSeries != oldValue {
+                updateFilteredBookList()
+            }
+        }
+    }
+    
     @Published var filteredBookList = [Int32]()
     
     @Published var booksInShelf = [String: CalibreBook]()
@@ -166,7 +204,7 @@ final class ModelData: ObservableObject {
     }
     @Published var updatingMetadataStatus = "" {
         didSet {
-            if updatingMetadataStatus == "Success" {
+            if updatingMetadataStatus == "Success" || updatingMetadataStatus == "Deleted" {
                 updatingMetadataSucceed = true
             }
         }
@@ -177,7 +215,7 @@ final class ModelData: ObservableObject {
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 15,
+        schemaVersion: 16,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -207,7 +245,8 @@ final class ModelData: ObservableObject {
                 baseUrl: serverRealm.baseUrl!,
                 username: serverRealm.username ?? "",
                 password: serverRealm.password ?? "",
-                defaultLibrary: serverRealm.defaultLibrary ?? ""
+                defaultLibrary: serverRealm.defaultLibrary ?? "",
+                lastLibrary: serverRealm.lastLibrary ?? ""
             )
             calibreServers[calibreServer.id] = calibreServer
         }
@@ -422,6 +461,23 @@ final class ModelData: ObservableObject {
             if !filterCriteriaIdentifier.isEmpty && filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty {
                 return false
             }
+            if !filterCriteriaSeries.isEmpty && filterCriteriaSeries.contains(book.seriesDescription) == false {
+                return false
+            }
+            switch filterCriteriaShelved {
+            case .shelvedOnly:
+                if book.inShelf == false {
+                    return false
+                }
+                break
+            case .notShelvedOnly:
+                if book.inShelf == true {
+                    return false
+                }
+                break
+            case .none:
+                break
+            }
             return true
         }.sorted { (lhs, rhs) -> Bool in
             lhs.title < rhs.title
@@ -530,6 +586,7 @@ final class ModelData: ObservableObject {
         serverRealm.username = server.username
         serverRealm.password = server.password
         serverRealm.defaultLibrary = server.defaultLibrary
+        serverRealm.lastLibrary = server.lastLibrary
         try! realm.write {
             realm.add(serverRealm, update: .all)
         }
@@ -610,7 +667,7 @@ final class ModelData: ObservableObject {
     }
     
     
-    
+    //TODO merge with ServerView's handleLibraryInfo
     func handleLibraryInfo(jsonData: Data) {
         do {
             let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
@@ -716,6 +773,16 @@ final class ModelData: ObservableObject {
             let id = (key as! NSString).intValue
             if let rating = value as? NSNumber {
                 calibreServerLibraryBooks[id]!.rating = rating.intValue
+            }
+        }
+        
+        let series = dataElement["series"] as! NSDictionary
+        series.forEach { (key, value) in
+            let id = (key as! NSString).intValue
+            if let series = value as? String {
+                calibreServerLibraryBooks[id]!.series = series
+            } else {
+                calibreServerLibraryBooks[id]!.series = ""
             }
         }
         
@@ -961,24 +1028,26 @@ final class ModelData: ObservableObject {
         return book
     }
     
-    func addToShelf(_ bookId: Int32, shelfName: String? = nil) {
-        readingBook?.inShelf = true
-        calibreServerLibraryBooks[bookId]!.inShelf = true
-        if let shelfName = shelfName {
-            readingBook?.inShelfName = shelfName
-            calibreServerLibraryBooks[bookId]!.inShelfName = shelfName
-        } else if readingBook?.inShelfName.isEmpty ?? false, let tag = readingBook?.tags.first {
-            readingBook?.inShelfName = tag
-            calibreServerLibraryBooks[bookId]!.inShelfName = tag
-        } else {
-            
+    func addToShelf(_ bookId: Int32, shelfName: String) {
+        guard var book = calibreServerLibraryBooks[bookId] else {
+            return
         }
         
-        updateBookRealm(book: calibreServerLibraryBooks[bookId]!, realm: self.realm)
-        booksInShelf[calibreServerLibraryBooks[bookId]!.inShelfId] = calibreServerLibraryBooks[bookId]!
+        book.inShelfName = shelfName
+        book.inShelf = true
+        book.timestamp = Date()
         
-        if let book = readingBook, let library = calibreLibraries[book.library.id], let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
-            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+        calibreServerLibraryBooks[bookId] = book
+        
+        if readingBook?.id == bookId {
+            readingBook = book
+        }
+        
+        updateBookRealm(book: book, realm: self.realm)
+        booksInShelf[book.inShelfId] = book
+        
+        if let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = book.library.goodreadsSyncProfileName, goodreadsSyncProfileName.isEmpty == false {
+            let connector = GoodreadsSyncConnector(server: book.library.server, profileName: goodreadsSyncProfileName)
             let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
         }
     }
@@ -1019,7 +1088,7 @@ final class ModelData: ObservableObject {
             complete(false)
             return false
         }
-//        let url = URL(string: book.library.server.baseUrl + "/get/\(format.rawValue)/\(book.id)/\(book.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")
+
         defaultLog.info("downloadURL: \(url.absoluteString)")
         
         guard let savedURL = getSavedUrl(book: book, format: format) else {
@@ -1064,6 +1133,10 @@ final class ModelData: ObservableObject {
         }
         downloadTask.resume()
         return true
+    }
+    
+    func startBatchDownload(bookIds: [Int32], formats: [String]) {
+        
     }
     
     func clearCache(inShelfId: String, _ format: CalibreBook.Format) {
@@ -1204,6 +1277,7 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getDevices().first
     }
     
+    @available(*, deprecated)
     func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
         let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
@@ -1409,78 +1483,99 @@ final class ModelData: ObservableObject {
     
     func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-        do {
-            let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+
+        let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        
+        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+            if let error = error {
+                defaultLog.warning("error: \(error.localizedDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = error.localizedDescription
+                    updatingMetadata = false
+                    completion?(oldbook)
+                }
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = response.debugDescription
+                    updatingMetadata = false
+                    completion?(oldbook)
+                }
+                return
+            }
+            guard httpResponse.statusCode != 404 else {
+                defaultLog.warning("statusCode 404: \(httpResponse.debugDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = "Deleted"
+                    updatingMetadata = false
+                    completion?(oldbook)
+                }
+                return
+            }
+            guard (200...299).contains(httpResponse.statusCode) else {
+                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = httpResponse.debugDescription
+                    updatingMetadata = false
+                    completion?(oldbook)
+                }
+                return
+            }
             
-            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-                if let error = error {
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = error.localizedDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
-                    return
+            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                  let data = data,
+                  let string = String(data: data, encoding: .utf8) else {
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = httpResponse.debugDescription
+                    updatingMetadata = false
+                    completion?(oldbook)
                 }
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = response.debugDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
-                    return
-                }
-                if !(200...299).contains(httpResponse.statusCode) {
-                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
+                return
+            }
+            
+            DispatchQueue.main.async {
+                //self.webView.loadHTMLString(string, baseURL: url)
+                //                            defaultLog.warning("httpResponse: \(string)")
+                //book.comments = string
+                guard var book = handleLibraryBookOneNew(oldbook: oldbook, json: data) else {
+                    completion?(oldbook)
                     return
                 }
                 
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                   let data = data,
-                   let string = String(data: data, encoding: .utf8) {
-                    DispatchQueue.main.async {
-                        //self.webView.loadHTMLString(string, baseURL: url)
-                        //                            defaultLog.warning("httpResponse: \(string)")
-                        //book.comments = string
-                        guard var book = handleLibraryBookOneNew(oldbook: oldbook, json: data) else {
-                            completion?(oldbook)
-                            return
-                        }
-                        
-                        if( book.readPos.getDevices().isEmpty) {
-                            book.readPos.addInitialPosition(deviceName, defaultReaderForDefaultFormat(book: book).rawValue)
-                        }
-                        
-                        updateBook(book: book)
-                        
-                        updatingMetadataStatus = "Success"
-                        updatingMetadata = false
-                        
-                        completion?(book)
-                    }
+                if( book.readPos.getDevices().isEmpty) {
+                    book.readPos.addInitialPosition(deviceName, defaultReaderForDefaultFormat(book: book).rawValue)
                 }
+                
+                updateBook(book: book)
+                
+                updatingMetadataStatus = "Success"
+                updatingMetadata = false
+                
+                completion?(book)
             }
-            
-            updatingMetadata = true
-            task.resume()
-            
-        }catch{
         }
+        
+        updatingMetadata = true
+        task.resume()
     }
     
     func getBookManifest(book: CalibreBook, format: CalibreBook.Format, completion: ((_ manifest: Data) -> Void)? = nil) {
+        let emptyData = "{}".data(using: .ascii)!
+        
+        guard formatReaderMap[format] != nil else {
+            updatingMetadataStatus = "Success"
+            updatingMetadata = false
+            completion?(emptyData)
+            return
+        }
+        
         let endpointUrl = URL(string: book.library.server.baseUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl)
         
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-            let emptyData = "{}".data(using: .ascii)!
             if let error = error {
                 defaultLog.warning("error: \(error.localizedDescription)")
                 DispatchQueue.main.async {
@@ -1499,7 +1594,17 @@ final class ModelData: ObservableObject {
                 }
                 return
             }
-            if !(200...299).contains(httpResponse.statusCode) {
+            
+            guard httpResponse.statusCode != 404 else {
+                DispatchQueue.main.async {
+                    updatingMetadataStatus = "Deleted"
+                    updatingMetadata = false
+                    completion?(emptyData)
+                }
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
                 defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                 DispatchQueue.main.async {
                     updatingMetadataStatus = httpResponse.debugDescription
@@ -1547,6 +1652,13 @@ final class ModelData: ObservableObject {
             .reversed()
             .reduce(ReaderType.UNSUPPORTED) { formatReaderMap[$1]!.first! }
         }
+    }
+    
+    func formatOfReader(readerName: String) -> CalibreBook.Format? {
+        let formats = formatReaderMap.filter {
+            $0.value.contains(where: { reader in reader.rawValue == readerName } )
+        }
+        return formats.first?.key
     }
     
     func prepareBookReading(book: CalibreBook) ->(URL, CalibreBook.Format, ReaderType)? {

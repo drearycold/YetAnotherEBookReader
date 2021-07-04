@@ -25,7 +25,9 @@ final private class BannerVC: UIViewControllerRepresentable  {
         return viewController
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        
+    }
 }
 
 struct Banner: View{

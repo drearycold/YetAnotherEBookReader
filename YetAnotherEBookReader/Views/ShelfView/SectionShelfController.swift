@@ -219,8 +219,16 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         modelData.readingBookInShelfId = bookId
-        guard modelData.getSelectedReadingPosition() != nil else {
-            //TODO
+        guard let book = modelData.readingBook,
+            let readerInfo = modelData.prepareBookReading(book: book) else {
+            let alert = UIAlertController(title: "Missing Book File", message: "Re-download from Server?", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                alert.dismiss(animated: true, completion: nil)
+            })
+            alert.addAction(UIAlertAction(title: "Download", style: .default) { _ in
+                alert.dismiss(animated: true, completion: nil)
+            })
+            self.present(alert, animated: true, completion: nil)
             return
         }
         modelData.presentingEBookReaderFromShelf = true
@@ -235,7 +243,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 //        becomeFirstResponder()
 //        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        let bookDetailView = BookDetailView().environmentObject(modelData)
+        let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )

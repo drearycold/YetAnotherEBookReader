@@ -41,6 +41,7 @@ struct CalibreServer: Hashable, Identifiable {
     var username: String
     var password: String
     var defaultLibrary = ""
+    var lastLibrary = ""
     
     static func == (lhs: CalibreServer, rhs: CalibreServer) -> Bool {
         lhs.baseUrl == rhs.baseUrl && lhs.username == rhs.username
@@ -61,6 +62,7 @@ class CalibreServerRealm: Object {
     }
     @objc dynamic var password: String?
     @objc dynamic var defaultLibrary: String?
+    @objc dynamic var lastLibrary: String?
     
     override static func primaryKey() -> String? {
         return "primaryKey"
@@ -173,6 +175,12 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var comments = "Without Comments"
     var publisher = "Unknown"
     var series = ""
+    var seriesDescription: String {
+        if series.isEmpty {
+            return "Without Series"
+        }
+        return series
+    }
     var rating = 0
     var ratingDescription: String {
         if rating > 9 {
@@ -190,9 +198,23 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         }
     }
     var size = 0
-    var pubDate = Date()
-    var timestamp = Date()
-    var lastModified = Date()
+    var pubDate = Date(timeIntervalSince1970: .zero)
+    var pubDateByLocale: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .none
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: pubDate)
+    }
+    var timestamp = Date(timeIntervalSince1970: .zero)
+    var lastModified = Date(timeIntervalSince1970: .zero)
+    var lastModifiedByLocale: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: lastModified)
+    }
     var tags = [String]()
     var tagsDescription: String {
         if tags.count == 0 {
@@ -239,6 +261,18 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         var id: String { self.rawValue }
         
         var ext: String { self.rawValue.lowercased() }
+    }
+    
+    struct FormatInfo {
+        var serverSize: UInt64
+        var serverMTime: Date
+        var cached: Bool
+        var cacheSize: UInt64
+        var cacheMTime: Date
+        
+        var cacheUptoDate: Bool {
+            serverMTime.timeIntervalSince(cacheMTime) < 60
+        }
     }
 }
 
@@ -392,7 +426,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         hasher.combine(readerName)
     }
     
-    var id: String
+    var id: String  //device name
     
     var readerName: String
     var maxPage = 0

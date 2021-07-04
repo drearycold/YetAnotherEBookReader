@@ -20,10 +20,10 @@ struct MainView: View {
     
     var body: some View {
         TabView(selection: $modelData.activeTab) {
-            PlainShelfUI()
+            RecentShelfUI()
                 .tabItem {
                     Image(systemName: "doc.text.fill")
-                    Text("Local")
+                    Text("Recent")
                 }
                 .tag(0)
                 
@@ -37,14 +37,14 @@ struct MainView: View {
             LibraryInfoView()
                 .tabItem {
                     Image(systemName: "building.columns.fill")
-                    Text("Library")
+                    Text("Browse")
                 }
                 .tag(2)
             
-            ServerView()
+            SettingsView()
                 .tabItem {
-                    Image(systemName: "server.rack")
-                    Text("Server")
+                    Image(systemName: "gearshape.fill")
+                    Text("Settings")
                 }
                 .tag(3)
         }
@@ -67,7 +67,6 @@ struct MainView: View {
                 modelData.updateCurrentPosition()
             }
         }) {
-            
             if let book = modelData.readingBook,
                let readerInfo = modelData.prepareBookReading(book: book)
                {
