@@ -39,11 +39,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         bookModel = modelData.booksInShelf
             .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) }
             .sorted { $0.value.lastModified > $1.value.lastModified }
-            .map { (key: String, value: CalibreBook) -> BookModel in
-            BookModel(
-                bookCoverSource: value.coverURL.absoluteString,
-                bookId: key,
-                bookTitle: value.title)
+            .compactMap {
+                guard let coverUrl = $1.coverURL else { return nil }
+                return BookModel(
+                    bookCoverSource: coverUrl.absoluteString,
+                    bookId: $0,
+                    bookTitle: $1.title)
         }
         
         self.shelfView.reloadBooks(bookModel: bookModel)
@@ -182,7 +183,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         modelData.readingBookInShelfId = bookId
         
         modelData.presentingEBookReaderFromShelf = true
-
     }
     
     func onBookLongClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
@@ -227,7 +227,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
               let book = modelData.readingBook else { return }
         
         book.formats.keys.forEach {
-            guard let format = CalibreBook.Format(rawValue: $0) else { return }
+            guard let format = Format(rawValue: $0) else { return }
             modelData.clearCache(book: book, format: format)
             modelData.deleteLocalLibraryBook(book: book, format: format)
         }

@@ -304,7 +304,7 @@ struct LibraryInfoView: View {
                     Button(action: {
                         defaultLog.info("selected \(selectedBookIds.description)")
                         selectedBookIds.forEach { bookId in
-                            CalibreBook.Format.allCases.forEach {
+                            Format.allCases.forEach {
                                 modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId, $0)
                             }
                             modelData.removeFromShelf(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)

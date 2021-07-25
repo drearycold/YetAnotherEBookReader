@@ -16,14 +16,14 @@ import R2Streamer
 struct YabrEBookReader: UIViewControllerRepresentable {
     
     let bookURL : URL
-    let bookFormat: CalibreBook.Format
+    let bookFormat: Format
     let bookReader: ReaderType
     
     @EnvironmentObject var modelData: ModelData
     
     func makeUIViewController(context: Context) -> UIViewController {
         let nav = UINavigationController()
-        if bookFormat == CalibreBook.Format.EPUB && bookReader == ReaderType.ReadiumEPUB {
+        if bookFormat == Format.EPUB && bookReader == ReaderType.ReadiumEPUB {
             
             guard let server = PublicationServer() else {
                 return nav
@@ -70,7 +70,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return nav
         }
         
-        if bookFormat == CalibreBook.Format.EPUB && bookReader == ReaderType.FolioReader {
+        if bookFormat == Format.EPUB && bookReader == ReaderType.FolioReader {
             let readerConfiguration = FolioReaderConfiguration(bookURL: bookURL)
             readerConfiguration.enableTTS = false
             readerConfiguration.allowSharing = false
@@ -88,7 +88,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return epubReaderContainer
         }
         
-        if bookFormat == CalibreBook.Format.PDF && bookReader == ReaderType.ReadiumPDF {
+        if bookFormat == Format.PDF && bookReader == ReaderType.ReadiumPDF {
             let nav = UINavigationController()
             
             guard let server = PublicationServer() else {
@@ -141,7 +141,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return nav
         }
         
-        if bookFormat == CalibreBook.Format.PDF && bookReader == ReaderType.YabrPDFView {
+        if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDFView {
             let pdfViewController = YabrPDFViewController()
             
             let nav = UINavigationController(rootViewController: pdfViewController)
@@ -169,7 +169,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return nav
         }
         
-        if bookFormat == CalibreBook.Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
+        if bookFormat == Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
             let nav = UINavigationController()
             
             guard let server = PublicationServer() else {
@@ -240,7 +240,7 @@ func FolioReaderConfiguration(bookURL: URL) -> FolioReaderConfig {
     
     #if DEBUG
     //config.debug.formUnion([.borderHighlight, .viewTransition, .functionTrace])
-    config.debug.formUnion([.htmlStyling, .borderHighlight])
+    //config.debug.formUnion([.htmlStyling, .borderHighlight])
     #endif
     // See more at FolioReaderConfig.swift
 //        config.canChangeScrollDirection = false

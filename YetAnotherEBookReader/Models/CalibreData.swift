@@ -12,7 +12,7 @@ struct CalibreServer: Hashable, Identifiable {
     var id: String {
         get {
             if isLocal {
-                return "Document"
+                return "Document Folder"
             }
             else if username.isEmpty {
                 return baseUrl
@@ -36,42 +36,27 @@ struct CalibreServer: Hashable, Identifiable {
         return documentDirectoryURL
     }
     
+    var name: String
     var baseUrl: String
-    var alternativeUrls = [String]()
+    var publicUrl: String
+    var serverUrl: String {
+        if usePublic && publicUrl.isEmpty == false {
+            return publicUrl
+        } else {
+            return baseUrl
+        }
+    }
     var username: String
     var password: String
     var defaultLibrary = ""
     var lastLibrary = ""
+    var usePublic: Bool = false
     
     static func == (lhs: CalibreServer, rhs: CalibreServer) -> Bool {
         lhs.baseUrl == rhs.baseUrl && lhs.username == rhs.username
     }
 }
 
-class CalibreServerRealm: Object {
-    @objc dynamic var primaryKey: String?
-    @objc dynamic var baseUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var username: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var password: String?
-    @objc dynamic var defaultLibrary: String?
-    @objc dynamic var lastLibrary: String?
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
-    func updatePrimaryKey() {
-        primaryKey = "\(username ?? "-")@\(baseUrl ?? "-")"
-    }
-}
 
 struct CalibreLibrary: Hashable, Identifiable {
     var id: String {
@@ -97,42 +82,16 @@ struct CalibreLibrary: Hashable, Identifiable {
     var goodreadsSyncProfileNameDefault: String {
         return "Default"
     }
-}
-
-class CalibreLibraryRealm: Object {
-    @objc dynamic var primaryKey: String?
     
-    @objc dynamic var key: String? {
-        didSet {
-            
+    var urlForDeleteBook: URL? {
+        guard let keyEncoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
         }
+        
+        let serverUrl = server.serverUrl
+        
+        return URL(string: "\(serverUrl)/cdb/cmd/remove/0?library_id=\(keyEncoded)")
     }
-    @objc dynamic var name: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var serverUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var serverUsername: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
-    func updatePrimaryKey() {
-        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
-    }
-    
-    @objc dynamic var readPosColumnName: String?
-    @objc dynamic var goodreadsSyncProfileName: String?
 }
 
 struct CalibreBook: Hashable, Identifiable, Equatable {
@@ -236,11 +195,23 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     
     var identifiers = [String: String]()
     
-    var coverURL : URL {
-        return URL(string: "\(library.server.baseUrl)/get/thumb/\(id)/\(library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)?sz=300x400")!
+    var coverURL : URL? {
+        guard let keyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
+        }
+        
+        let url = URL(string: "\(library.server.serverUrl)/get/thumb/\(id)/\(keyEncoded)?sz=300x400&username=\(library.server.username)")
+        if url != nil {
+            print("coverURL: \(url!.absoluteString)")
+        }
+        return url
     }
-    var commentBaseURL : URL {  //fake
-        return URL(string: "\(library.server.baseUrl)/get/\(id)/\(library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)")!
+    var commentBaseURL : URL? {
+        //fake
+        guard let keyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
+            return nil
+        }
+        return URL(string: "\(library.server.serverUrl)/get/\(id)/\(keyEncoded)")!
     }
     
     var inShelfId : String {
@@ -250,127 +221,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var inShelf = false
     var inShelfName = ""
     
-    enum Format: String, CaseIterable, Identifiable {
-        case UNKNOWN
-        
-        case EPUB
-        case PDF
-        case CBZ
-        
-        
-        var id: String { self.rawValue }
-        
-        var ext: String { self.rawValue.lowercased() }
-    }
-    
-    struct FormatInfo {
-        var serverSize: UInt64
-        var serverMTime: Date
-        var cached: Bool
-        var cacheSize: UInt64
-        var cacheMTime: Date
-        
-        var cacheUptoDate: Bool {
-            serverMTime.timeIntervalSince(cacheMTime) < 60
-        }
-    }
 }
 
-class CalibreBookRealm: Object {
-    @objc dynamic var primaryKey: String?
-    
-    @objc dynamic var serverUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var serverUsername: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var libraryName: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-    @objc dynamic var id: Int32 = 0 {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var title = ""
-    let authors = List<String>()
-    @objc dynamic var comments = ""
-    @objc dynamic var publisher = ""
-    @objc dynamic var series = ""
-    @objc dynamic var rating = 0
-    @objc dynamic var size = 0
-    @objc dynamic var pubDate = Date()
-    @objc dynamic var timestamp = Date()
-    @objc dynamic var lastModified = Date()
-    let tags = List<String>()
-    @objc dynamic var formatsData: NSData?
-    @objc dynamic var readPosData: NSData?
-    @objc dynamic var identifiersData: NSData?
-    
-    @objc dynamic var inShelf = false
-    @objc dynamic var inShelfName = ""
-    
-    func formats() -> [String: String] {
-        let formats = try! JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as! [String: String]
-        return formats
-    }
-    
-    func identifiers() -> [String: String] {
-        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
-        return identifiers
-    }
-    
-    func readPos() -> BookReadingPosition {
-        var readPos = BookReadingPosition()
-        
-        let readPosObject = try! JSONSerialization.jsonObject(with: readPosData! as Data, options: [])
-        let readPosDict = readPosObject as! NSDictionary
-        
-        let deviceMapObject = readPosDict["deviceMap"]
-        let deviceMapDict = deviceMapObject as! NSDictionary
-        deviceMapDict.forEach { key, value in
-            let deviceName = key as! String
-            let deviceReadingPositionDict = value as! [String: Any]
-            
-            var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
-            
-            deviceReadingPosition.readerName = deviceReadingPositionDict["readerName"] as! String
-            deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-            deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-            deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
-            deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-            deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-            deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-            deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-            if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                deviceReadingPosition.lastPosition = lastPosition as! [Int]
-            }
-            
-            readPos.updatePosition(deviceName, deviceReadingPosition)
-        }
-        return readPos
-    }
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
-    func updatePrimaryKey() {
-        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(libraryName ?? "-") ^ \(id)"
-    }
-    
-    override static func indexedProperties() -> [String] {
-            return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf"]
-        }
-}
 
 struct BookReadingPosition {
     private var deviceMap = [String: BookDeviceReadingPosition]()
@@ -410,6 +262,12 @@ struct BookReadingPosition {
     
     func getDevices() -> [BookDeviceReadingPosition] {
         return devices
+    }
+    
+    func getDevices(by reader: ReaderType) -> [BookDeviceReadingPosition] {
+        return devices.filter {
+            $0.readerName == reader.id
+        }
     }
 }
 
@@ -494,14 +352,3 @@ struct ServerErrorDelegate {
     
 }
 
-enum ReaderType: String, CaseIterable, Identifiable {
-    case UNSUPPORTED
-    
-    case FolioReader
-    case YabrPDFView
-    case ReadiumEPUB
-    case ReadiumPDF
-    case ReadiumCBZ
-    
-    var id: String { self.rawValue }
-}

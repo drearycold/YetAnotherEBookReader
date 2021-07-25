@@ -99,7 +99,7 @@ struct LibraryInfoBatchDownloadSheet: View {
     func test() {
 //        selectedBookIds.forEach { bookId in
 //            var downloaded = false
-//            CalibreBook.Format.allCases.forEach {
+//            Format.allCases.forEach {
 //                downloaded = downloaded || modelData.downloadFormat(book: modelData.calibreServerLibraryBooks[bookId]!, format: $0) { result in
 //                    
 //                }

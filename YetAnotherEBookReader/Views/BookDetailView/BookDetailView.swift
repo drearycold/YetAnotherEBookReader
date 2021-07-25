@@ -48,10 +48,10 @@ struct BookDetailView: View {
 //    @State private var showingRefreshAlert = false
 //    @State private var showingDownloadAlert = false
     
-    @State private var formatStats = [CalibreBook.Format: CalibreBook.FormatInfo]()
+    @State private var formatStats = [Format: FormatInfo]()
     
     @State private var selectedFormatShowDetail = false
-    @State private var selectedFormat = CalibreBook.Format.EPUB
+    @State private var selectedFormat = Format.EPUB
 //    @State private var selectedFormatSize:UInt64 = 0
 //    @State private var selectedFormatMTime = Date()
 //    @State private var selectedFormatCached = false
@@ -267,26 +267,26 @@ struct BookDetailView: View {
                             selectedFormat = format
                         }
                         
-                        guard selectedFormat == CalibreBook.Format.UNKNOWN
+                        guard selectedFormat == Format.UNKNOWN
                                 || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
                                 else { return }
-                        CalibreBook.Format.allCases.forEach { format in
+                        Format.allCases.forEach { format in
                             if formatStats[format]?.cached ?? false {
                                 self.selectedFormat = format
                             }
                         }
                         
-                        guard selectedFormat == CalibreBook.Format.UNKNOWN
+                        guard selectedFormat == Format.UNKNOWN
                                 || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
                                 else { return }
                         if book.formats[modelData.defaultFormat.rawValue] != nil {
                             self.selectedFormat = modelData.defaultFormat
                         }
                         
-                        guard selectedFormat == CalibreBook.Format.UNKNOWN
+                        guard selectedFormat == Format.UNKNOWN
                                 || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
                                 else { return }
-                        CalibreBook.Format.allCases.forEach { format in
+                        Format.allCases.forEach { format in
                             if book.formats[format.rawValue] != nil {
                                 self.selectedFormat = format
                             }
@@ -331,7 +331,7 @@ struct BookDetailView: View {
                         .font(.subheadline)
                         .frame(minWidth: 80, alignment: .trailing)
                     Picker("Format", selection: $selectedFormat) {
-                        ForEach(CalibreBook.Format.allCases) { format in
+                        ForEach(Format.allCases) { format in
                             if book.formats[format.rawValue] != nil {
                                 Text(format.rawValue).tag(format)
                             }
@@ -339,7 +339,7 @@ struct BookDetailView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .onChange(of: selectedFormat) { newFormat in
-                        if newFormat == CalibreBook.Format.UNKNOWN {
+                        if newFormat == Format.UNKNOWN {
                             return
                         }
                         print("selectedFormat \(selectedFormat.rawValue)")
@@ -537,15 +537,15 @@ struct BookDetailView: View {
                     }
                 } else {
                     VStack(alignment: .trailing, spacing: 4) {
-                        HStack {
-                            metadataIcon(systemName: "exclamationmark.shield")
-                            Text("Sync Error Encounted")
-                        }
                         Button(action:{
                             alertItem = AlertItem(id: "Sync Error", msg: modelData.updatingMetadataStatus)
                         }) {
-                            Text("Show Detail")
+                            HStack {
+                                metadataIcon(systemName: "exclamationmark.shield")
+                                Text("Sync Error Encounted")
+                            }
                         }
+                        
                     }
                 }
             }
@@ -624,7 +624,7 @@ struct BookDetailView: View {
             .frame(width: 24, height: 24)
     }
     
-    private func cacheFormatButton(book: CalibreBook, format: CalibreBook.Format, formatInfo: CalibreBook.FormatInfo) -> some View {
+    private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
             modelData.downloadFormat(
@@ -638,7 +638,7 @@ struct BookDetailView: View {
                         modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
                     }
 
-                    guard format == CalibreBook.Format.EPUB,
+                    guard format == Format.EPUB,
                           let savedURL = getSavedUrl(book: book, format: format),
                           let folioUnzippedPath = makeFolioReaderUnzipPath(),
                           FileManager.default.fileExists(atPath: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true).path)
@@ -659,7 +659,7 @@ struct BookDetailView: View {
         }
     }
     
-    private func clearFormatButton(book: CalibreBook, format: CalibreBook.Format, formatInfo: CalibreBook.FormatInfo) -> some View {
+    private func clearFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
             updateCacheStates(book: book, format: format)
@@ -694,7 +694,9 @@ struct BookDetailView: View {
                     //TODO cancel
                 } else {
                     if let book = modelData.readingBook {
-                        modelData.kfImageCache.removeImage(forKey: book.coverURL.absoluteString)
+                        if let coverUrl = book.coverURL {
+                            modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
+                        }
                         resetStates()
                         modelData.getMetadataNew(oldbook: book) { newbook in
                             initStates(book: newbook)
@@ -821,7 +823,9 @@ struct BookDetailView: View {
             assert(false, "readingBook is nil")
             return
         }
-        let endpointUrl = URL(string: book.library.server.baseUrl + "/cdb/cmd/remove/0?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        guard let endpointUrl = book.library.urlForDeleteBook else {
+            return
+        }
         let json:[Any] = [[book.id], false]
         do {
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -859,7 +863,7 @@ struct BookDetailView: View {
     }
     
     func resetStates() {
-        selectedFormat = CalibreBook.Format.UNKNOWN
+        selectedFormat = Format.UNKNOWN
         selectedPosition = ""
         selectedFormatReader = ReaderType.UNSUPPORTED
         formatStats.removeAll()
@@ -884,8 +888,8 @@ struct BookDetailView: View {
     
     func initCacheStates(book: CalibreBook) {
         book.formats.forEach { (fKey, fValStr) in
-            guard let format = CalibreBook.Format(rawValue: fKey) else { return }
-            var formatInfo = CalibreBook.FormatInfo(
+            guard let format = Format(rawValue: fKey) else { return }
+            var formatInfo = FormatInfo(
                 serverSize: 0,
                 serverMTime: Date(timeIntervalSince1970: 0),
                 cached: false,
@@ -900,7 +904,7 @@ struct BookDetailView: View {
                 }
                 if let mtimeVal = fVal["mtime"] as? String {
                     let dateFormatter = ISO8601DateFormatter()
-                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+                    dateFormatter.formatOptions = ISO8601DateFormatter.Options.withInternetDateTime.union(.withFractionalSeconds)
                     if let mtime = dateFormatter.date(from: mtimeVal) {
                         formatInfo.serverMTime = mtime
                     }
@@ -920,7 +924,7 @@ struct BookDetailView: View {
         }
     }
     
-    func updateCacheStates(book: CalibreBook, format: CalibreBook.Format) {
+    func updateCacheStates(book: CalibreBook, format: Format) {
         guard let formatInfo = formatStats[format] else { return }
         
         if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
@@ -994,10 +998,34 @@ struct BookDetailView: View {
 
 @available(macCatalyst 14.0, *)
 struct BookDetailView_Previews: PreviewProvider {
+    @State static var book = CalibreBook(
+        id: 5410,
+        library: CalibreLibrary(
+            server: CalibreServer(
+                name:"My Server",
+                baseUrl: "http://calibre-server.lan:8080/",
+                publicUrl: "",
+                username: "",
+                password: ""),
+            key: "Local",
+            name: "Local"
+        ),
+        title: "Title",
+        authors: ["Author"],
+        comments: "",
+        rating: 0,
+        formats: ["EPUB":""],
+        readPos: BookReadingPosition(),
+        inShelf: true
+    )
+   
     static var modelData = ModelData()
-    @State static var book = CalibreBook(id: 1, library: CalibreLibrary(server: CalibreServer(baseUrl: "", username: "", password: ""), key: "Local", name: "Local"), title: "Title", authors: ["Author"], comments: "", rating: 0, formats: ["EPUB":""], readPos: BookReadingPosition(), inShelf: true)
+     
     static var previews: some View {
-        BookDetailView(viewMode: .SHELF)
+        BookDetailView(viewMode: .LIBRARY)
             .environmentObject(modelData)
+            .onAppear() {
+                modelData.readingBook = book
+            }
     }
 }

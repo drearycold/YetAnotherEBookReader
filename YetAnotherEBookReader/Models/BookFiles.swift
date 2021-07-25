@@ -7,7 +7,7 @@
 
 import Foundation
 
-func getSavedUrl(book: CalibreBook, format: CalibreBook.Format) -> URL? {
+func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
     if book.library.server.isLocal {
         if let localBaseUrl = book.library.server.localBaseUrl,
            let formatDataEncoded = book.formats[format.rawValue],

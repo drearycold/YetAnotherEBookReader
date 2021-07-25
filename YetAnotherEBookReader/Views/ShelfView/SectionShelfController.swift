@@ -47,8 +47,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             }
             .reduce(into: [String: [BookModel]]()) {
                 print("updateBookModel \($1.value.title) \($1.value.lastModified)")
+                guard let coverUrl = $1.value.coverURL else { return }
                 let newBook = BookModel(
-                    bookCoverSource: $1.value.coverURL.absoluteString,
+                    bookCoverSource: coverUrl.absoluteString,
                     bookId: $1.key,
                     bookTitle: $1.value.title)
                 let shelfName = $1.value.inShelfName.isEmpty ? ($1.value.tags.first ?? "Untagged") : $1.value.inShelfName
@@ -219,8 +220,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         modelData.readingBookInShelfId = bookId
-        guard let book = modelData.readingBook,
-            let readerInfo = modelData.prepareBookReading(book: book) else {
+        guard modelData.readingBook != nil else {
             let alert = UIAlertController(title: "Missing Book File", message: "Re-download from Server?", preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
                 alert.dismiss(animated: true, completion: nil)

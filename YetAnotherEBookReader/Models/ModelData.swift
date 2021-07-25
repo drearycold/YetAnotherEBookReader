@@ -96,8 +96,8 @@ final class ModelData: ObservableObject {
     var localLibrary: CalibreLibrary?
     
     //for LibraryInfoView
-    @Published var defaultFormat = CalibreBook.Format.PDF
-    var formatReaderMap = [CalibreBook.Format: [ReaderType]]()
+    @Published var defaultFormat = Format.PDF
+    var formatReaderMap = [Format: [ReaderType]]()
     
     @Published var searchString = "" {
         didSet {
@@ -171,6 +171,7 @@ final class ModelData: ObservableObject {
             }
             guard readingBook?.inShelfId != readingBookInShelfId else { return }
             readingBook = booksInShelf[readingBookInShelfId]
+            readerInfo = prepareBookReading(book: readingBook!)
         }
     }
     @Published var readingBook: CalibreBook? = nil {
@@ -186,6 +187,8 @@ final class ModelData: ObservableObject {
             }
         }
     }
+    
+    @Published var readerInfo: (URL, Format, ReaderType)? = nil
     
     @Published var presentingEBookReaderFromShelf = false
     
@@ -215,7 +218,7 @@ final class ModelData: ObservableObject {
     
     private var realm: Realm!
     private let realmConf = Realm.Configuration(
-        schemaVersion: 16,
+        schemaVersion: 17,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
                     // if you added a new property or removed a property you don't
@@ -226,6 +229,7 @@ final class ModelData: ObservableObject {
     )
     
     let kfImageCache = ImageCache.default
+    var authResponsor = AuthResponsor()
     
     init() {
         #if canImport(GoogleMobileAds)
@@ -237,18 +241,61 @@ final class ModelData: ObservableObject {
         )
         
         kfImageCache.diskStorage.config.expiration = .never
+        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
+        ImageDownloader.default.authenticationChallengeResponder = authResponsor
         
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in
             guard serverRealm.baseUrl != nil else { return }
             let calibreServer = CalibreServer(
+                name: serverRealm.name ?? serverRealm.baseUrl!,
                 baseUrl: serverRealm.baseUrl!,
+                publicUrl: serverRealm.publicUrl ?? "",
                 username: serverRealm.username ?? "",
                 password: serverRealm.password ?? "",
                 defaultLibrary: serverRealm.defaultLibrary ?? "",
                 lastLibrary: serverRealm.lastLibrary ?? ""
             )
             calibreServers[calibreServer.id] = calibreServer
+            
+            if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
+                if let url = URL(string: calibreServer.baseUrl), let host = url.host, let port = url.port {
+                    var authMethod = NSURLAuthenticationMethodDefault
+                    if url.scheme == "http" {
+                        authMethod = NSURLAuthenticationMethodHTTPDigest
+                    }
+                    if url.scheme == "https" {
+                        authMethod = NSURLAuthenticationMethodHTTPBasic
+                    }
+                    let protectionSpace = URLProtectionSpace.init(host: host,
+                                                                  port: port,
+                                                                  protocol: url.scheme,
+                                                                  realm: "calibre",
+                                                                  authenticationMethod: authMethod)
+                    let userCredential = URLCredential(user: calibreServer.username,
+                                                       password: calibreServer.password,
+                                                       persistence: .permanent)
+                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+                }
+                if let url = URL(string: calibreServer.publicUrl), let host = url.host, let port = url.port {
+                    var authMethod = NSURLAuthenticationMethodDefault
+                    if url.scheme == "http" {
+                        authMethod = NSURLAuthenticationMethodHTTPDigest
+                    }
+                    if url.scheme == "https" {
+                        authMethod = NSURLAuthenticationMethodHTTPBasic
+                    }
+                    let protectionSpace = URLProtectionSpace.init(host: host,
+                                                                  port: port,
+                                                                  protocol: url.scheme,
+                                                                  realm: "calibre",
+                                                                  authenticationMethod: authMethod)
+                    let userCredential = URLCredential(user: calibreServer.username,
+                                                       password: calibreServer.password,
+                                                       persistence: .permanent)
+                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+                }
+            }
         }
         
         if let lastServerId = UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_SELECTED_SERVER_ID), calibreServers[lastServerId] != nil {
@@ -270,7 +317,7 @@ final class ModelData: ObservableObject {
         
         booksInShelfRealm.forEach {
             // print(bookRealm)
-            guard let server = calibreServers[CalibreServer(baseUrl: $0.serverUrl!, username: $0.serverUsername!, password: "").id] else {
+            guard let server = calibreServers[CalibreServer(name: "", baseUrl: $0.serverUrl!, publicUrl: "", username: $0.serverUsername!, password: "").id] else {
                 print("ERROR booksInShelfRealm missing server \($0)")
                 return
             }
@@ -288,26 +335,27 @@ final class ModelData: ObservableObject {
         
         switch UIDevice.current.userInterfaceIdiom {
             case .phone:
-                defaultFormat = CalibreBook.Format.EPUB
+                defaultFormat = Format.EPUB
             case .pad:
-                defaultFormat = CalibreBook.Format.PDF
+                defaultFormat = Format.PDF
             default:
-                defaultFormat = CalibreBook.Format.EPUB
+                defaultFormat = Format.EPUB
         }
         
-        formatReaderMap[CalibreBook.Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
-        formatReaderMap[CalibreBook.Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
-        formatReaderMap[CalibreBook.Format.CBZ] = [ReaderType.ReadiumCBZ]
+        formatReaderMap[Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
+        formatReaderMap[Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
+        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
     }
     
     func populateLibraries() {
-        let currentCalibreServer = calibreServers[currentCalibreServerId]!
+        guard let currentCalibreServer = calibreServers[currentCalibreServerId]
+                else { return }
         
         let librariesCached = realm.objects(CalibreLibraryRealm.self)
 
         librariesCached.forEach { libraryRealm in
-            guard let calibreServer = calibreServers[CalibreServer(baseUrl: libraryRealm.serverUrl!, username: libraryRealm.serverUsername!, password: "").id] else {
+            guard let calibreServer = calibreServers[CalibreServer(name: "", baseUrl: libraryRealm.serverUrl!, publicUrl: "", username: libraryRealm.serverUsername!, password: "").id] else {
                 print("Unknown Server: \(libraryRealm)")
                 return
             }
@@ -364,7 +412,7 @@ final class ModelData: ObservableObject {
             return
         }
         
-        let tmpServer = CalibreServer(baseUrl: ".", username: "", password: "")
+        let tmpServer = CalibreServer(name: "Document Folder", baseUrl: ".", publicUrl: "", username: "", password: "")
         documentServer = calibreServers[tmpServer.id]
         if documentServer == nil {
             calibreServers[tmpServer.id] = tmpServer
@@ -415,7 +463,7 @@ final class ModelData: ObservableObject {
         let removedBooks: [CalibreBook] = booksInShelf.compactMap { inShelfId, book in
             guard book.library.server.isLocal else { return nil }
             let existingFormats: [String] = book.formats.compactMap {
-                guard let format = CalibreBook.Format(rawValue: $0.key),
+                guard let format = Format(rawValue: $0.key),
                       let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
                 
                 var isDirectory : ObjCBool = false
@@ -1073,7 +1121,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func downloadFormat(book: CalibreBook, format: CalibreBook.Format, modificationDate: Date? = nil, overwrite: Bool = false, complete: @escaping (Bool) -> Void) -> Bool {
+    func downloadFormat(book: CalibreBook, format: Format, modificationDate: Date? = nil, overwrite: Bool = false, complete: @escaping (Bool) -> Void) -> Bool {
         guard book.formats.contains(where: { $0.key == format.rawValue }) else {
             complete(false)
             return false
@@ -1108,7 +1156,11 @@ final class ModelData: ObservableObject {
             // check for and handle errors:
             // * errorOrNil should be nil
             // * responseOrNil should be an HTTPURLResponse with statusCode in 200..<299
-            
+            guard errorOrNil == nil else {
+                
+                complete(false)
+                return
+            }
             guard let fileURL = urlOrNil else { complete(false); return }
             do {
                 self.defaultLog.info("fileURL: \(fileURL.absoluteString)")
@@ -1139,7 +1191,7 @@ final class ModelData: ObservableObject {
         
     }
     
-    func clearCache(inShelfId: String, _ format: CalibreBook.Format) {
+    func clearCache(inShelfId: String, _ format: Format) {
         guard let book = booksInShelf[inShelfId] else {
             return
         }
@@ -1148,7 +1200,7 @@ final class ModelData: ObservableObject {
         
     }
     
-    func clearCache(book: CalibreBook, format: CalibreBook.Format) {
+    func clearCache(book: CalibreBook, format: Format) {
         guard let bookFileURL = getSavedUrl(book: book, format: format) else { return }
         
         if FileManager.default.fileExists(atPath: bookFileURL.path) {
@@ -1160,7 +1212,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func getCacheInfo(book: CalibreBook, format: CalibreBook.Format) -> (UInt64, Date?)? {
+    func getCacheInfo(book: CalibreBook, format: Format) -> (UInt64, Date?)? {
         var resultStorage: ObjCBool = false
         guard let bookFileURL = getSavedUrl(book: book, format: format) else {
             return nil
@@ -1197,7 +1249,7 @@ final class ModelData: ObservableObject {
     }
     
     func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
-        CalibreBook.Format.allCases.forEach { format in
+        Format.allCases.forEach { format in
             guard fileName.hasSuffix(".\(format.ext)") else {
                 return
             }
@@ -1234,8 +1286,8 @@ final class ModelData: ObservableObject {
                 book.inShelf = true
                 
                 book.title = publication.metadata.title
-                if let cover = publication.cover, let coverData = cover.pngData() {
-                    self.kfImageCache.storeToDisk(coverData, forKey: book.coverURL.absoluteString)
+                if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
+                    self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
                 }
                 
                 
@@ -1252,7 +1304,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func deleteLocalLibraryBook(book: CalibreBook, format: CalibreBook.Format) {
+    func deleteLocalLibraryBook(book: CalibreBook, format: Format) {
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else { return }
         do {
             try FileManager.default.removeItem(at: bookFileUrl)
@@ -1274,6 +1326,10 @@ final class ModelData: ObservableObject {
     }
     
     func getLatestReadingPosition() -> BookDeviceReadingPosition? {
+        return readingBook!.readPos.getDevices().first
+    }
+    
+    func getLatestReadingPosition(by reader: ReaderType) -> BookDeviceReadingPosition? {
         return readingBook!.readPos.getDevices().first
     }
     
@@ -1561,7 +1617,7 @@ final class ModelData: ObservableObject {
         task.resume()
     }
     
-    func getBookManifest(book: CalibreBook, format: CalibreBook.Format, completion: ((_ manifest: Data) -> Void)? = nil) {
+    func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data) -> Void)? = nil) {
         let emptyData = "{}".data(using: .ascii)!
         
         guard formatReaderMap[format] != nil else {
@@ -1647,27 +1703,27 @@ final class ModelData: ObservableObject {
             return formatReaderMap[defaultFormat]!.first!
         } else {
             return book.formats.keys.compactMap {
-                CalibreBook.Format(rawValue: $0)
+                Format(rawValue: $0)
             }
             .reversed()
             .reduce(ReaderType.UNSUPPORTED) { formatReaderMap[$1]!.first! }
         }
     }
     
-    func formatOfReader(readerName: String) -> CalibreBook.Format? {
+    func formatOfReader(readerName: String) -> Format? {
         let formats = formatReaderMap.filter {
             $0.value.contains(where: { reader in reader.rawValue == readerName } )
         }
         return formats.first?.key
     }
     
-    func prepareBookReading(book: CalibreBook) ->(URL, CalibreBook.Format, ReaderType)? {
+    func prepareBookReading(book: CalibreBook) ->(URL, Format, ReaderType)? {
         guard let position = getSelectedReadingPosition() else { return nil }
         
         let formatReaderPairArray = formatReaderMap.compactMap {
             guard let index = $0.value.firstIndex(where: { $0.rawValue == position.readerName }) else { return nil }
             return ($0.key, $0.value[index])
-        } as [(CalibreBook.Format, ReaderType)]
+        } as [(Format, ReaderType)]
         
         guard let formatReaderPair = formatReaderPairArray.first else { return nil }
         guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }

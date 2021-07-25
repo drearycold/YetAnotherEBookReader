@@ -16,8 +16,7 @@ struct MainView: View {
         var msg: String?
     }
     @State private var alertItem: AlertItem?
-    
-    
+
     var body: some View {
         TabView(selection: $modelData.activeTab) {
             RecentShelfUI()
@@ -50,7 +49,11 @@ struct MainView: View {
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             modelData.presentingEBookReaderFromShelf = false
-            let originalPosition = modelData.getLatestReadingPosition() ?? modelData.getInitialReadingPosition()
+            let originalPosition = modelData.getLatestReadingPosition(
+                    by: modelData.readerInfo?.2 ?? ReaderType.UNSUPPORTED
+                )
+                ?? modelData.getLatestReadingPosition()
+                ?? modelData.getInitialReadingPosition()
             if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
                 return
             }
@@ -67,9 +70,7 @@ struct MainView: View {
                 modelData.updateCurrentPosition()
             }
         }) {
-            if let book = modelData.readingBook,
-               let readerInfo = modelData.prepareBookReading(book: book)
-               {
+            if let readerInfo = modelData.readerInfo {
                 YabrEBookReader(
                     bookURL: readerInfo.0,
                     bookFormat: readerInfo.1,

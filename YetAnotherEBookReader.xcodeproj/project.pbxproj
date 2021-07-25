@@ -98,6 +98,8 @@
 		2A107E152663CB96007DCA20 /* App.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107E112663CB96007DCA20 /* App.storyboard */; };
 		2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */; };
 		2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
+		2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8464F4269AE3EE000638B2 /* MDictView.swift */; };
+		2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */; };
 		2A890571260076780072B580 /* YabrPDFOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A890570260076780072B580 /* YabrPDFOptionView.swift */; };
 		2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */; };
 		2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */; };
@@ -125,6 +127,9 @@
 		2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3225BDBC11004A6633 /* YetAnotherEBookReaderTests.swift */; };
 		2AC3EC3E25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */; };
 		2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */; };
+		2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265426A920E10037FCB4 /* YabrData.swift */; };
+		2ACE265926A921230037FCB4 /* RealmModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265826A921230037FCB4 /* RealmModel.swift */; };
+		2ACE265D26A97BE70037FCB4 /* ImageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */; };
 		2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD02675F680006E92E0 /* SettingsView.swift */; };
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
 		2CA704C6D260C9141797622F /* Pods_YetAnotherEBookReaderTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DDEAD2FD192058D3349F9E0B /* Pods_YetAnotherEBookReaderTests.framework */; };
@@ -147,8 +152,6 @@
 		6E7733BD26660A1C008318C3 /* KingfisherSwiftUI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; };
 		6E7733BE26660A1C008318C3 /* KingfisherSwiftUI.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
-		6EB47B90266E670300189F63 /* ZipArchive.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6EBDDABE266E1330008E888D /* ZipArchive.xcframework */; };
-		6EB47B91266E670400189F63 /* ZipArchive.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6EBDDABE266E1330008E888D /* ZipArchive.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6ECF63FC2633FBD1008CE2A6 /* SwiftUI_Ad_Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */; };
 		6ECF63FD2633FBD1008CE2A6 /* WebViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */; };
 		6ECF63FE2633FBD1008CE2A6 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
@@ -205,7 +208,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				6EB47B91266E670400189F63 /* ZipArchive.xcframework in Embed Frameworks */,
 				6E76E9B5265FF35600885D26 /* GCDWebServer.xcframework in Embed Frameworks */,
 				2A107C8F26613068007DCA20 /* R2Streamer.framework in Embed Frameworks */,
 				2A107C8D26613068007DCA20 /* R2Shared.framework in Embed Frameworks */,
@@ -324,6 +326,8 @@
 		2A107E122663CB96007DCA20 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/App.storyboard; sourceTree = "<group>"; };
 		2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI_Ad_Banner.swift; sourceTree = "<group>"; };
 		2A1A4BFD2619EBE300E95ED5 /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
+		2A8464F4269AE3EE000638B2 /* MDictView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MDictView.swift; sourceTree = "<group>"; };
+		2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MyFolioReaderCenterDelegate.swift; sourceTree = "<group>"; };
 		2A890570260076780072B580 /* YabrPDFOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFOptionView.swift; sourceTree = "<group>"; };
 		2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUIVC.swift; sourceTree = "<group>"; };
 		2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUI.swift; sourceTree = "<group>"; };
@@ -358,6 +362,9 @@
 		2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderUITests.swift; sourceTree = "<group>"; };
 		2AC3EC3F25BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelData.swift; sourceTree = "<group>"; };
+		2ACE265426A920E10037FCB4 /* YabrData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrData.swift; sourceTree = "<group>"; };
+		2ACE265826A921230037FCB4 /* RealmModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmModel.swift; sourceTree = "<group>"; };
+		2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageRequest.swift; sourceTree = "<group>"; };
 		2AF53FD02675F680006E92E0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsView.swift; sourceTree = "<group>"; };
 		6E1CDBC4266C69F000F49276 /* FolioReaderKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FolioReaderKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -377,7 +384,6 @@
 		6EBDDAAC266E0F76008E888D /* MenuItemKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MenuItemKit.xcframework; path = Carthage/Build/MenuItemKit.xcframework; sourceTree = "<group>"; };
 		6EBDDAB0266E0F98008E888D /* FontBlaster.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = FontBlaster.xcframework; path = Carthage/Build/FontBlaster.xcframework; sourceTree = "<group>"; };
 		6EBDDAB2266E0FB0008E888D /* AEXML.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = AEXML.xcframework; path = Carthage/Build/AEXML.xcframework; sourceTree = "<group>"; };
-		6EBDDABE266E1330008E888D /* ZipArchive.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ZipArchive.xcframework; path = Carthage/Build/ZipArchive.xcframework; sourceTree = "<group>"; };
 		6EBDDAC2266E135E008E888D /* ZFDragableModalTransition.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ZFDragableModalTransition.xcframework; path = Carthage/Build/ZFDragableModalTransition.xcframework; sourceTree = "<group>"; };
 		6EBDDAC6266E1580008E888D /* ShelfView.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ShelfView.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		6ECF64212633FBD1008CE2A6 /* YetAnotherEBookReader(macOS).app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "YetAnotherEBookReader(macOS).app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -397,7 +403,6 @@
 			files = (
 				6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */,
 				2A107C8E26613068007DCA20 /* R2Streamer.framework in Frameworks */,
-				6EB47B90266E670300189F63 /* ZipArchive.xcframework in Frameworks */,
 				6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */,
 				2A107C8A26613068007DCA20 /* R2Navigator.framework in Frameworks */,
 				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
@@ -704,9 +709,19 @@
 			path = ADViews;
 			sourceTree = "<group>";
 		};
+		2A84650C269AE539000638B2 /* FolioReaderView */ = {
+			isa = PBXGroup;
+			children = (
+				2ABB9152261F1A47004AA7C0 /* EpubFolioReaderContainer.swift */,
+				2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */,
+			);
+			path = FolioReaderView;
+			sourceTree = "<group>";
+		};
 		2A8C26B325C54BA700FC7FC0 /* WebView */ = {
 			isa = PBXGroup;
 			children = (
+				2A8464F4269AE3EE000638B2 /* MDictView.swift */,
 				2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */,
 				2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */,
 			);
@@ -748,13 +763,13 @@
 		2ABB914C261F1A47004AA7C0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				2A84650C269AE539000638B2 /* FolioReaderView */,
 				2A8C26BE25C5570E00FC7FC0 /* PDFView */,
 				2A8C26B325C54BA700FC7FC0 /* WebView */,
 				2A1A4BF42616CCD900E95ED5 /* ADViews */,
 				2ABB911D261DE894004AA7C0 /* ShelfView */,
 				2AAE409B267849CA0058A501 /* LibraryInfoView */,
 				6E7733BC2664E747008318C3 /* BookDetailView */,
-				2ABB9152261F1A47004AA7C0 /* EpubFolioReaderContainer.swift */,
 				2A107D412661CFBB007DCA20 /* EpubReadiumReaderContainer.swift */,
 				2ABB9151261F1A47004AA7C0 /* MainView.swift */,
 				2ABB914F261F1A47004AA7C0 /* ServerView.swift */,
@@ -840,6 +855,9 @@
 				2AC340D22647A23600A477ED /* GoodreadsSyncConnector.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
+				2ACE265426A920E10037FCB4 /* YabrData.swift */,
+				2ACE265826A921230037FCB4 /* RealmModel.swift */,
+				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -889,7 +907,6 @@
 				6E76E99E265FED1800885D26 /* SQLite.xcframework */,
 				6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */,
 				6EBDDAC2266E135E008E888D /* ZFDragableModalTransition.xcframework */,
-				6EBDDABE266E1330008E888D /* ZipArchive.xcframework */,
 				6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */,
 				DAAD088B00B456E9B7569E42 /* Pods_YetAnotherEBookReader.framework */,
 				7EF92693BF2FF30C39B0F5DC /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */,
@@ -1234,6 +1251,7 @@
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
 				2A107E012663CB56007DCA20 /* FontSelectionViewController.swift in Sources */,
 				2A107DD02663CB56007DCA20 /* DRMLibraryService.swift in Sources */,
+				2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */,
 				2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */,
 				2A107DF02663CB56007DCA20 /* BookmarkDatabase.swift in Sources */,
 				2A107DCE2663CB56007DCA20 /* OPDSFacetViewController.swift in Sources */,
@@ -1247,6 +1265,7 @@
 				2A107DCC2663CB56007DCA20 /* OPDSCatalogSelectorViewController.swift in Sources */,
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* EpubReadiumReaderContainer.swift in Sources */,
+				2ACE265926A921230037FCB4 /* RealmModel.swift in Sources */,
 				2A107DFE2663CB56007DCA20 /* AdvancedSettingsViewController.swift in Sources */,
 				2A107DE92663CB56007DCA20 /* PDFModule.swift in Sources */,
 				2A107DD32663CB56007DCA20 /* PublicationMenuViewController.swift in Sources */,
@@ -1256,10 +1275,12 @@
 				2ABB9155261F1A47004AA7C0 /* ServerView.swift in Sources */,
 				2A107DF32663CB56007DCA20 /* BookmarkDataSource.swift in Sources */,
 				2A107DF82663CB56007DCA20 /* ReaderModule.swift in Sources */,
+				2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */,
 				2A107DDB2663CB56007DCA20 /* PublicationCollectionViewCell.swift in Sources */,
 				2A107DEA2663CB56007DCA20 /* PDFViewController.swift in Sources */,
 				2A107DE22663CB56007DCA20 /* ScreenOrientation.swift in Sources */,
 				2A107DFB2663CB56007DCA20 /* AssociatedColors.swift in Sources */,
+				2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */,
 				2A107DDD2663CB56007DCA20 /* DetailsTableViewController.swift in Sources */,
 				2A107DCF2663CB56007DCA20 /* LCPLibraryService.swift in Sources */,
 				2ABB9133261DE894004AA7C0 /* SectionShelfUI.swift in Sources */,
@@ -1267,6 +1288,7 @@
 				2A107DC52663CB56007DCA20 /* OPDSRootTableViewController.swift in Sources */,
 				2A107DC82663CB56007DCA20 /* OPDSPublicationInfoViewController.swift in Sources */,
 				2A107DC62663CB56007DCA20 /* OPDSModule.swift in Sources */,
+				2ACE265D26A97BE70037FCB4 /* ImageRequest.swift in Sources */,
 				2A107DF62663CB56007DCA20 /* ReaderFactory.swift in Sources */,
 				2A107DD92663CB56007DCA20 /* LibraryFactory.swift in Sources */,
 				2A107DEF2663CB56007DCA20 /* ReaderViewController.swift in Sources */,

@@ -15,6 +15,8 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     var modelData: ModelData?
     var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
     
+    var yabrFolioReaderPageDelegate: YabrFolioReaderPageDelegate!
+    
     func open(bookReadingPosition: BookDeviceReadingPosition? = nil) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
@@ -26,6 +28,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
             readerConfig.savedPositionForCurrentBook = position
         }
         
+        self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
         self.folioReader.delegate = self
         
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
@@ -48,6 +51,11 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
 //        
 //        super.viewDidDisappear(animated)
 //    }
+    
+    func folioReader(_ folioReader: FolioReader, didFinishedLoading book: FRBook) {
+        folioReader.readerCenter?.delegate = MyFolioReaderCenterDelegate()
+        folioReader.readerCenter?.pageDelegate = yabrFolioReaderPageDelegate
+    }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
         guard let chapterProgress = folioReader.readerCenter?.getCurrentPageProgress(),

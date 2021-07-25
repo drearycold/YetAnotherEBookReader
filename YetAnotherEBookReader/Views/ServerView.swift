@@ -14,11 +14,14 @@ struct ServerView: View {
     @State private var calibreServerId = ""
     @State private var calibreServerLibraryId = "Undetermined"
     
+    @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
+    @State private var calibreServerUrlPublic = ""
+    @State private var calibreServerSetPublicAddress = false
     @State private var calibreServerNeedAuth = false
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
-    //@State private var calibreServerEdit = CalibreServer(baseUrl: "", username: "", password: "")
+    @State private var calibreDefaultLibrary = ""
     @State private var calibreServerLibrariesEdit = [CalibreLibrary]()
     
     @State private var enableStoreReadingPosition = false
@@ -50,16 +53,14 @@ struct ServerView: View {
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
                 HStack {
                     Picker("Switch Server", selection: $calibreServerId) {
-                        ForEach(modelData.calibreServers.values.sorted(by: { (lhs, rhs) -> Bool in
-                            lhs.id < rhs.id
-                        }), id: \.self) { server in
-                            Text(server.id).tag(server.id)
+                        ForEach(modelData.calibreServers.values.map { $0.id }.sorted { $0 < $1 }, id: \.self) { serverId in
+                            Text(serverId)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreServerId) { value in
-                        if modelData.currentCalibreServerId != calibreServerId {
-                            modelData.currentCalibreServerId = calibreServerId
+                    .onChange(of: calibreServerId) { newValue in
+                        if modelData.currentCalibreServerId != newValue {
+                            modelData.currentCalibreServerId = newValue
                         }
                     }
                     
@@ -85,16 +86,45 @@ struct ServerView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if calibreServerEditing {
                         HStack {
-                            Text("Server:")
-                            TextField("Server", text: $calibreServerUrl)
+                            Image(systemName: "at")
+                            TextField("Name Your Server", text: $calibreServerName)
+                                .border(Color(UIColor.separator))
+                        }
+                        HStack {
+                            Image(systemName: "server.rack")
+                            TextField("Internal Server Address", text: $calibreServerUrl)
                                 .keyboardType(.URL)
                                 .autocapitalization(.none)
                                 .disableAutocorrection(true)
                                 .border(Color(UIColor.separator))
-                            
                         }
                         
-                        Toggle("Auth?", isOn: $calibreServerNeedAuth)
+                        VStack {
+                            Toggle("Set a Separate Public Address?", isOn: $calibreServerSetPublicAddress)
+                            if calibreServerSetPublicAddress {
+                                HStack {
+                                    Image(systemName: "cloud")
+                                    TextField("Internet Server Address", text: $calibreServerUrlPublic)
+                                        .keyboardType(.URL)
+                                        .autocapitalization(.none)
+                                        .disableAutocorrection(true)
+                                        .border(Color(UIColor.separator))
+                                }
+                                HStack {
+                                    Text("It's highly recommended to enable HTTPS and user authentication before exposing server to Internet.")
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .font(.caption)
+                                    Spacer()
+                                    Button(action:{
+                                        
+                                    }) {
+                                        Image(systemName: "questionmark.circle")
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Toggle("Need Auth?", isOn: $calibreServerNeedAuth)
                         
                         if calibreServerNeedAuth {
                             HStack {
@@ -115,6 +145,10 @@ struct ServerView: View {
                         }
                         
                         HStack {
+                            if dataLoading {
+                                Text("Connecting...")
+                                
+                            }
                             Spacer()
                             Button(action:{ calibreServerEditing = false }) {
                                 Image(systemName: "xmark")
@@ -362,16 +396,26 @@ struct ServerView: View {
         guard let url = URL(string: calibreServer.baseUrl + "/ajax/library-info") else {
             return 2
         }
+        if calibreServerName.isEmpty {
+            calibreServerName = "My Server on \(url.host ?? "unknown host")"
+        }
         if calibreServer.username.count > 0 && calibreServer.password.count > 0 {
+            var authMethod = NSURLAuthenticationMethodDefault
+            if url.scheme == "http" {
+                authMethod = NSURLAuthenticationMethodHTTPDigest
+            }
+            if url.scheme == "https" {
+                authMethod = NSURLAuthenticationMethodHTTPBasic
+            }
             let protectionSpace = URLProtectionSpace.init(host: url.host!,
                                                           port: url.port ?? 0,
                                                           protocol: url.scheme,
                                                           realm: "calibre",
-                                                          authenticationMethod: NSURLAuthenticationMethodHTTPBasic)
+                                                          authenticationMethod: authMethod)
             let userCredential = URLCredential(user: calibreServer.username,
                                                password: calibreServer.password,
-                                               persistence: .permanent)
-            URLCredentialStorage.shared.setDefaultCredential(userCredential, for: protectionSpace)
+                                               persistence: .forSession)
+            URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
         }
         
         let task = URLSession.shared.dataTask(with: url) { data, response, error in
@@ -382,9 +426,20 @@ struct ServerView: View {
                 })
                 return
             }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
+            guard let httpResponse = response as? HTTPURLResponse else {
                 self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
+                    dataLoading = false
+                })
+                return
+            }
+            guard httpResponse.statusCode != 401 else {
+                self.alertItem = AlertItem(id: "Need to Provide User Authentication to Access Server", action: {
+                    dataLoading = false
+                })
+                return
+            }
+            guard (200...299).contains(httpResponse.statusCode) else {
+                self.alertItem = AlertItem(id: httpResponse.description, action: {
                     dataLoading = false
                 })
                 return
@@ -399,12 +454,35 @@ struct ServerView: View {
         }
         
         dataLoading = true
+        
+        if calibreServer.username.count > 0 && calibreServer.password.count > 0 {
+            var authMethod = NSURLAuthenticationMethodDefault
+            if url.scheme == "http" {
+                authMethod = NSURLAuthenticationMethodHTTPDigest
+            }
+            if url.scheme == "https" {
+                authMethod = NSURLAuthenticationMethodHTTPBasic
+            }
+            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+                                                          port: url.port ?? 0,
+                                                          protocol: url.scheme,
+                                                          realm: "calibre",
+                                                          authenticationMethod: authMethod)
+            if let credentials = URLCredentialStorage.shared.credentials(for: protectionSpace) {
+                if let credential = credentials.filter({ $0.key == calibreServer.username }).first?.value {
+                    URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
+                }
+            }
+            
+        }
+        
+        
         task.resume()
         return 0
     }
     
     func handleLibraryInfo(jsonData: Data) {
-        var calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
+        var calibreServer = CalibreServer(name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
         
         if let libraryInfo = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? NSDictionary {
             defaultLog.info("libraryInfo: \(libraryInfo)")
@@ -412,13 +490,14 @@ struct ServerView: View {
             if let libraryMap = libraryInfo["library_map"] as? [String: String] {
                 if let defaultLibrary = libraryInfo["default_library"] as? String {
                     calibreServer.defaultLibrary = defaultLibrary
+                    calibreDefaultLibrary = defaultLibrary
                 }
                 if calibreServer.lastLibrary.isEmpty {
                     calibreServer.lastLibrary = calibreServer.defaultLibrary
                 }
                 var content = "Library List:"
                 calibreServerLibrariesEdit.removeAll()
-                libraryMap.forEach { (key, value) in
+                libraryMap.sorted(by: { $0.key < $1.key }).forEach { (key, value) in
                     content += "\n\(value)"
                     calibreServerLibrariesEdit.append(CalibreLibrary(server: calibreServer, key: key, name: value))
                 }
@@ -433,7 +512,8 @@ struct ServerView: View {
     }
     
     private func addServerConfirmButtonAction() {
-        let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
+        let calibreServer = CalibreServer(
+            name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
         if modelData.calibreServers[calibreServer.id] != nil {
             alertItem = AlertItem(id: "AddServerExists")
             return
@@ -450,7 +530,7 @@ struct ServerView: View {
     }
     
     private func addServerConfirmed() {
-        let calibreServer = CalibreServer(baseUrl: calibreServerUrl, username: calibreUsername, password: calibrePassword)
+        let calibreServer = CalibreServer(name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword, defaultLibrary: calibreDefaultLibrary)
         
         modelData.addServer(server: calibreServer, libraries: calibreServerLibrariesEdit)
         calibreServerId = calibreServer.id
