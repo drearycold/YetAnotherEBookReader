@@ -323,7 +323,9 @@ struct BookDetailView: View {
 
                 if selectedPositionShowDetail {
                     Text(modelData.getSelectedReadingPosition()?.description ?? modelData.getDeviceReadingPosition()?.description ?? modelData.deviceName)
-                        .frame(height: 120)
+                        .multilineTextAlignment(.leading)
+                        .frame(minHeight: 80)
+                        .font(.subheadline)
                 }
                 
                 HStack {
@@ -367,49 +369,8 @@ struct BookDetailView: View {
                 .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
 
                 if selectedFormatShowDetail, let formatInfo = formatStats[selectedFormat] {
-                    HStack {
-                        Text(
-                            ByteCountFormatter.string(
-                                fromByteCount: Int64(formatInfo.serverSize),
-                                countStyle: .file
-                            )
-                        )
-                        .font(.subheadline)
-                        Spacer()
-                        if formatInfo.cached {
-                            Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.cacheSize), countStyle: .file)).font(.subheadline)
-                        }
-                    }
-                    HStack {
-                        Text(formatInfo.serverMTime.description)
-                        Spacer()
-                        if formatInfo.cached {
-                            Text(formatInfo.cacheMTime.description)
-                        }
-                    }
-                    HStack {
-                        Spacer()
-                        #if DEBUG
-                        Button(action: {
-                            // move from cache to downloaded
-                            do {
-                                let cacheDir = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-                                let oldURL = cacheDir.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())", isDirectory: false)
-                                if FileManager.default.fileExists(atPath: oldURL.path), let newURL = getSavedUrl(book: book, format: selectedFormat) {
-                                    try FileManager.default.moveItem(at: oldURL, to: newURL)
-                                    updateCacheStates(book: book, format: selectedFormat)
-                                }
-                            } catch {
-                                print(error)
-                            }
-                        }) {
-                            Image(systemName: "wrench.and.screwdriver")
-                        }
-                        #endif
-                        cacheFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
-                        clearFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
-                            .disabled(!formatInfo.cached)
-                    }
+                    viewContentFormatDetail(book: book, isCompat: isCompat, formatInfo: formatInfo)
+                        .fixedSize()
                 }
                 
                 HStack {
@@ -624,6 +585,80 @@ struct BookDetailView: View {
             .frame(width: 24, height: 24)
     }
     
+    @ViewBuilder
+    private func viewContentFormatDetail(book: CalibreBook, isCompat: Bool, formatInfo: FormatInfo) -> some View {
+        if isCompat {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading) {
+                    Text("Server File Info")
+                    Text(
+                        ByteCountFormatter.string(
+                            fromByteCount: Int64(formatInfo.serverSize),
+                            countStyle: .file
+                        )
+                    )
+                    Text(formatInfo.serverMTime.description)
+                }
+                
+                Divider()
+                
+                VStack(alignment: .leading) {
+                    Text("Cached File Info")
+                    Text(
+                        ByteCountFormatter.string(
+                            fromByteCount: Int64(formatInfo.cacheSize),
+                            countStyle: .file
+                        )
+                    )
+                    Text(formatInfo.cacheMTime.description)
+                }
+            }.font(.subheadline)
+        } else {
+            HStack {
+                Text(
+                    ByteCountFormatter.string(
+                        fromByteCount: Int64(formatInfo.serverSize),
+                        countStyle: .file
+                    )
+                )
+                .font(.subheadline)
+                Spacer()
+                if formatInfo.cached {
+                    Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.cacheSize), countStyle: .file)).font(.subheadline)
+                }
+            }
+            HStack {
+                Spacer()
+                if formatInfo.cached {
+                    Text(formatInfo.cacheMTime.description)
+                }
+            }
+            HStack {
+                Spacer()
+                #if DEBUG
+                Button(action: {
+                    // move from cache to downloaded
+                    do {
+                        let cacheDir = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+                        let oldURL = cacheDir.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())", isDirectory: false)
+                        if FileManager.default.fileExists(atPath: oldURL.path), let newURL = getSavedUrl(book: book, format: selectedFormat) {
+                            try FileManager.default.moveItem(at: oldURL, to: newURL)
+                            updateCacheStates(book: book, format: selectedFormat)
+                        }
+                    } catch {
+                        print(error)
+                    }
+                }) {
+                    Image(systemName: "wrench.and.screwdriver")
+                }
+                #endif
+                cacheFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
+                clearFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
+                    .disabled(!formatInfo.cached)
+            }
+        }
+    }
+    
     private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
@@ -722,7 +757,7 @@ struct BookDetailView: View {
             Button(action: {
                 modelData.goToPreviousBook()
             }) {
-                if viewMode == .LIBRARY {
+                if viewMode == .LIBRARY && sizeClass == .regular {
                     Image(systemName: "chevron.up")
                 } else {
                     Image(systemName: "chevron.up").hidden()
@@ -734,7 +769,7 @@ struct BookDetailView: View {
             Button(action: {
                 modelData.goToNextBook()
             }) {
-                if viewMode == .LIBRARY {
+                if viewMode == .LIBRARY && sizeClass == .regular {
                     Image(systemName: "chevron.down")
                 } else {
                     Image(systemName: "chevron.down").hidden()

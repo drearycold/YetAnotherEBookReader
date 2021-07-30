@@ -11,8 +11,39 @@ struct GoodreadsSyncConnector {
     let server: CalibreServer
     let profileName: String
     
+    func endpointBaseUrlAddRemove(goodreads_id: String, shelfName: String) -> URLComponents? {
+        guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
+        urlComponents.path.append("/grsync/add_remove_book_to_shelf")
+        urlComponents.queryItems = [
+            URLQueryItem(name: "goodreads_id", value: goodreads_id.description),
+            URLQueryItem(name: "profile_name", value: profileName),
+            URLQueryItem(name: "shelf_name", value: shelfName)
+        ]
+        
+        return urlComponents
+    }
+    
+    func endpointBaseUrlPrecent(goodreads_id: String) -> URLComponents? {
+        guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
+        urlComponents.path.append("/grsync/update_reading_progress")
+        urlComponents.queryItems = [
+            URLQueryItem(name: "goodreads_id", value: goodreads_id.description),
+            URLQueryItem(name: "profile_name", value: profileName)
+        ]
+        
+        return urlComponents
+    }
+    
+    
     func addToShelf(goodreads_id: String, shelfName: String) -> Bool {
-        let request = URLRequest(url: URL(string: server.baseUrl + "/grsync/add_remove_book_to_shelf?goodreads_id=\(goodreads_id)&profile_name=\(profileName)&shelf_name=\(shelfName)&action=add")!)
+        guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
+            return false
+        }
+        endpointBaseUrl.queryItems!.append(URLQueryItem(name: "action", value: "add"))
+        
+        guard let url = endpointBaseUrl.url else { return false }
+        
+        let request = URLRequest(url: url)
 
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             if let error = error {
@@ -42,7 +73,13 @@ struct GoodreadsSyncConnector {
     }
     
     func removeFromShelf(goodreads_id: String, shelfName: String) -> Bool {
-        let request = URLRequest(url: URL(string: server.baseUrl + "/grsync/add_remove_book_to_shelf?goodreads_id=\(goodreads_id)&profile_name=\(profileName)&shelf_name=\(shelfName)&action=remove")!)
+        guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
+            return false
+        }
+        endpointBaseUrl.queryItems!.append(URLQueryItem(name: "action", value: "remove"))
+        
+        guard let url = endpointBaseUrl.url else { return false }
+        let request = URLRequest(url: url)
 
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             if let error = error {
@@ -72,7 +109,13 @@ struct GoodreadsSyncConnector {
     }
     
     func updateReadingProgress(goodreads_id: String, progress: Double) -> Bool {
-        let request = URLRequest(url: URL(string: server.baseUrl + "/grsync/update_reading_progress?goodreads_id=\(goodreads_id)&profile_name=\(profileName)&percent=\(progress)")!)
+        guard var endpointBaseUrl = endpointBaseUrlPrecent(goodreads_id: goodreads_id) else {
+            return false
+        }
+        endpointBaseUrl.queryItems!.append(URLQueryItem(name: "percent", value: progress.description))
+        
+        guard let url = endpointBaseUrl.url else { return false }
+        let request = URLRequest(url: url)
 
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             if let error = error {

@@ -56,6 +56,9 @@ final class ModelData: ObservableObject {
             
         }
     }
+    var currentCalibreServer: CalibreServer? {
+        calibreServers[currentCalibreServerId]
+    }
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var currentCalibreLibraryId = "" {
@@ -85,6 +88,13 @@ final class ModelData: ObservableObject {
             }
         }
     }
+    var currentCalibreLibrary: CalibreLibrary? {
+        calibreLibraries[currentCalibreLibraryId]
+    }
+    var currentCalibreServerLibraries: [CalibreLibrary] {
+        calibreLibraries.values.filter { $0.server.id == currentCalibreServerId }
+    }
+    
     @Published var calibreServerLibraryUpdating = false
     @Published var calibreServerLibraryUpdatingProgress = 0
     @Published var calibreServerLibraryUpdatingTotal = 0
@@ -217,7 +227,8 @@ final class ModelData: ObservableObject {
     private var defaultLog = Logger()
     
     private var realm: Realm!
-    private let realmConf = Realm.Configuration(
+    private var realmConf = Realm.Configuration(
+        
         schemaVersion: 17,
         migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 9 {
@@ -235,6 +246,16 @@ final class ModelData: ObservableObject {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
         #endif
+        
+        if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+            realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
+            if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+                let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")
+                if FileManager.default.fileExists(atPath: existingRealmURL.path) {
+                    try? FileManager.default.moveItem(at: existingRealmURL, to: realmConf.fileURL!)
+                }
+            }
+        }
         
         realm = try! Realm(
             configuration: realmConf
@@ -321,7 +342,7 @@ final class ModelData: ObservableObject {
                 print("ERROR booksInShelfRealm missing server \($0)")
                 return
             }
-            guard let library = calibreLibraries[CalibreLibrary(server: server, key: $0.libraryName!, name: $0.libraryName!).id] else {
+            guard let library = calibreLibraries[CalibreLibrary(server: server, key: "", name: $0.libraryName!).id] else {
                 print("ERROR booksInShelfRealm missing library \($0)")
                 return
             }
@@ -565,45 +586,6 @@ final class ModelData: ObservableObject {
         return calibreBook
     }
     
-    func getBookInShelf(inShelfId: String) -> Binding<CalibreBook> {
-        return getBook(library: booksInShelf[inShelfId]!.library, bookId: booksInShelf[inShelfId]!.id)
-    }
-    
-    func getCurrentServerLibraryBook(bookId: Int32) -> Binding<CalibreBook> {
-        return getBook(library: calibreLibraries[currentCalibreLibraryId]!, bookId: bookId)
-    }
-    
-    func getBook(library: CalibreLibrary, bookId: Int32) -> Binding<CalibreBook> {
-        return Binding<CalibreBook>(
-            get: {
-                if library.id == self.currentCalibreLibraryId {
-                    return self.calibreServerLibraryBooks[bookId]!
-                } else {
-                    let booksRealm = self.realm.objects(CalibreBookRealm.self).filter(
-                        NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
-                                    library.server.baseUrl,
-                                    library.server.username,
-                                    library.name,
-                                    NSNumber(value: bookId))
-                        )
-                    assert(!booksRealm.isEmpty, "illegal params")
-                    
-                    return self.convert(library: library, bookRealm: booksRealm.first!)
-                }
-            },
-            set: { [self] book in
-                updateBookRealm(book: book, realm: realm)
-                if calibreLibraries[currentCalibreLibraryId] == library {
-                    calibreServerLibraryBooks[book.id] = book
-                }
-                if book.inShelf {
-                    //TODO
-                }
-            }
-        )
-    }
-
-
     func updateStoreReadingPosition(enabled: Bool, value: String) {
         calibreLibraries[currentCalibreLibraryId]!.readPosColumnName = enabled ? value : nil
         updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
@@ -630,7 +612,9 @@ final class ModelData: ObservableObject {
     
     func updateServerRealm(server: CalibreServer) {
         let serverRealm = CalibreServerRealm()
+        serverRealm.name = server.name
         serverRealm.baseUrl = server.baseUrl
+        serverRealm.publicUrl = server.publicUrl
         serverRealm.username = server.username
         serverRealm.password = server.password
         serverRealm.defaultLibrary = server.defaultLibrary
@@ -714,6 +698,32 @@ final class ModelData: ObservableObject {
         }
     }
     
+    
+    /// update server library infos
+    /// make sure libraries' server ids equal to serverId
+    /// - Parameters:
+    ///   - serverId:
+    ///   - libraries:
+    ///   - defaultLibrary:
+    func updateServerLibraryInfo(serverId: String, libraries: [CalibreLibrary], defaultLibrary: String) {
+        guard let server = calibreServers[serverId] else { return }
+        
+        libraries.filter { $0.server.id == server.id }
+            .forEach { newLibrary in
+                let libraryId = newLibrary.id
+            
+                if calibreLibraries[libraryId] == nil {
+                    let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
+                    calibreLibraries[libraryId] = library
+                    updateLibraryRealm(library: library)
+                }
+        }
+        
+        if server.defaultLibrary != defaultLibrary {
+            calibreServers[serverId]!.defaultLibrary = defaultLibrary
+            updateServerRealm(server: calibreServers[serverId]!)
+        }
+    }
     
     //TODO merge with ServerView's handleLibraryInfo
     func handleLibraryInfo(jsonData: Data) {
@@ -1101,7 +1111,9 @@ final class ModelData: ObservableObject {
     }
     
     func removeFromShelf(inShelfId: String) {
-        readingBook?.inShelf = false
+        if readingBook?.inShelfId == inShelfId {
+            readingBook?.inShelf = false
+        }
         booksInShelf[inShelfId]!.inShelf = false
         
         let book = booksInShelf[inShelfId]!
@@ -1127,7 +1139,7 @@ final class ModelData: ObservableObject {
             return false
         }
         
-        guard let url = URL(string: book.library.server.baseUrl)?
+        guard let url = URL(string: book.library.server.serverUrl)?
                 .appendingPathComponent("get", isDirectory: true)
                 .appendingPathComponent(format.rawValue, isDirectory: true)
                 .appendingPathComponent(book.id.description, isDirectory: true)
@@ -1246,6 +1258,9 @@ final class ModelData: ObservableObject {
             
             url.stopAccessingSecurityScopedResource()
         }
+        if url.isHTTP {
+            
+        }
     }
     
     func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
@@ -1333,81 +1348,6 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getDevices().first
     }
     
-    @available(*, deprecated)
-    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
-        let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/cdb/cmd/list/0?library_id=" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-        let json:[Any] = [["all"], "", "", "id:\(oldbook.id)", -1]
-        do {
-            let data = try JSONSerialization.data(withJSONObject: json, options: [])
-            
-            var request = URLRequest(url: endpointUrl)
-            request.httpMethod = "POST"
-            request.httpBody = data
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("application/json", forHTTPHeaderField: "Accept")
-            
-            let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-                if let error = error {
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = error.localizedDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = response.debugDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
-                    return
-                }
-                if !(200...299).contains(httpResponse.statusCode) {
-                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
-                        updatingMetadata = false
-                        completion?(oldbook)
-                    }
-                    return
-                }
-                
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                   let data = data,
-                   let string = String(data: data, encoding: .utf8) {
-                    DispatchQueue.main.async {
-                        //self.webView.loadHTMLString(string, baseURL: url)
-                        //                            defaultLog.warning("httpResponse: \(string)")
-                        //book.comments = string
-                        guard var book = handleLibraryBookOne(oldbook: oldbook, json: data) else {
-                            completion?(oldbook)
-                            return
-                        }
-                        
-                        if( book.readPos.getDevices().isEmpty) {
-                            book.readPos.addInitialPosition(UIDevice.current.name, defaultReaderForDefaultFormat(book: book).rawValue)
-                        }
-                        
-                        updateBook(book: book)
-                        
-                        updatingMetadataStatus = "Success"
-                        updatingMetadata = false
-                        
-                        completion?(book)
-                    }
-                }
-            }
-            
-            updatingMetadata = true
-            task.resume()
-            
-        }catch{
-        }
-    }
-    
     func updateCurrentPosition() {
         guard var readingBook = self.readingBook else {
             return
@@ -1432,7 +1372,7 @@ final class ModelData: ObservableObject {
             
             let readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString()
             
-            let endpointUrl = URL(string: readingBook.library.server.baseUrl + "/cdb/cmd/set_metadata/0?library_id=" + readingBook.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+            let endpointUrl = URL(string: readingBook.library.server.serverUrl + "/cdb/cmd/set_metadata/0?library_id=" + readingBook.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
             let json:[Any] = ["fields", readingBook.id, [[readPosColumnName, readPosData]]]
             
             let data = try JSONSerialization.data(withJSONObject: json, options: [])
@@ -1538,7 +1478,7 @@ final class ModelData: ObservableObject {
     }
     
     func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
-        let endpointUrl = URL(string: oldbook.library.server.baseUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let endpointUrl = URL(string: oldbook.library.server.serverUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         
@@ -1627,7 +1567,7 @@ final class ModelData: ObservableObject {
             return
         }
         
-        let endpointUrl = URL(string: book.library.server.baseUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl)
         
@@ -1688,7 +1628,6 @@ final class ModelData: ObservableObject {
     func goToPreviousBook() {
         if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
             currentBookId = filteredBookList[curIndex-1]
-            
         }
     }
     
@@ -1732,6 +1671,95 @@ final class ModelData: ObservableObject {
         }
         
         return (savedURL, formatReaderPair.0, formatReaderPair.1)
+    }
+    
+    func removeLibrary(libraryId: String) -> Bool {
+        guard let library = calibreLibraries[libraryId] else { return false }
+        
+        //remove cached book files
+        let libraryBooksInShelf = booksInShelf.filter {
+            $0.value.library.id == libraryId
+        }
+        libraryBooksInShelf.forEach {
+            self.removeFromShelf(inShelfId: $0.key)
+        }
+        
+        //remove library info
+        do {
+            let booksCached = realm.objects(CalibreBookRealm.self).filter(
+                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                            library.server.baseUrl,
+                            library.server.username,
+                            library.name
+                )
+            )
+            try realm.write {
+                realm.delete(booksCached)
+            }
+        } catch {
+            return false
+        }
+        
+        return true
+    }
+    
+    func removeServer(serverId: String) -> Bool {
+        guard let server = calibreServers[serverId] else { return false }
+        
+        let libraries = calibreLibraries.filter {
+            $0.value.server == server
+        }
+        
+        var isSuccess = true
+        libraries.forEach {
+            let result = removeLibrary(libraryId: $0.key)
+            isSuccess = isSuccess && result
+        }
+        if !isSuccess {
+            return false
+        }
+        
+        //remove library info
+        libraries.forEach {
+            calibreLibraries.removeValue(forKey: $0.key)
+        }
+        do {
+            let serverLibraryRealms = realm.objects(CalibreLibraryRealm.self).filter(
+                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@",
+                            server.baseUrl,
+                            server.username
+                ))
+            try realm.write {
+                realm.delete(serverLibraryRealms)
+            }
+        } catch {
+            return false
+        }
+        
+        //remove server
+        calibreServers.removeValue(forKey: serverId)
+        do {
+            let serverRealms = realm.objects(CalibreServerRealm.self).filter(
+                NSPredicate(format: "baseUrl = %@ AND username = %@",
+                            server.baseUrl,
+                            server.username
+                )
+            )
+            try realm.write {
+                realm.delete(serverRealms)
+            }
+        } catch {
+            return false
+        }
+        
+        //reset current server id
+        currentCalibreServerId = calibreServers.keys.first!
+        
+        return true
+    }
+    
+    func updateServer(newServer: CalibreServer) {
+        
     }
 }
 

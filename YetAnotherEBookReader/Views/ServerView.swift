@@ -11,8 +11,8 @@ import OSLog
 struct ServerView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @State private var calibreServerId = ""
-    @State private var calibreServerLibraryId = "Undetermined"
+//    @State private var calibreServerId = ""
+//    @State private var calibreServerLibraryId = "Undetermined"
     
     @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
@@ -26,14 +26,13 @@ struct ServerView: View {
     
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
+    @State private var isDefaultReadingPosition = false
     
     @State private var enableGoodreadsSync = false
     @State private var goodreadsSyncProfileName = ""
-    
+    @State private var isDefaultGoodreadsSync = false
     
     @State private var calibreServerEditing = false
-    
-    @State private var presentingAlert = false
     
     @State private var dataLoading = false
     
@@ -52,17 +51,12 @@ struct ServerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
                 HStack {
-                    Picker("Switch Server", selection: $calibreServerId) {
+                    Picker("Switch Server", selection: $modelData.currentCalibreServerId) {
                         ForEach(modelData.calibreServers.values.map { $0.id }.sorted { $0 < $1 }, id: \.self) { serverId in
                             Text(serverId)
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreServerId) { newValue in
-                        if modelData.currentCalibreServerId != newValue {
-                            modelData.currentCalibreServerId = newValue
-                        }
-                    }
                     
                     Spacer()
                     
@@ -71,16 +65,28 @@ struct ServerView: View {
                     }) {
                         Image(systemName: "plus")
                     }
+                    
                     Button(action:{
                         alertItem = AlertItem(id: "DelServer")
                     }) {
                         Image(systemName: "minus")
-                    }
+                    }.disabled(!canDeleteCurrentServer())
+                    
                     Button(action:{
-                        //TODO modify current server
+                        guard let server = modelData.currentCalibreServer else { return }
+                        calibreServerName = server.name
+                        calibreServerUrl = server.baseUrl
+                        calibreUsername = server.username
+                        calibrePassword = server.password
+                        calibreServerUrlPublic = server.publicUrl
+                        calibreServerSetPublicAddress = !calibreServerUrlPublic.isEmpty
+                        calibreServerNeedAuth = !calibreUsername.isEmpty
+                        calibreDefaultLibrary = server.defaultLibrary
+                        calibreServerLibrariesEdit = modelData.currentCalibreServerLibraries
+                        calibreServerEditing = true
                     }) {
                         Image(systemName: "square.and.pencil")
-                    }
+                    }.disabled(!canDeleteCurrentServer())
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -153,7 +159,13 @@ struct ServerView: View {
                             Button(action:{ calibreServerEditing = false }) {
                                 Image(systemName: "xmark")
                             }
-                            Button(action:{ addServerConfirmButtonAction() }) {
+                            Button(action:{
+                                if calibreServerLibrariesEdit.isEmpty && calibreDefaultLibrary.isEmpty {
+                                    addServerConfirmButtonAction()
+                                } else {
+                                    modServerConfirmButtonAction()
+                                }
+                            }) {
                                 Image(systemName: "checkmark")
                             }
                         }
@@ -165,13 +177,20 @@ struct ServerView: View {
                         HStack(alignment: .center, spacing: 8) {
                             Spacer()
                             
-                            Text("\(modelData.calibreLibraries.values.filter({ (library) -> Bool in library.server.id == calibreServerId }).count) Library(s) in Server")
+                            Text("\(modelData.currentCalibreServerLibraries.count) Library(s) in Server")
                             
                             Button(action: {
+                                guard let server = modelData.currentCalibreServer else { return }
                                 let ret = startLoadServerLibraries(
-                                    calibreServer: modelData.calibreServers[modelData.currentCalibreServerId]!,
-                                    success: modelData.handleLibraryInfo(jsonData:)
-                                )
+                                    calibreServer: server,
+                                    parse: handleLibraryInfo(jsonData:)
+                                ) {
+                                    modelData.updateServerLibraryInfo(
+                                        serverId: modelData.currentCalibreServerId,
+                                        libraries: calibreServerLibrariesEdit,
+                                        defaultLibrary: calibreDefaultLibrary
+                                    )
+                                }
                                 if ret != 0 {
                                     //TODO
                                 }
@@ -185,31 +204,33 @@ struct ServerView: View {
                 Divider()
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Switch Library", selection: $calibreServerLibraryId) {
-                        ForEach(modelData.calibreLibraries.values.filter({ (library) -> Bool in
-                            library.server.id == calibreServerId
-                        }).sorted(by: { (lhs, rhs) -> Bool in
-                            lhs.name < rhs.name
-                        })) { library in
-                            Text(library.name).tag(library.id)
+                    HStack {
+                        Picker("Switch Library", selection: $modelData.currentCalibreLibraryId) {
+                            ForEach(modelData.currentCalibreServerLibraries.sorted(by: { $0.name < $1.name })) { library in
+                                Text(library.name).tag(library.id)
+                            }
+                        }
+                        .pickerStyle(MenuPickerStyle())
+                        .onChange(of: modelData.currentCalibreLibraryId, perform: { value in
+                            guard let library = modelData.currentCalibreLibrary else { return }
+                            
+                            enableStoreReadingPosition = library.readPosColumnName != nil
+                            storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
+                            
+                            enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+                            goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
+                        })
+                        
+                        Spacer()
+                        
+                        Button(action: {
+                            alertItem = AlertItem(id: "DelLibrary")
+                        }) {
+                            Image(systemName: "trash")
                         }
                     }
-                    .pickerStyle(MenuPickerStyle())
-                    .onChange(of: calibreServerLibraryId, perform: { value in
-                        if modelData.currentCalibreLibraryId != calibreServerLibraryId {
-                            modelData.currentCalibreLibraryId = calibreServerLibraryId
-                        }
-                        
-                        guard let library = modelData.calibreLibraries[calibreServerLibraryId] else { return }
-                        
-                        enableStoreReadingPosition = library.readPosColumnName != nil
-                        storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
-                        
-                        enableGoodreadsSync = library.goodreadsSyncProfileName != nil
-                        goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
-                    })
                     
-                    Text("Current Library: \(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "")")
+                    Text("Current Library: \(modelData.currentCalibreLibrary?.name ?? "No Library Selected")")
                     HStack(alignment: .center, spacing: 8) {
                         Spacer()
                         
@@ -253,14 +274,27 @@ struct ServerView: View {
                         }
                         Text("Please add a custom column of type \"Long text\" on calibre server.\nIf there are multiple users, it's better to add a unique column for each user.")
                             .font(.caption)
+                        
+                        HStack {
+                            Spacer()
+                            Button(action:{
+                                isDefaultReadingPosition = true
+                            }) {
+                                Text("Set as Server-wide Default")
+                            }
+                            if isDefaultReadingPosition {
+                                Image(systemName: "checkmark")
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .hidden()
+                            }
+                        }
                     }
                     
                     Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
                         .onChange(of: enableGoodreadsSync, perform: { value in
                             modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
                         })
-                    Text("This is a Work-in-Progress, please stay tuned!")
-                        .font(.caption)
                     if enableGoodreadsSync {
                         HStack {
                             Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
@@ -272,6 +306,23 @@ struct ServerView: View {
                             .disableAutocorrection(true)
                             .border(Color(UIColor.separator))
                         }
+                        Text("This is a Work-in-Progress, please stay tuned!")
+                            .font(.caption)
+                        
+                        HStack {
+                            Spacer()
+                            Button(action:{
+                                isDefaultGoodreadsSync = true
+                            }) {
+                                Text("Set as Server-wide Default")
+                            }
+                            if isDefaultGoodreadsSync {
+                                Image(systemName: "checkmark")
+                            } else {
+                                Image(systemName: "checkmark")
+                                    .hidden()
+                            }
+                        }
                     }
                 }
             }
@@ -282,10 +333,10 @@ struct ServerView: View {
             Spacer()
         }
         .onAppear() {
-            calibreServerId = modelData.currentCalibreServerId
-            calibreServerLibraryId = modelData.currentCalibreLibraryId
+//            calibreServerId = modelData.currentCalibreServerId
+//            calibreServerLibraryId = modelData.currentCalibreLibraryId
             
-            if let library = modelData.calibreLibraries[calibreServerLibraryId] {
+            if let library = modelData.currentCalibreLibrary {
                 enableStoreReadingPosition = library.readPosColumnName != nil
                 storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
                 
@@ -312,9 +363,19 @@ struct ServerView: View {
             if item.id == "DelServer" {
                 return Alert(
                     title: Text("Remove Server"),
-                    message: Text("Will Remove Cached Libraries and Books from App"),
-                    primaryButton: .default(Text("Confirm")) {
+                    message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
+                    primaryButton: .destructive(Text("Confirm")) {
                         delServerConfirmed()
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+            if item.id == "DelLibrary" {
+                return Alert(
+                    title: Text("Remove Library"),
+                    message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact"),
+                    primaryButton: .destructive(Text("Confirm")) {
+                        delLibraryConfirmed()
                     },
                     secondaryButton: .cancel()
                 )
@@ -325,12 +386,19 @@ struct ServerView: View {
         }
     }
     
-    
+    private func canDeleteCurrentServer() -> Bool {
+        guard let server = modelData.currentCalibreServer else {
+            return false
+        }
+        return !server.isLocal
+    }
     
     private func syncLibrary() {
-        print(modelData.calibreLibraries)
-        print(modelData.currentCalibreLibraryId)
-        guard let endpointUrl = URL(string: modelData.calibreServers[modelData.currentCalibreServerId]!.baseUrl + "/cdb/cmd/list/0?library_id=" + modelData.calibreLibraries[modelData.currentCalibreLibraryId]!.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!) else {
+        guard let server = modelData.currentCalibreServer,
+              let library = modelData.currentCalibreLibrary,
+              let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
+              else {
             return
         }
         
@@ -389,11 +457,11 @@ struct ServerView: View {
         
     }
     
-    func startLoadServerLibraries(calibreServer: CalibreServer, success: @escaping (_ jsonData: Data) -> Void) -> Int {
+    func startLoadServerLibraries(calibreServer: CalibreServer, parse: @escaping (_ jsonData: Data) -> Void, complete: () -> Void) -> Int {
         if dataLoading {
             return 1
         }
-        guard let url = URL(string: calibreServer.baseUrl + "/ajax/library-info") else {
+        guard let url = URL(string: calibreServer.serverUrl + "/ajax/library-info") else {
             return 2
         }
         if calibreServerName.isEmpty {
@@ -447,7 +515,7 @@ struct ServerView: View {
             if let mimeType = httpResponse.mimeType, mimeType == "application/json",
                let data = data {
                 DispatchQueue.main.async {
-                    success(data)
+                    parse(data)
                     dataLoading = false
                 }
             }
@@ -495,15 +563,10 @@ struct ServerView: View {
                 if calibreServer.lastLibrary.isEmpty {
                     calibreServer.lastLibrary = calibreServer.defaultLibrary
                 }
-                var content = "Library List:"
                 calibreServerLibrariesEdit.removeAll()
                 libraryMap.sorted(by: { $0.key < $1.key }).forEach { (key, value) in
-                    content += "\n\(value)"
                     calibreServerLibrariesEdit.append(CalibreLibrary(server: calibreServer, key: key, name: value))
                 }
-                
-                alertContent = content
-                alertItem = AlertItem(id: "AddServer")
             }
             
         } else {
@@ -518,14 +581,26 @@ struct ServerView: View {
             alertItem = AlertItem(id: "AddServerExists")
             return
         }
-        print(calibreServer.password)
-        let ret = startLoadServerLibraries(calibreServer: calibreServer, success: self.handleLibraryInfo(jsonData:))
-        switch(ret) {
-        case 2: //URL malformed
-            alertItem = AlertItem(id: "Server URL is not well formed")
-            break;
-        default:
-            break;
+        let ret = startLoadServerLibraries(calibreServer: calibreServer, parse: self.handleLibraryInfo(jsonData:)) {
+            
+            var content = "Library List:"
+            calibreServerLibrariesEdit.removeAll()
+            calibreServerLibrariesEdit.forEach {
+                content += "\n\($0.name)"
+            }
+
+            alertContent = content
+            alertItem = AlertItem(id: "AddServer")
+        }
+        
+        if ret != 0 {
+            switch(ret) {
+            case 2: //URL malformed
+                alertItem = AlertItem(id: "Server URL is not well formed")
+                break;
+            default:
+                break;
+            }
         }
     }
     
@@ -533,17 +608,63 @@ struct ServerView: View {
         let calibreServer = CalibreServer(name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword, defaultLibrary: calibreDefaultLibrary)
         
         modelData.addServer(server: calibreServer, libraries: calibreServerLibrariesEdit)
-        calibreServerId = calibreServer.id
+        modelData.currentCalibreServerId = calibreServer.id
         if let defaultLibraryId = calibreServerLibrariesEdit.filter({
             $0.name == $0.server.defaultLibrary
         }).first?.id {
-            calibreServerLibraryId = defaultLibraryId
+            modelData.currentCalibreLibraryId = defaultLibraryId
         }
         calibreServerEditing = false
     }
     
-    private func delServerConfirmed() {
+    private func modServerConfirmButtonAction() {
+        let newServer = CalibreServer(
+            name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
+        guard let server = modelData.currentCalibreServer else {
+            alertItem = AlertItem(id: "ModServerNotExist")  //shouldn't reach here
+            return
+        }
         
+        if newServer == server {
+            //minor changes
+            modelData.updateServer(newServer: newServer)
+        } else {
+            //sanity check
+            let ret = startLoadServerLibraries(calibreServer: newServer, parse: self.handleLibraryInfo(jsonData:)) {
+                
+                
+            }
+            
+            if ret != 0 {
+                switch(ret) {
+                case 2: //URL malformed
+                    alertItem = AlertItem(id: "Server URL is not well formed")
+                    break;
+                default:
+                    break;
+                }
+                return
+            }
+            
+        }
+    }
+    
+    private func delServerConfirmed() {
+        let isSuccess = modelData.removeServer(serverId: modelData.currentCalibreServerId)
+        if !isSuccess {
+            alertItem = AlertItem(id: "DelServerFailed")
+        }
+        
+    }
+    
+    private func delLibraryConfirmed() {
+        let isSuccess = modelData.removeLibrary(libraryId: modelData.currentCalibreLibraryId)
+        modelData.filteredBookList.removeAll()
+        modelData.calibreServerLibraryBooks.removeAll()
+        
+        if !isSuccess {
+            alertItem = AlertItem(id: "DelLibraryFailed")
+        }
     }
 }
 
