@@ -95,6 +95,9 @@ final class ModelData: ObservableObject {
         calibreLibraries.values.filter { $0.server.id == currentCalibreServerId }
     }
     
+    @Published var calibreServerUpdating = false
+    @Published var calibreServerUpdatingStatus: String? = nil
+    
     @Published var calibreServerLibraryUpdating = false
     @Published var calibreServerLibraryUpdatingProgress = 0
     @Published var calibreServerLibraryUpdatingTotal = 0
@@ -198,7 +201,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    @Published var readerInfo: (URL, Format, ReaderType)? = nil
+    @Published var readerInfo: ReaderInfo? = nil
     
     @Published var presentingEBookReaderFromShelf = false
     
@@ -699,12 +702,13 @@ final class ModelData: ObservableObject {
     }
     
     
-    /// update server library infos
+    /// update server library infos,
     /// make sure libraries' server ids equal to serverId
     /// - Parameters:
-    ///   - serverId:
-    ///   - libraries:
-    ///   - defaultLibrary:
+    ///   - serverId: id of target server
+    ///   - libraries: library list
+    ///   - defaultLibrary: key of default library
+    /// - TODO: update & remove
     func updateServerLibraryInfo(serverId: String, libraries: [CalibreLibrary], defaultLibrary: String) {
         guard let server = calibreServers[serverId] else { return }
         
@@ -726,32 +730,32 @@ final class ModelData: ObservableObject {
     }
     
     //TODO merge with ServerView's handleLibraryInfo
-    func handleLibraryInfo(jsonData: Data) {
-        do {
-            let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
-            defaultLog.info("libraryInfo: \(libraryInfo)")
-            
-            let libraryMap = libraryInfo["library_map"] as! [String: String]
-            libraryMap.forEach { (key, value) in
-                let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, key: key, name: value)
-                if calibreLibraries[library.id] == nil {
-                    calibreLibraries[library.id] = library
-                    
-                    updateLibraryRealm(library: library)
-                }
-            }
-            if let defaultLibrary = libraryInfo["default_library"] as? String {
-                if calibreServers[currentCalibreServerId]!.defaultLibrary != defaultLibrary {
-                    calibreServers[currentCalibreServerId]!.defaultLibrary = defaultLibrary
-                    
-                    updateServerRealm(server: calibreServers[currentCalibreServerId]!)
-                }
-            }
-        } catch {
-        
-        }
-        
-    }
+//    func handleLibraryInfo(jsonData: Data) {
+//        do {
+//            let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
+//            defaultLog.info("libraryInfo: \(libraryInfo)")
+//
+//            let libraryMap = libraryInfo["library_map"] as! [String: String]
+//            libraryMap.forEach { (key, value) in
+//                let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, key: key, name: value)
+//                if calibreLibraries[library.id] == nil {
+//                    calibreLibraries[library.id] = library
+//
+//                    updateLibraryRealm(library: library)
+//                }
+//            }
+//            if let defaultLibrary = libraryInfo["default_library"] as? String {
+//                if calibreServers[currentCalibreServerId]!.defaultLibrary != defaultLibrary {
+//                    calibreServers[currentCalibreServerId]!.defaultLibrary = defaultLibrary
+//
+//                    updateServerRealm(server: calibreServers[currentCalibreServerId]!)
+//                }
+//            }
+//        } catch {
+//
+//        }
+//
+//    }
     
     /**
      run on background threads, call completionHandler on main thread
@@ -1656,13 +1660,29 @@ final class ModelData: ObservableObject {
         return formats.first?.key
     }
     
-    func prepareBookReading(book: CalibreBook) ->(URL, Format, ReaderType)? {
-        guard let position = getSelectedReadingPosition() else { return nil }
+    func prepareBookReading(book: CalibreBook) -> ReaderInfo? {
+        var candidatePositions = [BookDeviceReadingPosition]()
+
+        if let position = getDeviceReadingPosition() {
+            candidatePositions.append(position)
+        }
+        if let position = getLatestReadingPosition() {
+            candidatePositions.append(position)
+        }
+        if let position = getSelectedReadingPosition() {
+            candidatePositions.append(position)
+        }
+        candidatePositions.append(contentsOf: book.readPos.getDevices())
         
-        let formatReaderPairArray = formatReaderMap.compactMap {
-            guard let index = $0.value.firstIndex(where: { $0.rawValue == position.readerName }) else { return nil }
-            return ($0.key, $0.value[index])
-        } as [(Format, ReaderType)]
+        var formatReaderPairArray = [(Format, ReaderType, BookDeviceReadingPosition)]()
+        candidatePositions.forEach { position in
+            formatReaderPairArray.append(
+                contentsOf: formatReaderMap.compactMap {
+                    guard let index = $0.value.firstIndex(where: { $0.rawValue == position.readerName }) else { return nil }
+                    return ($0.key, $0.value[index], position)
+                } as [(Format, ReaderType, BookDeviceReadingPosition)]
+            )
+        }
         
         guard let formatReaderPair = formatReaderPairArray.first else { return nil }
         guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }
@@ -1670,7 +1690,18 @@ final class ModelData: ObservableObject {
             return nil
         }
         
-        return (savedURL, formatReaderPair.0, formatReaderPair.1)
+        return ReaderInfo(url: savedURL, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
+    }
+    
+    func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) -> ReaderInfo {
+        let readerInfo = ReaderInfo(
+            url: url,
+            format: format,
+            readerType: readerType,
+            position: position
+        )
+        self.readerInfo = readerInfo
+        return readerInfo
     }
     
     func removeLibrary(libraryId: String) -> Bool {
@@ -1761,6 +1792,75 @@ final class ModelData: ObservableObject {
     func updateServer(newServer: CalibreServer) {
         
     }
+    
+    func syncLibrary(alertDelegate: AlertDelegate) {
+        guard let server = currentCalibreServer,
+              let library = currentCalibreLibrary,
+              let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
+              else {
+            return
+        }
+        
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "identifiers"], "", "", "", -1]
+        
+        let data = try! JSONSerialization.data(withJSONObject: json, options: [])
+        
+        var request = URLRequest(url: endpointUrl)
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                self.defaultLog.warning("error: \(error.localizedDescription)")
+
+                let alertItem = AlertItem(id: error.localizedDescription, action: {
+                    self.calibreServerUpdating = false
+                })
+                alertDelegate.alert(alertItem: alertItem)
+
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                
+                let alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
+                    self.calibreServerUpdating = false
+                })
+                alertDelegate.alert(alertItem: alertItem)
+                
+                return
+            }
+            
+            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
+               let data = data {
+                DispatchQueue(label: "data").async {
+                    //self.webView.loadHTMLString(string, baseURL: url)
+                    //result = string
+                    self.handleLibraryBooks(json: data) { isSuccess in
+                        self.calibreServerUpdating = false
+                        if !isSuccess {
+                            let alertItem = AlertItem(id: "Failed to parse calibre server response.")
+                            alertDelegate.alert(alertItem: alertItem)
+                            
+                            self.calibreServerUpdatingStatus = "Failed"
+                        } else {
+                            self.calibreServerUpdatingStatus = "Refreshed"
+                        }
+                    }
+                }
+            }
+        }
+        
+        calibreServerUpdating = true
+        calibreServerUpdatingStatus = "Refreshing"
+        
+        task.resume()
+    }
+    
 }
 
 func load<T: Decodable>(_ filename: String) -> T {

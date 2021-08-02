@@ -11,9 +11,6 @@ import OSLog
 struct ServerView: View {
     @EnvironmentObject var modelData: ModelData
     
-//    @State private var calibreServerId = ""
-//    @State private var calibreServerLibraryId = "Undetermined"
-    
     @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
     @State private var calibreServerUrlPublic = ""
@@ -21,6 +18,7 @@ struct ServerView: View {
     @State private var calibreServerNeedAuth = false
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
+
     @State private var calibreDefaultLibrary = ""
     @State private var calibreServerLibrariesEdit = [CalibreLibrary]()
     
@@ -40,10 +38,6 @@ struct ServerView: View {
     
     var defaultLog = Logger()
     
-    struct AlertItem : Identifiable {
-        var id: String
-        var action: (() -> Void)?
-    }
     @State private var alertItem: AlertItem?
     @State private var alertContent: String = ""
     
@@ -153,8 +147,8 @@ struct ServerView: View {
                         HStack {
                             if dataLoading {
                                 Text("Connecting...")
-                                
                             }
+                            
                             Spacer()
                             Button(action:{ calibreServerEditing = false }) {
                                 Image(systemName: "xmark")
@@ -172,9 +166,11 @@ struct ServerView: View {
                         
                         
                     } else {
-                        Text("Current Server: \(modelData.currentCalibreServerId)")
+                        Text("Current Server: \(modelData.currentCalibreServer?.name ?? "Unknown Server")")
                         
                         HStack(alignment: .center, spacing: 8) {
+                            Text(modelData.calibreServerUpdatingStatus ?? "")
+                            
                             Spacer()
                             
                             Text("\(modelData.currentCalibreServerLibraries.count) Library(s) in Server")
@@ -235,12 +231,14 @@ struct ServerView: View {
                         Spacer()
                         
                         if modelData.calibreServerLibraryUpdating {
-                            Text("Loading Books \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal), please wait a moment...")
+                            Text("Refreshing Metadata \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal), please wait a moment...")
                         } else {
                             Text("\(modelData.calibreServerLibraryBooks.count) Book(s) in Library")
                         }
                         
-                        Button(action: { syncLibrary() }) {
+                        Button(action: {
+                            modelData.syncLibrary(alertDelegate: self)
+                        }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                         }
                     }.onChange(of: modelData.calibreServerLibraryUpdatingProgress) {_ in
@@ -327,7 +325,6 @@ struct ServerView: View {
                 }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
-            .disabled(dataLoading)
             .disabled(modelData.calibreServerLibraryUpdating)
             
             Spacer()
@@ -345,6 +342,7 @@ struct ServerView: View {
                 print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
             }
         }
+        .disabled(modelData.calibreServerUpdating)
         .navigationBarHidden(false)
         .statusBar(hidden: false)
         .alert(item: $alertItem) { item in
@@ -355,7 +353,11 @@ struct ServerView: View {
                              ) {
                                 addServerConfirmed()
                              },
-                             secondaryButton: .cancel())
+                             secondaryButton: .cancel() {
+                                //clear stalled server info
+                                calibreDefaultLibrary.removeAll()
+                                calibreServerLibrariesEdit.removeAll()
+                             })
             }
             if item.id == "AddServerExists" {
                 return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
@@ -393,71 +395,11 @@ struct ServerView: View {
         return !server.isLocal
     }
     
-    private func syncLibrary() {
-        guard let server = modelData.currentCalibreServer,
-              let library = modelData.currentCalibreLibrary,
-              let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
-              else {
-            return
-        }
-        
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "identifiers"], "", "", "", -1]
-        
-        let data = try! JSONSerialization.data(withJSONObject: json, options: [])
-        
-        var request = URLRequest(url: endpointUrl)
-        request.httpMethod = "POST"
-        request.httpBody = data
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                self.alertItem = AlertItem(id: error.localizedDescription, action: {
-                    dataLoading = false
-                })
-                defaultLog.warning("error: \(error.localizedDescription)")
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                self.alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
-                    dataLoading = false
-                })
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data {
-                DispatchQueue(label: "data").async {
-                    //self.webView.loadHTMLString(string, baseURL: url)
-                    //result = string
-                    modelData.handleLibraryBooks(json: data) { isSuccess in
-                        dataLoading = false
-                        
-                        if !isSuccess {
-                            self.alertItem = AlertItem(id: "Failed to parse calibre server response.")
-                        }
-                    }
-                }
-            }
-        }
-        
-        dataLoading = true
-        task.resume()
-    }
-    
     private func handleClientError(_ error: Error) {
         
     }
     
-    private func updateLibrary() {
-        
-    }
-    
-    func startLoadServerLibraries(calibreServer: CalibreServer, parse: @escaping (_ jsonData: Data) -> Void, complete: () -> Void) -> Int {
+    func startLoadServerLibraries(calibreServer: CalibreServer, parse: @escaping (_ jsonData: Data) -> Void, complete: @escaping () -> Void) -> Int {
         if dataLoading {
             return 1
         }
@@ -517,6 +459,7 @@ struct ServerView: View {
                 DispatchQueue.main.async {
                     parse(data)
                     dataLoading = false
+                    complete()
                 }
             }
         }
@@ -582,9 +525,7 @@ struct ServerView: View {
             return
         }
         let ret = startLoadServerLibraries(calibreServer: calibreServer, parse: self.handleLibraryInfo(jsonData:)) {
-            
             var content = "Library List:"
-            calibreServerLibrariesEdit.removeAll()
             calibreServerLibrariesEdit.forEach {
                 content += "\n\($0.name)"
             }
@@ -665,6 +606,12 @@ struct ServerView: View {
         if !isSuccess {
             alertItem = AlertItem(id: "DelLibraryFailed")
         }
+    }
+}
+
+extension ServerView : AlertDelegate {
+    func alert(alertItem: AlertItem) {
+        self.alertItem = alertItem
     }
 }
 

@@ -62,3 +62,16 @@ func makeFolioReaderUnzipPath() -> URL? {
     
     return folioReaderUnzipped
 }
+
+func removeFolioCache(book: CalibreBook, format: Format) {
+    guard let savedURL = getSavedUrl(book: book, format: format),
+          let folioUnzippedPath = makeFolioReaderUnzipPath(),
+          FileManager.default.fileExists(atPath: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true).path)
+    else { return }
+    
+    do {
+        try FileManager.default.removeItem(at: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true))
+    } catch {
+        print(error)
+    }
+}

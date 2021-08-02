@@ -352,3 +352,9 @@ struct ServerErrorDelegate {
     
 }
 
+struct ReaderInfo {
+    let url: URL
+    let format: Format
+    let readerType: ReaderType
+    let position: BookDeviceReadingPosition
+}

@@ -49,8 +49,9 @@ struct MainView: View {
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             modelData.presentingEBookReaderFromShelf = false
-            let originalPosition = modelData.getLatestReadingPosition(
-                    by: modelData.readerInfo?.2 ?? ReaderType.UNSUPPORTED
+            let originalPosition = modelData.readerInfo?.position ?? 
+                modelData.getLatestReadingPosition(
+                    by: modelData.readerInfo?.readerType ?? ReaderType.UNSUPPORTED
                 )
                 ?? modelData.getLatestReadingPosition()
                 ?? modelData.getInitialReadingPosition()
@@ -71,13 +72,9 @@ struct MainView: View {
             }
         }) {
             if let readerInfo = modelData.readerInfo {
-                YabrEBookReader(
-                    bookURL: readerInfo.0,
-                    bookFormat: readerInfo.1,
-                    bookReader: readerInfo.2
-                )
+                YabrEBookReader(readerInfo: readerInfo)
             } else {
-                Text("Nil Book")
+                Text("No Suitable Format/Reader/Position Combo")
             }
         }
         .alert(item: $alertItem) { item in

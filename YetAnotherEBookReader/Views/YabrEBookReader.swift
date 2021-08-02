@@ -18,8 +18,16 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     let bookURL : URL
     let bookFormat: Format
     let bookReader: ReaderType
+    let bookPosition: BookDeviceReadingPosition
     
     @EnvironmentObject var modelData: ModelData
+    
+    init(readerInfo: ReaderInfo) {
+        bookURL = readerInfo.url
+        bookFormat = readerInfo.format
+        bookReader = readerInfo.readerType
+        bookPosition = readerInfo.position
+    }
     
     func makeUIViewController(context: Context) -> UIViewController {
         let nav = UINavigationController()
@@ -40,19 +48,18 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     try server.add(publication)
                     let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
                     
-                    if let bookReadingPosition = modelData.getSelectedReadingPosition(),
-                       bookReadingPosition.lastReadPage > 0,
-                       bookReadingPosition.lastReadPage - 1 < publication.readingOrder.count {
-                        let link = publication.readingOrder[bookReadingPosition.lastReadPage - 1]
+                    if bookPosition.lastReadPage > 0,
+                       bookPosition.lastReadPage - 1 < publication.readingOrder.count {
+                        let link = publication.readingOrder[bookPosition.lastReadPage - 1]
                         let locator = Locator(
                             href: link.href,
                             type: link.type ?? "",
-                            title: bookReadingPosition.lastReadChapter,
+                            title: bookPosition.lastReadChapter,
                             locations: Locator.Locations(
                                 fragments: [],
-                                progression: bookReadingPosition.lastChapterProgress / 100.0,
-                                totalProgression: bookReadingPosition.lastProgress / 100.0,
-                                position: bookReadingPosition.lastPosition[1],
+                                progression: bookPosition.lastChapterProgress / 100.0,
+                                totalProgression: bookPosition.lastProgress / 100.0,
+                                position: bookPosition.lastPosition[1],
                                 otherLocations: [:]),
                             text: Locator.Text())
                         book.progression = locator.jsonString
@@ -106,19 +113,18 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     
                     let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
                     
-                    if let bookReadingPosition = modelData.getSelectedReadingPosition(),
-                       bookReadingPosition.lastReadPage > 0,
-                       bookReadingPosition.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0,
+                    if bookPosition.lastReadPage > 0,
+                       bookPosition.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0,
                        let link = publication.readingOrder.first {
                         let locator = Locator(
                             href: link.href,
                             type: link.type ?? "",
-                            title: bookReadingPosition.lastReadChapter,
+                            title: bookPosition.lastReadChapter,
                             locations: Locator.Locations(
                                 fragments: [],
-                                progression: bookReadingPosition.lastChapterProgress / 100.0,
-                                totalProgression: bookReadingPosition.lastProgress / 100.0,
-                                position: bookReadingPosition.lastPosition[0],
+                                progression: bookPosition.lastChapterProgress / 100.0,
+                                totalProgression: bookPosition.lastProgress / 100.0,
+                                position: bookPosition.lastPosition[0],
                                 otherLocations: [:]),
                             text: Locator.Text())
                         book.progression = locator.jsonString
@@ -149,7 +155,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             nav.navigationBar.isTranslucent = false
             nav.setToolbarHidden(false, animated: true)
             
-            pdfViewController.open(pdfURL: bookURL, position: modelData.getSelectedReadingPosition() ?? modelData.getInitialReadingPosition())
+            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
             pdfViewController.modelData = modelData
             
             let stackView = UIStackView(frame: nav.toolbar.frame)
@@ -187,19 +193,18 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     try server.add(publication)
                     let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
                     
-                    if let bookReadingPosition = modelData.getSelectedReadingPosition(),
-                       bookReadingPosition.lastReadPage > 0,
-                       bookReadingPosition.lastReadPage - 1 < publication.readingOrder.count {
-                        let link = publication.readingOrder[bookReadingPosition.lastReadPage - 1]
+                    if bookPosition.lastReadPage > 0,
+                       bookPosition.lastReadPage - 1 < publication.readingOrder.count {
+                        let link = publication.readingOrder[bookPosition.lastReadPage - 1]
                         let locator = Locator(
                             href: link.href,
                             type: link.type ?? "",
-                            title: bookReadingPosition.lastReadChapter,
+                            title: bookPosition.lastReadChapter,
                             locations: Locator.Locations(
                                 fragments: [],
-                                progression: bookReadingPosition.lastChapterProgress / 100.0,
-                                totalProgression: bookReadingPosition.lastProgress / 100.0,
-                                position: bookReadingPosition.lastPosition[1],
+                                progression: bookPosition.lastChapterProgress / 100.0,
+                                totalProgression: bookPosition.lastProgress / 100.0,
+                                position: bookPosition.lastPosition[1],
                                 otherLocations: [:]),
                             text: Locator.Text())
                         book.progression = locator.jsonString
@@ -239,7 +244,9 @@ func FolioReaderConfiguration(bookURL: URL) -> FolioReaderConfig {
     config.displayTitle = true
     
     #if DEBUG
-    //config.debug.formUnion([.borderHighlight, .viewTransition, .functionTrace])
+//    config.debug.formUnion([.borderHighlight])
+//    config.debug.formUnion([.viewTransition])
+//    config.debug.formUnion([.functionTrace])
     //config.debug.formUnion([.htmlStyling, .borderHighlight])
     #endif
     // See more at FolioReaderConfig.swift

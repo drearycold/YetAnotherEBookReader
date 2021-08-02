@@ -20,10 +20,6 @@ struct LibraryInfoView: View {
     @State private var pageSize = 100
     @State private var updater = 0
     
-    struct AlertItem : Identifiable {
-        var id: String
-        var msg: String?
-    }
     @State private var alertItem: AlertItem?
     
     @State private var batchDownloadSheetPresenting = false
@@ -34,11 +30,39 @@ struct LibraryInfoView: View {
     var body: some View {
             NavigationView {
                 VStack(alignment: .leading) {
-                    TextField("Search", text: $searchString, onCommit: {
-                        modelData.searchString = searchString
-                        pageNo = 0
-                    })
-                    .padding()
+                    VStack(alignment: .trailing, spacing: 4) {
+                        HStack {
+                            Button(action: {
+                                modelData.syncLibrary(alertDelegate: self)
+                            }) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                            if modelData.calibreServerLibraryUpdating {
+                                Text("\(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal)")
+                            } else {
+                                if modelData.calibreServerLibraryBooks.count > 1 {
+                                    Text("\(modelData.calibreServerLibraryBooks.count) Books")
+                                } else {
+                                    Text("\(modelData.calibreServerLibraryBooks.count) Book")
+                                }
+                            }
+                            
+                            Spacer()
+                            
+                            Text(modelData.calibreServerUpdatingStatus ?? "")
+                            filterMenuView()
+                        }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
+                            //                            guard value == false else { return }
+                            pageNo = 0
+                        }
+                        
+                        TextField("Search", text: $searchString, onCommit: {
+                            modelData.searchString = searchString
+                            pageNo = 0
+                        })
+                        
+                        Divider()
+                    }.padding(4)    //top bar
                     
                     List(selection: $selectedBookIds) {
                         ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
@@ -48,9 +72,15 @@ struct LibraryInfoView: View {
                                 selection: $modelData.selectedBookId
                             ) {
                                 LibraryInfoBookRow(bookId: bookId)
-                            }.isDetailLink(true)
+                            }
+                            .isDetailLink(true)
+                            .contextMenu {
+                                if let book = modelData.calibreServerLibraryBooks[bookId] {
+                                    bookRowContextMenuView(book: book)
+                                }
+                            }
                         }   //ForEach
-                        .onDelete(perform: deleteFromList)
+//                        .onDelete(perform: deleteFromList)
                     }
                     .popover(isPresented: $batchDownloadSheetPresenting,
                              attachmentAnchor: .rect(.bounds),
@@ -60,20 +90,7 @@ struct LibraryInfoView: View {
                     }
                     
                     VStack(alignment: .trailing, spacing: 4) {
-                        HStack {
-                            if modelData.calibreServerLibraryUpdating {
-                                Text("Loading  \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal)")
-                            } else {
-                                if modelData.calibreServerLibraryBooks.count > 1 {
-                                    Text("\(modelData.calibreServerLibraryBooks.count) Books")
-                                } else {
-                                    Text("\(modelData.calibreServerLibraryBooks.count) Book")
-                                }
-                            }
-                        }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
-//                            guard value == false else { return }
-                            pageNo = 0
-                        }
+                        Divider()
                         
                         HStack {
                             Button(action:{
@@ -126,20 +143,20 @@ struct LibraryInfoView: View {
                                 Image(systemName: "chevron.forward.2")
                             }
                         }
-                    }
-                    .padding(4)
+                    }.padding(4)    //bottom bar
                 }
+                .padding(4)
                 .navigationTitle(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "Please Select a Library")
                 .navigationBarTitleDisplayMode(.automatic)
                 .statusBar(hidden: false)
-                .toolbar {
-                    toolbarContent()
-                }   //List.toolbar
+//                .toolbar {
+//                    toolbarContent()
+//                }   //List.toolbar
                 //.environment(\.editMode, self.$editMode)  //TODO
             }   //NavigationView
             .navigationViewStyle(DefaultNavigationViewStyle())
             .listStyle(PlainListStyle())
-            .disabled(modelData.calibreServerLibraryUpdating)
+            .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
             
         //Body
     }   //View
@@ -166,9 +183,151 @@ struct LibraryInfoView: View {
         }
     }
 
+    @ViewBuilder
+    private func bookRowContextMenuView(book: CalibreBook) -> some View {
+        Menu("Download ...") {
+            ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
+                Button(format.rawValue) {
+                    modelData.clearCache(book: book, format: format)
+                    modelData.downloadFormat(
+                        book: book,
+                        format: format
+                    ) { success in
+                        DispatchQueue.main.async {
+                            if book.inShelf == false {
+                                modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
+                            }
+
+                            if format == Format.EPUB {
+                                removeFolioCache(book: book, format: format)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func filterMenuView() -> some View {
+        Menu {
+            Button(action: {
+                modelData.filterCriteriaRating.removeAll()
+                modelData.filterCriteriaFormat.removeAll()
+                modelData.filterCriteriaIdentifier.removeAll()
+                modelData.filterCriteriaShelved = .none
+                modelData.filterCriteriaSeries.removeAll()
+            }) {
+                Text("Reset")
+            }
+            
+            Menu("Shelved ...") {
+                Button(action: {
+                    if modelData.filterCriteriaShelved == .shelvedOnly {
+                        modelData.filterCriteriaShelved = .none
+                    } else {
+                        modelData.filterCriteriaShelved = .shelvedOnly
+                    }
+                }, label: {
+                    Text("Yes" + (modelData.filterCriteriaShelved == .shelvedOnly ? "✓" : ""))
+                })
+                Button(action: {
+                    if modelData.filterCriteriaShelved == .notShelvedOnly {
+                        modelData.filterCriteriaShelved = .none
+                    } else {
+                        modelData.filterCriteriaShelved = .notShelvedOnly
+                    }
+                }, label: {
+                    Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
+                })
+            }
+            
+            Menu("Series ...") {
+                ForEach(
+                    modelData.calibreServerLibraryBooks.values.reduce(
+                        into: [String: Int]()) { result, value in
+                        if value.series.isEmpty == false {
+                            result[value.series] = 1
+                        } else {
+                            result["Without Series"] = 1
+                        }
+                    }
+                    .compactMap { $0.key }
+                    .sorted {
+                        if $0 == "Without Series" {
+                            return true
+                        }
+                        if $1 == "Without Series" {
+                            return false
+                        }
+                        return $0 < $1
+                    },
+                    id: \.self) { id in
+                    Button(action: {
+                        if modelData.filterCriteriaSeries.contains(id) {
+                            modelData.filterCriteriaSeries.remove(id)
+                        } else {
+                            modelData.filterCriteriaSeries.insert(id)
+                        }
+                    }, label: {
+                        Text(id + (modelData.filterCriteriaSeries.contains(id) ? "✓" : ""))
+                    })
+                }
+            }
+            
+            Menu("Rating ...") {
+                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                    result[value.ratingDescription] = 1
+                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                    Button(action: {
+                        if modelData.filterCriteriaRating.contains(id) {
+                            modelData.filterCriteriaRating.remove(id)
+                        } else {
+                            modelData.filterCriteriaRating.insert(id)
+                        }
+                    }, label: {
+                        Text(id + (modelData.filterCriteriaRating.contains(id) ? "✓" : ""))
+                    })
+                }
+            }
+            Menu("Format ...") {
+                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                    value.formats.forEach { result[$0.key] = 1 }
+                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                    Button(action: {
+                        if modelData.filterCriteriaFormat.contains(id) {
+                            modelData.filterCriteriaFormat.remove(id)
+                        } else {
+                            modelData.filterCriteriaFormat.insert(id)
+                        }
+                    }, label: {
+                        Text(id + (modelData.filterCriteriaFormat.contains(id) ? "✓" : ""))
+                    })
+                }
+            }
+            Menu("Linked with ...") {
+                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
+                    value.identifiers.forEach { result[$0.key] = 1 }
+                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                    Button(action: {
+                        if modelData.filterCriteriaIdentifier.contains(id) {
+                            modelData.filterCriteriaIdentifier.remove(id)
+                        } else {
+                            modelData.filterCriteriaIdentifier.insert(id)
+                        }
+                    }, label: {
+                        Text(id + (modelData.filterCriteriaIdentifier.contains(id) ? "✓" : ""))
+                    })
+                }
+            }
+        } label: {
+            Image(systemName: "line.horizontal.3.decrease.circle")
+        }
+    }
+    
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
+        /*ToolbarItem(placement: .navigationBarTrailing) {
             HStack {
                 Menu {
                     Button(action: {
@@ -285,7 +444,7 @@ struct LibraryInfoView: View {
                 }
 
             }
-        }   //ToolbarItem
+        }*/   //ToolbarItem
         ToolbarItem(placement: .navigationBarLeading) {
             HStack {
                 //editButton
@@ -324,6 +483,12 @@ struct LibraryInfoView: View {
         modelData.filteredBookList.remove(atOffsets: offsets)
     }
     
+}
+
+extension LibraryInfoView : AlertDelegate {
+    func alert(alertItem: AlertItem) {
+        self.alertItem = alertItem
+    }
 }
 
 extension Array {

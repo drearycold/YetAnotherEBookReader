@@ -30,11 +30,11 @@ struct LibraryInfoLibrarySwitcher: View {
             Text("\(calibreServerId)")
 
             Picker("Switch Library", selection: $calibreServerLibraryId) {
-                ForEach(modelData.calibreLibraries.values.filter({ (library) -> Bool in
-                    library.server.id == calibreServerId
-                }).sorted(by: { (lhs, rhs) -> Bool in
-                    lhs.name < rhs.name
-                })) { library in
+                ForEach(
+                    modelData.calibreLibraries.values.filter {
+                        $0.server.id == calibreServerId
+                    }.sorted { $0.name < $1.name }
+                ) { library in
                     Text(library.name).tag(library.id)
                 }
             }

@@ -167,11 +167,15 @@ struct BookDetailView: View {
         }
         .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
             if let book = modelData.readingBook,
-               let bookFileUrl = getSavedUrl(book: book, format: selectedFormat) {
+               let bookFileUrl = getSavedUrl(book: book, format: selectedFormat),
+               let position = modelData.getSelectedReadingPosition() {
                 YabrEBookReader(
-                    bookURL: bookFileUrl,
-                    bookFormat: selectedFormat,
-                    bookReader: selectedFormatReader
+                    readerInfo: modelData.prepareBookReading(
+                        url: bookFileUrl,
+                        format: selectedFormat,
+                        readerType: selectedFormatReader,
+                        position: position
+                    )
                 )
             } else {
                 Text("Nil Book")
@@ -293,7 +297,7 @@ struct BookDetailView: View {
                         }
                     }
                     .onChange(of: modelData.updatedReadingPosition) { value in
-                        if let selectedPosition = modelData.getSelectedReadingPosition() {
+                        if let selectedPosition = modelData.readerInfo?.position {
                             if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
                                 return
                             }
@@ -387,13 +391,31 @@ struct BookDetailView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     
-                    Button(action:{ selectedFormatReaderShowDetail.toggle() }) {
-                        if selectedFormatReaderShowDetail {
-                            Image(systemName: "chevron.up")
-                        } else {
-                            Image(systemName: "chevron.down")
+                    Button(action: {
+                        let devicePosition = modelData.getDeviceReadingPosition()
+                        let selectedPosition = modelData.getSelectedReadingPosition()
+                        
+                        if devicePosition == nil && selectedPosition == nil {
+                            readBook(position: BookDeviceReadingPosition(id: modelData.deviceName, readerName: ""))
+                            return
                         }
-                    }.hidden()
+                        if devicePosition == nil && selectedPosition != nil {
+                            readBook(position: selectedPosition!)
+                            return
+                        }
+                        if devicePosition != nil && selectedPosition == nil {
+                            readBook(position: devicePosition!)
+                            return
+                        }
+                        if devicePosition! == selectedPosition! {
+                            readBook(position: devicePosition!)
+                            return
+                        } else {
+                            alertItem = AlertItem(id: "ReadingPosition", msg: "You have picked a different reading position than that of this device, please confirm.\n\(devicePosition!.description) VS \(selectedPosition!.description)")
+                        }
+                    }) {
+                        Image(systemName: "book")
+                    }.disabled(modelData.readingBook?.inShelf == false)
                 }
                 .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
             }
@@ -673,16 +695,8 @@ struct BookDetailView: View {
                         modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
                     }
 
-                    guard format == Format.EPUB,
-                          let savedURL = getSavedUrl(book: book, format: format),
-                          let folioUnzippedPath = makeFolioReaderUnzipPath(),
-                          FileManager.default.fileExists(atPath: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true).path)
-                    else { return }
-
-                    do {
-                        try FileManager.default.removeItem(at: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true))
-                    } catch {
-                        print(error)
+                    if format == Format.EPUB {
+                        removeFolioCache(book: book, format: format)
                     }
                 }
             }
