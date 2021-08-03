@@ -170,7 +170,7 @@ struct ServerView: View {
                         
                         HStack(alignment: .center, spacing: 8) {
                             Text(modelData.calibreServerUpdatingStatus ?? "")
-                            
+
                             Spacer()
                             
                             Text("\(modelData.currentCalibreServerLibraries.count) Library(s) in Server")
@@ -228,6 +228,8 @@ struct ServerView: View {
                     
                     Text("Current Library: \(modelData.currentCalibreLibrary?.name ?? "No Library Selected")")
                     HStack(alignment: .center, spacing: 8) {
+                        Text(modelData.calibreServerUpdatingStatus ?? "")
+                        
                         Spacer()
                         
                         if modelData.calibreServerLibraryUpdating {
@@ -272,7 +274,8 @@ struct ServerView: View {
                         }
                         Text("Please add a custom column of type \"Long text\" on calibre server.\nIf there are multiple users, it's better to add a unique column for each user.")
                             .font(.caption)
-                        
+                        Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
+                            .font(.caption)
                         HStack {
                             Spacer()
                             Button(action:{
@@ -381,6 +384,23 @@ struct ServerView: View {
                     },
                     secondaryButton: .cancel()
                 )
+            }
+            if item.id == "ModServer" {
+                return Alert(title: Text("Mod Server"),
+                             message: Text(alertContent),
+                             primaryButton: .default(Text("Confirm")
+                             ) {
+                                modServerConfirmed()
+                             },
+                             secondaryButton: .cancel() {
+                                //clear stalled server info
+                                calibreDefaultLibrary.removeAll()
+                                calibreServerLibrariesEdit.removeAll()
+
+                                if let server = modelData.currentCalibreServer {
+                                    calibreDefaultLibrary = server.defaultLibrary
+                                }
+                             })
             }
             return Alert(title: Text("Error"), message: Text(item.id), dismissButton: .cancel() {
                 item.action?()
@@ -561,19 +581,24 @@ struct ServerView: View {
     private func modServerConfirmButtonAction() {
         let newServer = CalibreServer(
             name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
-        guard let server = modelData.currentCalibreServer else {
+        guard let oldServer = modelData.currentCalibreServer else {
             alertItem = AlertItem(id: "ModServerNotExist")  //shouldn't reach here
             return
         }
         
-        if newServer == server {
+        if newServer.id == oldServer.id {
             //minor changes
-            modelData.updateServer(newServer: newServer)
+            modelData.updateServer(oldServer: oldServer, newServer: newServer)
         } else {
             //sanity check
             let ret = startLoadServerLibraries(calibreServer: newServer, parse: self.handleLibraryInfo(jsonData:)) {
-                
-                
+                var content = "Library List:"
+                calibreServerLibrariesEdit.forEach {
+                    content += "\n\($0.name)"
+                }
+
+                alertContent = content
+                alertItem = AlertItem(id: "ModServer")  //call modServerConfirmed() if confirmed
             }
             
             if ret != 0 {
@@ -588,6 +613,26 @@ struct ServerView: View {
             }
             
         }
+    }
+    
+    private func modServerConfirmed() {
+        guard let oldServer = modelData.currentCalibreServer else {
+            alertItem = AlertItem(id: "Error", msg: "Unexpected Error")
+            return
+            
+        }
+        let newServer = CalibreServer(
+            name: calibreServerName,
+            baseUrl: calibreServerUrl,
+            publicUrl: calibreServerUrlPublic,
+            username: calibreUsername,
+            password: calibrePassword,
+            defaultLibrary: calibreDefaultLibrary,
+            lastLibrary: oldServer.lastLibrary,
+            usePublic: oldServer.usePublic
+        )
+        
+        modelData.updateServer(oldServer: oldServer, newServer: newServer)
     }
     
     private func delServerConfirmed() {

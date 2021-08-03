@@ -11,10 +11,6 @@ import SwiftUI
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
     
-    struct AlertItem : Identifiable {
-        var id: String
-        var msg: String?
-    }
     @State private var alertItem: AlertItem?
 
     var body: some View {
@@ -49,7 +45,7 @@ struct MainView: View {
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             modelData.presentingEBookReaderFromShelf = false
-            let originalPosition = modelData.readerInfo?.position ?? 
+            let originalPosition = modelData.readerInfo?.position ??
                 modelData.getLatestReadingPosition(
                     by: modelData.readerInfo?.readerType ?? ReaderType.UNSUPPORTED
                 )
@@ -68,7 +64,7 @@ struct MainView: View {
                 }
             }
             else {
-                modelData.updateCurrentPosition()
+                modelData.updateCurrentPosition(alertDelegate: self)
             }
         }) {
             if let readerInfo = modelData.readerInfo {
@@ -80,15 +76,15 @@ struct MainView: View {
         .alert(item: $alertItem) { item in
             if item.id == "ForwardProgress" {
                 return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition()
+                    modelData.updateCurrentPosition(alertDelegate: self)
                 }), secondaryButton: .cancel())
             }
             if item.id == "BackwardProgress" {
                 return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition()
+                    modelData.updateCurrentPosition(alertDelegate: self)
                 }), secondaryButton: .cancel())
             }
-            return Alert(title: Text(item.id))
+            return Alert(title: Text(item.id), message: Text(item.msg ?? "Unexpected Error"))
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
@@ -99,6 +95,12 @@ struct MainView: View {
         
     }
     
+}
+
+extension MainView: AlertDelegate {
+    func alert(alertItem: AlertItem) {
+        self.alertItem = alertItem
+    }
 }
 
 @available(macCatalyst 14.0, *)

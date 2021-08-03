@@ -16,4 +16,16 @@ struct AlertItem : Identifiable {
 
 protocol AlertDelegate {
     func alert(alertItem: AlertItem)
+    func alert(msg: String)
+}
+
+extension AlertDelegate {
+    func alert(msg: String) {
+        self.alert(
+            alertItem: AlertItem(
+                id: "Alert",
+                msg: msg
+            )
+        )
+    }
 }

@@ -69,7 +69,11 @@ final class ModelData: ObservableObject {
             guard var server = calibreServers[currentCalibreServerId] else { return }
             
             server.lastLibrary = library.name
-            updateServerRealm(server: server)
+            do {
+                try updateServerRealm(server: server)
+            } catch {
+                
+            }
             
             UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
             
@@ -84,6 +88,7 @@ final class ModelData: ObservableObject {
                 
                 DispatchQueue.main.sync {
                     calibreServerLibraryUpdating = false
+                    //currentBookId = self.filteredBookList.first ?? 0
                 }
             }
         }
@@ -335,6 +340,26 @@ final class ModelData: ObservableObject {
             }
         }
         
+        populateBookShelf()
+        
+        populateLocalLibraryBooks()
+        
+        switch UIDevice.current.userInterfaceIdiom {
+            case .phone:
+                defaultFormat = Format.EPUB
+            case .pad:
+                defaultFormat = Format.PDF
+            default:
+                defaultFormat = Format.EPUB
+        }
+        
+        formatReaderMap[Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
+        formatReaderMap[Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
+        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
+
+    }
+    
+    func populateBookShelf() {
         let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "inShelf = true")
         )
@@ -354,22 +379,6 @@ final class ModelData: ObservableObject {
             
             print("booksInShelfRealm \(book.inShelfId)")
         }
-        
-        populateLocalLibraryBooks()
-        
-        switch UIDevice.current.userInterfaceIdiom {
-            case .phone:
-                defaultFormat = Format.EPUB
-            case .pad:
-                defaultFormat = Format.PDF
-            default:
-                defaultFormat = Format.EPUB
-        }
-        
-        formatReaderMap[Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
-        formatReaderMap[Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
-        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
-
     }
     
     func populateLibraries() {
@@ -441,7 +450,11 @@ final class ModelData: ObservableObject {
         if documentServer == nil {
             calibreServers[tmpServer.id] = tmpServer
             documentServer = calibreServers[tmpServer.id]
-            updateServerRealm(server: documentServer!)
+            do {
+                try updateServerRealm(server: documentServer!)
+            } catch {
+                
+            }
             if calibreServers.count == 1 {
                 currentCalibreServerId = documentServer!.id
             }
@@ -465,7 +478,11 @@ final class ModelData: ObservableObject {
         if localLibrary == nil {
             calibreLibraries[tmpLibrary.id] = tmpLibrary
             localLibrary = calibreLibraries[tmpLibrary.id]
-            updateLibraryRealm(library: localLibrary!)
+            do {
+                try updateLibraryRealm(library: localLibrary!)
+            } catch {
+                
+            }
             if calibreLibraries.count == 1 {
                 currentCalibreLibraryId = localLibrary!
                     .id
@@ -591,12 +608,20 @@ final class ModelData: ObservableObject {
     
     func updateStoreReadingPosition(enabled: Bool, value: String) {
         calibreLibraries[currentCalibreLibraryId]!.readPosColumnName = enabled ? value : nil
-        updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
+        do {
+            try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
+        } catch {
+            
+        }
     }
     
     func updateGoodreadsSyncProfileName(enabled: Bool, value: String) {
         calibreLibraries[currentCalibreLibraryId]!.goodreadsSyncProfileName = enabled ? value : nil
-        updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
+        do {
+            try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
+        } catch {
+            
+        }
     }
     
     func updateCustomDictViewer(enabled: Bool, value: String) {
@@ -605,15 +630,23 @@ final class ModelData: ObservableObject {
     
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
         calibreServers[server.id] = server
-        updateServerRealm(server: server)
+        do {
+            try updateServerRealm(server: server)
+        } catch {
+            
+        }
         
         libraries.forEach { (library) in
             calibreLibraries[library.id] = library
-            updateLibraryRealm(library: library)
+            do {
+                try updateLibraryRealm(library: library)
+            } catch {
+            
+            }
         }
     }
     
-    func updateServerRealm(server: CalibreServer) {
+    func updateServerRealm(server: CalibreServer) throws {
         let serverRealm = CalibreServerRealm()
         serverRealm.name = server.name
         serverRealm.baseUrl = server.baseUrl
@@ -622,12 +655,12 @@ final class ModelData: ObservableObject {
         serverRealm.password = server.password
         serverRealm.defaultLibrary = server.defaultLibrary
         serverRealm.lastLibrary = server.lastLibrary
-        try! realm.write {
+        try realm.write {
             realm.add(serverRealm, update: .all)
         }
     }
     
-    func updateLibraryRealm(library: CalibreLibrary) {
+    func updateLibraryRealm(library: CalibreLibrary) throws {
         let libraryRealm = CalibreLibraryRealm()
         libraryRealm.key = library.key
         libraryRealm.name = library.name
@@ -635,7 +668,7 @@ final class ModelData: ObservableObject {
         libraryRealm.serverUsername = library.server.username
         libraryRealm.readPosColumnName = library.readPosColumnName
         libraryRealm.goodreadsSyncProfileName = library.goodreadsSyncProfileName
-        try! realm.write {
+        try realm.write {
             realm.add(libraryRealm, update: .all)
         }
     }
@@ -719,13 +752,21 @@ final class ModelData: ObservableObject {
                 if calibreLibraries[libraryId] == nil {
                     let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
                     calibreLibraries[libraryId] = library
-                    updateLibraryRealm(library: library)
+                    do {
+                        try updateLibraryRealm(library: library)
+                    } catch {
+                        
+                    }
                 }
         }
         
         if server.defaultLibrary != defaultLibrary {
             calibreServers[serverId]!.defaultLibrary = defaultLibrary
-            updateServerRealm(server: calibreServers[serverId]!)
+            do {
+                try updateServerRealm(server: calibreServers[serverId]!)
+            } catch {
+                
+            }
         }
     }
     
@@ -1352,7 +1393,7 @@ final class ModelData: ObservableObject {
         return readingBook!.readPos.getDevices().first
     }
     
-    func updateCurrentPosition() {
+    func updateCurrentPosition(alertDelegate: AlertDelegate) {
         guard var readingBook = self.readingBook else {
             return
         }
@@ -1392,28 +1433,32 @@ final class ModelData: ObservableObject {
                 updatingMetadataTask!.cancel()
             }
             updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+                let emptyData = "".data(using: .utf8) ?? Data()
                 if let error = error {
                     // self.handleClientError(error)
                     defaultLog.warning("error: \(error.localizedDescription)")
                     DispatchQueue.main.async {
                         updatingMetadataStatus = error.localizedDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
                 guard let httpResponse = response as? HTTPURLResponse else {
                     defaultLog.warning("not httpResponse: \(response.debugDescription)")
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = response.debugDescription
+                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + response.debugDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
                 if !(200...299).contains(httpResponse.statusCode) {
                     defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
@@ -1421,24 +1466,27 @@ final class ModelData: ObservableObject {
                 guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
                       let data = data else {
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
                 
                 guard let root = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
                 
                 guard let result = root["result"] as? NSDictionary, let resultv = result["v"] as? NSDictionary else {
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
+                        alertDelegate.alert(msg: updatingMetadataStatus)
                     }
                     return
                 }
@@ -1693,7 +1741,7 @@ final class ModelData: ObservableObject {
         return ReaderInfo(url: savedURL, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
     }
     
-    func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) -> ReaderInfo {
+    func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
         let readerInfo = ReaderInfo(
             url: url,
             format: format,
@@ -1701,7 +1749,6 @@ final class ModelData: ObservableObject {
             position: position
         )
         self.readerInfo = readerInfo
-        return readerInfo
     }
     
     func removeLibrary(libraryId: String) -> Bool {
@@ -1789,8 +1836,98 @@ final class ModelData: ObservableObject {
         return true
     }
     
-    func updateServer(newServer: CalibreServer) {
+    func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
         
+        do {
+            try self.updateServerRealm(server: newServer)
+        } catch {
+            
+        }
+        self.calibreServers.removeValue(forKey: oldServer.id)
+        self.calibreServers[newServer.id] = newServer
+        
+        if oldServer.id != newServer.id {
+            calibreServerUpdating = true
+            calibreServerUpdatingStatus = "Updating..."
+            
+            //if major change occured
+            //remove old server from realm
+            
+            realm.objects(CalibreServerRealm.self).forEach { serverRealm in
+                guard serverRealm.baseUrl == oldServer.baseUrl && serverRealm.username == oldServer.username else {
+                    return
+                }
+                do {
+                    try realm.write {
+                        realm.delete(serverRealm)
+                    }
+                } catch {
+                    
+                }
+            }
+            
+            
+            //update library
+            let librariesCached = realm.objects(CalibreLibraryRealm.self)
+            librariesCached.forEach { oldLibraryRealm in
+                guard oldLibraryRealm.serverUrl == oldServer.baseUrl && oldLibraryRealm.serverUsername == oldServer.username else { return }
+                    
+                let oldLibrary = CalibreLibrary(
+                    server: oldServer,
+                    key: oldLibraryRealm.key!,
+                    name: oldLibraryRealm.name!,
+                    readPosColumnName: oldLibraryRealm.readPosColumnName,
+                    goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
+                
+                
+                let newLibrary = CalibreLibrary(
+                    server: newServer,
+                    key: oldLibraryRealm.key!,
+                    name: oldLibraryRealm.name!,
+                    readPosColumnName: oldLibraryRealm.readPosColumnName,
+                    goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
+                
+                do {
+                    try realm.write {
+                        realm.delete(oldLibraryRealm)
+                    }
+                    try updateLibraryRealm(library: newLibrary)
+                } catch {
+                    
+                }
+                
+                calibreLibraries.removeValue(forKey: oldLibrary.id)
+                calibreLibraries[newLibrary.id] = newLibrary
+            }
+            
+            //update books
+            let booksCached = realm.objects(CalibreBookRealm.self)
+            do {
+                try realm.write {
+                    booksCached.forEach { oldBookRealm in
+                        guard oldBookRealm.serverUrl == oldServer.baseUrl && oldBookRealm.serverUsername == oldServer.username else { return }
+                        let newBookRealm = CalibreBookRealm(value: oldBookRealm)
+                        newBookRealm.serverUrl = newServer.baseUrl
+                        newBookRealm.serverUsername = newServer.username
+                        
+                        realm.delete(oldBookRealm)
+                        realm.add(newBookRealm, update: .all)
+                    }
+                }
+            } catch {
+                
+            }
+            
+            //reload shelf
+            booksInShelf.removeAll(keepingCapacity: true)
+            populateBookShelf()
+            
+            //reload book list
+            calibreServerUpdating = false
+            calibreServerUpdatingStatus = "Finished"
+            
+            currentCalibreServerId = newServer.id
+        }
     }
     
     func syncLibrary(alertDelegate: AlertDelegate) {
@@ -1818,6 +1955,7 @@ final class ModelData: ObservableObject {
 
                 let alertItem = AlertItem(id: error.localizedDescription, action: {
                     self.calibreServerUpdating = false
+                    self.calibreServerUpdatingStatus = "Failed"
                 })
                 alertDelegate.alert(alertItem: alertItem)
 
@@ -1829,6 +1967,7 @@ final class ModelData: ObservableObject {
                 
                 let alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
                     self.calibreServerUpdating = false
+                    self.calibreServerUpdatingStatus = "Failed"
                 })
                 alertDelegate.alert(alertItem: alertItem)
                 

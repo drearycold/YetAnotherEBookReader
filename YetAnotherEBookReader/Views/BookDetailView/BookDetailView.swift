@@ -38,10 +38,6 @@ struct BookDetailView: View {
     
     var defaultLog = Logger()
     
-    struct AlertItem : Identifiable {
-        var id: String
-        var msg: String?
-    }
     @State private var alertItem: AlertItem?
 
 //    @State private var presentingUpdateAlert = false
@@ -94,7 +90,7 @@ struct BookDetailView: View {
                     modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-                .navigationTitle(Text(modelData.readingBook!.title))
+                .navigationTitle(Text(modelData.readingBook?.title ?? ""))
             } else {
                 EmptyView()
             }
@@ -149,12 +145,12 @@ struct BookDetailView: View {
             }
             if item.id == "ForwardProgress" {
                 return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition()
+                    modelData.updateCurrentPosition(alertDelegate: self)
                 }), secondaryButton: .cancel())
             }
             if item.id == "BackwardProgress" {
                 return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition()
+                    modelData.updateCurrentPosition(alertDelegate: self)
                 }), secondaryButton: .cancel())
             }
             if item.id == "ReadingPosition" {
@@ -166,17 +162,8 @@ struct BookDetailView: View {
             return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
         .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
-            if let book = modelData.readingBook,
-               let bookFileUrl = getSavedUrl(book: book, format: selectedFormat),
-               let position = modelData.getSelectedReadingPosition() {
-                YabrEBookReader(
-                    readerInfo: modelData.prepareBookReading(
-                        url: bookFileUrl,
-                        format: selectedFormat,
-                        readerType: selectedFormatReader,
-                        position: position
-                    )
-                )
+            if let readerInfo = modelData.readerInfo {
+                YabrEBookReader(readerInfo: readerInfo)
             } else {
                 Text("Nil Book")
             }
@@ -311,7 +298,7 @@ struct BookDetailView: View {
                                 }
                             }
                             else {
-                                modelData.updateCurrentPosition()
+                                modelData.updateCurrentPosition(alertDelegate: self)
                             }
                         }
                     }
@@ -992,7 +979,19 @@ struct BookDetailView: View {
             return
         }
         modelData.updatedReadingPosition.update(with: position)
-        showingReadSheet = true
+        
+        if let book = modelData.readingBook,
+           let bookFileUrl = getSavedUrl(book: book, format: selectedFormat),
+           let position = modelData.getSelectedReadingPosition() {
+            
+            modelData.prepareBookReading(
+                url: bookFileUrl,
+                format: selectedFormat,
+                readerType: selectedFormatReader,
+                position: position
+            )
+            showingReadSheet = true
+        }
     }
     
     func handleBookDeleted() {
@@ -1041,8 +1040,12 @@ struct BookDetailView: View {
         
         return comments + "\n" + tocHTML
     }
-    
-    
+}
+
+extension BookDetailView : AlertDelegate {
+    func alert(alertItem: AlertItem) {
+        self.alertItem = alertItem
+    }
 }
 
 @available(macCatalyst 14.0, *)
