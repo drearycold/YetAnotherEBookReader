@@ -10,10 +10,8 @@ import Foundation
 func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
     if book.library.server.isLocal {
         if let localBaseUrl = book.library.server.localBaseUrl,
-           let formatDataEncoded = book.formats[format.rawValue],
-           let formatData = Data(base64Encoded: formatDataEncoded),
-           let formatVal = try? JSONSerialization.jsonObject(with: formatData, options: []) as? [String: Any],
-           let localFilename = formatVal["filename"] as? String {
+           let formatInfo = book.formats[format.rawValue],
+           let localFilename = formatInfo.filename {
             return localBaseUrl
                     .appendingPathComponent(book.library.key, isDirectory: true)
                     .appendingPathComponent(localFilename, isDirectory: false)

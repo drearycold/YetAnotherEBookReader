@@ -100,9 +100,11 @@ final class ModelData: ObservableObject {
         calibreLibraries.values.filter { $0.server.id == currentCalibreServerId }
     }
     
+    /// Used for server level activities
     @Published var calibreServerUpdating = false
     @Published var calibreServerUpdatingStatus: String? = nil
     
+    /// Used for library level activities
     @Published var calibreServerLibraryUpdating = false
     @Published var calibreServerLibraryUpdatingProgress = 0
     @Published var calibreServerLibraryUpdatingTotal = 0
@@ -187,9 +189,12 @@ final class ModelData: ObservableObject {
                 readingBook = nil
                 return
             }
-            guard readingBook?.inShelfId != readingBookInShelfId else { return }
-            readingBook = booksInShelf[readingBookInShelfId]
-            readerInfo = prepareBookReading(book: readingBook!)
+            if readingBook?.inShelfId != readingBookInShelfId {
+                readingBook = booksInShelf[readingBookInShelfId]
+            }
+            if readingBook != nil {
+                readerInfo = prepareBookReading(book: readingBook!)
+            }
         }
     }
     @Published var readingBook: CalibreBook? = nil {
@@ -209,9 +214,7 @@ final class ModelData: ObservableObject {
     @Published var readerInfo: ReaderInfo? = nil
     
     @Published var presentingEBookReaderFromShelf = false
-    
-    let readingBookReloadCover = PassthroughSubject<(), Never>()
-    
+        
     @Published var loadLibraryResult = "Waiting"
     
     var updatingMetadataTask: URLSessionDataTask?
@@ -250,6 +253,9 @@ final class ModelData: ObservableObject {
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
     
+    lazy var downloadService = BookFormatDownloadService(modelData: self)
+    @Published var activeDownloads: [URL: BookFormatDownload] = [:]
+
     init() {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -357,6 +363,7 @@ final class ModelData: ObservableObject {
         formatReaderMap[Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
+        downloadService.modelData = self
     }
     
     func populateBookShelf() {
@@ -582,6 +589,16 @@ final class ModelData: ObservableObject {
     }
     
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
+        let formatsVer1 = bookRealm.formats().reduce(
+            into: [String: FormatInfo]()
+        ) { result, entry in
+            result[entry.key] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+        }
+//        let formatsVer2 = try? JSONSerialization.jsonObject(with: bookRealm.formatsData! as Data, options: []) as? [String: FormatInfo]
+        let decoder = JSONDecoder()
+        let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData! as Data))
+                ?? formatsVer1
+        
         var calibreBook = CalibreBook(
             id: bookRealm.id,
             library: library,
@@ -594,7 +611,7 @@ final class ModelData: ObservableObject {
             pubDate: bookRealm.pubDate,
             timestamp: bookRealm.timestamp,
             lastModified: bookRealm.lastModified,
-            formats: bookRealm.formats(),
+            formats: formatsVer2,
             readPos: bookRealm.readPos(),
             inShelf: bookRealm.inShelf,
             inShelfName: bookRealm.inShelfName)
@@ -706,7 +723,9 @@ final class ModelData: ObservableObject {
         bookRealm.inShelf = book.inShelf
         bookRealm.inShelfName = book.inShelfName
         
-        bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
+//        bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
+        let encoder = JSONEncoder()
+        bookRealm.formatsData = try! encoder.encode(book.formats) as NSData
         
         bookRealm.identifiersData = try! JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
         
@@ -749,14 +768,16 @@ final class ModelData: ObservableObject {
             .forEach { newLibrary in
                 let libraryId = newLibrary.id
             
-                if calibreLibraries[libraryId] == nil {
+                if calibreLibraries[libraryId] != nil {
+                    calibreLibraries[libraryId]!.key = newLibrary.key
+                } else {
                     let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
                     calibreLibraries[libraryId] = library
-                    do {
-                        try updateLibraryRealm(library: library)
-                    } catch {
-                        
-                    }
+                }
+                do {
+                    try updateLibraryRealm(library: calibreLibraries[libraryId]!)
+                } catch {
+                    
                 }
         }
         
@@ -858,7 +879,7 @@ final class ModelData: ObservableObject {
             let id = (key as! NSString).intValue
             let formats = value as! NSArray
             formats.forEach { format in
-                calibreServerLibraryBooks[id]!.formats[(format as! String)] = ""
+                calibreServerLibraryBooks[id]!.formats[(format as! String)] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
             }
         }
         
@@ -1062,9 +1083,24 @@ final class ModelData: ObservableObject {
         }
         
         if let v = root["format_metadata"] as? NSDictionary {
-            book.formats = v.reduce(into: [String: String]()) { result, format in
-                if let fKey = format.key as? String, let fVal = format.value as? NSDictionary, let fValData = try? JSONSerialization.data(withJSONObject: fVal, options: []) {
-                    result[fKey.uppercased()] = fValData.base64EncodedString()
+            book.formats = v.reduce(
+                into: book.formats
+            ) { result, format in
+                if let fKey = format.key as? String,
+                   let fVal = format.value as? NSDictionary,
+                   let sizeVal = fVal["size"] as? NSNumber,
+                   let mtimeVal = fVal["mtime"] as? String {
+                    var formatInfo = result[fKey.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+                    
+                    formatInfo.serverSize = sizeVal.uint64Value
+                    
+                    let dateFormatter = ISO8601DateFormatter()
+                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+                    if let mtime = dateFormatter.date(from: mtimeVal) {
+                        formatInfo.serverMTime = mtime
+                    }
+                    
+                    result[fKey.uppercased()] = formatInfo
                 }
             }
         }
@@ -1178,83 +1214,69 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func downloadFormat(book: CalibreBook, format: Format, modificationDate: Date? = nil, overwrite: Bool = false, complete: @escaping (Bool) -> Void) -> Bool {
-        guard book.formats.contains(where: { $0.key == format.rawValue }) else {
-            complete(false)
-            return false
+    func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
+        return downloadService.startDownload(book, format: format, overwrite: overwrite)
+    }
+    
+    func cancelDownloadFormat(book: CalibreBook, format: Format) {
+        return downloadService.cancelDownload(book, format: format)
+    }
+    
+    func pauseDownloadFormat(book: CalibreBook, format: Format) {
+        return downloadService.pauseDownload(book, format: format)
+    }
+    
+    func resumeDownloadFormat(book: CalibreBook, format: Format) -> Bool {
+        let result = downloadService.resumeDownload(book, format: format)
+        if !result {
+            downloadService.cancelDownload(book, format: format)
         }
-        
-        guard let url = URL(string: book.library.server.serverUrl)?
-                .appendingPathComponent("get", isDirectory: true)
-                .appendingPathComponent(format.rawValue, isDirectory: true)
-                .appendingPathComponent(book.id.description, isDirectory: true)
-                .appendingPathComponent(book.library.key, isDirectory: false)
-                else {
-            complete(false)
-            return false
-        }
-
-        defaultLog.info("downloadURL: \(url.absoluteString)")
-        
-        guard let savedURL = getSavedUrl(book: book, format: format) else {
-            complete(false)
-            return false
-        }
-        
-        self.defaultLog.info("savedURL: \(savedURL.absoluteString)")
-        
-        if FileManager.default.fileExists(atPath: savedURL.path) && !overwrite {
-            complete(true)
-            return false
-        }
-        
-        let downloadTask = URLSession.shared.downloadTask(with: url) {
-            urlOrNil, responseOrNil, errorOrNil in
-            // check for and handle errors:
-            // * errorOrNil should be nil
-            // * responseOrNil should be an HTTPURLResponse with statusCode in 200..<299
-            guard errorOrNil == nil else {
-                
-                complete(false)
-                return
-            }
-            guard let fileURL = urlOrNil else { complete(false); return }
-            do {
-                self.defaultLog.info("fileURL: \(fileURL.absoluteString)")
-                
-                if FileManager.default.fileExists(atPath: savedURL.path) {
-                    try FileManager.default.removeItem(at: savedURL)
-                }
-                try FileManager.default.moveItem(at: fileURL, to: savedURL)
-                if let modificationDate = modificationDate {
-                    let attributes = [FileAttributeKey.modificationDate: modificationDate]
-                    try FileManager.default.setAttributes(attributes, ofItemAtPath: savedURL.path)
-                }
-                
-                let isFileExist = FileManager.default.fileExists(atPath: savedURL.path)
-                self.defaultLog.info("isFileExist: \(isFileExist)")
-                
-                complete(isFileExist)
-            } catch {
-                print ("file error: \(error)")
-                complete(false)
-            }
-        }
-        downloadTask.resume()
-        return true
+        return result
     }
     
     func startBatchDownload(bookIds: [Int32], formats: [String]) {
         
     }
     
-    func clearCache(inShelfId: String, _ format: Format) {
+    func clearCache(inShelfId: String) {
         guard let book = booksInShelf[inShelfId] else {
             return
         }
         
-        clearCache(book: book,  format: format)
+        book.formats.filter{$1.cached}.forEach {
+            guard let format = Format(rawValue: $0.key) else { return }
+            clearCache(book: book,  format: format)
+        }
         
+    }
+    
+    func addedCache(book: CalibreBook, format: Format) {
+        guard var formatInfo = book.formats[format.rawValue] else { return }
+        var newBook = book
+        
+        if let cacheInfo = getCacheInfo(book: newBook, format: format),
+           let cacheMTime = cacheInfo.1 {
+            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
+            formatInfo.cached = true
+            formatInfo.cacheSize = cacheInfo.0
+            formatInfo.cacheMTime = cacheMTime
+        } else {
+            formatInfo.cached = false
+            formatInfo.cacheSize = 0
+            formatInfo.cacheMTime = .distantPast
+        }
+
+        newBook.formats[format.rawValue] = formatInfo
+        
+        updateBook(book: newBook)
+
+        if newBook.inShelf == false {
+            addToShelf(newBook.id, shelfName: newBook.tags.first ?? "Untagged")
+        }
+        
+        if format == Format.EPUB {
+            removeFolioCache(book: newBook, format: format)
+        }
     }
     
     func clearCache(book: CalibreBook, format: Format) {
@@ -1267,6 +1289,18 @@ final class ModelData: ObservableObject {
                 defaultLog.error("clearCache \(error.localizedDescription)")
             }
         }
+        var newBook = book
+        
+        newBook.formats[format.rawValue]?.cacheMTime = .distantPast
+        newBook.formats[format.rawValue]?.cacheSize = 0
+        newBook.formats[format.rawValue]?.cached = false
+
+        updateBook(book: newBook)
+        
+        if newBook.inShelf, newBook.formats.filter({ $1.cached }).isEmpty {
+            removeFromShelf(inShelfId: newBook.inShelfId)
+        }
+
     }
     
     func getCacheInfo(book: CalibreBook, format: Format) -> (UInt64, Date?)? {
@@ -1335,13 +1369,23 @@ final class ModelData: ObservableObject {
                     return
                 }
                 
-                var formatVal: [String: Any] = [:]
-                formatVal["filename"] = fileName
-                
-                guard let formatData = try? JSONSerialization.data(withJSONObject: formatVal, options: []).base64EncodedString() else {
-                    return
+                var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
+                formatInfo.filename = fileName
+                do {
+                    let fileAttribs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                    if let fileSize = fileAttribs[.size] as? NSNumber {
+                        formatInfo.serverSize = fileSize.uint64Value
+                        formatInfo.cacheSize = fileSize.uint64Value
+                    }
+                    if let fileTS = fileAttribs[.modificationDate] as? Date {
+                        formatInfo.serverMTime = fileTS
+                        formatInfo.cacheMTime = fileTS
+                    }
+                } catch {
+                    
                 }
-                book.formats[format.rawValue] = formatData
+                
+                book.formats[format.rawValue] = formatInfo
                 
                 book.inShelf = true
                 
@@ -1395,6 +1439,9 @@ final class ModelData: ObservableObject {
     
     func updateCurrentPosition(alertDelegate: AlertDelegate) {
         guard var readingBook = self.readingBook else {
+            return
+        }
+        guard let readerInfo = self.readerInfo else {
             return
         }
         do {
@@ -1456,7 +1503,11 @@ final class ModelData: ObservableObject {
                 if !(200...299).contains(httpResponse.statusCode) {
                     defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
+                        updatingMetadataStatus =
+                            httpResponse.statusCode.description
+                            + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+                            + " " + (String(data: data ?? emptyData, encoding: .utf8) ?? "")
+                            + " " + httpResponse.debugDescription
                         updatingMetadata = false
                         alertDelegate.alert(msg: updatingMetadataStatus)
                     }
@@ -1475,7 +1526,7 @@ final class ModelData: ObservableObject {
                 
                 guard let root = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data , encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
                         alertDelegate.alert(msg: updatingMetadataStatus)
                     }
@@ -1484,7 +1535,7 @@ final class ModelData: ObservableObject {
                 
                 guard let result = root["result"] as? NSDictionary, let resultv = result["v"] as? NSDictionary else {
                     DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
+                        updatingMetadataStatus = String(data: data , encoding: .utf8) ?? "" + httpResponse.debugDescription
                         updatingMetadata = false
                         alertDelegate.alert(msg: updatingMetadataStatus)
                     }
@@ -1516,7 +1567,11 @@ final class ModelData: ObservableObject {
                     updatingMetadataStatus = "Success"
                     updatingMetadata = false
                     
-                    if let library = calibreLibraries[readingBook.library.id], let goodreadsId = readingBook.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
+                    if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
+                       let library = calibreLibraries[readingBook.library.id],
+                       let goodreadsId = readingBook.identifiers["goodreads"],
+                       let goodreadsSyncProfileName = library.goodreadsSyncProfileName,
+                       goodreadsSyncProfileName.count > 0 {
                         let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
                         connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
                     }
@@ -1837,7 +1892,6 @@ final class ModelData: ObservableObject {
     }
     
     func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
-        
         do {
             try self.updateServerRealm(server: newServer)
         } catch {
@@ -1846,13 +1900,16 @@ final class ModelData: ObservableObject {
         self.calibreServers.removeValue(forKey: oldServer.id)
         self.calibreServers[newServer.id] = newServer
         
-        if oldServer.id != newServer.id {
-            calibreServerUpdating = true
-            calibreServerUpdatingStatus = "Updating..."
-            
+        guard oldServer.id != newServer.id else { return }  //minor changes
+        
+        calibreServerUpdating = true
+        calibreServerUpdatingStatus = "Updating..."
+        
             //if major change occured
+        DispatchQueue(label: "data").async {
+            let realm = try! Realm(configuration: self.realmConf)
+
             //remove old server from realm
-            
             realm.objects(CalibreServerRealm.self).forEach { serverRealm in
                 guard serverRealm.baseUrl == oldServer.baseUrl && serverRealm.username == oldServer.username else {
                     return
@@ -1865,7 +1922,6 @@ final class ModelData: ObservableObject {
                     
                 }
             }
-            
             
             //update library
             let librariesCached = realm.objects(CalibreLibraryRealm.self)
@@ -1891,13 +1947,18 @@ final class ModelData: ObservableObject {
                     try realm.write {
                         realm.delete(oldLibraryRealm)
                     }
-                    try updateLibraryRealm(library: newLibrary)
                 } catch {
                     
                 }
                 
-                calibreLibraries.removeValue(forKey: oldLibrary.id)
-                calibreLibraries[newLibrary.id] = newLibrary
+                DispatchQueue.main.sync {
+                    do {
+                       try self.updateLibraryRealm(library: newLibrary)
+                    } catch {}
+                    self.calibreLibraries.removeValue(forKey: oldLibrary.id)
+                    self.calibreLibraries[newLibrary.id] = newLibrary
+                }
+                
             }
             
             //update books
@@ -1918,15 +1979,19 @@ final class ModelData: ObservableObject {
                 
             }
             
-            //reload shelf
-            booksInShelf.removeAll(keepingCapacity: true)
-            populateBookShelf()
-            
-            //reload book list
-            calibreServerUpdating = false
-            calibreServerUpdatingStatus = "Finished"
-            
-            currentCalibreServerId = newServer.id
+            DispatchQueue.main.sync {
+                //reload shelf
+                realm.refresh()
+
+                self.booksInShelf.removeAll(keepingCapacity: true)
+                self.populateBookShelf()
+                
+                //reload book list
+                self.calibreServerUpdating = false
+                self.calibreServerUpdatingStatus = "Finished"
+                
+                self.currentCalibreServerId = newServer.id
+            }
         }
     }
     

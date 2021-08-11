@@ -220,6 +220,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         modelData.readingBookInShelfId = bookId
+        
         guard modelData.readingBook != nil else {
             let alert = UIAlertController(title: "Missing Book File", message: "Re-download from Server?", preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in

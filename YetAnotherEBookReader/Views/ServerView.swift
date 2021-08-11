@@ -51,36 +51,52 @@ struct ServerView: View {
                         }
                     }
                     .pickerStyle(MenuPickerStyle())
+                    .disabled(calibreServerEditing)
                     
                     Spacer()
                     
-                    Button(action:{
-                        calibreServerEditing = true
-                    }) {
-                        Image(systemName: "plus")
+                    if calibreServerEditing {
+                        Button(action:{ calibreServerEditing = false }) {
+                            Image(systemName: "xmark")
+                        }
+                        Button(action:{
+                            if calibreServerLibrariesEdit.isEmpty && calibreDefaultLibrary.isEmpty {
+                                addServerConfirmButtonAction()
+                            } else {
+                                modServerConfirmButtonAction()
+                            }
+                        }) {
+                            Image(systemName: "checkmark")
+                        }
+                    } else {
+                        Button(action:{
+                            calibreServerEditing = true
+                        }) {
+                            Image(systemName: "plus")
+                        }
+                        
+                        Button(action:{
+                            alertItem = AlertItem(id: "DelServer")
+                        }) {
+                            Image(systemName: "minus")
+                        }.disabled(!canDeleteCurrentServer())
+                        
+                        Button(action:{
+                            guard let server = modelData.currentCalibreServer else { return }
+                            calibreServerName = server.name
+                            calibreServerUrl = server.baseUrl
+                            calibreUsername = server.username
+                            calibrePassword = server.password
+                            calibreServerUrlPublic = server.publicUrl
+                            calibreServerSetPublicAddress = !calibreServerUrlPublic.isEmpty
+                            calibreServerNeedAuth = !calibreUsername.isEmpty
+                            calibreDefaultLibrary = server.defaultLibrary
+                            calibreServerLibrariesEdit = modelData.currentCalibreServerLibraries
+                            calibreServerEditing = true
+                        }) {
+                            Image(systemName: "square.and.pencil")
+                        }.disabled(!canDeleteCurrentServer())
                     }
-                    
-                    Button(action:{
-                        alertItem = AlertItem(id: "DelServer")
-                    }) {
-                        Image(systemName: "minus")
-                    }.disabled(!canDeleteCurrentServer())
-                    
-                    Button(action:{
-                        guard let server = modelData.currentCalibreServer else { return }
-                        calibreServerName = server.name
-                        calibreServerUrl = server.baseUrl
-                        calibreUsername = server.username
-                        calibrePassword = server.password
-                        calibreServerUrlPublic = server.publicUrl
-                        calibreServerSetPublicAddress = !calibreServerUrlPublic.isEmpty
-                        calibreServerNeedAuth = !calibreUsername.isEmpty
-                        calibreDefaultLibrary = server.defaultLibrary
-                        calibreServerLibrariesEdit = modelData.currentCalibreServerLibraries
-                        calibreServerEditing = true
-                    }) {
-                        Image(systemName: "square.and.pencil")
-                    }.disabled(!canDeleteCurrentServer())
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -148,20 +164,12 @@ struct ServerView: View {
                             if dataLoading {
                                 Text("Connecting...")
                             }
+                            if modelData.calibreServerUpdating {
+                                Text(modelData.calibreServerUpdatingStatus ?? "")
+                            }
                             
                             Spacer()
-                            Button(action:{ calibreServerEditing = false }) {
-                                Image(systemName: "xmark")
-                            }
-                            Button(action:{
-                                if calibreServerLibrariesEdit.isEmpty && calibreDefaultLibrary.isEmpty {
-                                    addServerConfirmButtonAction()
-                                } else {
-                                    modServerConfirmButtonAction()
-                                }
-                            }) {
-                                Image(systemName: "checkmark")
-                            }
+                            
                         }
                         
                         
@@ -179,7 +187,9 @@ struct ServerView: View {
                                 guard let server = modelData.currentCalibreServer else { return }
                                 let ret = startLoadServerLibraries(
                                     calibreServer: server,
-                                    parse: handleLibraryInfo(jsonData:)
+                                    parse: { jsonData in
+                                        self.handleLibraryInfo(calibreServer: server, jsonData: jsonData)
+                                    }
                                 ) {
                                     modelData.updateServerLibraryInfo(
                                         serverId: modelData.currentCalibreServerId,
@@ -194,6 +204,11 @@ struct ServerView: View {
                                 Image(systemName: "arrow.triangle.2.circlepath")
                             }
                         }
+                    }
+                }
+                .onChange(of: calibreServerEditing) { newState in
+                    if newState == false {
+                        resetEditingFields()
                     }
                 }
                 
@@ -328,7 +343,7 @@ struct ServerView: View {
                 }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
-            .disabled(modelData.calibreServerLibraryUpdating)
+            .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
             
             Spacer()
         }
@@ -345,7 +360,6 @@ struct ServerView: View {
                 print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
             }
         }
-        .disabled(modelData.calibreServerUpdating)
         .navigationBarHidden(false)
         .statusBar(hidden: false)
         .alert(item: $alertItem) { item in
@@ -419,7 +433,11 @@ struct ServerView: View {
         
     }
     
-    func startLoadServerLibraries(calibreServer: CalibreServer, parse: @escaping (_ jsonData: Data) -> Void, complete: @escaping () -> Void) -> Int {
+    func startLoadServerLibraries(
+        calibreServer: CalibreServer,
+        parse: @escaping (_ jsonData: Data) -> Void,
+        complete: @escaping () -> Void
+    ) -> Int {
         if dataLoading {
             return 1
         }
@@ -512,19 +530,13 @@ struct ServerView: View {
         return 0
     }
     
-    func handleLibraryInfo(jsonData: Data) {
-        var calibreServer = CalibreServer(name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
-        
+    func handleLibraryInfo(calibreServer: CalibreServer, jsonData: Data) {
         if let libraryInfo = try? JSONSerialization.jsonObject(with: jsonData, options: []) as? NSDictionary {
             defaultLog.info("libraryInfo: \(libraryInfo)")
             
             if let libraryMap = libraryInfo["library_map"] as? [String: String] {
                 if let defaultLibrary = libraryInfo["default_library"] as? String {
-                    calibreServer.defaultLibrary = defaultLibrary
                     calibreDefaultLibrary = defaultLibrary
-                }
-                if calibreServer.lastLibrary.isEmpty {
-                    calibreServer.lastLibrary = calibreServer.defaultLibrary
                 }
                 calibreServerLibrariesEdit.removeAll()
                 libraryMap.sorted(by: { $0.key < $1.key }).forEach { (key, value) in
@@ -544,7 +556,12 @@ struct ServerView: View {
             alertItem = AlertItem(id: "AddServerExists")
             return
         }
-        let ret = startLoadServerLibraries(calibreServer: calibreServer, parse: self.handleLibraryInfo(jsonData:)) {
+        let ret = startLoadServerLibraries(
+            calibreServer: calibreServer,
+            parse: { jsonData in
+                self.handleLibraryInfo(calibreServer: calibreServer, jsonData: jsonData)
+                
+            }) {
             var content = "Library List:"
             calibreServerLibrariesEdit.forEach {
                 content += "\n\($0.name)"
@@ -591,7 +608,11 @@ struct ServerView: View {
             modelData.updateServer(oldServer: oldServer, newServer: newServer)
         } else {
             //sanity check
-            let ret = startLoadServerLibraries(calibreServer: newServer, parse: self.handleLibraryInfo(jsonData:)) {
+            let ret = startLoadServerLibraries(
+                calibreServer: newServer,
+                parse: { jsonData in
+                    self.handleLibraryInfo(calibreServer: newServer, jsonData: jsonData)
+                }) {
                 var content = "Library List:"
                 calibreServerLibrariesEdit.forEach {
                     content += "\n\($0.name)"
@@ -633,6 +654,8 @@ struct ServerView: View {
         )
         
         modelData.updateServer(oldServer: oldServer, newServer: newServer)
+        
+        calibreServerEditing = false
     }
     
     private func delServerConfirmed() {
@@ -651,6 +674,19 @@ struct ServerView: View {
         if !isSuccess {
             alertItem = AlertItem(id: "DelLibraryFailed")
         }
+    }
+    
+    private func resetEditingFields() {
+        calibreServerName.removeAll()
+        calibreServerUrl.removeAll()
+        calibreServerUrlPublic.removeAll()
+        calibreServerSetPublicAddress = false
+        calibreServerNeedAuth = false
+        calibreUsername.removeAll()
+        calibrePassword.removeAll()
+
+        calibreDefaultLibrary.removeAll()
+        calibreServerLibrariesEdit.removeAll()
     }
 }
 

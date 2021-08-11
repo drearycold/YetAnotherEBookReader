@@ -20,7 +20,8 @@ enum Format: String, CaseIterable, Identifiable {
     var ext: String { self.rawValue.lowercased() }
 }
 
-struct FormatInfo {
+struct FormatInfo: Codable {
+    var filename: String?
     var serverSize: UInt64
     var serverMTime: Date
     var cached: Bool
@@ -42,4 +43,11 @@ enum ReaderType: String, CaseIterable, Identifiable {
     case ReadiumCBZ
     
     var id: String { self.rawValue }
+}
+
+struct ReaderInfo {
+    let url: URL
+    let format: Format
+    let readerType: ReaderType
+    let position: BookDeviceReadingPosition
 }

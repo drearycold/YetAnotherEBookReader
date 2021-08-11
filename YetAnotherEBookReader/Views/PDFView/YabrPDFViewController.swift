@@ -309,6 +309,14 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         return PDFPageWithBackground.self
     }
     
+    override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
+        coordinator.animate { _ in
+            
+        } completion: { _ in
+            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
+        }
+    }
+    
     @objc private func tappedGesture(sender: UITapGestureRecognizer) {
         print("tappedGesture \(sender.state.rawValue)")
         
@@ -745,7 +753,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     @objc func lookupMDict() {
         if let s = pdfView?.currentSelection?.string {
             print(s)
-            mDictView.word = s
+            mDictView.title = s
             self.present(mDictView, animated: true, completion: nil)
         }
     }

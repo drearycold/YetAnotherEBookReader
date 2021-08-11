@@ -44,8 +44,6 @@ struct BookDetailView: View {
 //    @State private var showingRefreshAlert = false
 //    @State private var showingDownloadAlert = false
     
-    @State private var formatStats = [Format: FormatInfo]()
-    
     @State private var selectedFormatShowDetail = false
     @State private var selectedFormat = Format.EPUB
 //    @State private var selectedFormatSize:UInt64 = 0
@@ -69,17 +67,6 @@ struct BookDetailView: View {
     
     // let rvc = ReaderViewController()
     // var pdfView = PDFViewUI()
-    
-    class DownloadDelegate : NSObject, URLSessionTaskDelegate, URLSessionDownloadDelegate {
-        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-            //TODO
-        }
-        
-        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-            //TODO
-        }
-        
-    }
     
     var body: some View {
         ScrollView {
@@ -262,7 +249,7 @@ struct BookDetailView: View {
                                 || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
                                 else { return }
                         Format.allCases.forEach { format in
-                            if formatStats[format]?.cached ?? false {
+                            if book.formats[format.rawValue]?.cached ?? false {
                                 self.selectedFormat = format
                             }
                         }
@@ -359,7 +346,7 @@ struct BookDetailView: View {
                 }
                 .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
 
-                if selectedFormatShowDetail, let formatInfo = formatStats[selectedFormat] {
+                if selectedFormatShowDetail, let formatInfo = book.formats[selectedFormat.rawValue] {
                     viewContentFormatDetail(book: book, isCompat: isCompat, formatInfo: formatInfo)
                         .fixedSize()
                 }
@@ -521,25 +508,27 @@ struct BookDetailView: View {
             }
             
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(formatStats.enumerated().sorted { $0.element.key.rawValue < $1.element.key.rawValue }, id: \.element.key) { format in
+                ForEach(book.formats.enumerated().sorted { $0.element.key < $1.element.key }, id: \.element.key) { format in
                     HStack(alignment: .top, spacing: 4) {
-                        metadataFormatIcon(format.element.key.rawValue)
+                        metadataFormatIcon(
+                            (Format(rawValue: format.element.key) ?? .UNKNOWN).rawValue
+                        )
                             .padding(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
 
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(alignment: .bottom, spacing: 24) {
-                                Text(format.element.key.rawValue)
+                                Text(format.element.key)
                                     .font(.subheadline)
                                     .frame(minWidth: 48, alignment: .leading)
                                 cacheFormatButton(
                                     book: book,
-                                    format: format.element.key,
+                                    format: Format(rawValue: format.element.key) ?? Format.UNKNOWN,
                                     formatInfo: format.element.value
                                 )
                                 
                                 clearFormatButton(
                                     book: book,
-                                    format: format.element.key,
+                                    format: Format(rawValue: format.element.key) ?? Format.UNKNOWN,
                                     formatInfo: format.element.value
                                 ).disabled(!format.element.value.cached)
                             }
@@ -556,7 +545,34 @@ struct BookDetailView: View {
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
                                         .frame(width: 16, height: 16)
-                                } else {
+                                } else if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format.rawValue == format.element.key && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                                    ProgressView(value: download.progress)
+                                        .progressViewStyle(LinearProgressViewStyle())
+                                        .frame(maxWidth: 200)
+
+                                    Button(action: {
+                                        if let format = Format(rawValue: format.element.key) {
+                                            if download.isDownloading {
+                                                modelData.pauseDownloadFormat(book: book, format: format)
+                                            } else {
+                                                modelData.resumeDownloadFormat(book: book, format: format)
+                                            }
+                                        }
+                                    }) {
+                                        Image(systemName: download.isDownloading ? "pause" : "play")
+                                    }
+                                    
+                                    //cancel download
+                                    Button(action:{
+                                        if let format = Format(rawValue: format.element.key) {
+                                            modelData.cancelDownloadFormat(book: book, format: format)
+                                        }
+                                    }) {
+                                        Image(systemName: "xmark")
+                                            .foregroundColor(.red)
+                                    }
+                                }
+                                else {
                                     Text("Not cached")
                                 }
                             }
@@ -632,35 +648,22 @@ struct BookDetailView: View {
                 )
                 .font(.subheadline)
                 Spacer()
-                if formatInfo.cached {
-                    Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.cacheSize), countStyle: .file)).font(.subheadline)
-                }
+                Text(
+                    ByteCountFormatter.string(
+                        fromByteCount: Int64(formatInfo.cacheSize),
+                        countStyle: .file
+                    )
+                ).font(.subheadline)
+            }
+            HStack {
+                Text(formatInfo.serverMTime.description)
+
+                Spacer()
+                Text(formatInfo.cacheMTime.description)
             }
             HStack {
                 Spacer()
-                if formatInfo.cached {
-                    Text(formatInfo.cacheMTime.description)
-                }
-            }
-            HStack {
-                Spacer()
-                #if DEBUG
-                Button(action: {
-                    // move from cache to downloaded
-                    do {
-                        let cacheDir = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-                        let oldURL = cacheDir.appendingPathComponent("\(book.library.name) - \(book.id).\(selectedFormat.rawValue.lowercased())", isDirectory: false)
-                        if FileManager.default.fileExists(atPath: oldURL.path), let newURL = getSavedUrl(book: book, format: selectedFormat) {
-                            try FileManager.default.moveItem(at: oldURL, to: newURL)
-                            updateCacheStates(book: book, format: selectedFormat)
-                        }
-                    } catch {
-                        print(error)
-                    }
-                }) {
-                    Image(systemName: "wrench.and.screwdriver")
-                }
-                #endif
+                
                 cacheFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
                 clearFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
                     .disabled(!formatInfo.cached)
@@ -671,22 +674,10 @@ struct BookDetailView: View {
     private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
-            modelData.downloadFormat(
+            modelData.startDownloadFormat(
                 book: book,
-                format: format,
-                modificationDate: formatInfo.serverMTime
-            ) { success in
-                DispatchQueue.main.async {
-                    updateCacheStates(book: book, format: format)
-                    if book.inShelf == false {
-                        modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
-                    }
-
-                    if format == Format.EPUB {
-                        removeFolioCache(book: book, format: format)
-                    }
-                }
-            }
+                format: format
+            )
         }) {
             Image(systemName: "tray.and.arrow.down")
                 .resizable()
@@ -698,10 +689,6 @@ struct BookDetailView: View {
     private func clearFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
-            updateCacheStates(book: book, format: format)
-            
-            guard !formatStats.contains(where: { $0.value.cached }) else { return }
-            modelData.removeFromShelf(inShelfId: book.inShelfId)
         }) {
             Image(systemName: "tray.and.arrow.up")
                 .resizable()
@@ -785,28 +772,18 @@ struct BookDetailView: View {
                     return
                 }
                 if book.inShelf {
-                    modelData.clearCache(inShelfId: book.inShelfId, selectedFormat)
-                    modelData.removeFromShelf(inShelfId: book.inShelfId)
+                    modelData.clearCache(inShelfId: book.inShelfId)
                     downloadStatus = .INITIAL
-                    updateCacheStates(book: book, format: selectedFormat)
-                } else if downloadStatus == .INITIAL, let formatInfo = formatStats[selectedFormat] {
-                    let downloading = modelData.downloadFormat(book: book, format: selectedFormat, modificationDate: formatInfo.serverMTime) { isSuccess in
-                        if isSuccess {
-                            downloadStatus = .DOWNLOADED
-                            updateCacheStates(book: book, format: selectedFormat)
-                        } else {
-                            downloadStatus = .INITIAL
-                            alertItem = AlertItem(id: "DownloadFailure")
-                        }
-                    }
-                    if downloading {
+                } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
+                    if modelData.startDownloadFormat(book: book, format: selectedFormat) {
                         downloadStatus = .DOWNLOADING
                     }
                 }
                 updater += 1
             }) {
-                if downloadStatus == .DOWNLOADING {
-                    Text("Downloading")
+                if let download = modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == modelData.readingBook?.id} ).first {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle())
                 } else if modelData.readingBook != nil, modelData.readingBook!.inShelf {
                     Image(systemName: "star.slash")
                 } else {
@@ -902,12 +879,9 @@ struct BookDetailView: View {
         selectedFormat = Format.UNKNOWN
         selectedPosition = ""
         selectedFormatReader = ReaderType.UNSUPPORTED
-        formatStats.removeAll()
     }
     
     func initStates(book: CalibreBook) {
-        initCacheStates(book: book)
-        
         shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
         shelfNameCustomized = !book.tags.contains(shelfName)
         
@@ -922,59 +896,52 @@ struct BookDetailView: View {
         
     }
     
-    func initCacheStates(book: CalibreBook) {
-        book.formats.forEach { (fKey, fValStr) in
-            guard let format = Format(rawValue: fKey) else { return }
-            var formatInfo = FormatInfo(
-                serverSize: 0,
-                serverMTime: Date(timeIntervalSince1970: 0),
-                cached: false,
-                cacheSize: 0,
-                cacheMTime: Date(timeIntervalSince1970: 0)
-            )
-            
-            if let fValData = Data(base64Encoded: fValStr),
-               let fVal = try? JSONSerialization.jsonObject(with: fValData, options: []) as? NSDictionary {
-                if let sizeVal = fVal["size"] as? NSNumber {
-                    formatInfo.serverSize = sizeVal.uint64Value
-                }
-                if let mtimeVal = fVal["mtime"] as? String {
-                    let dateFormatter = ISO8601DateFormatter()
-                    dateFormatter.formatOptions = ISO8601DateFormatter.Options.withInternetDateTime.union(.withFractionalSeconds)
-                    if let mtime = dateFormatter.date(from: mtimeVal) {
-                        formatInfo.serverMTime = mtime
-                    }
-                }
-            }
-            
-            if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
-                print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
-                formatInfo.cached = true
-                formatInfo.cacheSize = cacheInfo.0
-                formatInfo.cacheMTime = cacheInfo.1!
-            } else {
-                formatInfo.cached = false
-            }
-            
-            self.formatStats[format] = formatInfo
-        }
-    }
+//    func initCacheStates(book: CalibreBook) {
+//        book.formats.forEach { (format, formatInfo) in
+//            guard let format = Format(rawValue: format) else { return }
+//
+//            if let fValData = Data(base64Encoded: fValStr),
+//               let fVal = try? JSONSerialization.jsonObject(with: fValData, options: []) as? NSDictionary {
+//                if let sizeVal = fVal["size"] as? NSNumber {
+//                    formatInfo.serverSize = sizeVal.uint64Value
+//                }
+//                if let mtimeVal = fVal["mtime"] as? String {
+//                    let dateFormatter = ISO8601DateFormatter()
+//                    dateFormatter.formatOptions = ISO8601DateFormatter.Options.withInternetDateTime.union(.withFractionalSeconds)
+//                    if let mtime = dateFormatter.date(from: mtimeVal) {
+//                        formatInfo.serverMTime = mtime
+//                    }
+//                }
+//            }
+//
+//            if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
+//                print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
+//                formatInfo.cached = true
+//                formatInfo.cacheSize = cacheInfo.0
+//                formatInfo.cacheMTime = cacheInfo.1!
+//            } else {
+//                formatInfo.cached = false
+//            }
+//
+//            self.formatStats[format] = formatInfo
+//        }
+//    }
     
-    func updateCacheStates(book: CalibreBook, format: Format) {
-        guard let formatInfo = formatStats[format] else { return }
-        
-        if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
-            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
-            formatStats[format]!.cached = true
-            formatStats[format]!.cacheSize = cacheInfo.0
-            formatStats[format]!.cacheMTime = cacheInfo.1!
-        } else {
-            formatStats[format]!.cached = false
-        }
-    }
+//    func updateCacheStates(book: CalibreBook, format: Format) {
+//        guard let formatInfo = formatStats[format] else { return }
+//
+//        if let cacheInfo = modelData.getCacheInfo(book: book, format: format), (cacheInfo.1 != nil) {
+//            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
+//            formatStats[format]!.cached = true
+//            formatStats[format]!.cacheSize = cacheInfo.0
+//            formatStats[format]!.cacheMTime = cacheInfo.1!
+//        } else {
+//            formatStats[format]!.cached = false
+//        }
+//    }
     
     func readBook(position: BookDeviceReadingPosition) {
-        guard formatStats[selectedFormat]?.cached ?? false else {
+        guard modelData.readingBook?.formats[selectedFormat.rawValue]?.cached ?? false else {
             alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(selectedFormat.rawValue) first")
             return
         }
@@ -1066,7 +1033,7 @@ struct BookDetailView_Previews: PreviewProvider {
         authors: ["Author"],
         comments: "",
         rating: 0,
-        formats: ["EPUB":""],
+        formats: ["EPUB":FormatInfo(serverSize: 0, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date())],
         readPos: BookReadingPosition(),
         inShelf: true
     )

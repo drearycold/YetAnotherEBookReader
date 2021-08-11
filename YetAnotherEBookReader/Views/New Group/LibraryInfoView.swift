@@ -188,21 +188,22 @@ struct LibraryInfoView: View {
         Menu("Download ...") {
             ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
                 Button(format.rawValue) {
-                    modelData.clearCache(book: book, format: format)
-                    modelData.downloadFormat(
-                        book: book,
-                        format: format
-                    ) { success in
-                        DispatchQueue.main.async {
-                            if book.inShelf == false {
-                                modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
-                            }
-
-                            if format == Format.EPUB {
-                                removeFolioCache(book: book, format: format)
-                            }
-                        }
-                    }
+                    // MARK:  - TODO
+//                    modelData.clearCache(book: book, format: format)
+//                    modelData.downloadFormat(
+//                        book: book,
+//                        format: format
+//                    ) { success in
+//                        DispatchQueue.main.async {
+//                            if book.inShelf == false {
+//                                modelData.addToShelf(book.id, shelfName: book.tags.first ?? "Untagged")
+//                            }
+//
+//                            if format == Format.EPUB {
+//                                removeFolioCache(book: book, format: format)
+//                            }
+//                        }
+//                    }
                 }
             }
         }
@@ -463,10 +464,7 @@ struct LibraryInfoView: View {
                     Button(action: {
                         defaultLog.info("selected \(selectedBookIds.description)")
                         selectedBookIds.forEach { bookId in
-                            Format.allCases.forEach {
-                                modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId, $0)
-                            }
-                            modelData.removeFromShelf(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
+                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
                         }
                         selectedBookIds.removeAll()
                     }) {

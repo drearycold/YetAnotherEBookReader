@@ -12,7 +12,7 @@ import WebKit
 open class MDictViewContainer : UIViewController, WKUIDelegate {
     var webView: WKWebView!
     var server = "http://peter-mdict.lan/"
-    open var word = ""
+    var word = ""
     
     open override func viewDidLoad() {
         self.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)

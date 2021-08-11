@@ -119,8 +119,14 @@ class CalibreBookRealm: Object {
     @objc dynamic var inShelfName = ""
     
     func formats() -> [String: String] {
-        let formats = try! JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as! [String: String]
-        return formats
+        do {
+            if let formats = try JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as? [String: String] {
+                return formats
+            }
+        } catch {
+            
+        }
+        return [:]
     }
     
     func identifiers() -> [String: String] {

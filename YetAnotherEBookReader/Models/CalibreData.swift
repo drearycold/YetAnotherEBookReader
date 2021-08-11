@@ -65,9 +65,9 @@ struct CalibreLibrary: Hashable, Identifiable {
     static func == (lhs: CalibreLibrary, rhs: CalibreLibrary) -> Bool {
         lhs.server == rhs.server && lhs.id == rhs.id
     }
-    let server: CalibreServer
-    let key: String
-    let name: String
+    var server: CalibreServer
+    var key: String
+    var name: String
     
     var readPosColumnName: String? = nil
     var readPosColumnNameDefault: String {
@@ -190,7 +190,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
             }
         }
     }
-    var formats = [String: String]()
+    var formats = [String: FormatInfo]()
     var readPos = BookReadingPosition()
     
     var identifiers = [String: String]()
@@ -348,13 +348,3 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     }
 }
 
-struct ServerErrorDelegate {
-    
-}
-
-struct ReaderInfo {
-    let url: URL
-    let format: Format
-    let readerType: ReaderType
-    let position: BookDeviceReadingPosition
-}
