@@ -217,7 +217,6 @@ final class ModelData: ObservableObject {
         
     @Published var loadLibraryResult = "Waiting"
     
-    var updatingMetadataTask: URLSessionDataTask?
     @Published var updatingMetadata = false {
         didSet {
             if updatingMetadata {
@@ -256,6 +255,8 @@ final class ModelData: ObservableObject {
     lazy var downloadService = BookFormatDownloadService(modelData: self)
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
 
+    lazy var calibreServerService = CalibreServerService(modelData: self)
+    
     init() {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -703,6 +704,20 @@ final class ModelData: ObservableObject {
         }
     }
     
+    /**
+        should run on non-main thread
+     */
+    func updateBooks(books: [CalibreBook]) {
+        let realm = try! Realm(configuration: self.realmConf)
+        calibreServerLibraryBooks.values.forEach { (book) in
+            self.updateBookRealm(book: book, realm: realm)
+            DispatchQueue.main.async {
+                self.calibreServerLibraryUpdatingProgress += 1
+            }
+        }
+        
+    }
+    
     func updateBookRealm(book: CalibreBook, realm: Realm) {
         let bookRealm = CalibreBookRealm()
         bookRealm.id = book.id
@@ -789,382 +804,6 @@ final class ModelData: ObservableObject {
                 
             }
         }
-    }
-    
-    //TODO merge with ServerView's handleLibraryInfo
-//    func handleLibraryInfo(jsonData: Data) {
-//        do {
-//            let libraryInfo = try JSONSerialization.jsonObject(with: jsonData, options: []) as! NSDictionary
-//            defaultLog.info("libraryInfo: \(libraryInfo)")
-//
-//            let libraryMap = libraryInfo["library_map"] as! [String: String]
-//            libraryMap.forEach { (key, value) in
-//                let library = CalibreLibrary(server: calibreServers[currentCalibreServerId]!, key: key, name: value)
-//                if calibreLibraries[library.id] == nil {
-//                    calibreLibraries[library.id] = library
-//
-//                    updateLibraryRealm(library: library)
-//                }
-//            }
-//            if let defaultLibrary = libraryInfo["default_library"] as? String {
-//                if calibreServers[currentCalibreServerId]!.defaultLibrary != defaultLibrary {
-//                    calibreServers[currentCalibreServerId]!.defaultLibrary = defaultLibrary
-//
-//                    updateServerRealm(server: calibreServers[currentCalibreServerId]!)
-//                }
-//            }
-//        } catch {
-//
-//        }
-//
-//    }
-    
-    /**
-     run on background threads, call completionHandler on main thread
-     */
-    func handleLibraryBooks(json: Data, completionHandler: @escaping (Bool) -> Void) {
-        let library = calibreLibraries[currentCalibreLibraryId]!
-        
-        DispatchQueue.main.async {
-            self.calibreServerLibraryUpdating = true
-            self.calibreServerLibraryUpdatingTotal = 0
-            self.calibreServerLibraryUpdatingProgress = 0
-        }
-        
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
-            DispatchQueue.main.async {
-                self.calibreServerLibraryUpdating = false
-            }
-            completionHandler(false)
-            return
-        }
-        
-        var calibreServerLibraryBooks = self.calibreServerLibraryBooks
-        
-        let resultElement = root["result"] as! NSDictionary
-        let bookIds = resultElement["book_ids"] as! NSArray
-        
-        bookIds.forEach { idNum in
-            let id = (idNum as! NSNumber).int32Value
-            if calibreServerLibraryBooks[id] == nil {
-                calibreServerLibraryBooks[id] = CalibreBook(id: id, library: library)
-            }
-        }
-        
-        let bookCount = calibreServerLibraryBooks.count
-        DispatchQueue.main.async {
-            self.calibreServerLibraryUpdatingTotal = bookCount
-        }
-        
-        let dataElement = resultElement["data"] as! NSDictionary
-        
-        let titles = dataElement["title"] as! NSDictionary
-        titles.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let title = value as! String
-            calibreServerLibraryBooks[id]!.title = title
-        }
-        
-        let authors = dataElement["authors"] as! NSDictionary
-        authors.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let authors = value as! NSArray
-            calibreServerLibraryBooks[id]!.authors = authors.compactMap({ (author) -> String? in
-                author as? String
-            })
-        }
-        
-        let formats = dataElement["formats"] as! NSDictionary
-        formats.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let formats = value as! NSArray
-            formats.forEach { format in
-                calibreServerLibraryBooks[id]!.formats[(format as! String)] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-            }
-        }
-        
-        if let identifiers = dataElement["identifiers"] as? NSDictionary {
-            identifiers.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                if let idDict = value as? NSDictionary {
-                    calibreServerLibraryBooks[id]!.identifiers = idDict as! [String: String]
-                }
-            }
-        }
-        
-        let ratings = dataElement["rating"] as! NSDictionary
-        ratings.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            if let rating = value as? NSNumber {
-                calibreServerLibraryBooks[id]!.rating = rating.intValue
-            }
-        }
-        
-        let series = dataElement["series"] as! NSDictionary
-        series.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            if let series = value as? String {
-                calibreServerLibraryBooks[id]!.series = series
-            } else {
-                calibreServerLibraryBooks[id]!.series = ""
-            }
-        }
-        
-        let realm = try! Realm(configuration: self.realmConf)
-        calibreServerLibraryBooks.values.forEach { (book) in
-            updateBookRealm(book: book, realm: realm)
-            DispatchQueue.main.async {
-                self.calibreServerLibraryUpdatingProgress += 1
-            }
-        }
-        
-        DispatchQueue.main.async {
-            self.calibreServerLibraryBooks = calibreServerLibraryBooks
-            self.updateFilteredBookList()
-            
-            self.calibreServerLibraryUpdating = false
-            completionHandler(true)
-        }
-        
-    }
-    
-    func handleLibraryBookOne(oldbook: CalibreBook, json: Data) -> CalibreBook? {
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary,
-              let resultElement = root["result"] as? NSDictionary,
-              let bookIds = resultElement["book_ids"] as? NSArray,
-              let dataElement = resultElement["data"] as? NSDictionary,
-              let bookId = bookIds.firstObject as? NSNumber else {
-            updatingMetadataStatus = "Failed to Parse Calibre Server Response."
-            updatingMetadata = false
-            return nil
-        }
-        
-        let bookIdKey = bookId.stringValue
-        var book = oldbook
-        if let d = dataElement["title"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.title = v
-        }
-        if let d = dataElement["publisher"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.publisher = v
-        }
-        if let d = dataElement["series"] as? NSDictionary, let v = d[bookIdKey] as? String {
-            book.series = v
-        }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime
-        if let d = dataElement["pubdate"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.pubDate = date
-        }
-        if let d = dataElement["last_modified"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.lastModified = date
-        }
-        if let d = dataElement["timestamp"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary, let t = v["v"] as? String, let date = dateFormatter.date(from: t) {
-            book.timestamp = date
-        }
-        
-        if let d = dataElement["tags"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
-            book.tags = v.compactMap { (t) -> String? in
-                t as? String
-            }
-        }
-        if let d = dataElement["size"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
-            book.size = v.intValue
-        }
-        
-        if let d = dataElement["rating"] as? NSDictionary, let v = d[bookIdKey] as? NSNumber {
-            book.rating = v.intValue
-        }
-        
-        if let d = dataElement["authors"] as? NSDictionary, let v = d[bookIdKey] as? NSArray {
-            book.authors = v.compactMap { (t) -> String? in
-                if let t = t as? String {
-                    return t
-                } else {
-                    return nil
-                }
-            }
-        }
-
-        if let d = dataElement["identifiers"] as? NSDictionary, let v = d[bookIdKey] as? NSDictionary {
-            if let ids = v as? [String: String] {
-                book.identifiers = ids
-            }
-        }
-        
-        let comments = dataElement["comments"] as! NSDictionary
-        comments.forEach { (key, value) in
-            book.comments = value as? String ?? "Without Comments"
-        }
-        
-        do {
-            guard let readPosColumnName = calibreLibraries[oldbook.library.id]?.readPosColumnName else {
-                return book
-            }
-            guard let readPosDict = dataElement[readPosColumnName] as? NSDictionary else {
-                return book
-            }
-            try readPosDict.forEach { (key, value) in
-                if( value is NSString ) {
-                    let readPosString = value as! NSString
-                    let readPosObject = try JSONSerialization.jsonObject(with: Data(base64Encoded: readPosString as String)!, options: [])
-                    let readPosDict = readPosObject as! NSDictionary
-                    defaultLog.info("readPosDict \(readPosDict)")
-                    
-                    let deviceMapObject = readPosDict["deviceMap"]
-                    let deviceMapDict = deviceMapObject as! NSDictionary
-                    deviceMapDict.forEach { key, value in
-                        let deviceName = key as! String
-                        if deviceName == self.deviceName && getDeviceReadingPosition() != nil {
-                            //ignore server, trust local record
-                            return
-                        }
-                        
-                        let deviceReadingPositionDict = value as! [String: Any]
-                        //TODO merge
-                        var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
-                        
-                        deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                        deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                        deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
-                        deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-                        deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                        deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                        deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-                        if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                            deviceReadingPosition.lastPosition = lastPosition as! [Int]
-                        }
-                        book.readPos.updatePosition(deviceName, deviceReadingPosition)
-                        
-                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
-                    }
-                }
-            }
-        } catch {
-            defaultLog.warning("handleLibraryBooks: \(error.localizedDescription)")
-        }
-        return book
-    }
-    
-    func handleLibraryBookOneNew(oldbook: CalibreBook, json: Data) -> CalibreBook? {
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
-            updatingMetadataStatus = "Failed to Parse Calibre Server Response."
-            updatingMetadata = false
-            return nil
-        }
-        
-        var book = oldbook
-        if let v = root["title"] as? String {
-            book.title = v
-        }
-        if let v = root["publisher"] as? String {
-            book.publisher = v
-        }
-        if let v = root["series"] as? String {
-            book.series = v
-        }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime
-        if let v = root["pubdate"] as? String, let date = dateFormatter.date(from: v) {
-            book.pubDate = date
-        }
-        if let v = root["last_modified"] as? String, let date = dateFormatter.date(from: v) {
-            book.lastModified = date
-        }
-        if let v = root["timestamp"] as? String, let date = dateFormatter.date(from: v) {
-            book.timestamp = date
-        }
-        
-        if let v = root["tags"] as? NSArray {
-            book.tags = v.compactMap { (t) -> String? in
-                t as? String
-            }
-        }
-        
-        if let v = root["format_metadata"] as? NSDictionary {
-            book.formats = v.reduce(
-                into: book.formats
-            ) { result, format in
-                if let fKey = format.key as? String,
-                   let fVal = format.value as? NSDictionary,
-                   let sizeVal = fVal["size"] as? NSNumber,
-                   let mtimeVal = fVal["mtime"] as? String {
-                    var formatInfo = result[fKey.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-                    
-                    formatInfo.serverSize = sizeVal.uint64Value
-                    
-                    let dateFormatter = ISO8601DateFormatter()
-                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-                    if let mtime = dateFormatter.date(from: mtimeVal) {
-                        formatInfo.serverMTime = mtime
-                    }
-                    
-                    result[fKey.uppercased()] = formatInfo
-                }
-            }
-        }
-        
-        book.size = 0   //parse later
-        
-        if let v = root["rating"] as? NSNumber {
-            book.rating = v.intValue * 2
-        }
-        
-        if let v = root["authors"] as? NSArray {
-            book.authors = v.compactMap { (t) -> String? in
-                t as? String
-            }
-        }
-
-        if let v = root["identifiers"] as? NSDictionary {
-            if let ids = v as? [String: String] {
-                book.identifiers = ids
-            }
-        }
-        
-        if let v = root["comments"] as? String {
-            book.comments = v
-        }
-        
-        
-        //Parse Reading Position
-        if let readPosColumnName = calibreLibraries[oldbook.library.id]?.readPosColumnName,
-              let userMetadata = root["user_metadata"] as? NSDictionary,
-              let userMetadataReadPosDict = userMetadata[readPosColumnName] as? NSDictionary,
-              let readPosString = userMetadataReadPosDict["#value#"] as? String,
-              let readPosData = Data(base64Encoded: readPosString),
-              let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-              let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
-            deviceMapDict.forEach { key, value in
-                let deviceName = key as! String
-                
-                if deviceName == self.deviceName && getDeviceReadingPosition() != nil {
-                    //ignore server, trust local record
-                    return
-                }
-                
-                let deviceReadingPositionDict = value as! [String: Any]
-                //TODO merge
-                var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
-                
-                deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-                deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-                deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-                if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                    deviceReadingPosition.lastPosition = lastPosition as! [Int]
-                }
-                book.readPos.updatePosition(deviceName, deviceReadingPosition)
-                
-                defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
-            }
-        }
-                
-        return book
     }
     
     func addToShelf(_ bookId: Int32, shelfName: String) {
@@ -1444,293 +1083,36 @@ final class ModelData: ObservableObject {
         guard let readerInfo = self.readerInfo else {
             return
         }
-        do {
-            defaultLog.info("pageNumber:  \(self.updatedReadingPosition.lastPosition[0])")
-            defaultLog.info("pageOffsetX: \(self.updatedReadingPosition.lastPosition[1])")
-            defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
-            
-            readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
-            
-            self.updateBook(book: readingBook)
-            
-            guard let readPosColumnName = calibreLibraries[readingBook.library.id]?.readPosColumnName else {
-                return
-            }
-            
-            var deviceMapSerialize = [String: Any]()
-            try readingBook.readPos.getCopy().forEach { key, value in
-                deviceMapSerialize[key] = try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
-            }
-            
-            let readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString()
-            
-            let endpointUrl = URL(string: readingBook.library.server.serverUrl + "/cdb/cmd/set_metadata/0?library_id=" + readingBook.library.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-            let json:[Any] = ["fields", readingBook.id, [[readPosColumnName, readPosData]]]
-            
-            let data = try JSONSerialization.data(withJSONObject: json, options: [])
-            defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
-            
-            var request = URLRequest(url: endpointUrl)
-            request.httpMethod = "POST"
-            request.httpBody = data
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("application/json", forHTTPHeaderField: "Accept")
-            
-            if updatingMetadata && updatingMetadataTask != nil {
-                updatingMetadataTask!.cancel()
-            }
-            updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-                let emptyData = "".data(using: .utf8) ?? Data()
-                if let error = error {
-                    // self.handleClientError(error)
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = error.localizedDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse else {
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + response.debugDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                if !(200...299).contains(httpResponse.statusCode) {
-                    defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus =
-                            httpResponse.statusCode.description
-                            + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                            + " " + (String(data: data ?? emptyData, encoding: .utf8) ?? "")
-                            + " " + httpResponse.debugDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                
-                guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                      let data = data else {
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data ?? emptyData, encoding: .utf8) ?? "" + httpResponse.debugDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                
-                guard let root = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data , encoding: .utf8) ?? "" + httpResponse.debugDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                
-                guard let result = root["result"] as? NSDictionary, let resultv = result["v"] as? NSDictionary else {
-                    DispatchQueue.main.async {
-                        updatingMetadataStatus = String(data: data , encoding: .utf8) ?? "" + httpResponse.debugDescription
-                        updatingMetadata = false
-                        alertDelegate.alert(msg: updatingMetadataStatus)
-                    }
-                    return
-                }
-                    
-                DispatchQueue.main.async {
-                    //self.webView.loadHTMLString(string, baseURL: url)
-                    //result = string
-                    //defaultLog.warning("httpResponse: \(string)")
-                    
-                    print("updateCurrentPosition result=\(result)")
-                    
-                    if let lastModifiedDict = resultv["last_modified"] as? NSDictionary, var lastModifiedV = lastModifiedDict["v"] as? String {
-                        print("last_modified \(lastModifiedV)")
-                        if let idxMilli = lastModifiedV.firstIndex(of: "."), let idxTZ = lastModifiedV.firstIndex(of: "+"), idxMilli < idxTZ {
-                            lastModifiedV = lastModifiedV.replacingCharacters(in: idxMilli..<idxTZ, with: "")
-                        }
-                        print("last_modified_new \(lastModifiedV)")
-                        
-                        let dateFormatter = ISO8601DateFormatter()
-                        dateFormatter.formatOptions = .withInternetDateTime
-                        if let date = dateFormatter.date(from: lastModifiedV) {
-                            readingBook.lastModified = date
-                            self.updateBook(book: readingBook)
-                        }
-                    }
-                    
-                    updatingMetadataStatus = "Success"
-                    updatingMetadata = false
-                    
-                    if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
-                       let library = calibreLibraries[readingBook.library.id],
-                       let goodreadsId = readingBook.identifiers["goodreads"],
-                       let goodreadsSyncProfileName = library.goodreadsSyncProfileName,
-                       goodreadsSyncProfileName.count > 0 {
-                        let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
-                        connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-                    }
-                }
-            }
-            updatingMetadata = true
-            updatingMetadataTask!.resume()
-            
-        }catch{
-        }
-    }
-    
-    func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
-        let endpointUrl = URL(string: oldbook.library.server.serverUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-
-        let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         
-        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-            if let error = error {
-                defaultLog.warning("error: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = error.localizedDescription
-                    updatingMetadata = false
-                    completion?(oldbook)
-                }
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = response.debugDescription
-                    updatingMetadata = false
-                    completion?(oldbook)
-                }
-                return
-            }
-            guard httpResponse.statusCode != 404 else {
-                defaultLog.warning("statusCode 404: \(httpResponse.debugDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = "Deleted"
-                    updatingMetadata = false
-                    completion?(oldbook)
-                }
-                return
-            }
-            guard (200...299).contains(httpResponse.statusCode) else {
-                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = httpResponse.debugDescription
-                    updatingMetadata = false
-                    completion?(oldbook)
-                }
-                return
-            }
-            
-            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                  let data = data,
-                  let string = String(data: data, encoding: .utf8) else {
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = httpResponse.debugDescription
-                    updatingMetadata = false
-                    completion?(oldbook)
-                }
-                return
-            }
-            
-            DispatchQueue.main.async {
-                //self.webView.loadHTMLString(string, baseURL: url)
-                //                            defaultLog.warning("httpResponse: \(string)")
-                //book.comments = string
-                guard var book = handleLibraryBookOneNew(oldbook: oldbook, json: data) else {
-                    completion?(oldbook)
-                    return
-                }
-                
-                if( book.readPos.getDevices().isEmpty) {
-                    book.readPos.addInitialPosition(deviceName, defaultReaderForDefaultFormat(book: book).rawValue)
-                }
-                
-                updateBook(book: book)
-                
-                updatingMetadataStatus = "Success"
-                updatingMetadata = false
-                
-                completion?(book)
-            }
-        }
+        defaultLog.info("pageNumber:  \(self.updatedReadingPosition.lastPosition[0])")
+        defaultLog.info("pageOffsetX: \(self.updatedReadingPosition.lastPosition[1])")
+        defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
         
-        updatingMetadata = true
-        task.resume()
-    }
-    
-    func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data) -> Void)? = nil) {
-        let emptyData = "{}".data(using: .ascii)!
+        readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
         
-        guard formatReaderMap[format] != nil else {
-            updatingMetadataStatus = "Success"
-            updatingMetadata = false
-            completion?(emptyData)
+        self.updateBook(book: readingBook)
+        
+        guard let readPosColumnName = calibreLibraries[readingBook.library.id]?.readPosColumnName else {
             return
         }
-        
-        let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
-
-        let request = URLRequest(url: endpointUrl)
-        
-        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
-            if let error = error {
-                defaultLog.warning("error: \(error.localizedDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = error.localizedDescription
-                    updatingMetadata = false
-                    completion?(emptyData)
-                }
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = response.debugDescription
-                    updatingMetadata = false
-                    completion?(emptyData)
-                }
-                return
-            }
             
-            guard httpResponse.statusCode != 404 else {
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = "Deleted"
-                    updatingMetadata = false
-                    completion?(emptyData)
-                }
-                return
-            }
-            
-            guard (200...299).contains(httpResponse.statusCode) else {
-                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = httpResponse.debugDescription
-                    updatingMetadata = false
-                    completion?(emptyData)
-                }
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data {
-                DispatchQueue.main.async {
-                    updatingMetadataStatus = "Success"
-                    updatingMetadata = false
-                    
-                    completion?(data)
-                }
+        let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: readPosColumnName, alertDelegate: alertDelegate) { [self] in
+            if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
+               let library = calibreLibraries[readingBook.library.id],
+               let goodreadsId = readingBook.identifiers["goodreads"],
+               let goodreadsSyncProfileName = library.goodreadsSyncProfileName,
+               goodreadsSyncProfileName.count > 0 {
+                let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+                connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
             }
         }
-        
-        updatingMetadata = true
-        task.resume()
+        if ret != 0 {
+            updatingMetadataStatus = "Internal Error"
+            updatingMetadata = false
+            alertDelegate.alert(msg: updatingMetadataStatus)
+        }
     }
+    
     
     func goToPreviousBook() {
         if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
@@ -1997,94 +1379,12 @@ final class ModelData: ObservableObject {
     
     func syncLibrary(alertDelegate: AlertDelegate) {
         guard let server = currentCalibreServer,
-              let library = currentCalibreLibrary,
-              let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
+              let library = currentCalibreLibrary
               else {
             return
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "identifiers"], "", "", "", -1]
-        
-        let data = try! JSONSerialization.data(withJSONObject: json, options: [])
-        
-        var request = URLRequest(url: endpointUrl)
-        request.httpMethod = "POST"
-        request.httpBody = data
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                self.defaultLog.warning("error: \(error.localizedDescription)")
-
-                let alertItem = AlertItem(id: error.localizedDescription, action: {
-                    self.calibreServerUpdating = false
-                    self.calibreServerUpdatingStatus = "Failed"
-                })
-                alertDelegate.alert(alertItem: alertItem)
-
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                
-                let alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
-                    self.calibreServerUpdating = false
-                    self.calibreServerUpdatingStatus = "Failed"
-                })
-                alertDelegate.alert(alertItem: alertItem)
-                
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data {
-                DispatchQueue(label: "data").async {
-                    //self.webView.loadHTMLString(string, baseURL: url)
-                    //result = string
-                    self.handleLibraryBooks(json: data) { isSuccess in
-                        self.calibreServerUpdating = false
-                        if !isSuccess {
-                            let alertItem = AlertItem(id: "Failed to parse calibre server response.")
-                            alertDelegate.alert(alertItem: alertItem)
-                            
-                            self.calibreServerUpdatingStatus = "Failed"
-                        } else {
-                            self.calibreServerUpdatingStatus = "Refreshed"
-                        }
-                    }
-                }
-            }
-        }
-        
-        calibreServerUpdating = true
-        calibreServerUpdatingStatus = "Refreshing"
-        
-        task.resume()
+        calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
     }
     
-}
-
-func load<T: Decodable>(_ filename: String) -> T {
-    let data: Data
-    
-    guard let file = Bundle.main.url(forResource: filename, withExtension: nil)
-    else {
-        fatalError("Couldn't find \(filename) in main bundle.")
-    }
-    
-    do {
-        data = try Data(contentsOf: file)
-    } catch {
-        fatalError("Couldn't load \(filename) from main bundle:\n\(error)")
-    }
-    
-    do {
-        let decoder = JSONDecoder()
-        return try decoder.decode(T.self, from: data)
-    } catch {
-        fatalError("Couldn't parse \(filename) as \(T.self):\n\(error)")
-    }
 }

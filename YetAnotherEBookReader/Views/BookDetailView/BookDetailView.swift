@@ -40,17 +40,9 @@ struct BookDetailView: View {
     
     @State private var alertItem: AlertItem?
 
-//    @State private var presentingUpdateAlert = false
-//    @State private var showingRefreshAlert = false
-//    @State private var showingDownloadAlert = false
-    
     @State private var selectedFormatShowDetail = false
     @State private var selectedFormat = Format.EPUB
-//    @State private var selectedFormatSize:UInt64 = 0
-//    @State private var selectedFormatMTime = Date()
-//    @State private var selectedFormatCached = false
-//    @State private var selectedFormatCachedSize:UInt64 = 0
-//    @State private var selectedFormatCachedMTime = Date()
+
     @State private var selectedFormatTOC = "Uninitialized"
     @State private var selectedFormatReader = ReaderType.UNSUPPORTED
     @State private var selectedFormatReaderShowDetail = false
@@ -63,10 +55,6 @@ struct BookDetailView: View {
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
     @State private var shelfNameCustomized = false
-    // var commentWebView = WebViewUI()
-    
-    // let rvc = ReaderViewController()
-    // var pdfView = PDFViewUI()
     
     var body: some View {
         ScrollView {
@@ -74,7 +62,7 @@ struct BookDetailView: View {
                 viewContent(book: book, isCompat: sizeClass == .compact)
                 .onAppear() {
                     resetStates()
-                    modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
+                    modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(modelData.readingBook?.title ?? ""))
@@ -88,7 +76,7 @@ struct BookDetailView: View {
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
                 resetStates()
-                modelData.getMetadataNew(oldbook: book, completion: initStates(book:))
+                modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
             }
         }
         .onChange(of: downloadStatus) { value in
@@ -106,26 +94,6 @@ struct BookDetailView: View {
                     }),
                     secondaryButton: .cancel()
                 )
-            }
-//            if item.id == "Download" {
-//                return Alert(
-//                    title: Text("Need Download"),
-//                    message: Text("Please Download First"),
-//                    primaryButton: .default(Text("Download"), action: {
-//                        modelData.downloadFormat(book: modelData.readingBook!, format: selectedFormat, modificationDate: selectedFormatMTime) { result in
-//
-//                        }
-//                    }),
-//                    secondaryButton: .cancel()
-//                )
-//            }
-            if item.id == "Updating" {
-                let alert = Alert(title: Text("Updating"), message: Text("Update Book Metadata..."), dismissButton: .cancel() {
-                    if modelData.updatingMetadata && modelData.updatingMetadataTask != nil {
-                        modelData.updatingMetadataTask!.cancel()
-                    }
-                })
-                return alert
             }
             if item.id == "Updated" {
                 return Alert(title: Text("Updated"), message: Text(item.msg ?? "Success"))
@@ -227,7 +195,7 @@ struct BookDetailView: View {
                     Text("Read At")
                         .font(.subheadline)
                         .frame(minWidth: 80, alignment: .trailing)
-                    Picker("Position", selection: $selectedPosition) {
+                    Picker(selectedPosition, selection: $selectedPosition) {
                         ForEach(book.readPos.getDevices(), id: \.self) { position in
                             HStack {
                                 Text(position.id)
@@ -236,7 +204,7 @@ struct BookDetailView: View {
                             }.tag(position.id)
                         }
                     }
-                    .pickerStyle(SegmentedPickerStyle())
+                    .pickerStyle(MenuPickerStyle())
                     .onChange(of: selectedPosition) { value in
                         modelData.selectedPosition = selectedPosition
                         
@@ -322,17 +290,19 @@ struct BookDetailView: View {
                         if newFormat == Format.UNKNOWN {
                             return
                         }
-                        print("selectedFormat \(selectedFormat.rawValue)")
+                        print("selectedFormat \(newFormat.rawValue)")
                         
-                        guard let readers = modelData.formatReaderMap[selectedFormat] else { return }
+                        guard let readers = modelData.formatReaderMap[newFormat] else { return }
                         selectedFormatReader = readers.reduce(into: readers.first!) {
                             if $1.rawValue == book.readPos.getPosition(self.selectedPosition)?.readerName {
                                 $0 = $1
                             }
                         }
                         
-                        modelData.getBookManifest(book: book, format: newFormat) { manifest in
-                            parseManifestToTOC(json: manifest)
+                        modelData.calibreServerService.getBookManifest(book: book, format: newFormat) { manifest in
+                            if let manifest = manifest {
+                                parseManifestToTOC(json: manifest)
+                            }
                         }
                     }
                     
@@ -721,10 +691,12 @@ struct BookDetailView: View {
                             modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                         }
                         resetStates()
-                        modelData.getMetadataNew(oldbook: book) { newbook in
+                        modelData.calibreServerService.getMetadataNew(oldbook: book) { newbook in
                             initStates(book: newbook)
-                            modelData.getBookManifest(book: newbook, format: selectedFormat) { manifest in
-                                self.parseManifestToTOC(json: manifest)
+                            modelData.calibreServerService.getBookManifest(book: newbook, format: selectedFormat) { manifest in
+                                if let manifest = manifest {
+                                    self.parseManifestToTOC(json: manifest)
+                                }
                             }
                         }
                     }

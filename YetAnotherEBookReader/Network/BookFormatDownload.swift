@@ -9,8 +9,9 @@ import Foundation
 import OSLog
 
 struct BookFormatDownloadService {
-    var defaultLog = Logger()
     var modelData: ModelData
+
+    var defaultLog = Logger()
 
     func cancelDownload(_ book: CalibreBook, format: Format) {
         guard let download = modelData.activeDownloads.filter({
