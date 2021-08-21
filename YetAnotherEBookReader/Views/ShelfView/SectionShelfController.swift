@@ -48,10 +48,13 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             .reduce(into: [String: [BookModel]]()) {
                 print("updateBookModel \($1.value.title) \($1.value.lastModified)")
                 guard let coverUrl = $1.value.coverURL else { return }
+                guard let readerInfo = modelData.prepareBookReading(book: $1.value) else { return }
                 let newBook = BookModel(
                     bookCoverSource: coverUrl.absoluteString,
                     bookId: $1.key,
-                    bookTitle: $1.value.title)
+                    bookTitle: $1.value.title,
+                    bookProgress: Int(floor(readerInfo.position.lastProgress))
+                )
                 let shelfName = $1.value.inShelfName.isEmpty ? ($1.value.tags.first ?? "Untagged") : $1.value.inShelfName
                 if $0[shelfName] != nil {
                     $0[shelfName]!.append(newBook)
@@ -258,6 +261,10 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         detailView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
         self.present(nav, animated: true, completion: nil)
+    }
+    
+    func onBookOptionsClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+
     }
     
     @objc func onBookLongClickedDetailMenuItem(_ sender: Any?) {

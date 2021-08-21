@@ -45,12 +45,8 @@ struct MainView: View {
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             modelData.presentingEBookReaderFromShelf = false
-            let originalPosition = modelData.readerInfo?.position ??
-                modelData.getLatestReadingPosition(
-                    by: modelData.readerInfo?.readerType ?? ReaderType.UNSUPPORTED
-                )
-                ?? modelData.getLatestReadingPosition()
-                ?? modelData.getInitialReadingPosition()
+            guard let readerInfo = modelData.readerInfo else { return }
+            let originalPosition = readerInfo.position
             if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
                 return
             }

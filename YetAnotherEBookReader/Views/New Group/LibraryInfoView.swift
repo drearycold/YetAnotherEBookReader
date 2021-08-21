@@ -250,15 +250,15 @@ struct LibraryInfoView: View {
                         if value.series.isEmpty == false {
                             result[value.series] = 1
                         } else {
-                            result["Without Series"] = 1
+                            result["Not in a Series"] = 1
                         }
                     }
                     .compactMap { $0.key }
                     .sorted {
-                        if $0 == "Without Series" {
+                        if $0 == "Not in a Series" {
                             return true
                         }
-                        if $1 == "Without Series" {
+                        if $1 == "Not in a Series" {
                             return false
                         }
                         return $0 < $1
@@ -328,124 +328,6 @@ struct LibraryInfoView: View {
     
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-        /*ToolbarItem(placement: .navigationBarTrailing) {
-            HStack {
-                Menu {
-                    Button(action: {
-                        modelData.filterCriteriaRating.removeAll()
-                        modelData.filterCriteriaFormat.removeAll()
-                        modelData.filterCriteriaIdentifier.removeAll()
-                        modelData.filterCriteriaShelved = .none
-                        modelData.filterCriteriaSeries.removeAll()
-                    }) {
-                        Text("Reset")
-                    }
-                    
-                    Menu("Shelved ...") {
-                        Button(action: {
-                            if modelData.filterCriteriaShelved == .shelvedOnly {
-                                modelData.filterCriteriaShelved = .none
-                            } else {
-                                modelData.filterCriteriaShelved = .shelvedOnly
-                            }
-                        }, label: {
-                            Text("Yes" + (modelData.filterCriteriaShelved == .shelvedOnly ? "✓" : ""))
-                        })
-                        Button(action: {
-                            if modelData.filterCriteriaShelved == .notShelvedOnly {
-                                modelData.filterCriteriaShelved = .none
-                            } else {
-                                modelData.filterCriteriaShelved = .notShelvedOnly
-                            }
-                        }, label: {
-                            Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
-                        })
-                    }
-                    
-                    Menu("Series ...") {
-                        ForEach(
-                            modelData.calibreServerLibraryBooks.values.reduce(
-                                into: [String: Int]()) { result, value in
-                                if value.series.isEmpty == false {
-                                    result[value.series] = 1
-                                } else {
-                                    result["Without Series"] = 1
-                                }
-                            }
-                            .compactMap { $0.key }
-                            .sorted {
-                                if $0 == "Without Series" {
-                                    return true
-                                }
-                                if $1 == "Without Series" {
-                                    return false
-                                }
-                                return $0 < $1
-                            },
-                            id: \.self) { id in
-                            Button(action: {
-                                if modelData.filterCriteriaSeries.contains(id) {
-                                    modelData.filterCriteriaSeries.remove(id)
-                                } else {
-                                    modelData.filterCriteriaSeries.insert(id)
-                                }
-                            }, label: {
-                                Text(id + (modelData.filterCriteriaSeries.contains(id) ? "✓" : ""))
-                            })
-                        }
-                    }
-                    
-                    Menu("Rating ...") {
-                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                            result[value.ratingDescription] = 1
-                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
-                            Button(action: {
-                                if modelData.filterCriteriaRating.contains(id) {
-                                    modelData.filterCriteriaRating.remove(id)
-                                } else {
-                                    modelData.filterCriteriaRating.insert(id)
-                                }
-                            }, label: {
-                                Text(id + (modelData.filterCriteriaRating.contains(id) ? "✓" : ""))
-                            })
-                        }
-                    }
-                    Menu("Format ...") {
-                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                            value.formats.forEach { result[$0.key] = 1 }
-                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
-                            Button(action: {
-                                if modelData.filterCriteriaFormat.contains(id) {
-                                    modelData.filterCriteriaFormat.remove(id)
-                                } else {
-                                    modelData.filterCriteriaFormat.insert(id)
-                                }
-                            }, label: {
-                                Text(id + (modelData.filterCriteriaFormat.contains(id) ? "✓" : ""))
-                            })
-                        }
-                    }
-                    Menu("Linked with ...") {
-                        ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                            value.identifiers.forEach { result[$0.key] = 1 }
-                        }).compactMap { $0.key }.sorted(), id: \.self) { id in
-                            Button(action: {
-                                if modelData.filterCriteriaIdentifier.contains(id) {
-                                    modelData.filterCriteriaIdentifier.remove(id)
-                                } else {
-                                    modelData.filterCriteriaIdentifier.insert(id)
-                                }
-                            }, label: {
-                                Text(id + (modelData.filterCriteriaIdentifier.contains(id) ? "✓" : ""))
-                            })
-                        }
-                    }
-                } label: {
-                    Image(systemName: "line.horizontal.3.decrease.circle")
-                }
-
-            }
-        }*/   //ToolbarItem
         ToolbarItem(placement: .navigationBarLeading) {
             HStack {
                 //editButton

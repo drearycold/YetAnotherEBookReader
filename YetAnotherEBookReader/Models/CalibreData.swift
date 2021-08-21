@@ -136,7 +136,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var series = ""
     var seriesDescription: String {
         if series.isEmpty {
-            return "Without Series"
+            return "Not in a Series"
         }
         return series
     }

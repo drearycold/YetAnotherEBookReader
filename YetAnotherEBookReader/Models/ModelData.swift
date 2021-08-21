@@ -23,6 +23,9 @@ final class ModelData: ObservableObject {
     @Published var deviceName = UIDevice.current.name
     
     @Published var calibreServers = [String: CalibreServer]()
+    @Published var calibreServerInfo: CalibreServerInfo?
+    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
+    
     @Published var currentCalibreServerId = "" {
         didSet {
             guard oldValue != currentCalibreServerId else { return }
@@ -199,14 +202,18 @@ final class ModelData: ObservableObject {
     }
     @Published var readingBook: CalibreBook? = nil {
         didSet {
-            guard readingBook != nil else { return }
+            guard let readingBook = readingBook else {
+                self.selectedPosition = ""
+                return
+            }
             
-            if let position = getDeviceReadingPosition() {
+            if let position = getDeviceReadingPosition(book: readingBook) {
                 self.selectedPosition = position.id
-            } else if let position = getLatestReadingPosition() {
+            } else if let position = getLatestReadingPosition(book: readingBook) {
                 self.selectedPosition = position.id
             } else {
-                self.selectedPosition = getInitialReadingPosition().id
+                let pair = defaultReaderForDefaultFormat(book: readingBook)
+                self.selectedPosition = getInitialReadingPosition(book: readingBook, format: pair.0, reader: pair.1).id
             }
         }
     }
@@ -776,30 +783,30 @@ final class ModelData: ObservableObject {
     ///   - libraries: library list
     ///   - defaultLibrary: key of default library
     /// - TODO: update & remove
-    func updateServerLibraryInfo(serverId: String, libraries: [CalibreLibrary], defaultLibrary: String) {
-        guard let server = calibreServers[serverId] else { return }
+    func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
+        guard let server = calibreServers[serverInfo.server.id] else { return }
         
-        libraries.filter { $0.server.id == server.id }
-            .forEach { newLibrary in
-                let libraryId = newLibrary.id
+        serverInfo.libraryMap.forEach { key, name in
+            let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
+            let libraryId = newLibrary.id
             
-                if calibreLibraries[libraryId] != nil {
-                    calibreLibraries[libraryId]!.key = newLibrary.key
-                } else {
-                    let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
-                    calibreLibraries[libraryId] = library
-                }
-                do {
-                    try updateLibraryRealm(library: calibreLibraries[libraryId]!)
-                } catch {
-                    
-                }
+            if calibreLibraries[libraryId] != nil {
+                calibreLibraries[libraryId]!.key = newLibrary.key
+            } else {
+                let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
+                calibreLibraries[libraryId] = library
+            }
+            do {
+                try updateLibraryRealm(library: calibreLibraries[libraryId]!)
+            } catch {
+                
+            }
         }
         
-        if server.defaultLibrary != defaultLibrary {
-            calibreServers[serverId]!.defaultLibrary = defaultLibrary
+        if server.defaultLibrary != serverInfo.defaultLibrary {
+            calibreServers[server.id]!.defaultLibrary = serverInfo.defaultLibrary
             do {
-                try updateServerRealm(server: calibreServers[serverId]!)
+                try updateServerRealm(server: calibreServers[server.id]!)
             } catch {
                 
             }
@@ -847,7 +854,7 @@ final class ModelData: ObservableObject {
             let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
             let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
-            if let position = getDeviceReadingPosition(), position.lastProgress > 99 {
+            if let position = getDeviceReadingPosition(book: book), position.lastProgress > 99 {
                 connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
             }
         }
@@ -1056,24 +1063,24 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func getSelectedReadingPosition() -> BookDeviceReadingPosition? {
-        return readingBook!.readPos.getPosition(selectedPosition)
+    func getSelectedReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
+        return book.readPos.getPosition(selectedPosition)
     }
     
-    func getDeviceReadingPosition() -> BookDeviceReadingPosition? {
-        return readingBook!.readPos.getPosition(deviceName)
+    func getDeviceReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
+        return book.readPos.getPosition(deviceName)
     }
     
-    func getInitialReadingPosition() -> BookDeviceReadingPosition {
-        return BookDeviceReadingPosition(id: deviceName, readerName: "YABR")
+    func getInitialReadingPosition(book: CalibreBook, format: Format, reader: ReaderType) -> BookDeviceReadingPosition {
+        return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
     }
     
-    func getLatestReadingPosition() -> BookDeviceReadingPosition? {
-        return readingBook!.readPos.getDevices().first
+    func getLatestReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
+        return book.readPos.getDevices().first
     }
     
-    func getLatestReadingPosition(by reader: ReaderType) -> BookDeviceReadingPosition? {
-        return readingBook!.readPos.getDevices().first
+    func getLatestReadingPosition(book: CalibreBook, by reader: ReaderType) -> BookDeviceReadingPosition? {
+        return book.readPos.getDevices().first
     }
     
     func updateCurrentPosition(alertDelegate: AlertDelegate) {
@@ -1126,15 +1133,17 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func defaultReaderForDefaultFormat(book: CalibreBook) -> ReaderType {
+    func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
         if book.formats.contains(where: { $0.key == defaultFormat.rawValue }) {
-            return formatReaderMap[defaultFormat]!.first!
+            return (defaultFormat, formatReaderMap[defaultFormat]!.first!)
         } else {
             return book.formats.keys.compactMap {
                 Format(rawValue: $0)
             }
             .reversed()
-            .reduce(ReaderType.UNSUPPORTED) { formatReaderMap[$1]!.first! }
+            .reduce((Format.UNKNOWN, ReaderType.UNSUPPORTED)) {
+                ($1, formatReaderMap[$1]!.first!)
+            }
         }
     }
     
@@ -1148,13 +1157,14 @@ final class ModelData: ObservableObject {
     func prepareBookReading(book: CalibreBook) -> ReaderInfo? {
         var candidatePositions = [BookDeviceReadingPosition]()
 
-        if let position = getDeviceReadingPosition() {
+        //preference: device, latest, selected, any
+        if let position = getDeviceReadingPosition(book: book) {
             candidatePositions.append(position)
         }
-        if let position = getLatestReadingPosition() {
+        if let position = getLatestReadingPosition(book: book) {
             candidatePositions.append(position)
         }
-        if let position = getSelectedReadingPosition() {
+        if let position = getSelectedReadingPosition(book: book) {
             candidatePositions.append(position)
         }
         candidatePositions.append(contentsOf: book.readPos.getDevices())
@@ -1363,7 +1373,7 @@ final class ModelData: ObservableObject {
             
             DispatchQueue.main.sync {
                 //reload shelf
-                realm.refresh()
+                self.realm.refresh()
 
                 self.booksInShelf.removeAll(keepingCapacity: true)
                 self.populateBookShelf()
@@ -1387,4 +1397,35 @@ final class ModelData: ObservableObject {
         calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
     }
     
+    func probeServersReachability() {
+        calibreServers.forEach { id, server in
+            if server.isLocal {
+                return
+            }
+            
+            var isPublic = false
+            var infoId = server.id + " " + isPublic.description
+            if calibreServerInfoStaging[infoId] == nil {
+                calibreServerInfoStaging[infoId] =
+                    CalibreServerInfo(server: server, isPublic: isPublic, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+            }
+            calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
+            
+            if server.publicUrl.isEmpty { return }
+            
+            isPublic = true
+            infoId = server.id + " " + isPublic.description
+            if calibreServerInfoStaging[infoId] == nil {
+                calibreServerInfoStaging[infoId] =
+                    CalibreServerInfo(server: server, isPublic: isPublic, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+            }
+            calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
+        }
+    }
+    
+    func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
+        return calibreServerInfoStaging.filter {
+            $1.server.id == server.id && $1.isPublic == isPublic
+        }.first?.value.reachable
+    }
 }

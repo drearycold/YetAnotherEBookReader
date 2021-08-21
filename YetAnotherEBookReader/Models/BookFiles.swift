@@ -37,7 +37,14 @@ func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
             return savedURL
         }
     }
-    
+    book.formats.sorted {
+        $0.key < $1.key
+    }.compactMap {
+        if let format = Format(rawValue: $0.key) {
+            return (format, $0.value)
+        }
+        return nil
+    } as [(Format, FormatInfo)]
     return nil
 }
 

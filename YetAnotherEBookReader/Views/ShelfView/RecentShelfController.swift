@@ -41,11 +41,16 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             .sorted { $0.value.lastModified > $1.value.lastModified }
             .compactMap {
                 guard let coverUrl = $1.coverURL else { return nil }
+                guard let readerInfo = modelData.prepareBookReading(book: $1) else { return nil }
+                
                 return BookModel(
                     bookCoverSource: coverUrl.absoluteString,
                     bookId: $0,
-                    bookTitle: $1.title)
-        }
+                    bookTitle: $1.title,
+                    bookProgress: Int(floor(readerInfo.position.lastProgress)
+                    )
+                )
+            }
         
         self.shelfView.reloadBooks(bookModel: bookModel)
     }
@@ -213,6 +218,19 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             
             self.present(nav, animated: true, completion: nil)
         }
+    }
+    
+    func onBookOptionsClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+        print("I just clicked options \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
+        
+        modelData.readingBookInShelfId = bookId
+        guard modelData.readingBook != nil else { return }
+        
+        let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
+        let deleteMenuItem = UIMenuItem(title: "Delete", action: #selector(deleteBook(_:)))
+        UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
+        becomeFirstResponder()
+        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
     }
 
     @objc func refreshBook(_ sender: Any?) {

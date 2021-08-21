@@ -13,10 +13,127 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
+    func getServerLibraries(server: CalibreServer){
+        modelData.calibreServerInfo = nil
+        modelData.calibreServerUpdatingStatus = "Initializing"
+
+        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, reachable: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
+
+        guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
+            modelData.calibreServerInfo = serverInfo
+            modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
+            return
+        }
+        
+        var urlComponents = URLComponents()
+        urlComponents.path = "ajax/library-info"
+        
+        guard let url = urlComponents.url(relativeTo: serverUrl) else {
+            modelData.calibreServerInfo = serverInfo
+            modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
+            return
+        }
+        //url.appendPathComponent("/ajax/library-info", isDirectory: false)
+        
+        if server.username.count > 0 && server.password.count > 0 {
+            var authMethod = NSURLAuthenticationMethodDefault
+            if url.scheme == "http" {
+                authMethod = NSURLAuthenticationMethodHTTPDigest
+            }
+            if url.scheme == "https" {
+                authMethod = NSURLAuthenticationMethodHTTPBasic
+            }
+            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+                                                          port: url.port ?? 0,
+                                                          protocol: url.scheme,
+                                                          realm: "calibre",
+                                                          authenticationMethod: authMethod)
+            let userCredential = URLCredential(user: server.username,
+                                               password: server.password,
+                                               persistence: .forSession)
+            URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+        }
+
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            defer {
+                DispatchQueue.main.async {
+                    modelData.calibreServerInfo = serverInfo
+                    modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
+                    modelData.calibreServerUpdating = false
+                }
+            }
+            if let error = error {
+                serverInfo.errorMsg = error.localizedDescription
+                return
+            }
+            var dataAsString = ""
+            if let data = data, let s = String(data: data, encoding: .utf8) {
+                dataAsString = s
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                serverInfo.errorMsg = dataAsString + response.debugDescription
+                return
+            }
+            guard httpResponse.statusCode != 401 else {
+                serverInfo.errorMsg = httpResponse.statusCode.description
+                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+                    + " " + dataAsString
+                return
+            }
+            guard (200...299).contains(httpResponse.statusCode) else {
+                serverInfo.errorMsg = httpResponse.statusCode.description
+                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+                    + " " + dataAsString
+                return
+            }
+            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                  let data = data,
+                  let libraryInfo = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
+                serverInfo.errorMsg = "Failed to parse server response"
+                return
+            }
+
+            guard let libraryMap = libraryInfo["library_map"] as? [String: String] else {
+                serverInfo.errorMsg = "No library info found in server response"
+                return
+            }
+            defaultLog.info("libraryInfo: \(libraryInfo)")
+
+            let defaultLibrary = libraryInfo["default_library"] as? String ?? ""
+
+            serverInfo.defaultLibrary = defaultLibrary
+            serverInfo.libraryMap = libraryMap
+            serverInfo.reachable = true
+
+            serverInfo.errorMsg = "Success"
+        }
+
+        modelData.calibreServerUpdating = true
+
+        setCredential(server: server, task: task)
+
+        task.resume()
+    }
+    
     func syncLibrary(server: CalibreServer, library: CalibreLibrary, alertDelegate: AlertDelegate) {
-        guard let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
-              else {
+        guard let serverUrl = getServerUrlByReachability(server: server) else {
+            modelData.calibreServerUpdatingStatus = "Server not Reachable"
+            return
+        }
+        
+        var urlComponents = URLComponents()
+        
+        urlComponents.path = "cdb/cmd/list/0"
+        urlComponents.query = "library_id=\(library.key)"
+        
+//        guard let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+//              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
+//              else {
+//            return
+//        }
+        
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
+            modelData.calibreServerUpdatingStatus = "Internal Error"
             return
         }
         
@@ -87,6 +204,7 @@ struct CalibreServerService {
         modelData.calibreServerUpdating = true
         modelData.calibreServerUpdatingStatus = "Refreshing"
         
+        setCredential(server: server, task: task)
         task.resume()
     }
     
@@ -179,7 +297,19 @@ struct CalibreServerService {
     }
     
     func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
-        let endpointUrl = URL(string: oldbook.library.server.serverUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
+        guard let serverUrl = getServerUrlByReachability(server: oldbook.library.server) else {
+            modelData.updatingMetadataStatus = "Server not Reachable"
+            return
+        }
+        
+        var urlComponents = URLComponents()
+        urlComponents.path = "/get/json/\(oldbook.id)/\(oldbook.library.key)"
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
+            modelData.updatingMetadataStatus = "Internal Error"
+            return
+        }
+        
+        //let endpointUrl = URL(string: oldbook.library.server.serverUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         
@@ -233,9 +363,10 @@ struct CalibreServerService {
             }
             
             if( newbook.readPos.getDevices().isEmpty) {
+                let pair = modelData.defaultReaderForDefaultFormat(book: newbook)
                 newbook.readPos.addInitialPosition(
                     modelData.deviceName,
-                    modelData.defaultReaderForDefaultFormat(book: newbook).rawValue
+                    pair.1.rawValue
                 )
             }
                 
@@ -245,6 +376,8 @@ struct CalibreServerService {
         }
         
         modelData.updatingMetadata = true
+        
+        setCredential(server: oldbook.library.server, task: task)
         task.resume()
     }
     
@@ -338,7 +471,7 @@ struct CalibreServerService {
             deviceMapDict.forEach { key, value in
                 let deviceName = key as! String
                 
-                if deviceName == modelData.deviceName && modelData.getDeviceReadingPosition() != nil {
+                if deviceName == modelData.deviceName && modelData.getDeviceReadingPosition(book: book) != nil {
                     //ignore server, trust local record
                     return
                 }
@@ -367,6 +500,12 @@ struct CalibreServerService {
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
+//        book.formats
+//                    .filtered { Format(rawValue: $0) != nil }
+//                    .sorted { $0.element.key < $1.element.key }
+        
+        
+        
         let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl)
@@ -409,6 +548,8 @@ struct CalibreServerService {
         }
         
         modelData.updatingMetadata = true
+
+        setCredential(server: book.library.server, task: task)
         task.resume()
     }
     
@@ -539,8 +680,151 @@ struct CalibreServerService {
         }
         
         modelData.updatingMetadata = true
+        
+        setCredential(server: book.library.server, task: updatingMetadataTask)
         updatingMetadataTask.resume()
         
         return 0
     }
+    
+    func setCredential(server: CalibreServer, task: URLSessionDataTask) {
+        guard server.username.count > 0 && server.password.count > 0 else { return }
+        guard let url = task.originalRequest?.url,
+              let host = url.host
+        else { return }
+        
+        var authMethod = NSURLAuthenticationMethodDefault
+        if url.scheme == "http" {
+            authMethod = NSURLAuthenticationMethodHTTPDigest
+        }
+        if url.scheme == "https" {
+            authMethod = NSURLAuthenticationMethodHTTPBasic
+        }
+        let protectionSpace = URLProtectionSpace.init(host: host,
+                                                      port: url.port ?? 0,
+                                                      protocol: url.scheme,
+                                                      realm: "calibre",
+                                                      authenticationMethod: authMethod)
+        if let credentials = URLCredentialStorage.shared.credentials(for: protectionSpace),
+           let credential = credentials.filter({ $0.key == server.username }).first?.value {
+            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
+        }
+    }
+    
+    func getServerUrlByReachability(server: CalibreServer) -> URL? {
+        let serverInfos = modelData.calibreServerInfoStaging.filter { $1.reachable && $1.server.id == server.id }.sorted { !$0.value.isPublic && $1.value.isPublic }
+        guard let serverInfo = serverInfos.first else { return nil }
+        
+        if serverInfo.value.isPublic {
+            return URL(string: server.publicUrl)
+        } else {
+            return URL(string: server.baseUrl)
+        }
+    }
+    
+    func probeServerReachability(server: CalibreServer, isPublic: Bool) {
+        let infoId = server.id + " " + isPublic.description
+        guard var serverInfo = modelData.calibreServerInfoStaging[infoId] else { return }
+
+        serverInfo.reachable = false
+        serverInfo.errorMsg = "Unknown Error"
+        serverInfo.probingTask?.cancel()
+        
+        guard var url = URL(string: isPublic ? server.publicUrl : server.baseUrl) else {
+            modelData.calibreServerInfoStaging[infoId] = serverInfo
+            return
+        }
+        url.appendPathComponent("/ajax/library-info", isDirectory: false)
+        
+        if server.username.count > 0 && server.password.count > 0 {
+            var authMethod = NSURLAuthenticationMethodDefault
+            if url.scheme == "http" {
+                authMethod = NSURLAuthenticationMethodHTTPDigest
+            }
+            if url.scheme == "https" {
+                authMethod = NSURLAuthenticationMethodHTTPBasic
+            }
+            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+                                                          port: url.port ?? 0,
+                                                          protocol: url.scheme,
+                                                          realm: "calibre",
+                                                          authenticationMethod: authMethod)
+            let userCredential = URLCredential(user: server.username,
+                                               password: server.password,
+                                               persistence: .forSession)
+            URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+        }
+
+        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+            defer {
+                print("probeServerReachability \(serverInfo)")
+                DispatchQueue.main.async {
+                    modelData.calibreServerInfoStaging[serverInfo.id] = serverInfo
+                }
+            }
+            if let error = error {
+                serverInfo.errorMsg = error.localizedDescription
+                return
+            }
+            var dataAsString = ""
+            if let data = data, let s = String(data: data, encoding: .utf8) {
+                dataAsString = s
+            }
+            guard let httpResponse = response as? HTTPURLResponse else {
+                serverInfo.errorMsg = dataAsString + response.debugDescription
+                return
+            }
+            guard httpResponse.statusCode != 401 else {
+                serverInfo.errorMsg = httpResponse.statusCode.description
+                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+                    + " " + dataAsString
+                return
+            }
+            guard (200...299).contains(httpResponse.statusCode) else {
+                serverInfo.errorMsg = httpResponse.statusCode.description
+                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
+                    + " " + dataAsString
+                return
+            }
+            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
+                  let data = data,
+                  let libraryInfo = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
+                serverInfo.errorMsg = "Failed to parse server response"
+                return
+            }
+
+            guard let libraryMap = libraryInfo["library_map"] as? [String: String] else {
+                serverInfo.errorMsg = "No library info found in server response"
+                return
+            }
+            defaultLog.info("libraryInfo: \(libraryInfo)")
+
+
+            let defaultLibrary = libraryInfo["default_library"] as? String ?? ""
+
+            serverInfo.defaultLibrary = defaultLibrary
+            serverInfo.libraryMap = libraryMap
+            serverInfo.reachable = true
+            serverInfo.errorMsg = "Success"
+        }
+
+        setCredential(server: server, task: task)
+
+        serverInfo.probingTask = task
+        task.resume()
+    }
+}
+
+struct CalibreServerInfo: Identifiable {
+    var id: String {
+        server.id + " " + isPublic.description
+    }
+    
+    let server: CalibreServer
+    let isPublic: Bool
+    var reachable: Bool
+    var errorMsg: String
+    var probingTask: URLSessionDataTask?
+    var defaultLibrary: String
+    var libraryMap: [String:String]
 }

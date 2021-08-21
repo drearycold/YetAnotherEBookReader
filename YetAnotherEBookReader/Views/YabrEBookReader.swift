@@ -91,7 +91,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path, unzipPath: unzipPath.path, removeEpub: false)
             
             epubReaderContainer.modelData = modelData
-            epubReaderContainer.open()
+            epubReaderContainer.open(bookReadingPosition: bookPosition)
             return epubReaderContainer
         }
         
