@@ -264,7 +264,7 @@ final class ModelData: ObservableObject {
 
     lazy var calibreServerService = CalibreServerService(modelData: self)
     
-    init() {
+    init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
         #endif
@@ -372,6 +372,40 @@ final class ModelData: ObservableObject {
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
         downloadService.modelData = self
+        
+        if mock {
+            let library = calibreLibraries.first!.value
+            
+            var readPos = BookReadingPosition()
+            readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: "FolioReader", maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
+            
+            self.readingBook = CalibreBook(
+                id: 1,
+                library: library,
+                title: "Mock Title",
+                authors: ["Mock Author", "Mock Auther 2"],
+                comments: "<p>Mock Comment",
+                publisher: "Mock Publisher",
+                series: "Mock Series",
+                rating: 8,
+                size: 12345678,
+                pubDate: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
+                timestamp: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
+                lastModified: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+                tags: ["Mock"],
+                formats: ["EPUB" : FormatInfo(
+                            filename: "file:///mock",
+                            serverSize: 123456,
+                            serverMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+                            cached: false, cacheSize: 123456,
+                            cacheMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000))
+                )],
+                readPos: readPos,
+                identifiers: [:],
+                inShelf: true,
+                inShelfName: "Default")
+            self.booksInShelf[self.readingBook!.inShelfId] = self.readingBook
+        }
     }
     
     func populateBookShelf() {
@@ -628,6 +662,13 @@ final class ModelData: ObservableObject {
         }
         calibreBook.authors.append(contentsOf: bookRealm.authors)
         calibreBook.tags.append(contentsOf: bookRealm.tags)
+        
+        if calibreBook.readPos.getDevices().count > 1 {
+            if let pos = calibreBook.readPos.getPosition(deviceName), pos.lastReadPage == 0 {
+                calibreBook.readPos.removePosition(deviceName)
+            }
+        }
+        
         return calibreBook
     }
     
@@ -1112,6 +1153,23 @@ final class ModelData: ObservableObject {
                 let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
                 connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
             }
+        }
+        if ret != 0 {
+            updatingMetadataStatus = "Internal Error"
+            updatingMetadata = false
+            alertDelegate.alert(msg: updatingMetadataStatus)
+        }
+    }
+    
+    func updateReadingPosition(book: CalibreBook, alertDelegate: AlertDelegate) {
+        self.updateBook(book: book)
+        
+        guard let readPosColumnName = calibreLibraries[book.library.id]?.readPosColumnName else {
+            return
+        }
+
+        let ret = calibreServerService.updateBookReadingPosition(book: book, columnName: readPosColumnName, alertDelegate: alertDelegate) {
+            // empty
         }
         if ret != 0 {
             updatingMetadataStatus = "Internal Error"

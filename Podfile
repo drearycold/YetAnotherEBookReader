@@ -7,7 +7,8 @@ target 'YetAnotherEBookReader' do
 
   # Pods for YetAnotherEBookReader
   pod 'Google-Mobile-Ads-SDK'
-  pod 'ShelfView', :git => 'https://github.com/drearycold/ShelfView-iOS', :branch => 'peter_dev'
+  # pod 'ShelfView', :git => 'https://github.com/drearycold/ShelfView-iOS', :branch => 'peter_dev'
+  pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
 
   target 'YetAnotherEBookReaderTests' do

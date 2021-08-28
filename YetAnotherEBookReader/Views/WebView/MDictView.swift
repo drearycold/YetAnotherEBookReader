@@ -15,16 +15,16 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
     var word = ""
     
     open override func viewDidLoad() {
+        super.viewDidLoad()
+
         self.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
-        let webConfiguration = WKWebViewConfiguration()
-        webView = WKWebView(frame: view.frame, configuration: webConfiguration)
+        print("MDICT viewDidLoad \(self.view.frame)")
+
+        // let webConfiguration = WKWebViewConfiguration()
+        webView = WKWebView()
         webView.uiDelegate = self
         view.addSubview(webView)
-        
-        if let url = URL(string: server) {
-            webView.load(URLRequest(url: url))
-        }
         
         let constraints = [
             webView.topAnchor.constraint(equalTo: view.topAnchor),
@@ -35,7 +35,12 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         
         NSLayoutConstraint.activate(constraints)
         
-        super.viewDidLoad()
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        
+        if let url = URL(string: server) {
+            webView.load(URLRequest(url: url))
+        }
+        
     }
     
     open override func viewWillAppear(_ animated: Bool) {
@@ -45,6 +50,15 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         }
         
         super.viewWillAppear(animated)
+    }
+    
+    open override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        coordinator.animate { context in
+        } completion: { context in
+            print("MDICTTRANS \(self.view.frame)")
+            //self.webView.frame = self.view.frame
+        }
+
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {

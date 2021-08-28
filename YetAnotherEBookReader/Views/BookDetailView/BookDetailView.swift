@@ -50,12 +50,17 @@ struct BookDetailView: View {
     @State private var selectedPositionShowDetail = false
     @State private var selectedPosition = ""
     @State private var updater = 0
-    @State private var showingReadSheet = false
+    
+    @State private var presentingReadSheet = false
+    @State private var presentingReadPositionList = false
+    
     @State private var readWillUpdatePosition = false
     
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
     @State private var shelfNameCustomized = false
+    
+    @ObservedObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
         ScrollView {
@@ -66,7 +71,7 @@ struct BookDetailView: View {
                     modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-                .navigationTitle(Text(modelData.readingBook?.title ?? ""))
+                .navigationTitle(Text(book.title))
             } else {
                 EmptyView()
             }
@@ -118,14 +123,13 @@ struct BookDetailView: View {
             }
             return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
-        .fullScreenCover(isPresented: $showingReadSheet, onDismiss: {showingReadSheet = false} ) {
+        .fullScreenCover(isPresented: $presentingReadSheet, onDismiss: {presentingReadSheet = false} ) {
             if let readerInfo = modelData.readerInfo {
                 YabrEBookReader(readerInfo: readerInfo)
             } else {
                 Text("Nil Book")
             }
         }
-
         .disabled(modelData.readingBook == nil)
     }
     
@@ -162,7 +166,6 @@ struct BookDetailView: View {
                     .frame(maxWidth: 300)
                 }
             }
-            
             
             #if canImport(GoogleMobileAds)
             Banner()
@@ -363,8 +366,8 @@ struct BookDetailView: View {
                     metadataFormatIcon(
                         format.rawValue
                     )
-                        .padding(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
-
+                    .padding(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
+                    
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .bottom, spacing: 24) {
                             Text(format.rawValue)
@@ -375,13 +378,13 @@ struct BookDetailView: View {
                                 format: format,
                                 formatInfo: formatInfo
                             )
-
+                            
                             clearFormatButton(
                                 book: book,
                                 format: format,
                                 formatInfo: formatInfo
                             ).disabled(!formatInfo.cached)
-
+                            
                             readFormatButton(
                                 book: book,
                                 format: format,
@@ -405,18 +408,18 @@ struct BookDetailView: View {
                                 ProgressView(value: download.progress)
                                     .progressViewStyle(LinearProgressViewStyle())
                                     .frame(maxWidth: 160)
-
+                                
                                 Button(action: {
                                     if download.isDownloading {
                                         modelData.pauseDownloadFormat(book: book, format: format)
                                     } else {
                                         modelData.resumeDownloadFormat(book: book, format: format)
                                     }
-
+                                    
                                 }) {
                                     Image(systemName: download.isDownloading ? "pause" : "play")
                                 }
-
+                                
                                 //cancel download
                                 Button(action:{
                                     modelData.cancelDownloadFormat(book: book, format: format)
@@ -431,9 +434,16 @@ struct BookDetailView: View {
                         }
                         .font(.caption)
                     }
-
+                    
                 }
             }
+        }
+        .sheet(isPresented: $presentingReadPositionList, onDismiss: {
+            print("ReadingPositionListView dismiss \(book.readPos.getDevices().count) \(_viewModel.readingPositionListViewModel.book.readPos.getDevices().count)")
+            guard book.readPos.getDevices().count != _viewModel.readingPositionListViewModel.book.readPos.getDevices().count else { return }
+            modelData.updateReadingPosition(book: _viewModel.readingPositionListViewModel.book, alertDelegate: self)
+        }) {
+            ReadingPositionListView(viewModel: _viewModel.readingPositionListViewModel)
         }
     }
     
@@ -810,7 +820,12 @@ struct BookDetailView: View {
                     alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(selectedFormat.rawValue) first")
                     return
                 }
-                readAction(book: book, format: selectedFormat, formatInfo: formatInfo, reader: selectedFormatReader)
+//                if book.readPos.getDevices().count == 1 {
+//                    readAction(book: book, format: selectedFormat, formatInfo: formatInfo, reader: selectedFormatReader)
+//                } else {
+                    _viewModel.readingPositionListViewModel = ReadingPositionListViewModel(modelData: modelData, book: book)
+                    presentingReadPositionList = true
+//                }
             }) {
                 Image(systemName: "book")
             }.disabled(modelData.readingBook?.inShelf == false)
@@ -945,14 +960,14 @@ struct BookDetailView: View {
         )
         
         readWillUpdatePosition = false
-        showingReadSheet = true
+        presentingReadSheet = true
     }
     
     
     func readBook(position: BookDeviceReadingPosition) {
         modelData.updatedReadingPosition.update(with: position)
         readWillUpdatePosition = true
-        showingReadSheet = true
+        presentingReadSheet = true
     }
     
     func handleBookDeleted() {

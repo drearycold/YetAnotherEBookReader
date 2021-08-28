@@ -248,11 +248,19 @@ struct BookReadingPosition {
         deviceMap[deviceName] = newPosition
         devices.append(newPosition)
         devices.sort { (lhs, rhs) -> Bool in
+            
             if lhs.lastPosition[0] == rhs.lastPosition[0] {
                 return (lhs.lastPosition[1] + lhs.lastPosition[2]) > (rhs.lastPosition[1] + rhs.lastPosition[2])
             } else {
                 return lhs.lastPosition[0] > rhs.lastPosition[0]
             }
+        }
+    }
+    
+    mutating func removePosition(_ deviceName: String) {
+        deviceMap.removeValue(forKey: deviceName)
+        devices.removeAll { position in
+            position.id == deviceName
         }
     }
     
