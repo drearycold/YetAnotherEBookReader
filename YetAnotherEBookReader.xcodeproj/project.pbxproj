@@ -249,6 +249,8 @@
 		2A8C26D025C5A1E100FC7FC0 /* YabrPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */; };
 		2A8C26D825C5A7D000FC7FC0 /* YabrPDFViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */; };
 		2AA07E9126D73239008CE451 /* BookDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */; };
+		2AA07E9326DB4ADD008CE451 /* BookPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */; };
+		2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */; };
 		2AA5DEB726D3571A00954255 /* ReadingPositionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */; };
 		2AAE409D267849E80058A501 /* LibraryInfoBookRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */; };
 		2AAE409F26784D080058A501 /* LibraryBookListFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */; };
@@ -470,6 +472,8 @@
 		2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewContainer.swift; sourceTree = "<group>"; };
 		2A8C26DF25C9970B00FC7FC0 /* YetAnotherEBookReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YetAnotherEBookReader.entitlements; sourceTree = "<group>"; };
 		2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailViewModel.swift; sourceTree = "<group>"; };
+		2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreviewView.swift; sourceTree = "<group>"; };
+		2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreviewViewModel.swift; sourceTree = "<group>"; };
 		2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionListView.swift; sourceTree = "<group>"; };
 		2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookRow.swift; sourceTree = "<group>"; };
 		2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBookListFilter.swift; sourceTree = "<group>"; };
@@ -1028,6 +1032,8 @@
 				2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */,
 				2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */,
 				2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */,
+				2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */,
+				2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */,
 			);
 			path = BookDetailView;
 			sourceTree = "<group>";
@@ -1523,6 +1529,7 @@
 				2ABB9153261F1A47004AA7C0 /* BookDetailView.swift in Sources */,
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
 				2A107E012663CB56007DCA20 /* FontSelectionViewController.swift in Sources */,
+				2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */,
 				2A107DD02663CB56007DCA20 /* DRMLibraryService.swift in Sources */,
 				2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */,
 				2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */,
@@ -1532,6 +1539,7 @@
 				2A107DEB2663CB56007DCA20 /* LCPViewModel.swift in Sources */,
 				2ABB912A261DE894004AA7C0 /* SectionShelfController.swift in Sources */,
 				2AA5DEB726D3571A00954255 /* ReadingPositionListView.swift in Sources */,
+				2AA07E9326DB4ADD008CE451 /* BookPreviewView.swift in Sources */,
 				2A107DF22663CB56007DCA20 /* Bookmark.swift in Sources */,
 				2A107DDC2663CB56007DCA20 /* LibraryModule.swift in Sources */,
 				2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */,

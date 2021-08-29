@@ -29,6 +29,13 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         bookPosition = readerInfo.position
     }
     
+    init(url: URL, format: Format, reader: ReaderType, position: BookDeviceReadingPosition) {
+        self.bookURL = url
+        self.bookFormat = format
+        self.bookReader = reader
+        self.bookPosition = position
+    }
+    
     func makeUIViewController(context: Context) -> UIViewController {
         let nav = UINavigationController()
         if bookFormat == Format.EPUB && bookReader == ReaderType.ReadiumEPUB {

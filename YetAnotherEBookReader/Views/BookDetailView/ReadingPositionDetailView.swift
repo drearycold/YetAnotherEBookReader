@@ -94,7 +94,9 @@ struct ReadingPositionDetailView: View {
                 Spacer()
                 
                 Button(action: {
-                    guard let formatInfo = _VM.book.formats[_VM.selectedFormat.rawValue] else {
+                    guard let formatInfo = _VM.book.formats[_VM.selectedFormat.rawValue],
+                          formatInfo.cached else {
+                        alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(_VM.selectedFormat.rawValue) first")
                         return
                     }
                     readAction(book: _VM.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
@@ -108,6 +110,46 @@ struct ReadingPositionDetailView: View {
             .disabled(_VM.selectedFormat == Format.UNKNOWN || _VM.selectedFormatReader == ReaderType.UNSUPPORTED)
         }
         .fixedSize(horizontal: true, vertical: false)
+        .onChange(of: _VM.modelData.updatedReadingPosition) { value in
+            if let selectedPosition = _VM.modelData.readerInfo?.position {
+                if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
+                    return
+                }
+                if _VM.modelData.updatedReadingPosition < selectedPosition {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
+                    }
+                } else if selectedPosition << _VM.modelData.updatedReadingPosition {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
+                    }
+                }
+                else {
+                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
+                }
+            }
+        }
+        .alert(item: $alertItem) { item in
+            if item.id == "ForwardProgress" {
+                return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
+                }), secondaryButton: .cancel())
+            }
+            if item.id == "BackwardProgress" {
+                return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
+                }), secondaryButton: .cancel())
+            }
+            if item.id == "ReadingPosition" {
+                return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+                    guard let formatInfo = _VM.book.formats[_VM.selectedFormat.rawValue] else {
+                        return
+                    }
+                    readAction(book: _VM.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
+                }), secondaryButton: .cancel())
+            }
+            return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
+        }
         .fullScreenCover(isPresented: $presentingReadSheet, onDismiss: {presentingReadSheet = false} ) {
             if let readerInfo = _VM.modelData.readerInfo {
                 YabrEBookReader(readerInfo: readerInfo)
@@ -138,6 +180,12 @@ struct ReadingPositionDetailView: View {
         
     }
 
+}
+
+extension ReadingPositionDetailView : AlertDelegate {
+    func alert(alertItem: AlertItem) {
+        self.alertItem = alertItem
+    }
 }
 
 struct ReadingPositionDetailView_Previews: PreviewProvider {

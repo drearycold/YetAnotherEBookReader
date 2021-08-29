@@ -27,6 +27,7 @@ struct FormatInfo: Codable {
     var cached: Bool
     var cacheSize: UInt64
     var cacheMTime: Date
+    var manifest = Data()   //json data
     
     var cacheUptoDate: Bool {
         serverMTime.timeIntervalSince(cacheMTime) < 60

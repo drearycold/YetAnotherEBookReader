@@ -34,27 +34,18 @@ struct BookDetailView: View {
     
     var viewMode: BookDetailViewMode
     
+    @StateObject private var previewViewModel = BookPreviewViewModel()
+    
     @State private var downloadStatus = DownloadStatus.INITIAL
     
     var defaultLog = Logger()
     
     @State private var alertItem: AlertItem?
 
-    @State private var selectedFormatShowDetail = false
-    @State private var selectedFormat = Format.EPUB
-
-    @State private var selectedFormatTOC = "Uninitialized"
-    @State private var selectedFormatReader = ReaderType.UNSUPPORTED
-    @State private var selectedFormatReaderShowDetail = false
-    
-    @State private var selectedPositionShowDetail = false
-    @State private var selectedPosition = ""
     @State private var updater = 0
     
     @State private var presentingReadSheet = false
     @State private var presentingReadPositionList = false
-    
-    @State private var readWillUpdatePosition = false
     
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
@@ -72,6 +63,9 @@ struct BookDetailView: View {
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(book.title))
+                .sheet(isPresented: $presentingReadSheet, onDismiss: { presentingReadSheet = false }) {
+                    BookPreviewView(viewModel: previewViewModel)
+                }
             } else {
                 EmptyView()
             }
@@ -104,31 +98,7 @@ struct BookDetailView: View {
             if item.id == "Updated" {
                 return Alert(title: Text("Updated"), message: Text(item.msg ?? "Success"))
             }
-            if item.id == "ForwardProgress" {
-                return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition(alertDelegate: self)
-                }), secondaryButton: .cancel())
-            }
-            if item.id == "BackwardProgress" {
-                return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition(alertDelegate: self)
-                }), secondaryButton: .cancel())
-            }
-            if item.id == "ReadingPosition" {
-                return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    guard let readerInfo = modelData.readerInfo else { return }
-                    let readPosition = readerInfo.position
-                    readBook(position: readPosition)
-                }), secondaryButton: .cancel())
-            }
             return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
-        }
-        .fullScreenCover(isPresented: $presentingReadSheet, onDismiss: {presentingReadSheet = false} ) {
-            if let readerInfo = modelData.readerInfo {
-                YabrEBookReader(readerInfo: readerInfo)
-            } else {
-                Text("Nil Book")
-            }
         }
         .disabled(modelData.readingBook == nil)
     }
@@ -171,10 +141,8 @@ struct BookDetailView: View {
             Banner()
             #endif
             
-            readingOptionsViewContent(book: book, isCompat: isCompat)
-                .frame(maxWidth: isCompat ? 400 : 500)
             WebViewUI(
-                content: generateCommentWithTOC(comments: book.comments, toc: selectedFormatTOC),
+                content: book.comments,
                 baseURL: book.commentBaseURL
             )
             .frame(maxWidth: isCompat ? 400 : 600, minHeight: 400, maxHeight: 400, alignment: .center)
@@ -385,7 +353,7 @@ struct BookDetailView: View {
                                 formatInfo: formatInfo
                             ).disabled(!formatInfo.cached)
                             
-                            readFormatButton(
+                            previewFormatButton(
                                 book: book,
                                 format: format,
                                 formatInfo: formatInfo
@@ -447,237 +415,6 @@ struct BookDetailView: View {
         }
     }
     
-    @ViewBuilder
-    private func readingOptionsViewContent(book: CalibreBook, isCompat: Bool) -> some View {
-        VStack(alignment: .center, spacing: 8) {
-            HStack {
-                Text("Read At")
-                    .font(.subheadline)
-                    .frame(minWidth: 80, alignment: .trailing)
-                Picker(selectedPosition, selection: $selectedPosition) {
-                    ForEach(book.readPos.getDevices(), id: \.self) { position in
-                        HStack {
-                            Text(position.id)
-                                .font(.body)
-                                .padding()
-                        }.tag(position.id)
-                    }
-                }
-                .pickerStyle(MenuPickerStyle())
-                .onChange(of: selectedPosition) { value in
-                    modelData.selectedPosition = selectedPosition
-                    
-                    if let position = book.readPos.getPosition(selectedPosition),
-                       let format = modelData.formatOfReader(readerName: position.readerName) {
-                        selectedFormat = format
-                    }
-                    
-                    guard selectedFormat == Format.UNKNOWN
-                            || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
-                            else { return }
-                    Format.allCases.forEach { format in
-                        if book.formats[format.rawValue]?.cached ?? false {
-                            self.selectedFormat = format
-                        }
-                    }
-                    
-                    guard selectedFormat == Format.UNKNOWN
-                            || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
-                            else { return }
-                    if book.formats[modelData.defaultFormat.rawValue] != nil {
-                        self.selectedFormat = modelData.defaultFormat
-                    }
-                    
-                    guard selectedFormat == Format.UNKNOWN
-                            || book.formats.contains(where: { $0.key == selectedFormat.rawValue }) == false
-                            else { return }
-                    Format.allCases.forEach { format in
-                        if book.formats[format.rawValue] != nil {
-                            self.selectedFormat = format
-                        }
-                    }
-                }
-                .onChange(of: modelData.updatedReadingPosition) { value in
-                    guard readWillUpdatePosition else { return }
-                    guard selectedPosition == modelData.updatedReadingPosition.id else {
-                        selectedPosition = modelData.updatedReadingPosition.id
-                        return
-                    }
-                    if let selectedPosition = modelData.readerInfo?.position {
-                        if modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
-                            return
-                        }
-                        if modelData.updatedReadingPosition < selectedPosition {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
-                            }
-                        } else if selectedPosition << modelData.updatedReadingPosition {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                                alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
-                            }
-                        }
-                        else {
-                            modelData.updateCurrentPosition(alertDelegate: self)
-                        }
-                    }
-                }
-                Button(action:{ selectedPositionShowDetail.toggle() }) {
-                    if selectedPositionShowDetail {
-                        Image(systemName: "chevron.up")
-                    } else {
-                        Image(systemName: "chevron.down")
-                    }
-                }
-                if book.readPos.getDevices().count > 1 {
-                    Text("(\(book.readPos.getDevices().count))")
-                }
-            }
-            .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-
-            if selectedPositionShowDetail {
-                Text(modelData.getSelectedReadingPosition(book: book)?.description ?? modelData.getDeviceReadingPosition(book: book)?.description ?? modelData.deviceName)
-                    .multilineTextAlignment(.leading)
-                    .frame(minHeight: 80)
-                    .font(.subheadline)
-            }
-            
-            HStack {
-                Text("Format")
-                    .font(.subheadline)
-                    .frame(minWidth: 80, alignment: .trailing)
-                Picker("Format", selection: $selectedFormat) {
-                    ForEach(Format.allCases) { format in
-                        if book.formats[format.rawValue] != nil {
-                            Text(format.rawValue).tag(format)
-                        }
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .onChange(of: selectedFormat) { newFormat in
-                    if newFormat == Format.UNKNOWN {
-                        return
-                    }
-                    print("selectedFormat \(newFormat.rawValue)")
-                    
-                    guard let readers = modelData.formatReaderMap[newFormat] else { return }
-                    selectedFormatReader = readers.reduce(into: readers.first!) {
-                        if $1.rawValue == book.readPos.getPosition(self.selectedPosition)?.readerName {
-                            $0 = $1
-                        }
-                    }
-                    
-                    modelData.calibreServerService.getBookManifest(book: book, format: newFormat) { manifest in
-                        if let manifest = manifest {
-                            parseManifestToTOC(json: manifest)
-                        }
-                    }
-                }
-                
-                Button(action:{ selectedFormatShowDetail.toggle() }) {
-                    if selectedFormatShowDetail {
-                        Image(systemName: "chevron.up")
-                    } else {
-                        Image(systemName: "chevron.down")
-                    }
-                }
-            }
-            .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-
-            if selectedFormatShowDetail, let formatInfo = book.formats[selectedFormat.rawValue] {
-                formatDetailViewContent(book: book, isCompat: isCompat, formatInfo: formatInfo)
-                    .fixedSize()
-            }
-            
-            HStack {
-                Text("Reader")
-                    .font(.subheadline)
-                    .frame(minWidth: 80, alignment: .trailing)
-                Picker("Reader", selection: $selectedFormatReader) {
-                    ForEach(ReaderType.allCases) { type in
-                        if let types = modelData.formatReaderMap[selectedFormat],
-                           types.contains(type) {
-                            Text(type.rawValue).tag(type)
-                        }
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                
-                Button(action: {
-                    guard let formatInfo = book.formats[selectedFormat.rawValue],
-                          formatInfo.cached else {
-                        alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(selectedFormat.rawValue) first")
-                        return
-                    }
-                    readAction(book: book, format: selectedFormat, formatInfo: formatInfo, reader: selectedFormatReader)
-                }) {
-                    Image(systemName: "book")
-                }.disabled(modelData.readingBook?.inShelf == false)
-            }
-            .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-        }
-    }
-    
-    @ViewBuilder
-    private func formatDetailViewContent(book: CalibreBook, isCompat: Bool, formatInfo: FormatInfo) -> some View {
-        if isCompat {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading) {
-                    Text("Server File Info")
-                    Text(
-                        ByteCountFormatter.string(
-                            fromByteCount: Int64(formatInfo.serverSize),
-                            countStyle: .file
-                        )
-                    )
-                    Text(formatInfo.serverMTime.description)
-                }
-                
-                Divider()
-                
-                VStack(alignment: .leading) {
-                    Text("Cached File Info")
-                    Text(
-                        ByteCountFormatter.string(
-                            fromByteCount: Int64(formatInfo.cacheSize),
-                            countStyle: .file
-                        )
-                    )
-                    Text(formatInfo.cacheMTime.description)
-                }
-            }.font(.subheadline)
-        } else {
-            HStack {
-                Text(
-                    ByteCountFormatter.string(
-                        fromByteCount: Int64(formatInfo.serverSize),
-                        countStyle: .file
-                    )
-                )
-                .font(.subheadline)
-                Spacer()
-                Text(
-                    ByteCountFormatter.string(
-                        fromByteCount: Int64(formatInfo.cacheSize),
-                        countStyle: .file
-                    )
-                ).font(.subheadline)
-            }
-            HStack {
-                Text(formatInfo.serverMTime.description)
-
-                Spacer()
-                Text(formatInfo.cacheMTime.description)
-            }
-            HStack {
-                Spacer()
-                
-                cacheFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
-                clearFormatButton(book: book, format: selectedFormat, formatInfo: formatInfo)
-                    .disabled(!formatInfo.cached)
-            }
-        }
-    }
-    
     private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
             modelData.clearCache(book: book, format: format)
@@ -704,7 +441,7 @@ struct BookDetailView: View {
         }
     }
     
-    private func readFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
+    private func previewFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action: {
             guard let reader = modelData.formatReaderMap[format]?.first else { return }
             previewAction(book: book, format: format, formatInfo: formatInfo, reader: reader)
@@ -742,11 +479,6 @@ struct BookDetailView: View {
                         resetStates()
                         modelData.calibreServerService.getMetadataNew(oldbook: book) { newbook in
                             initStates(book: newbook)
-                            modelData.calibreServerService.getBookManifest(book: newbook, format: selectedFormat) { manifest in
-                                if let manifest = manifest {
-                                    self.parseManifestToTOC(json: manifest)
-                                }
-                            }
                         }
                     }
                 }
@@ -796,9 +528,10 @@ struct BookDetailView: View {
                     modelData.clearCache(inShelfId: book.inShelfId)
                     downloadStatus = .INITIAL
                 } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
-                    if modelData.startDownloadFormat(book: book, format: selectedFormat) {
-                        downloadStatus = .DOWNLOADING
-                    }
+//                    if modelData.startDownloadFormat(book: book, format: selectedFormat) {
+//                        downloadStatus = .DOWNLOADING
+//                    }
+                    //TODO prompt for formats
                 }
                 updater += 1
             }) {
@@ -814,18 +547,9 @@ struct BookDetailView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                guard let book = modelData.readingBook,
-                      let formatInfo = book.formats[selectedFormat.rawValue],
-                      formatInfo.cached else {
-                    alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(selectedFormat.rawValue) first")
-                    return
-                }
-//                if book.readPos.getDevices().count == 1 {
-//                    readAction(book: book, format: selectedFormat, formatInfo: formatInfo, reader: selectedFormatReader)
-//                } else {
+                guard let book = modelData.readingBook else { return }
                     _viewModel.readingPositionListViewModel = ReadingPositionListViewModel(modelData: modelData, book: book)
                     presentingReadPositionList = true
-//                }
             }) {
                 Image(systemName: "book")
             }.disabled(modelData.readingBook?.inShelf == false)
@@ -888,59 +612,11 @@ struct BookDetailView: View {
     }
     
     func resetStates() {
-        selectedFormat = Format.UNKNOWN
-        selectedPosition = ""
-        selectedFormatReader = ReaderType.UNSUPPORTED
     }
     
     func initStates(book: CalibreBook) {
         shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
         shelfNameCustomized = !book.tags.contains(shelfName)
-        
-        if let position = modelData.getDeviceReadingPosition(book: book) {
-            self.selectedPosition = position.id
-        } else if let position = modelData.getLatestReadingPosition(book: book) {
-            self.selectedPosition = position.id
-        } else {
-            self.selectedPosition = modelData.getInitialReadingPosition(book: book, format: selectedFormat, reader: selectedFormatReader).id
-        }
-        
-        
-    }
-    
-    func readAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {
-        guard let bookFileUrl = getSavedUrl(book: book, format: format)
-        else {
-            alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
-            return
-        }
-        
-        
-        let devicePosition = modelData.getDeviceReadingPosition(book: book)
-        var readPosition = modelData.getSelectedReadingPosition(book: book)
-                        
-        if devicePosition != nil && readPosition == nil {
-            readPosition = devicePosition
-        }
-        
-        if readPosition == nil {
-            readPosition = modelData.getInitialReadingPosition(book: book, format: format, reader: reader)
-        }
-        
-        modelData.prepareBookReading(
-            url: bookFileUrl,
-            format: format,
-            readerType: reader,
-            position: readPosition!
-        )
-        
-        guard readPosition == devicePosition else {
-            //i.e devicePosition != selectedPosition
-            alertItem = AlertItem(id: "ReadingPosition", msg: "You have picked a different reading position than that of this device, please confirm.\n\(devicePosition!.description) VS \(readPosition!.description)")
-            return
-        }
-        
-        readBook(position: readPosition!)
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {
@@ -959,40 +635,37 @@ struct BookDetailView: View {
             position: readPosition
         )
         
-        readWillUpdatePosition = false
+        previewViewModel.modelData = modelData
+        previewViewModel.book = book
+        previewViewModel.url = bookFileUrl
+        previewViewModel.format = format
+        previewViewModel.reader = reader
+        
+        modelData.calibreServerService.getBookManifest(book: book, format: format) { data in
+            guard let data = data else { return }
+            self.parseManifestToTOC(json: data)
+        }
+        
         presentingReadSheet = true
-    }
-    
-    
-    func readBook(position: BookDeviceReadingPosition) {
-        modelData.updatedReadingPosition.update(with: position)
-        readWillUpdatePosition = true
-        presentingReadSheet = true
-    }
-    
-    func handleBookDeleted() {
-//        modelData.libraryInfo.deleteBook(book: book)
-        //TODO
-        //getMetadata()
     }
     
     func parseManifestToTOC(json: Data) {
-        selectedFormatTOC = "Without TOC"
+        previewViewModel.toc = "Without TOC"
         
         guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
             #if DEBUG
-            selectedFormatTOC = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
+            previewViewModel.toc = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
             #endif
             return
         }
         
         guard let tocNode = root["toc"] as? NSDictionary else {
             #if DEBUG
-            selectedFormatTOC = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
+            previewViewModel.toc = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
             #endif
             
             if let jobStatus = root["job_status"] as? String, jobStatus == "waiting" || jobStatus == "running" {
-                selectedFormatTOC = "Generating TOC, Please try again later"
+                previewViewModel.toc = "Generating TOC, Please try again later"
             }
             return
         }
@@ -1005,7 +678,13 @@ struct BookDetailView: View {
             result = result + ((childNode as! NSDictionary)["title"] as! String) + "\n"
         }
         
-        selectedFormatTOC = tocString
+        previewViewModel.toc = tocString
+    }
+    
+    func handleBookDeleted() {
+//        modelData.libraryInfo.deleteBook(book: book)
+        //TODO
+        //getMetadata()
     }
     
     func generateCommentWithTOC(comments: String, toc: String) -> String {
@@ -1026,34 +705,10 @@ extension BookDetailView : AlertDelegate {
 
 @available(macCatalyst 14.0, *)
 struct BookDetailView_Previews: PreviewProvider {
-    @State static var book = CalibreBook(
-        id: 5410,
-        library: CalibreLibrary(
-            server: CalibreServer(
-                name:"My Server",
-                baseUrl: "http://calibre-server.lan:8080/",
-                publicUrl: "",
-                username: "",
-                password: ""),
-            key: "Local",
-            name: "Local"
-        ),
-        title: "Title",
-        authors: ["Author"],
-        comments: "",
-        rating: 0,
-        formats: ["EPUB":FormatInfo(serverSize: 0, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date())],
-        readPos: BookReadingPosition(),
-        inShelf: true
-    )
-   
-    static var modelData = ModelData()
+    static var modelData = ModelData(mock: true)
      
     static var previews: some View {
         BookDetailView(viewMode: .LIBRARY)
             .environmentObject(modelData)
-            .onAppear() {
-                modelData.readingBook = book
-            }
     }
 }

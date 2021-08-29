@@ -500,12 +500,6 @@ struct CalibreServerService {
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
-//        book.formats
-//                    .filtered { Format(rawValue: $0) != nil }
-//                    .sorted { $0.element.key < $1.element.key }
-        
-        
-        
         let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl)
