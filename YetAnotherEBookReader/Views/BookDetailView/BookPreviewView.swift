@@ -16,11 +16,17 @@ struct BookPreviewView: View {
     
     var body: some View {
         TabView {
-            Text(_VM.toc)
-                .tabItem {
-                    Image(systemName: "scroll")
-                    Text("Manifest")
-                }.tag(0)
+            ScrollView(.vertical) {
+                VStack(alignment: .leading) {
+                    Text("Table of Content")
+                        .font(.headline)
+                    Text(_VM.toc)
+                }.padding()
+            }
+            .tabItem {
+                Image(systemName: "scroll")
+                Text("Manifest")
+            }.tag(0)
             
             VStack {
                 YabrEBookReader(

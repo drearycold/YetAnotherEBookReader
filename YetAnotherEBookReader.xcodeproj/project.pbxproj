@@ -10,14 +10,6 @@
 		17C3957C8FAD6C8F240E2079 /* Pods_YetAnotherEBookReader.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAAD088B00B456E9B7569E42 /* Pods_YetAnotherEBookReader.framework */; };
 		2A0EBA86267893740080BF5B /* Downloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA85267893740080BF5B /* Downloader.swift */; };
 		2A0EBA8826798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA8726798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift */; };
-		2A107C8A26613068007DCA20 /* R2Navigator.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8626613068007DCA20 /* R2Navigator.framework */; };
-		2A107C8B26613068007DCA20 /* R2Navigator.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8626613068007DCA20 /* R2Navigator.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A107C8C26613068007DCA20 /* R2Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8726613068007DCA20 /* R2Shared.framework */; };
-		2A107C8D26613068007DCA20 /* R2Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8726613068007DCA20 /* R2Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A107C8E26613068007DCA20 /* R2Streamer.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8826613068007DCA20 /* R2Streamer.framework */; };
-		2A107C8F26613068007DCA20 /* R2Streamer.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8826613068007DCA20 /* R2Streamer.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A107C9026613068007DCA20 /* ReadiumOPDS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8926613068007DCA20 /* ReadiumOPDS.framework */; };
-		2A107C9126613068007DCA20 /* ReadiumOPDS.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8926613068007DCA20 /* ReadiumOPDS.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A107D422661CFBB007DCA20 /* EpubReadiumReaderContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D412661CFBB007DCA20 /* EpubReadiumReaderContainer.swift */; };
 		2A107DC32663CB56007DCA20 /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D5B2663CB55007DCA20 /* OPDSNavigationTableViewCell.swift */; };
 		2A107DC42663CB56007DCA20 /* OPDSGroupCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D5C2663CB55007DCA20 /* OPDSGroupCollectionViewCell.swift */; };
@@ -192,18 +184,14 @@
 		2A3EB97B26B6432F000D70F1 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9142261ED7E5004AA7C0 /* Constants.swift */; };
 		2A3EB97C26B6432F000D70F1 /* GoodreadsSyncConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* GoodreadsSyncConnector.swift */; };
 		2A3EB97E26B6432F000D70F1 /* Minizip.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; };
-		2A3EB97F26B6432F000D70F1 /* R2Streamer.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8826613068007DCA20 /* R2Streamer.framework */; };
 		2A3EB98026B6432F000D70F1 /* SQLite.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; };
-		2A3EB98126B6432F000D70F1 /* R2Navigator.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8626613068007DCA20 /* R2Navigator.framework */; };
 		2A3EB98226B6432F000D70F1 /* Fuzi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; };
 		2A3EB98326B6432F000D70F1 /* SwiftSoup.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */; };
 		2A3EB98426B6432F000D70F1 /* MBProgressHUD.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; };
 		2A3EB98526B6432F000D70F1 /* KingfisherSwiftUI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; };
 		2A3EB98626B6432F000D70F1 /* GCDWebServer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; };
-		2A3EB98726B6432F000D70F1 /* R2Shared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8726613068007DCA20 /* R2Shared.framework */; };
 		2A3EB98826B6432F000D70F1 /* ZIPFoundation.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */; };
 		2A3EB98926B6432F000D70F1 /* CryptoSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; };
-		2A3EB98A26B6432F000D70F1 /* ReadiumOPDS.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8926613068007DCA20 /* ReadiumOPDS.framework */; };
 		2A3EB98D26B6432F000D70F1 /* App.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107E112663CB96007DCA20 /* App.storyboard */; };
 		2A3EB98E26B6432F000D70F1 /* 4.epub in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DC02663CB55007DCA20 /* 4.epub */; };
 		2A3EB98F26B6432F000D70F1 /* PublicationMenuViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D732663CB55007DCA20 /* PublicationMenuViewController.xib */; };
@@ -228,10 +216,7 @@
 		2A3EB9A226B6432F000D70F1 /* PublicationMenuViewController.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D6C2663CB55007DCA20 /* PublicationMenuViewController.strings */; };
 		2A3EB9A326B6432F000D70F1 /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DA12663CB55007DCA20 /* Outline.storyboard */; };
 		2A3EB9A526B6432F000D70F1 /* GCDWebServer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A3EB9A626B6432F000D70F1 /* R2Streamer.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8826613068007DCA20 /* R2Streamer.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A3EB9A726B6432F000D70F1 /* R2Shared.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8726613068007DCA20 /* R2Shared.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9A826B6432F000D70F1 /* MBProgressHUD.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A3EB9A926B6432F000D70F1 /* ReadiumOPDS.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8926613068007DCA20 /* ReadiumOPDS.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9AA26B6432F000D70F1 /* KingfisherSwiftUI.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9AB26B6432F000D70F1 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9AC26B6432F000D70F1 /* SQLite.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -239,8 +224,17 @@
 		2A3EB9AE26B6432F000D70F1 /* Minizip.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9AF26B6432F000D70F1 /* Fuzi.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A3EB9B026B6432F000D70F1 /* ZIPFoundation.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A3EB9B126B6432F000D70F1 /* R2Navigator.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A107C8626613068007DCA20 /* R2Navigator.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A63F74026C1136E00DB5E98 /* BookFormatDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */; };
+		2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */; };
+		2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */; };
+		2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; };
+		2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		2A73B8F426DB7BE0004B001D /* ReadiumLCP.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */; };
+		2A73B8F526DB7BE0004B001D /* ReadiumLCP.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		2A73B8F626DB7BE1004B001D /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; };
+		2A73B8F726DB7BE1004B001D /* ReadiumOPDS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8464F4269AE3EE000638B2 /* MDictView.swift */; };
 		2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */; };
 		2A890571260076780072B580 /* YabrPDFOptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A890570260076780072B580 /* YabrPDFOptionView.swift */; };
@@ -330,10 +324,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				2A3EB9A526B6432F000D70F1 /* GCDWebServer.xcframework in Embed Frameworks */,
-				2A3EB9A626B6432F000D70F1 /* R2Streamer.framework in Embed Frameworks */,
-				2A3EB9A726B6432F000D70F1 /* R2Shared.framework in Embed Frameworks */,
 				2A3EB9A826B6432F000D70F1 /* MBProgressHUD.xcframework in Embed Frameworks */,
-				2A3EB9A926B6432F000D70F1 /* ReadiumOPDS.framework in Embed Frameworks */,
 				2A3EB9AA26B6432F000D70F1 /* KingfisherSwiftUI.xcframework in Embed Frameworks */,
 				2A3EB9AB26B6432F000D70F1 /* CryptoSwift.xcframework in Embed Frameworks */,
 				2A3EB9AC26B6432F000D70F1 /* SQLite.xcframework in Embed Frameworks */,
@@ -341,7 +332,6 @@
 				2A3EB9AE26B6432F000D70F1 /* Minizip.xcframework in Embed Frameworks */,
 				2A3EB9AF26B6432F000D70F1 /* Fuzi.xcframework in Embed Frameworks */,
 				2A3EB9B026B6432F000D70F1 /* ZIPFoundation.xcframework in Embed Frameworks */,
-				2A3EB9B126B6432F000D70F1 /* R2Navigator.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -352,19 +342,20 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
+				2A73B8F526DB7BE0004B001D /* ReadiumLCP.xcframework in Embed Frameworks */,
+				2A73B8F726DB7BE1004B001D /* ReadiumOPDS.xcframework in Embed Frameworks */,
+				2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */,
 				6E76E9B5265FF35600885D26 /* GCDWebServer.xcframework in Embed Frameworks */,
-				2A107C8F26613068007DCA20 /* R2Streamer.framework in Embed Frameworks */,
-				2A107C8D26613068007DCA20 /* R2Shared.framework in Embed Frameworks */,
 				6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */,
-				2A107C9126613068007DCA20 /* ReadiumOPDS.framework in Embed Frameworks */,
 				6E7733BE26660A1C008318C3 /* KingfisherSwiftUI.xcframework in Embed Frameworks */,
 				6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */,
 				6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */,
+				2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */,
 				6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */,
+				2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */,
 				6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */,
 				6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */,
 				6E76E9C3265FF36900885D26 /* ZIPFoundation.xcframework in Embed Frameworks */,
-				2A107C8B26613068007DCA20 /* R2Navigator.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -375,10 +366,6 @@
 		12CE5BE6BF5F7016836A940D /* Pods-YetAnotherEBookReaderTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.debug.xcconfig"; sourceTree = "<group>"; };
 		2A0EBA85267893740080BF5B /* Downloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Downloader.swift; sourceTree = "<group>"; };
 		2A0EBA8726798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoLibrarySwitcher.swift; sourceTree = "<group>"; };
-		2A107C8626613068007DCA20 /* R2Navigator.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = R2Navigator.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A107C8726613068007DCA20 /* R2Shared.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = R2Shared.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A107C8826613068007DCA20 /* R2Streamer.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = R2Streamer.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A107C8926613068007DCA20 /* ReadiumOPDS.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ReadiumOPDS.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A107D412661CFBB007DCA20 /* EpubReadiumReaderContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubReadiumReaderContainer.swift; sourceTree = "<group>"; };
 		2A107D5B2663CB55007DCA20 /* OPDSNavigationTableViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSNavigationTableViewCell.swift; sourceTree = "<group>"; };
 		2A107D5C2663CB55007DCA20 /* OPDSGroupCollectionViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSGroupCollectionViewCell.swift; sourceTree = "<group>"; };
@@ -463,6 +450,11 @@
 		2A3EB9B626B6432F000D70F1 /* YetAnotherEBookReader macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "YetAnotherEBookReader macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A3EB9B726B64333000D70F1 /* YetAnotherEBookReader copy2-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "YetAnotherEBookReader copy2-Info.plist"; path = "/Volumes/Data/git/YetAnotherEBookReader/YetAnotherEBookReader copy2-Info.plist"; sourceTree = "<absolute>"; };
 		2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormatDownload.swift; sourceTree = "<group>"; };
+		2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Shared.xcframework; path = Carthage/Build/R2Shared.xcframework; sourceTree = "<group>"; };
+		2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ReadiumLCP.xcframework; path = Carthage/Build/ReadiumLCP.xcframework; sourceTree = "<group>"; };
+		2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Navigator.xcframework; path = Carthage/Build/R2Navigator.xcframework; sourceTree = "<group>"; };
+		2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Streamer.xcframework; path = Carthage/Build/R2Streamer.xcframework; sourceTree = "<group>"; };
+		2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ReadiumOPDS.xcframework; path = Carthage/Build/ReadiumOPDS.xcframework; sourceTree = "<group>"; };
 		2A8464F4269AE3EE000638B2 /* MDictView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MDictView.swift; sourceTree = "<group>"; };
 		2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MyFolioReaderCenterDelegate.swift; sourceTree = "<group>"; };
 		2A890570260076780072B580 /* YabrPDFOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFOptionView.swift; sourceTree = "<group>"; };
@@ -545,18 +537,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				2A3EB97E26B6432F000D70F1 /* Minizip.xcframework in Frameworks */,
-				2A3EB97F26B6432F000D70F1 /* R2Streamer.framework in Frameworks */,
 				2A3EB98026B6432F000D70F1 /* SQLite.xcframework in Frameworks */,
-				2A3EB98126B6432F000D70F1 /* R2Navigator.framework in Frameworks */,
 				2A3EB98226B6432F000D70F1 /* Fuzi.xcframework in Frameworks */,
 				2A3EB98326B6432F000D70F1 /* SwiftSoup.xcframework in Frameworks */,
 				2A3EB98426B6432F000D70F1 /* MBProgressHUD.xcframework in Frameworks */,
 				2A3EB98526B6432F000D70F1 /* KingfisherSwiftUI.xcframework in Frameworks */,
 				2A3EB98626B6432F000D70F1 /* GCDWebServer.xcframework in Frameworks */,
-				2A3EB98726B6432F000D70F1 /* R2Shared.framework in Frameworks */,
 				2A3EB98826B6432F000D70F1 /* ZIPFoundation.xcframework in Frameworks */,
 				2A3EB98926B6432F000D70F1 /* CryptoSwift.xcframework in Frameworks */,
-				2A3EB98A26B6432F000D70F1 /* ReadiumOPDS.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,18 +553,19 @@
 			buildActionMask = 2147483647;
 			files = (
 				6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */,
-				2A107C8E26613068007DCA20 /* R2Streamer.framework in Frameworks */,
 				6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */,
-				2A107C8A26613068007DCA20 /* R2Navigator.framework in Frameworks */,
 				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
+				2A73B8F426DB7BE0004B001D /* ReadiumLCP.xcframework in Frameworks */,
+				2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */,
 				6E76E9C0265FF36600885D26 /* SwiftSoup.xcframework in Frameworks */,
+				2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */,
 				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				6E7733BD26660A1C008318C3 /* KingfisherSwiftUI.xcframework in Frameworks */,
 				6E76E9B4265FF35500885D26 /* GCDWebServer.xcframework in Frameworks */,
-				2A107C8C26613068007DCA20 /* R2Shared.framework in Frameworks */,
 				6E76E9C2265FF36900885D26 /* ZIPFoundation.xcframework in Frameworks */,
+				2A73B8F626DB7BE1004B001D /* ReadiumOPDS.xcframework in Frameworks */,
 				6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */,
-				2A107C9026613068007DCA20 /* ReadiumOPDS.framework in Frameworks */,
+				2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */,
 				17C3957C8FAD6C8F240E2079 /* Pods_YetAnotherEBookReader.framework in Frameworks */,
 				4E430763E1DF7DC24FA6D571 /* Pods_YetAnotherEBookReader.framework in Frameworks */,
 			);
@@ -1058,10 +1047,11 @@
 				6EBDDA9C266E0C45008E888D /* Realm.framework */,
 				6EBDDA9D266E0C45008E888D /* RealmSwift.framework */,
 				6E1CDBC4266C69F000F49276 /* FolioReaderKit.framework */,
-				2A107C8626613068007DCA20 /* R2Navigator.framework */,
-				2A107C8726613068007DCA20 /* R2Shared.framework */,
-				2A107C8826613068007DCA20 /* R2Streamer.framework */,
-				2A107C8926613068007DCA20 /* ReadiumOPDS.framework */,
+				2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */,
+				2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */,
+				2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */,
+				2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */,
+				2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */,
 				6EBDDAB2266E0FB0008E888D /* AEXML.xcframework */,
 				6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */,
 				6EBDDAB0266E0F98008E888D /* FontBlaster.xcframework */,

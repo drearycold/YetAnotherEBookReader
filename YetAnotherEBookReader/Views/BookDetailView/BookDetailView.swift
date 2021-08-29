@@ -640,6 +640,7 @@ struct BookDetailView: View {
         previewViewModel.url = bookFileUrl
         previewViewModel.format = format
         previewViewModel.reader = reader
+        previewViewModel.toc = "Initializing"
         
         modelData.calibreServerService.getBookManifest(book: book, format: format) { data in
             guard let data = data else { return }
