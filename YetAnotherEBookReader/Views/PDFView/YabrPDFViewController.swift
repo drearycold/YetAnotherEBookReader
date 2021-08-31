@@ -721,7 +721,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         }
         
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
+        guard let realmConfig = getBookPreferenceConfig(book: modelData!.readingBook!, format: Format.PDF),
+              let realm = try? Realm(configuration: realmConfig)
+        else { return }
+        
         let pdfOptionsRealm = PDFOptionsRealm()
         pdfOptionsRealm.id = modelData!.readingBook!.id
         pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
@@ -737,7 +740,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
             NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: pdfOptionsRealm.id), pdfOptionsRealm.libraryName)
         )
-        try! realm.write {
+        try? realm.write {
             realm.delete(pdfOptionsRealmResult)
             realm.add(pdfOptionsRealm)
         }
