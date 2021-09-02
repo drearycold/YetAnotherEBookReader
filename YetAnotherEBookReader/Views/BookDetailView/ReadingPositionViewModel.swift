@@ -8,14 +8,17 @@
 import Foundation
 
 class ReadingPositionListViewModel: ObservableObject {
-    var modelData: ModelData
+    @Published var modelData: ModelData
     @Published var book: CalibreBook
+    
+    @Published var positions: [BookDeviceReadingPosition]
     
     var modified = false
     
-    init(modelData: ModelData, book: CalibreBook) {
+    init(modelData: ModelData, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.modelData = modelData
         self.book = book
+        self.positions = book.readPos.getDevices()
     }
     
     func removePosition(_ deviceName: String) {
@@ -25,17 +28,17 @@ class ReadingPositionListViewModel: ObservableObject {
 }
 
 class ReadingPositionDetailViewModel: ObservableObject {
-    var modelData: ModelData
-    @Published var book: CalibreBook
+    @Published var modelData: ModelData
+    @Published var listModel: ReadingPositionListViewModel
     @Published var position: BookDeviceReadingPosition
     
     @Published var selectedFormat = Format.UNKNOWN
     @Published var selectedFormatReader = ReaderType.UNSUPPORTED
     @Published var startPage = ""
     
-    init (modelData: ModelData, book: CalibreBook, position: BookDeviceReadingPosition) {
+    init (modelData: ModelData, listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
         self.modelData = modelData
-        self.book = book
+        self.listModel = listModel
         self.position = position
         
         if let format = modelData.formatOfReader(readerName: position.readerName) {

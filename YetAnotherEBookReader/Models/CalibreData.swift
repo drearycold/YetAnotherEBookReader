@@ -201,9 +201,9 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         }
         
         let url = URL(string: "\(library.server.serverUrl)/get/thumb/\(id)/\(keyEncoded)?sz=300x400&username=\(library.server.username)")
-        if url != nil {
-            print("coverURL: \(url!.absoluteString)")
-        }
+//        if url != nil {
+//            print("coverURL: \(url!.absoluteString)")
+//        }
         return url
     }
     var commentBaseURL : URL? {

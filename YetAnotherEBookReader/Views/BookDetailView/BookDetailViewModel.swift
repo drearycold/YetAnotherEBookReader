@@ -11,4 +11,7 @@ class BookDetailViewModel: ObservableObject {
     
     var readingPositionListViewModel: ReadingPositionListViewModel!
     
+    init() {
+        print("BookDetailViewModel INIT")
+    }
 }

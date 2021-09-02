@@ -51,14 +51,13 @@ struct BookDetailView: View {
     @State private var shelfName = ""
     @State private var shelfNameCustomized = false
     
-    @ObservedObject private var _viewModel = BookDetailViewModel()
+    @StateObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
         ScrollView {
             if let book = modelData.readingBook {
                 viewContent(book: book, isCompat: sizeClass == .compact)
                 .onAppear() {
-                    resetStates()
                     modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
@@ -75,7 +74,6 @@ struct BookDetailView: View {
         }
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
-                resetStates()
                 modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
             }
         }
@@ -476,7 +474,6 @@ struct BookDetailView: View {
                         if let coverUrl = book.coverURL {
                             modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                         }
-                        resetStates()
                         modelData.calibreServerService.getMetadataNew(oldbook: book) { newbook in
                             initStates(book: newbook)
                         }
@@ -548,7 +545,6 @@ struct BookDetailView: View {
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 guard let book = modelData.readingBook else { return }
-                    _viewModel.readingPositionListViewModel = ReadingPositionListViewModel(modelData: modelData, book: book)
                     presentingReadPositionList = true
             }) {
                 Image(systemName: "book")
@@ -576,47 +572,50 @@ struct BookDetailView: View {
             return
         }
         let json:[Any] = [[book.id], false]
-        do {
-            let data = try JSONSerialization.data(withJSONObject: json, options: [])
+        
+        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else { return }
             
-            var request = URLRequest(url: endpointUrl)
-            request.httpMethod = "POST"
-            request.httpBody = data
-            request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.addValue("application/json", forHTTPHeaderField: "Accept")
-            
-            let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                if let error = error {
-                    // self.handleClientError(error)
-                    defaultLog.warning("error: \(error.localizedDescription)")
-                    return
-                }
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode) else {
-                    // self.handleServerError(response)
-                    defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                    return
-                }
-                
-                if let mimeType = httpResponse.mimeType, mimeType == "application/json" {
-                    DispatchQueue.main.async {
-                        handleBookDeleted()
-                    }
-                }
+        var request = URLRequest(url: endpointUrl)
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                // self.handleClientError(error)
+                defaultLog.warning("error: \(error.localizedDescription)")
+                return
+            }
+            guard let httpResponse = response as? HTTPURLResponse,
+                  (200...299).contains(httpResponse.statusCode) else {
+                // self.handleServerError(response)
+                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                return
             }
             
-            task.resume()
-            
-        }catch{
+            if let mimeType = httpResponse.mimeType, mimeType == "application/json" {
+                DispatchQueue.main.async {
+                    handleBookDeleted()
+                }
+            }
         }
-    }
-    
-    func resetStates() {
+        
+        task.resume()
     }
     
     func initStates(book: CalibreBook) {
         shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
         shelfNameCustomized = !book.tags.contains(shelfName)
+        
+        if _viewModel.readingPositionListViewModel == nil {
+            _viewModel.readingPositionListViewModel = ReadingPositionListViewModel(
+                modelData: modelData, book: book, positions: book.readPos.getDevices()
+            )
+        } else {
+            _viewModel.readingPositionListViewModel.book = book
+            _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+        }
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {

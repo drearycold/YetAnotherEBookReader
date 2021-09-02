@@ -18,7 +18,8 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     var yabrFolioReaderPageDelegate: YabrFolioReaderPageDelegate!
     
     var folioReaderPreferenceProvider: FolioReaderPreferenceProvider?
-    
+    var folioReaderHighlightProvider: FolioReaderHighlightProvider?
+
     func open(bookReadingPosition: BookDeviceReadingPosition) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
@@ -43,7 +44,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     }
 
     override func viewDidDisappear(_ animated: Bool) {
-        updateReadingPosition(self.folioReader)
+        //updateReadingPosition(self.folioReader)
         
         super.viewDidDisappear(animated)
     }
@@ -110,6 +111,23 @@ extension EpubFolioReaderContainer {
             return preferenceProvider
         }
     }
+    
+    func folioReaderHighlightProvider(_ folioReader: FolioReader) -> FolioReaderHighlightProvider {
+        if let highlightProvider = folioReaderHighlightProvider {
+            return highlightProvider
+        } else {
+            guard let book = modelData?.readingBook,
+                  let format = modelData?.readerInfo?.format,
+                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  else { return FolioReaderDummyHighlightProvider() }
+            let highlightProvider = FolioReaderRealmHighlightProvider(folioReader, realmConfig: realmConfig)
+            self.folioReaderHighlightProvider = highlightProvider
+            
+            return highlightProvider
+        }
+    }
+    
+    
 }
 
 class FolioReaderPreferenceRealm: Object {
@@ -338,4 +356,203 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         }
     }
     
+}
+
+class FolioReaderHighlightRealm: Object {
+    @objc open dynamic var bookId: String!
+    @objc open dynamic var content: String!
+    @objc open dynamic var contentPost: String!
+    @objc open dynamic var contentPre: String!
+    @objc open dynamic var date: Date!
+    @objc open dynamic var highlightId: String!
+    @objc open dynamic var page: Int = 0
+    @objc open dynamic var type: Int = 0
+    @objc open dynamic var startOffset: Int = -1
+    @objc open dynamic var endOffset: Int = -1
+    @objc open dynamic var noteForHighlight: String?
+    @objc open dynamic var cfiStart: String?
+    @objc open dynamic var cfiEnd: String?
+
+    override open class func primaryKey()-> String {
+        return "highlightId"
+    }
+    
+    func fromHighlight(_ highlight: Highlight) {
+        bookId = highlight.bookId
+        content = highlight.content
+        contentPost = highlight.contentPost
+        contentPre = highlight.contentPre
+        date = highlight.date
+        highlightId = highlight.highlightId
+        page = highlight.page
+        type = highlight.type
+        startOffset = highlight.startOffset
+        endOffset = highlight.endOffset
+        noteForHighlight = highlight.noteForHighlight
+        cfiStart = highlight.cfiStart
+        cfiEnd = highlight.cfiEnd
+    }
+    
+    func toHighlight() -> Highlight {
+        let highlight = Highlight()
+        highlight.bookId = bookId
+        highlight.content = content
+        highlight.contentPost = contentPost
+        highlight.contentPre = contentPre
+        highlight.date = date
+        highlight.highlightId = highlightId
+        highlight.page = page
+        highlight.type = type
+        highlight.style = HighlightStyle.classForStyle(type)
+        highlight.startOffset = startOffset
+        highlight.endOffset = endOffset
+        highlight.noteForHighlight = noteForHighlight
+        highlight.cfiStart = cfiStart
+        highlight.cfiEnd = cfiEnd
+        
+        highlight.encodeContents()
+        
+        return highlight
+    }
+}
+
+public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
+    let folioReader: FolioReader
+    
+    let realm: Realm?
+
+    init(_ folioReader: FolioReader, realmConfig: Realm.Configuration) {
+        self.folioReader = folioReader
+        realm = try? Realm(configuration: realmConfig)
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: Highlight, completion: Completion?) {
+        print("highlight added \(highlight)")
+        
+        var error: NSError? = nil
+        defer {
+            completion?(error)
+        }
+        
+        guard let realm = self.realm else {
+            error = NSError(domain: "Realm Error", code: -1, userInfo: nil)
+            return
+        }
+        do {
+            let highlightRealm = FolioReaderHighlightRealm()
+            highlightRealm.fromHighlight(highlight)
+            
+            try realm.write {
+                realm.add(highlightRealm, update: .all)
+            }
+        } catch let e as NSError {
+            print("Error on persist highlight: \(e)")
+            error = e
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
+        print("highlight removed \(highlightId)")
+        
+        guard let realm = realm else { return }
+        
+        do {
+            guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
+                    NSPredicate(format:"highlightId = %@", highlightId)
+            ).toArray(FolioReaderHighlightRealm.self).first else { return }
+            
+            try realm.write {
+                realm.delete(highlightRealm)
+            }
+        } catch let error as NSError {
+            print("Error on remove highlight by id: \(error)")
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: HighlightStyle) {
+        print("highlight updated \(highlightId) \(style)")
+
+        guard let realm = realm else { return }
+        do {
+            guard let highlight = realm.objects(FolioReaderHighlightRealm.self).filter(
+                NSPredicate(format:"highlightId = %@", highlightId)
+            ).toArray(FolioReaderHighlightRealm.self).first else { return }
+            
+            try realm.write {
+                highlight.type = style.rawValue
+            }
+        } catch let error as NSError {
+            print("Error on updateById: \(error)")
+        }
+
+    }
+
+    public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> Highlight? {
+        print("highlight getById \(highlightId)")
+
+        guard let realm = realm else { return nil }
+        
+        guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
+                NSPredicate(format:"highlightId = %@", highlightId)
+        ).toArray(FolioReaderHighlightRealm.self).first else { return nil }
+        
+        return highlightRealm.toHighlight()
+        
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [Highlight] {
+        print("highlight allByBookId \(bookId) \(page ?? 0)")
+
+        guard let realm = realm else { return [] }
+
+        var predicate = NSPredicate(format: "bookId = %@", bookId)
+        if let page = page {
+            predicate = NSPredicate(format: "bookId = %@ && page = %@", bookId, page)
+        }
+
+        let highlights = realm.objects(FolioReaderHighlightRealm.self).filter(predicate).toArray(FolioReaderHighlightRealm.self).map {
+            $0.toHighlight()
+        }.sorted()
+        print("highlight allByBookId \(highlights)")
+        
+        return highlights
+        
+    }
+
+    public func folioReaderHighlight(_ folioReader: FolioReader) -> [Highlight] {
+        print("highlight all")
+        
+        guard let realm = realm else { return [] }
+
+        let highlights = realm.objects(FolioReaderHighlightRealm.self).toArray(FolioReaderHighlightRealm.self).map {
+            $0.toHighlight()
+        }
+        print("highlight all \(highlights)")
+        
+        return highlights
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: Highlight) {
+        print("highlight saveNoteFor \(highlight)")
+
+        guard let realm = realm else { return }
+        do {
+            guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
+                NSPredicate(format:"highlightId = %@", highlight.highlightId)
+            ).toArray(FolioReaderHighlightRealm.self).first else { return }
+        
+            try realm.write {
+                highlightRealm.noteForHighlight = highlight.noteForHighlight
+            }
+        } catch let error as NSError {
+            print("Error on updateById: \(error)")
+        }
+        
+    }
+}
+
+extension Results {
+    func toArray<T>(_ ofType: T.Type) -> [T] {
+        return compactMap { $0 as? T }
+    }
 }

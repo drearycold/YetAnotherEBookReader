@@ -423,7 +423,34 @@ final class ModelData: ObservableObject {
                 print("ERROR booksInShelfRealm missing library \($0)")
                 return
             }
-            let book = self.convert(library: library, bookRealm: $0)
+            
+            var book = self.convert(library: library, bookRealm: $0)
+            
+            book.formats.forEach { formatRaw, formatInfo in
+                guard let format = Format(rawValue: formatRaw) else {
+//                    var formatInfo = formatInfo
+//                    formatInfo.cached = false
+//                    book.formats[formatRaw] = formatInfo
+                    return
+                }
+                var formatInfoNew = formatInfo
+                if let cacheInfo = getCacheInfo(book: book, format: format),
+                   let modified = cacheInfo.1 {
+                    formatInfoNew.cached = true
+                    formatInfoNew.cacheSize = cacheInfo.0
+                    formatInfoNew.cacheMTime = modified
+                } else {
+                    formatInfoNew.cached = false
+                    formatInfoNew.cacheSize = 0
+                    formatInfoNew.cacheMTime = Date.distantPast
+                }
+                
+                if formatInfoNew.cached != formatInfo.cached {
+                    book.formats[formatRaw] = formatInfoNew
+                    self.updateBook(book: book)
+                }
+            }
+            
             self.booksInShelf[book.inShelfId] = book
             
             print("booksInShelfRealm \(book.inShelfId)")

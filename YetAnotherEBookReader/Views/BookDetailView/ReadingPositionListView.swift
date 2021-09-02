@@ -18,12 +18,12 @@ struct ReadingPositionListView: View {
         NavigationView {
             VStack(alignment: .leading) {
                 List {
-                    ForEach(_positionViewModel.book.readPos.getDevices(), id: \.id) { position in
+                    ForEach(_positionViewModel.positions, id: \.id) { position in
                         NavigationLink(
                             destination: ReadingPositionDetailView(
                                 viewModel: ReadingPositionDetailViewModel(
                                     modelData: _positionViewModel.modelData,
-                                    book: _positionViewModel.book,
+                                    listModel: _positionViewModel,
                                     position: position)
                             )
                         ) {
@@ -36,10 +36,7 @@ struct ReadingPositionListView: View {
                                         .foregroundColor(Color(UIColor.systemRed))
                                 }
                             }
-                            
                         }
-                        
-                        
                     }
                     .onDelete(perform: { indexSet in
                         let deviceNames = indexSet.reduce(into: [String]()) { result, index in
@@ -66,7 +63,7 @@ struct ReadingPositionListView: View {
                                 destination: ReadingPositionDetailView(
                                     viewModel: ReadingPositionDetailViewModel(
                                         modelData: _positionViewModel.modelData,
-                                        book: _positionViewModel.book,
+                                        listModel: _positionViewModel,
                                         position: _positionViewModel.modelData.getInitialReadingPosition(book: _positionViewModel.book, format: format, reader: reader))
                                 )
                             ) {
@@ -98,7 +95,8 @@ struct ReadingPositionView_Previews: PreviewProvider {
     static var previews: some View {
         ReadingPositionListView(viewModel: ReadingPositionListViewModel(
             modelData: modelData,
-            book: modelData.readingBook!
+            book: modelData.readingBook!,
+            positions: modelData.readingBook!.readPos.getDevices()
         ))
             
     }

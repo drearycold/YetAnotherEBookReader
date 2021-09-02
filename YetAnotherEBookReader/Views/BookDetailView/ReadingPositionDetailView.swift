@@ -28,10 +28,25 @@ struct ReadingPositionDetailView: View {
                     .frame(minWidth: 32, minHeight: 24)
                 VStack(alignment: .leading) {
                     Text("\(_VM.position.id) with \(_VM.position.readerName)")
-                    Text("Chapter: \(_VM.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines)), \(String(format: "%.2f%% Left", 100 - _VM.position.lastChapterProgress))")
-                    Text("Book: Page \(_VM.position.lastReadPage) / \(_VM.position.maxPage), \(String(format: "%.2f%% Left", 100 - _VM.position.lastProgress))")
+                    
+                    Text("Chapter: \(_VM.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))")
+                    
+                    HStack {
+                        Spacer()
+                        Text("\(String(format: "%.2f%% Left", 100 - _VM.position.lastChapterProgress))")
+                    }
+                    
+                    Text("Book: Page \(_VM.position.lastReadPage) / \(_VM.position.maxPage)")
+                    
+                    HStack {
+                        Spacer()
+                        Text("\(String(format: "%.2f%% Left", 100 - _VM.position.lastProgress))")
+                    }
                     #if DEBUG
-                    Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
+                    HStack {
+                        Spacer()
+                        Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
+                    }
                     #endif
                 }
                 
@@ -47,7 +62,7 @@ struct ReadingPositionDetailView: View {
                         .frame(minWidth: 40, alignment: .trailing)
                     Picker("Format", selection: $_VM.selectedFormat) {
                         ForEach(Format.allCases) { format in
-                            if _VM.book.formats[format.rawValue] != nil {
+                            if _VM.listModel.book.formats[format.rawValue] != nil {
                                 Text(format.rawValue).tag(format)
                             }
                         }
@@ -94,14 +109,20 @@ struct ReadingPositionDetailView: View {
                 Spacer()
                 
                 Button(action: {
-                    guard let formatInfo = _VM.book.formats[_VM.selectedFormat.rawValue],
+                    guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue],
                           formatInfo.cached else {
                         alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(_VM.selectedFormat.rawValue) first")
                         return
                     }
-                    readAction(book: _VM.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
+                    readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
                 }) {
                     Text("Continue Reading")
+                }
+                
+                Button(action:{
+                    _VM.position.lastReadPage += 1
+                }) {
+                    Text("Test Progress")
                 }
                 
                 Spacer()
@@ -110,49 +131,53 @@ struct ReadingPositionDetailView: View {
             .disabled(_VM.selectedFormat == Format.UNKNOWN || _VM.selectedFormatReader == ReaderType.UNSUPPORTED)
         }
         .fixedSize(horizontal: true, vertical: false)
-        .onChange(of: _VM.modelData.updatedReadingPosition) { value in
-            if let selectedPosition = _VM.modelData.readerInfo?.position {
-                if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
-                    return
-                }
-                if _VM.modelData.updatedReadingPosition < selectedPosition {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                    }
-                } else if selectedPosition << _VM.modelData.updatedReadingPosition {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                    }
-                }
-                else {
-                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
-                }
-            }
-        }
         .alert(item: $alertItem) { item in
             if item.id == "ForwardProgress" {
                 return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
+                    updatePosition()
                 }), secondaryButton: .cancel())
             }
             if item.id == "BackwardProgress" {
                 return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    _VM.modelData.updateCurrentPosition(alertDelegate: self)
+                    updatePosition()
                 }), secondaryButton: .cancel())
             }
             if item.id == "ReadingPosition" {
                 return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    guard let formatInfo = _VM.book.formats[_VM.selectedFormat.rawValue] else {
+                    guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue] else {
                         return
                     }
-                    readAction(book: _VM.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
+                    readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
                 }), secondaryButton: .cancel())
             }
             return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
-        .fullScreenCover(isPresented: $presentingReadSheet, onDismiss: {presentingReadSheet = false} ) {
+        .fullScreenCover(
+            isPresented: $presentingReadSheet,
+            onDismiss: {
+                presentingReadSheet = false
+                
+                if let selectedPosition = _VM.modelData.readerInfo?.position {
+                    if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
+                        return
+                    }
+                    if _VM.modelData.updatedReadingPosition < selectedPosition {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
+                        }
+                    } else if selectedPosition << _VM.modelData.updatedReadingPosition {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
+                        }
+                    }
+                    else {
+                        updatePosition()
+                    }
+                }
+            } ) {
             if let readerInfo = _VM.modelData.readerInfo {
                 YabrEBookReader(readerInfo: readerInfo)
+                    .environmentObject(_VM.modelData)
             } else {
                 Text("Nil Book")
             }
@@ -180,6 +205,17 @@ struct ReadingPositionDetailView: View {
         
     }
 
+    func updatePosition() {
+        _VM.modelData.updateCurrentPosition(alertDelegate: self)
+        
+        if let book = _VM.modelData.readingBook {
+            _VM.listModel.book = book
+            _VM.listModel.positions = book.readPos.getDevices()
+            if let position = book.readPos.getPosition(_VM.position.id) {
+                _VM.position = position
+            }
+        }
+    }
 }
 
 extension ReadingPositionDetailView : AlertDelegate {
@@ -192,10 +228,11 @@ struct ReadingPositionDetailView_Previews: PreviewProvider {
     @StateObject static var modelData = ModelData(mock: true)
 
     static var previews: some View {
+        let listModel = ReadingPositionListViewModel(modelData: modelData, book: modelData.readingBook!, positions: modelData.readingBook!.readPos.getDevices())
         ReadingPositionDetailView(
             viewModel: ReadingPositionDetailViewModel(
                 modelData: modelData,
-                book: modelData.readingBook!,
+                listModel: listModel,
                 position: modelData.readingBook!.readPos.getDevices().first!
             )
         )

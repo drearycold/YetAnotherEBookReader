@@ -482,7 +482,7 @@ struct CalibreServerService {
                 
                 deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
                 deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
+                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
                 deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
                 deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
                 deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
