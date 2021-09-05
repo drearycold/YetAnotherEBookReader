@@ -31,7 +31,7 @@ class EpubReadiumReaderContainer: EPUBViewController {
             
             modelData?.updatedReadingPosition.lastReadChapter = updatedReadingPosition.3
             
-            modelData?.updatedReadingPosition.readerName = "ReadiumReader"
+            modelData?.updatedReadingPosition.readerName = ReaderType.ReadiumEPUB.rawValue
         }))
         
         navigationItem.leftBarButtonItem = closeItem

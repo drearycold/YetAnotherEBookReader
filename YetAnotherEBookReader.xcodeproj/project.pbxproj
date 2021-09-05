@@ -163,7 +163,6 @@
 		2A3EB96726B6432F000D70F1 /* OPDSRootTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D5D2663CB55007DCA20 /* OPDSRootTableViewController.swift */; };
 		2A3EB96826B6432F000D70F1 /* OPDSPublicationInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D602663CB55007DCA20 /* OPDSPublicationInfoViewController.swift */; };
 		2A3EB96926B6432F000D70F1 /* OPDSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D5E2663CB55007DCA20 /* OPDSModule.swift */; };
-		2A3EB96A26B6432F000D70F1 /* ImageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */; };
 		2A3EB96B26B6432F000D70F1 /* ReaderFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107DA32663CB55007DCA20 /* ReaderFactory.swift */; };
 		2A3EB96C26B6432F000D70F1 /* LibraryFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D782663CB55007DCA20 /* LibraryFactory.swift */; };
 		2A3EB96D26B6432F000D70F1 /* ReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D992663CB55007DCA20 /* ReaderViewController.swift */; };
@@ -181,7 +180,6 @@
 		2A3EB97926B6432F000D70F1 /* LibraryError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D772663CB55007DCA20 /* LibraryError.swift */; };
 		2A3EB97A26B6432F000D70F1 /* LibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D6E2663CB55007DCA20 /* LibraryViewController.swift */; };
 		2A3EB97B26B6432F000D70F1 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9142261ED7E5004AA7C0 /* Constants.swift */; };
-		2A3EB97C26B6432F000D70F1 /* GoodreadsSyncConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* GoodreadsSyncConnector.swift */; };
 		2A3EB97E26B6432F000D70F1 /* Minizip.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; };
 		2A3EB98026B6432F000D70F1 /* SQLite.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; };
 		2A3EB98226B6432F000D70F1 /* Fuzi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; };
@@ -853,6 +851,8 @@
 		2A2C38D926C4AF9D007E2F3B /* Network */ = {
 			isa = PBXGroup;
 			children = (
+				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
+				2AC340D22647A23600A477ED /* GoodreadsSyncConnector.swift */,
 				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */,
 				2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */,
@@ -1002,12 +1002,10 @@
 				2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */,
 				2ABB913E261EC359004AA7C0 /* CalibreData.swift */,
 				2ABB9142261ED7E5004AA7C0 /* Constants.swift */,
-				2AC340D22647A23600A477ED /* GoodreadsSyncConnector.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
 				2ACE265826A921230037FCB4 /* RealmModel.swift */,
-				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
 				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 			);
 			path = Models;
@@ -1456,7 +1454,6 @@
 				2A3EB96726B6432F000D70F1 /* OPDSRootTableViewController.swift in Sources */,
 				2A3EB96826B6432F000D70F1 /* OPDSPublicationInfoViewController.swift in Sources */,
 				2A3EB96926B6432F000D70F1 /* OPDSModule.swift in Sources */,
-				2A3EB96A26B6432F000D70F1 /* ImageRequest.swift in Sources */,
 				2A3EB96B26B6432F000D70F1 /* ReaderFactory.swift in Sources */,
 				2A3EB96C26B6432F000D70F1 /* LibraryFactory.swift in Sources */,
 				2A3EB96D26B6432F000D70F1 /* ReaderViewController.swift in Sources */,
@@ -1474,7 +1471,6 @@
 				2A3EB97926B6432F000D70F1 /* LibraryError.swift in Sources */,
 				2A3EB97A26B6432F000D70F1 /* LibraryViewController.swift in Sources */,
 				2A3EB97B26B6432F000D70F1 /* Constants.swift in Sources */,
-				2A3EB97C26B6432F000D70F1 /* GoodreadsSyncConnector.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

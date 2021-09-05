@@ -7,6 +7,7 @@
 
 import Foundation
 import OSLog
+import Combine
 
 struct CalibreServerService {
     var modelData: ModelData
@@ -682,10 +683,17 @@ struct CalibreServerService {
     }
     
     func setCredential(server: CalibreServer, task: URLSessionDataTask) {
-        guard server.username.count > 0 && server.password.count > 0 else { return }
-        guard let url = task.originalRequest?.url,
+        if let protectionSpace = getProtectionSpace(server: server),
+            let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {
+            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
+        }
+    }
+    
+    func getProtectionSpace(server: CalibreServer) -> URLProtectionSpace? {
+        guard server.username.count > 0 && server.password.count > 0,
+              let url = getServerUrlByReachability(server: server),
               let host = url.host
-        else { return }
+        else { return nil }
         
         var authMethod = NSURLAuthenticationMethodDefault
         if url.scheme == "http" {
@@ -694,15 +702,11 @@ struct CalibreServerService {
         if url.scheme == "https" {
             authMethod = NSURLAuthenticationMethodHTTPBasic
         }
-        let protectionSpace = URLProtectionSpace.init(host: host,
-                                                      port: url.port ?? 0,
-                                                      protocol: url.scheme,
-                                                      realm: "calibre",
-                                                      authenticationMethod: authMethod)
-        if let credentials = URLCredentialStorage.shared.credentials(for: protectionSpace),
-           let credential = credentials.filter({ $0.key == server.username }).first?.value {
-            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
-        }
+        return URLProtectionSpace.init(host: host,
+                                       port: url.port ?? 0,
+                                       protocol: url.scheme,
+                                       realm: "calibre",
+                                       authenticationMethod: authMethod)
     }
     
     func getServerUrlByReachability(server: CalibreServer) -> URL? {
@@ -745,7 +749,7 @@ struct CalibreServerService {
                                                           authenticationMethod: authMethod)
             let userCredential = URLCredential(user: server.username,
                                                password: server.password,
-                                               persistence: .forSession)
+                                               persistence: .permanent)
             URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
         }
 
@@ -807,6 +811,275 @@ struct CalibreServerService {
         serverInfo.probingTask = task
         task.resume()
     }
+    
+    
+    // MARK: - Combine style below
+    
+    func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
+        
+        guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
+            return -1
+        }
+        
+        endpointURLComponent.path = "/book-set-last-read-position/\(book.library.key)/\(book.id)/\(format.rawValue)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
+        let entry = CalibreBookLastReadPositionEntry(device: position.id, cfi: position.cfi, epoch: position.epoch, pos_frac: position.lastProgress / 100)
+        guard let postData = try? JSONEncoder().encode(entry) else {
+            return -2
+        }
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = postData
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
+            .tryMap { output in
+                print("setLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
+            .replaceError(with: [:])
+            .eraseToAnyPublisher()
+            .sink(
+                receiveCompletion: { completion in
+                    print("setLastReadPosition \(completion)")
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        fatalError(error.localizedDescription)
+                    }
+                },
+                receiveValue: { results in
+                    print("setLastReadPosition count=\(results.count)")
+                    results.forEach { result in
+                        print("setLastReadPosition \(result)")
+                    }
+                }
+            )
+        
+        return 0
+    }
+    
+    func getLastReadPosition(book: CalibreBook, formats: [Format]) -> Int {
+        guard formats.isEmpty == false,
+              var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
+            return -1
+        }
+        
+        let which = formats.map { "\(book.id)-\($0.rawValue)" }.joined(separator: "_")
+        
+        endpointURLComponent.path = "/book-get-last-read-position/\(book.library.key)/\(which)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
+            .tryMap { output in
+                print("getLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
+            .replaceError(with: [:])
+            .eraseToAnyPublisher()
+            .sink(
+                receiveCompletion: { completion in
+                    print("getLastReadPosition \(completion)")
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        fatalError(error.localizedDescription)
+                    }
+                },
+                receiveValue: { results in
+                    print("getLastReadPosition count=\(results.count)")
+                    results.forEach { result in
+                        print("getLastReadPositionResult \(result)")
+                    }
+                }
+            )
+        
+        return 0
+    }
+    
+    func updateAnnotations(book: CalibreBook, format: Format, highlights: [CalibreBookAnnotationEntry]) -> Int {
+        guard highlights.isEmpty == false,
+              var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
+            return -1
+        }
+
+        endpointURLComponent.path = "/book-update-annotations/\(book.library.key)/\(book.id)/\(format.rawValue)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+
+        let entry = ["\(book.id):\(format.rawValue)":highlights]
+        guard let postData = try? JSONEncoder().encode(entry) else {
+            return -2
+        }
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = postData
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
+            .tryMap { output in
+                print("updateAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+
+                return output.data
+            }
+            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
+            .replaceError(with: [:])
+            .eraseToAnyPublisher()
+            .sink(
+                receiveCompletion: { completion in
+                    print("updateAnnotations \(completion)")
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        fatalError(error.localizedDescription)
+                    }
+                },
+                receiveValue: { results in
+                    print("updateAnnotations count=\(results.count)")
+                    results.forEach { result in
+                        print("updateAnnotations \(result)")
+                    }
+                }
+            )
+
+        return 0
+    }
+    
+    func getAnnotations(book: CalibreBook, formats: [Format]) -> Int {
+        guard formats.isEmpty == false,
+              var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
+            return -1
+        }
+        
+        let which = formats.map { "\(book.id)-\($0.rawValue)" }.joined(separator: "_")
+        
+        endpointURLComponent.path = "/book-get-annotations/\(book.library.key)/\(which)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
+        /*
+         {
+           "6:EPUB": {
+             "last_read_positions": [
+               {
+                 "device": "Mine",
+                 "cfi": "/2/4/2/2/2/2/4/2/8/2/1:105",
+                 "epoch": 1630591286.91118,
+                 "pos_frac": 0.1
+               },
+               {
+                 "device": "iPad Pro (11-inch) (3rd generation)",
+                 "cfi": "/12/4/2/4",
+                 "epoch": 1630818264.6980531,
+                 "pos_frac": 0.1923076923076923
+               }
+             ],
+             "annotations_map": {
+               "highlight": [
+                 {
+                   "end_cfi": "/2/4/2/2/2/2/4/2/8/2/1:134",
+                   "highlighted_text": "但愿在讨论这个令人感兴趣的问题时，激励我的只是对真理的热爱",
+                   "spine_index": 4,
+                   "spine_name": "populationch00.html",
+                   "start_cfi": "/2/4/2/2/2/2/4/2/8/2/1:105",
+                   "style": {
+                     "kind": "color",
+                     "type": "builtin",
+                     "which": "yellow"
+                   },
+                   "timestamp": "2021-09-01T06:22:52.491Z",
+                   "toc_family_titles": [
+                     "序"
+                   ],
+                   "type": "highlight",
+                   "uuid": "bXNJ7u7JhxE2k-CxAURl4A"
+                 }
+               ]
+             }
+           }
+         }
+         */
+        
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
+            .tryMap { output in
+                print("getAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: CalibreBookAnnotationsResult].self, decoder: JSONDecoder())
+            .replaceError(with: [:])
+            .eraseToAnyPublisher()
+            .sink(
+                receiveCompletion: { completion in
+                    print("getAnnotations \(completion)")
+                    switch completion {
+                    case .finished:
+                        break
+                    case .failure(let error):
+                        fatalError(error.localizedDescription)
+                    }
+                },
+                receiveValue: { results in
+                    print("getAnnotations count=\(results.count)")
+                    formats.forEach { format in
+                        guard let result = results["\(book.id):\(format.rawValue)"] else { return }
+                        print("getAnnotations \(result)")
+                        if let highlightResult = result.annotations_map["highlight"],
+                            let realmConfig = getBookPreferenceConfig(book: book, format: format),
+                            let bookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
+                            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+                            highlightProvider.folioReaderHighlight(bookId: bookId, added: highlightResult)
+                        }
+                    }
+                }
+            )
+        
+        return 0
+    }
 }
 
 struct CalibreServerInfo: Identifiable {
@@ -821,4 +1094,73 @@ struct CalibreServerInfo: Identifiable {
     var probingTask: URLSessionDataTask?
     var defaultLibrary: String
     var libraryMap: [String:String]
+}
+
+class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {
+    let username: String
+    
+    init(_ username: String) {
+        self.username = username
+    }
+    
+    func urlSession(_ session: URLSession,
+                        task: URLSessionTask,
+                  didReceive challenge: URLAuthenticationChallenge,
+                  completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        guard challenge.previousFailureCount < 3 else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+        
+        print("CalibreServerTaskDelegate \(task) \(challenge.previousFailureCount) \(challenge.protectionSpace)")
+        
+        let credentials = URLCredentialStorage.shared.credentials(for: challenge.protectionSpace)
+        completionHandler(.useCredential, credentials?[username])
+    }
+}
+
+func uuidFolioToCalibre(_ identifier: String) -> String? {
+    guard let tempUuid = NSUUID(uuidString: identifier) else {
+        return nil
+    }
+    var tempUuidBytes: UInt8 = 0
+    tempUuid.getBytes(&tempUuidBytes)
+    let data = Data(bytes: &tempUuidBytes, count: 16)
+    let base64 = data.base64EncodedString(options: NSData.Base64EncodingOptions())
+    return base64ToBase64URL(base64: base64)
+}
+
+func uuidCalibreToFolio(_ shortenedIdentifier: String?) -> String? {
+    // Expand an identifier out of a CBAdvertisementDataLocalNameKey or service characteristic.
+    guard let shortenedIdentifier = shortenedIdentifier else {
+        return nil
+    }
+    // Rehydrate the shortenedIdentifier
+    let shortenedIdentifierWithDoubleEquals = base64urlToBase64(base64url: shortenedIdentifier)
+    guard let data = Data(base64Encoded: shortenedIdentifierWithDoubleEquals),
+          let uuidBytes = data.withUnsafeBytes({ $0.baseAddress?.assumingMemoryBound(to: UInt8.self) })
+    else { return nil }
+    
+    let tempUuid = NSUUID(uuidBytes: uuidBytes)
+    
+    return tempUuid.uuidString
+}
+
+func base64urlToBase64(base64url: String) -> String {
+    var base64 = base64url
+        .replacingOccurrences(of: "-", with: "+")
+        .replacingOccurrences(of: "_", with: "/")
+    let paddingNum = 4 - base64.count % 4
+    if paddingNum != 4 {
+        base64.append(String(repeating: "=", count: paddingNum))
+    }
+    return base64
+}
+
+func base64ToBase64URL(base64: String) -> String {
+    let base64url = base64
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    return base64url
 }

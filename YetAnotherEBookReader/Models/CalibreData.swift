@@ -303,6 +303,8 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var furthestReadPage = 0
     var furthestReadChapter = ""
     var lastPosition = [0, 0, 0]
+    var cfi = "/"
+    var epoch = 0.0
     
     var description: String {
         return """
@@ -356,3 +358,68 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     }
 }
 
+struct CalibreBookLastReadPositionEntry: Codable {
+    var device: String = ""
+    var cfi: String = ""
+    var epoch: Double = 0.0
+    var pos_frac: Double = 0.0
+}
+
+struct CalibreBookAnnotationEntry: Codable {
+    /*
+     {
+         "end_cfi": "/2/4/2/2/2/2/4/2/8/2/1:134",
+         "highlighted_text": "但愿在讨论这个令人感兴趣的问题时，激励我的只是对真理的热爱",
+         "spine_index": 4,
+         "spine_name": "populationch00.html",
+         "start_cfi": "/2/4/2/2/2/2/4/2/8/2/1:105",
+         "style": {
+           "kind": "color",
+           "type": "builtin",
+           "which": "yellow"
+         },
+         "timestamp": "2021-09-01T06:22:52.491Z",
+         "toc_family_titles": [
+           "序"
+         ],
+         "type": "highlight",
+         "uuid": "bXNJ7u7JhxE2k-CxAURl4A"
+     }
+     */
+    var uuid: String
+    var type: String
+
+    var startCfi: String
+    var endCfi: String
+    var highlightedText: String
+    var style:[String:String]
+    var timestamp: String
+
+    var spineName: String
+    var spineIndex: Int
+    var tocFamilyTitles: [String]
+    
+    var notes: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case uuid
+        case type
+        
+        case startCfi = "start_cfi"
+        case endCfi = "end_cfi"
+        case highlightedText = "highlighted_text"
+        case style
+        case timestamp
+
+        case spineName = "spine_name"
+        case spineIndex = "spine_index"
+        case tocFamilyTitles = "toc_family_titles"
+        
+        case notes
+    }
+}
+
+struct CalibreBookAnnotationsResult: Codable {
+    var last_read_positions: [CalibreBookLastReadPositionEntry]
+    var annotations_map: [String: [CalibreBookAnnotationEntry]]
+}

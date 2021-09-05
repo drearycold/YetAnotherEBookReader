@@ -264,6 +264,8 @@ final class ModelData: ObservableObject {
 
     lazy var calibreServerService = CalibreServerService(modelData: self)
     
+    var calibreServiceCancellable: AnyCancellable?
+    
     init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -1169,10 +1171,20 @@ final class ModelData: ObservableObject {
         
         self.updateBook(book: readingBook)
         
+        calibreServerService.setLastReadPosition(book: readingBook, format: readerInfo.format, position: updatedReadingPosition)
+        
+        if let realmConfig = getBookPreferenceConfig(book: readingBook, format: readerInfo.format),
+           let bookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
+            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+            
+            let highlights = highlightProvider.folioReaderHighlight(bookId: bookId)
+            calibreServerService.updateAnnotations(book: readingBook, format: readerInfo.format, highlights: highlights)
+        }
+        
         guard let readPosColumnName = calibreLibraries[readingBook.library.id]?.readPosColumnName else {
             return
         }
-            
+
         let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: readPosColumnName, alertDelegate: alertDelegate) { [self] in
             if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
                let library = calibreLibraries[readingBook.library.id],

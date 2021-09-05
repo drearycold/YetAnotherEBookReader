@@ -474,9 +474,7 @@ struct BookDetailView: View {
                         if let coverUrl = book.coverURL {
                             modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                         }
-                        modelData.calibreServerService.getMetadataNew(oldbook: book) { newbook in
-                            initStates(book: newbook)
-                        }
+                        modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
                     }
                 }
             }) {
@@ -545,7 +543,9 @@ struct BookDetailView: View {
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 guard let book = modelData.readingBook else { return }
-                    presentingReadPositionList = true
+                _viewModel.readingPositionListViewModel.book = book
+                _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+                presentingReadPositionList = true
             }) {
                 Image(systemName: "book")
             }.disabled(modelData.readingBook?.inShelf == false)
@@ -616,6 +616,11 @@ struct BookDetailView: View {
             _viewModel.readingPositionListViewModel.book = book
             _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
         }
+        
+        modelData.calibreServerService.getAnnotations(
+            book: book,
+            formats: book.formats.keys.compactMap { Format(rawValue: $0) }
+        )
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {

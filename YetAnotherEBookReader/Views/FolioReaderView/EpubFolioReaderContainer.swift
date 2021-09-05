@@ -89,6 +89,10 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         updatedReadingPosition.lastPosition[2] = Int(pageOffsetY.rounded())
         updatedReadingPosition.lastReadPage = pageNumber
         
+        if let cfi = savedPosition["cfi"] as? String {
+            updatedReadingPosition.cfi = cfi
+        }
+        
         updatedReadingPosition.readerName = "FolioReader"
         
         modelData?.updatedReadingPosition = updatedReadingPosition
@@ -120,7 +124,7 @@ extension EpubFolioReaderContainer {
                   let format = modelData?.readerInfo?.format,
                   let realmConfig = getBookPreferenceConfig(book: book, format: format)
                   else { return FolioReaderDummyHighlightProvider() }
-            let highlightProvider = FolioReaderRealmHighlightProvider(folioReader, realmConfig: realmConfig)
+            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
             self.folioReaderHighlightProvider = highlightProvider
             
             return highlightProvider
@@ -417,12 +421,9 @@ class FolioReaderHighlightRealm: Object {
 }
 
 public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
-    let folioReader: FolioReader
-    
     let realm: Realm?
 
-    init(_ folioReader: FolioReader, realmConfig: Realm.Configuration) {
-        self.folioReader = folioReader
+    init(realmConfig: Realm.Configuration) {
         realm = try? Realm(configuration: realmConfig)
     }
     
@@ -555,4 +556,93 @@ extension Results {
     func toArray<T>(_ ofType: T.Type) -> [T] {
         return compactMap { $0 as? T }
     }
+}
+
+extension FolioReaderRealmHighlightProvider {
+    
+    func folioReaderHighlight(bookId: String) -> [CalibreBookAnnotationEntry] {
+        print("highlight all")
+        
+        guard let realm = realm else { return [] }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        let highlights = realm.objects(FolioReaderHighlightRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookId))
+            .toArray(FolioReaderHighlightRealm.self)
+            .compactMap { object -> CalibreBookAnnotationEntry? in
+                guard let uuid = uuidFolioToCalibre(object.highlightId),
+                      let cfiStart = object.cfiStart,
+                      let cfiEnd = object.cfiEnd
+                else { return nil }
+                return CalibreBookAnnotationEntry(
+                    uuid: uuid,
+                    type: "highlight",
+                    startCfi: cfiStart,
+                    endCfi: cfiEnd,
+                    highlightedText: object.content,
+                    style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyle(object.type)],
+                    timestamp: dateFormatter.string(from: object.date),
+                    spineName: "TODO",
+                    spineIndex: object.page,
+                    tocFamilyTitles: ["TODO"]
+                )
+            }
+        print("highlight all \(highlights)")
+        
+        return highlights
+    }
+    
+    func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationEntry]) {
+        print("highlight added \(highlights)")
+        
+        guard let realm = self.realm else {
+            return
+        }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        highlights.forEach { hl in
+            guard let highlightId = uuidCalibreToFolio(hl.uuid),
+                  let date = dateFormatter.date(from: hl.timestamp)
+                  else { return }
+            
+            let results = realm.objects(FolioReaderHighlightRealm.self).filter(
+                    NSPredicate(format:"highlightId = %@", highlightId)
+            )
+            
+            if results.isEmpty {
+                let highlightRealm = FolioReaderHighlightRealm()
+
+                highlightRealm.bookId = bookId
+                highlightRealm.content = hl.highlightedText
+                highlightRealm.contentPost = ""
+                highlightRealm.contentPre = ""
+                highlightRealm.date = date
+                highlightRealm.highlightId = highlightId
+                highlightRealm.page = hl.spineIndex
+                highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
+                highlightRealm.startOffset = 0
+                highlightRealm.endOffset = 0
+                highlightRealm.noteForHighlight = ""
+                highlightRealm.cfiStart = hl.startCfi
+                highlightRealm.cfiEnd = hl.endCfi
+                
+                try? realm.write {
+                    realm.add(highlightRealm, update: .all)
+                }
+            } else if let highlightRealm = results.first {
+                try? realm.write {
+                    highlightRealm.date = date
+                    highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
+                    highlightRealm.noteForHighlight = hl.notes
+                    realm.add(highlightRealm, update: .modified)
+                }
+            }
+        }
+            
+    }
+    
 }
