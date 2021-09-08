@@ -375,7 +375,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
             pdfView!.displaysRTL = true
         }
         
-        print("handlePageChange \(pageIndicator.title(for: .normal)) \(pageSlider.value)")
+        print("handlePageChange \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
         
         if pdfView!.frame.width < 1.0 {
             // have not been populated, cannot fit content

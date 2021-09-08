@@ -817,19 +817,22 @@ final class ModelData: ObservableObject {
         bookRealm.inShelf = book.inShelf
         bookRealm.inShelfName = book.inShelfName
         
-//        bookRealm.formatsData = try! JSONSerialization.data(withJSONObject: book.formats, options: []) as NSData
-        let encoder = JSONEncoder()
-        bookRealm.formatsData = try! encoder.encode(book.formats) as NSData
-        
-        bookRealm.identifiersData = try! JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
-        
-        let deviceMapSerialize = book.readPos.getCopy().compactMapValues { (value) -> Any? in
-            try? JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
-        }
-        bookRealm.readPosData = try! JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
-        
-        try! realm.write {
-            realm.add(bookRealm, update: .modified)
+        do {
+            let encoder = JSONEncoder()
+            bookRealm.formatsData = try encoder.encode(book.formats) as NSData
+            
+            bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
+            
+            let deviceMapSerialize = try book.readPos.getCopy().compactMapValues { (value) throws -> Any? in
+                try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
+            }
+            bookRealm.readPosData = try! JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
+            
+            try realm.write {
+                realm.add(bookRealm, update: .modified)
+            }
+        } catch {
+            print("updateBookRealm error=\(error.localizedDescription)")
         }
     }
     
