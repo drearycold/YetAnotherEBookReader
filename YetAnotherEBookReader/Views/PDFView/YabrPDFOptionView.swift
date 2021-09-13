@@ -26,11 +26,11 @@ enum PDFReadDirection: String, CaseIterable, Identifiable {
 struct PDFOptions: Equatable {
     var selectedAutoScaler = PDFAutoScaler.Width
     var readingDirection = PDFReadDirection.LtR_TtB
-    var hMarginAutoScaler = 5.0
-    var vMarginAutoScaler = 5.0
-    var hMarginDetectStrength = 2.0
-    var vMarginDetectStrength = 2.0
-    var lastScale = -1.0
+    var hMarginAutoScaler = CGFloat(5.0)
+    var vMarginAutoScaler = CGFloat(5.0)
+    var hMarginDetectStrength = CGFloat(2.0)
+    var vMarginDetectStrength = CGFloat(2.0)
+    var lastScale = CGFloat(-1.0)
     var rememberInPagePosition = true
 }
 

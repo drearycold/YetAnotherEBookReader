@@ -165,19 +165,6 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             pdfViewController.open(pdfURL: bookURL, position: bookPosition)
             pdfViewController.modelData = modelData
             
-            let stackView = UIStackView(frame: nav.toolbar.frame)
-            stackView.distribution = .fill
-            stackView.alignment = .fill
-            stackView.axis = .horizontal
-            stackView.spacing = 16.0
-            
-            stackView.addArrangedSubview(pdfViewController.pagePrevButton)
-            stackView.addArrangedSubview(pdfViewController.pageSlider)
-            stackView.addArrangedSubview(pdfViewController.pageIndicator)
-            stackView.addArrangedSubview(pdfViewController.pageNextButton)
-            
-            let toolbarView = UIBarButtonItem(customView: stackView)
-            pdfViewController.setToolbarItems([toolbarView], animated: false)
             
             return nav
         }

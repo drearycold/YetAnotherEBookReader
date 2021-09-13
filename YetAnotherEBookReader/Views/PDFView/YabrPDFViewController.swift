@@ -14,15 +14,16 @@ import SwiftUI
 import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
-class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDelegate {
+class YabrPDFViewController: UIViewController, PDFViewDelegate {
     var modelData: ModelData?
-    var pdfView: PDFView?
+    var pdfView = PDFView()
     var mDictView = MDictViewContainer()
-    var lastScale = CGFloat(-1.0)
     
     let logger = Logger()
     
     var historyMenu = UIMenu(title: "History", children: [])
+    
+    var stackView = UIStackView()
     
     var pageSlider = UISlider()
     var pageIndicator = UIButton()
@@ -39,41 +40,59 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         
     var bookTitle: String!
     
-    var initialPosition: BookDeviceReadingPosition!
-
-    func open(pdfURL: URL, position: BookDeviceReadingPosition) {
+    var pageViewPositionHistory = [Int: PageViewPosition]() //key is 1-based (pdfView.currentPage?.pageRef?.pageNumber)
+    
+    var realm: Realm?
+    
+    func open(pdfURL: URL, position: BookDeviceReadingPosition) -> Int {
         self.bookTitle = modelData?.readingBook?.title
-        
-        pdfView = PDFView()
-        
-        pdfView!.displayMode = PDFDisplayMode.singlePage
-        pdfView!.displayDirection = PDFDisplayDirection.horizontal
-        pdfView!.interpolationQuality = PDFInterpolationQuality.high
-        
-        // pdfView!.usePageViewController(true, withViewOptions: nil)
-        
-//        setToolbarItems(
-//            [   UIBarButtonItem.flexibleSpace(),
-//                UIBarButtonItem(title: "0 / 0", style: .plain, target: self, action: nil),
-//                UIBarButtonItem.flexibleSpace()
-//            ], animated: true)
-        
-        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView!)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .PDFViewScaleChanged, object: pdfView!)
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .PDFViewDisplayBoxChanged, object: pdfView!)
-        
         
         logger.info("pdfURL: \(pdfURL.absoluteString)")
         logger.info("Exist: \(FileManager.default.fileExists(atPath: pdfURL.path))")
         
-        let pdfDoc = PDFDocument(url: pdfURL)
-        pdfDoc?.delegate = self
-        logger.info("pdfDoc: \(pdfDoc?.majorVersion ?? -1) \(pdfDoc?.minorVersion ?? -1)")
+        guard let pdfDoc = PDFDocument(url: pdfURL) else { return -1 }
         
-        initialPosition = position
+        pdfDoc.delegate = self
+        logger.info("pdfDoc: \(pdfDoc.majorVersion) \(pdfDoc.minorVersion)")
+        pdfView.document = pdfDoc
+
+        if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
+            realm = try? Realm(configuration: config)
+            if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
+                pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
+                pdfOptions.readingDirection = PDFReadDirection.init(rawValue: pdfOptionsRealm.readingDirection) ?? .LtR_TtB
+                pdfOptions.hMarginAutoScaler = CGFloat(pdfOptionsRealm.hMarginAutoScaler)
+                pdfOptions.vMarginAutoScaler = CGFloat(pdfOptionsRealm.vMarginAutoScaler)
+                pdfOptions.hMarginDetectStrength = CGFloat(pdfOptionsRealm.hMarginDetectStrength)
+                pdfOptions.vMarginDetectStrength = CGFloat(pdfOptionsRealm.vMarginDetectStrength)
+                pdfOptions.lastScale = CGFloat(pdfOptionsRealm.lastScale)
+                pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
+            }
+        }
         
-        pdfView!.document = pdfDoc
-        pdfView!.autoScales = false
+        let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
+        
+        pageViewPositionHistory[intialPageNum] = PageViewPosition(
+            scaler: pdfOptions.lastScale,
+            point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
+        )
+        return 0
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        
+        pdfView.displayMode = PDFDisplayMode.singlePage
+        pdfView.displayDirection = PDFDisplayDirection.horizontal
+        pdfView.interpolationQuality = PDFInterpolationQuality.high
+        
+        // pdfView.usePageViewController(true, withViewOptions: nil)
+        
+        NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleScaleChange(_:)), name: .PDFViewScaleChanged, object: pdfView)
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDisplayBoxChange(_:)), name: .PDFViewDisplayBoxChanged, object: pdfView)
+        
+        pdfView.autoScales = false
 
         pageIndicator.setTitle("0 / 0", for: .normal)
         pageIndicator.setTitleColor(.label, for: .normal)
@@ -82,127 +101,129 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         }), for: .primaryActionTriggered)
         
         pageSlider.minimumValue = 1
-        pageSlider.maximumValue = Float(pdfView!.document!.pageCount)
-        //pageSlider.frame = CGRect(x:0, y:0, width: 200, height: 40);
+        pageSlider.maximumValue = Float(pdfView.document!.pageCount)
         pageSlider.isContinuous = true
         pageSlider.addAction(UIAction(handler: { (action) in
-            if let destPage = self.pdfView!.document!.page(at: Int(self.pageSlider.value.rounded())) {
-                self.pdfView!.go(to: destPage)
+            if let destPage = self.pdfView.document?.page(at: Int(self.pageSlider.value.rounded())) {
+                self.pdfView.go(to: destPage)
             }
         }), for: .valueChanged)
 
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
         pagePrevButton.addAction(UIAction(handler: { (action) in
-            if self.pdfView!.displaysRTL {
-                self.pdfView!.goToNextPage(self.pagePrevButton)
+            self.updatePageViewPositionHistory()
+
+            if self.pdfView.displaysRTL {
+                self.pdfView.goToNextPage(self.pagePrevButton)
             } else {
-                self.pdfView!.goToPreviousPage(self.pagePrevButton)
-            }
-        }), for: .primaryActionTriggered)
-        pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
-        pageNextButton.addAction(UIAction(handler: { (action) in
-            if self.pdfView!.displaysRTL {
-                self.pdfView!.goToPreviousPage(self.pagePrevButton)
-            } else {
-                self.pdfView!.goToNextPage(self.pagePrevButton)
+                self.pdfView.goToPreviousPage(self.pagePrevButton)
             }
         }), for: .primaryActionTriggered)
         
+        pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
+        pageNextButton.addAction(UIAction(handler: { (action) in
+            self.updatePageViewPositionHistory()
+
+            if self.pdfView.displaysRTL {
+                self.pdfView.goToPreviousPage(self.pagePrevButton)
+            } else {
+                self.pdfView.goToNextPage(self.pagePrevButton)
+            }
+        }), for: .primaryActionTriggered)
+        
+        stackView.distribution = .fill
+        stackView.alignment = .fill
+        stackView.axis = .horizontal
+        stackView.spacing = 16.0
+        
+        stackView.addArrangedSubview(pagePrevButton)
+        stackView.addArrangedSubview(pageSlider)
+        stackView.addArrangedSubview(pageIndicator)
+        stackView.addArrangedSubview(pageNextButton)
+        
+        let toolbarView = UIBarButtonItem(customView: stackView)
+        setToolbarItems([toolbarView], animated: false)
         
         navigationItem.setLeftBarButtonItems([
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
             UIBarButtonItem(title: "Zoom Out", image: UIImage(systemName: "minus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
-                self.pdfView?.scaleFactor = (self.pdfView?.scaleFactor ?? 1.0) / 1.1
+                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) / 1.1
             })),
             UIBarButtonItem(title: "Zoom In", image: UIImage(systemName: "plus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
-                self.pdfView?.scaleFactor = (self.pdfView?.scaleFactor ?? 1.0) * 1.1
+                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) * 1.1
             })),
         ], animated: true)
         
-        navigationItem.setRightBarButtonItems(
-            [
-                UIBarButtonItem(image: UIImage(systemName: "clock"), menu: historyMenu),
-                UIBarButtonItem(
-                    title: "Options",
-                    image: UIImage(systemName: "doc.badge.gearshape"),
-                    primaryAction:
-                        UIAction(
-                            handler: { (UIAction) in
-                                //self.present(self.optionMenu, animated: true, completion: nil)
-                                let optionView = PDFOptionView(pdfViewController: self)
-                                
-                                let optionViewController = UIHostingController(rootView: optionView.fixedSize())
-                                //optionViewController.preferredContentSize = CGSize(width:340, height:450)
-                                optionViewController.modalPresentationStyle = .popover
-                                optionViewController.popoverPresentationController!.barButtonItem = self.navigationItem.rightBarButtonItems![1]
-                                
-                                self.present(
-                                    optionViewController,
-                                    animated: true, completion: nil)
-                                
-                            }
-                        )
-                ),
-                
-                
-                
+        navigationItem.setRightBarButtonItems([
+            UIBarButtonItem(image: UIImage(systemName: "clock"), menu: historyMenu),
+            UIBarButtonItem(
+                title: "Options",
+                image: UIImage(systemName: "doc.badge.gearshape"),
+                primaryAction: UIAction { (UIAction) in
+                    //self.present(self.optionMenu, animated: true, completion: nil)
+                    let optionView = PDFOptionView(pdfViewController: self)
+                    
+                    let optionViewController = UIHostingController(rootView: optionView.fixedSize())
+                    //optionViewController.preferredContentSize = CGSize(width:340, height:450)
+                    optionViewController.modalPresentationStyle = .popover
+                    optionViewController.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItems?[1]
+                    
+                    self.present(optionViewController, animated: true, completion: nil)
+                }
+            ),
         ], animated: true)
         
         var tableOfContents = [UIMenuElement]()
         
-        if var outlineRoot = pdfDoc?.outlineRoot {
+        if let pdfDoc = pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
             while outlineRoot.numberOfChildren == 1 {
                 outlineRoot = outlineRoot.child(at: 0)!
             }
             for i in (0..<outlineRoot.numberOfChildren) {
                 tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
                 tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { (action) in
-                    if let dest = outlineRoot.child(at: i)?.destination {
-                        if let curPage = self.pdfView?.currentPage {
-                            
-                            var historyItems = self.historyMenu.children
-                            var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
-                            if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)) {
-                                if let curPageSelectionText = curPageSelection.string, curPageSelectionText.count > 5 {
-                                    print("\(curPageSelectionText)")
-                                    if var curPageOutlineItem = pdfDoc?.outlineItem(for: curPageSelection) {
-                                        while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
-                                            curPageOutlineItem = curPageOutlineItem.parent!
-                                        }
-                                        lastHistoryLabel += " of \(curPageOutlineItem.label!)"
-                                    }
-                                }
-                            }
-                            historyItems.append(UIAction(title: lastHistoryLabel) { (action) in
-                                var children = self.historyMenu.children
-                                if let index = children.firstIndex(of: action) {
-                                    children.removeLast(children.count - index)
-                                    self.historyMenu = self.historyMenu.replacingChildren(children)
-                                    if var rightBarButtonItems = self.navigationItem.rightBarButtonItems {
-                                        rightBarButtonItems[0] = UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)
-                                        self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
-                                    }
-                                }
-                                self.pdfView!.go(to: curPage)
-                            })
-                            self.historyMenu = self.historyMenu.replacingChildren(historyItems)
-                            if var rightBarButtonItems = self.navigationItem.rightBarButtonItems {
-                                rightBarButtonItems[0] = UIBarButtonItem(image: UIImage(systemName: "clock"), menu: self.historyMenu)
-                                self.navigationItem.setRightBarButtonItems(rightBarButtonItems, animated: true)
-                            }
-                            
+                    guard let dest = outlineRoot.child(at: i)?.destination,
+                          let curPage = self.pdfView.currentPage
+                    else { return }
+                    
+                    var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
+                    if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
+                       let curPageSelectionText = curPageSelection.string,
+                       curPageSelectionText.count > 5,
+                       var curPageOutlineItem = pdfDoc.outlineItem(for: curPageSelection) {
+                        
+                        print("\(curPageSelectionText)")
+                        while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
+                            curPageOutlineItem = curPageOutlineItem.parent!
                         }
-                        self.pdfView!.go(to: dest)
+                        lastHistoryLabel += " of \(curPageOutlineItem.label!)"
                     }
+                    
+                    var historyItems = self.historyMenu.children
+                    historyItems.append(UIAction(title: lastHistoryLabel) { (action) in
+                        var children = self.historyMenu.children
+                        if let index = children.firstIndex(of: action) {
+                            children.removeLast(children.count - index)
+                            self.historyMenu = self.historyMenu.replacingChildren(children)
+                            let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(children)
+                            self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
+                            self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                        }
+                        self.pdfView.go(to: curPage)
+                    })
+                    
+                    self.historyMenu = self.historyMenu.replacingChildren(historyItems)
+                    let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(historyItems)
+                    self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
+                    self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                        
+                    self.pdfView.go(to: dest)
                 })
                 
             }
         }
         
         let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
-        
-        //navigationItem.setRightBarButton(UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
-        //navigationItem.setRightBarButtonItems([UIBarButtonItem(image: UIImage(systemName: "list.bullet"), menu: navContentsMenu)], animated: true)
         
         titleInfoButton.setTitle("Title", for: .normal)
         titleInfoButton.setTitleColor(.label, for: .normal)
@@ -218,98 +239,50 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(tappedGesture(sender:)))
         tapGestureRecognizer.numberOfTapsRequired = 2
         
-        pdfView!.addGestureRecognizer(tapGestureRecognizer)
+        pdfView.addGestureRecognizer(tapGestureRecognizer)
         
         self.view = pdfView
+        
+        if mDictView.server.count > 0 {
+            UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
+            mDictView.loadViewIfNeeded()
+        }
+        
+        let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
+        
+        if let page = pdfView.document?.page(at: destPageIndex) {
+            pdfView.go(to: page)
+        }
+        
+        if destPageIndex == 0 {
+            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
+        }
+        
+        print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
+        stackView.frame = self.navigationController?.toolbar.frame ?? .zero
     }
     
     override func viewDidAppear(_ animated: Bool) {
-        self.viewSafeAreaInsetsDidChange()
-        self.viewLayoutMarginsDidChange()
+//        self.viewSafeAreaInsetsDidChange()
+//        self.viewLayoutMarginsDidChange()
         
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
-        UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
 //        starDictView.loadViewIfNeeded()
-        mDictView.loadViewIfNeeded()
-        
-        let realm = try! Realm(configuration: Realm.Configuration(schemaVersion: 2))
-        let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: modelData!.readingBook!.id), modelData!.readingBook!.library.name)
-        )
-        if let pdfOptionsRealm = pdfOptionsRealmResult.first {
-            pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
-            pdfOptions.readingDirection = PDFReadDirection.init(rawValue: pdfOptionsRealm.readingDirection) ?? .LtR_TtB
-            pdfOptions.hMarginAutoScaler = pdfOptionsRealm.hMarginAutoScaler
-            pdfOptions.vMarginAutoScaler = pdfOptionsRealm.vMarginAutoScaler
-            pdfOptions.hMarginDetectStrength = pdfOptionsRealm.hMarginDetectStrength
-            pdfOptions.vMarginDetectStrength = pdfOptionsRealm.vMarginDetectStrength
-            pdfOptions.lastScale = pdfOptionsRealm.lastScale
-            pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
-        }
-        
-        var destPageNum = initialPosition.lastPosition[0] - 1
-        if destPageNum < 0 {
-            destPageNum = 0
-        }
-        
-        if let page = pdfView?.document?.page(at: destPageNum) {
-            pdfView?.go(to: page)
-        }
-        
-        if destPageNum == 0 {
-            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
-        }
+        self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
     }
 
     override func viewDidDisappear(_ animated: Bool) {
+        updatePageViewPositionHistory()
         updateReadingProgress()
         
         super.viewDidDisappear(animated)
     }
     
-    class PDFPageWithBackground : PDFPage {
-        override func draw(with box: PDFDisplayBox, to context: CGContext) {
-            // Draw rotated overlay string
-//            UIGraphicsPushContext(context)
-//            context.saveGState()
-//
-//            context.setFillColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
-//
-//            let rect = self.bounds(for: box)
-//
-//            context.fill(CGRect(x: 0, y: 0, width: rect.width, height: rect.height))
-//
-//            context.restoreGState()
-//            UIGraphicsPopContext()
-            
-            // Draw original content
-            super.draw(with: box, to: context)
-            
-            UIGraphicsPushContext(context)
-            context.saveGState()
-            context.setBlendMode(.darken)
-            context.setFillColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
-            let rect = self.bounds(for: box)
-            context.fill(CGRect(x: 0, y: 0, width: rect.width, height: rect.height))
-            context.restoreGState()
-            UIGraphicsPopContext()
-            // print("context \(box.rawValue) \(context.height) \(context.width)")
-            
-            return
-        }
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        updatePageViewPositionHistory()
         
-        override func thumbnail(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
-            let uiImage = super.thumbnail(of: size, for: box)
-            
-            return uiImage
-        }
-    }
-    
-    func classForPage() -> AnyClass {
-        return PDFPageWithBackground.self
-    }
-    
-    override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        
         coordinator.animate { _ in
             
         } completion: { _ in
@@ -321,7 +294,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         print("tappedGesture \(sender.state.rawValue)")
         
         if sender.state == .ended {
-            let frameRect = self.pdfView!.frame
+            let frameRect = self.pdfView.frame
             let tapRect = sender.location(in: self.pdfView)
             print("tappedGesture \(tapRect) in \(frameRect)")
             
@@ -335,137 +308,153 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
                     return
                 }
                 
-                self.pdfView?.scaleFactor = (self.pdfView?.scaleFactor ?? 1.0) * 1.2
+                self.pdfView.scaleFactor = self.pdfView.scaleFactor * 1.2
             }
         }
     }
     
-    @objc private func handlePageChange(notification: Notification)
-    {
+    @objc private func handlePageChange(notification: Notification) {
         var titleLabel = self.bookTitle
-        if var outlineRoot = pdfView?.document?.outlineRoot {
+        guard let curPage = pdfView.currentPage else { return }
+
+        if var outlineRoot = pdfView.document?.outlineRoot {
             while outlineRoot.numberOfChildren == 1 {
                 outlineRoot = outlineRoot.child(at: 0)!
             }
-            if let curPage = self.pdfView?.currentPage {
-                if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)) {
-                    if !curPageSelection.selectionsByLine().isEmpty, var curPageOutlineItem = pdfView?.document?.outlineItem(for: curPageSelection) {
-                        while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
-                            curPageOutlineItem = curPageOutlineItem.parent!
-                        }
-                        if curPageOutlineItem.label != nil && !curPageOutlineItem.label!.isEmpty {
-                            titleLabel = curPageOutlineItem.label
-                        }
-                    }
+            if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
+               !curPageSelection.selectionsByLine().isEmpty,
+               var curPageOutlineItem = pdfView.document?.outlineItem(for: curPageSelection) {
+                while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
+                    curPageOutlineItem = curPageOutlineItem.parent!
+                }
+                if curPageOutlineItem.label != nil && !curPageOutlineItem.label!.isEmpty {
+                    titleLabel = curPageOutlineItem.label
                 }
             }
         }
         self.titleInfoButton.setTitle(titleLabel, for: .normal)
         
-        let curPageNum = pdfView?.currentPage?.pageRef?.pageNumber ?? 1
-        pageIndicator.setTitle("\(curPageNum) / \(pdfView?.document?.pageCount ?? 1)", for: .normal)
+        let curPageNum = pdfView.currentPage?.pageRef?.pageNumber ?? 1
+        pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
         
         if pdfOptions.readingDirection.rawValue.contains("LtR") {
             pageSlider.semanticContentAttribute = .forceLeftToRight
-            pdfView!.displaysRTL = false
+            pdfView.displaysRTL = false
         }
         if pdfOptions.readingDirection.rawValue.contains("RtL") {
             pageSlider.semanticContentAttribute = .forceRightToLeft
-            pdfView!.displaysRTL = true
+            pdfView.displaysRTL = true
         }
         
         print("handlePageChange \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
         
-        if pdfView!.frame.width < 1.0 {
+        if pdfView.frame.width < 1.0 {
             // have not been populated, cannot fit content
             return
         }
+        let boundsForCropBox = curPage.bounds(for: .cropBox)
+        let boundForVisibleContent = getVisibleContentsBound(pdfPage: curPage)
         
-
-        if let page = pdfView?.currentPage {
-            let boundForVisibleContent = getVisibleContentsBound(pdfPage: page)
-            let boundsForCropBox = page.bounds(for: .cropBox)
-            if let curScale = pdfView?.scaleFactor, curScale > 0 {
-                
-                let visibleWidthRatio = 1.0 * Double(boundForVisibleContent.width + 1) / Double(boundsForCropBox.width)
-                let visibleHeightRatio = 1.0 * Double(boundForVisibleContent.height + 1) / Double(boundsForCropBox.height)
-                print("curScale \(curScale) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView!.scaleFactorForSizeToFit)")
-                
-                let curPoint = pdfView!.currentDestination!.point
-                
-                let newDestX = Double(boundForVisibleContent.minX) + 1
-                let newDestY = Double(boundsForCropBox.height) - Double(boundForVisibleContent.minY)
-                
-                let visibleRectInView = pdfView!.convert(
-                    CGRect(x: newDestX,
-                           y: newDestY,
-                           width: Double(boundsForCropBox.width) * visibleWidthRatio,
-                           height: Double(boundsForCropBox.height) * visibleHeightRatio),
-                    from: page)
-                
-                print("pdfView frame \(pdfView!.frame)")
-                
-                print("initialRect \(visibleRectInView)")
-                
-                // let insetsScaleFactor = 0.9
-                let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
-                let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
-                if self.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
+        if let pageViewPosition = pageViewPositionHistory[curPageNum],
+           pageViewPosition.scaler > 0 {
+            let lastDest = PDFDestination(
+                page: curPage,
+                at: pageViewPosition.point
+            )
+            lastDest.zoom = pageViewPosition.scaler
+            print("BEFORE POINT lastDestPoint=\(lastDest.point)")
+            
+            let bottomRight = PDFDestination(
+                page: curPage,
+                at: CGPoint(x: lastDest.point.x + boundsForCropBox.width, y: lastDest.point.y + boundsForCropBox.height)
+            )
+            bottomRight.zoom = 1.0
+            
+            pdfView.scaleFactor = pageViewPosition.scaler
+            
+            pdfView.go(to: bottomRight)
+            pdfView.go(to: lastDest)
+            return
+        }
+        
+        let curScale = pdfView.scaleFactor
+        if curScale > 0 {
+            let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
+            let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
+            print("curScale \(curScale) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView.scaleFactorForSizeToFit)")
+            
+            let newDestX = boundForVisibleContent.minX + 1
+            let newDestY = boundsForCropBox.height - boundForVisibleContent.minY
+            
+            let visibleRectInView = pdfView.convert(
+                CGRect(x: newDestX,
+                       y: newDestY,
+                       width: boundsForCropBox.width * visibleWidthRatio,
+                       height: boundsForCropBox.height * visibleHeightRatio),
+                from: curPage)
+            
+            print("pdfView frame \(pdfView.frame)")
+            
+            print("initialRect \(visibleRectInView)")
+            
+            // let insetsScaleFactor = 0.9
+            let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
+            let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
+            let scaleFactor = { () -> CGFloat in
+                if pdfOptions.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
                     switch pdfOptions.selectedAutoScaler {
                     case .Width:
-                        self.lastScale = pdfView!.scaleFactor * pdfView!.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
+                        return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
                     case .Height:
-                        self.lastScale = pdfView!.scaleFactor * (pdfView!.frame.height - self.navigationController!.navigationBar.frame.height) / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
+                        return pdfView.scaleFactor * (pdfView.frame.height - self.navigationController!.navigationBar.frame.height) / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
                     default:    // including .Page
-                        self.lastScale = min(
-                            pdfView!.scaleFactor * pdfView!.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
-                            pdfView!.scaleFactor * pdfView!.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
+                        return min(
+                            pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
+                            pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
                         )
                     }
-                    
-                }
-                pdfView!.scaleFactor = self.lastScale
-                print("scaleFactor \(self.lastScale)")
-                
-                let navBarFrame = self.navigationController!.navigationBar.frame
-                let navBarFrameHeightInPDF = pdfView!.convert(navBarFrame, to:page).height
-                
-                let viewFrameInPDF = pdfView!.convert(pdfView!.frame, to: page)
-                
-                let newDest = PDFDestination(
-                    page: page,
-                    at: CGPoint(
-                        x: newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * Double(boundsForCropBox.width) + Double(boundsForCropBox.minX),
-                        y: newDestY + Double(navBarFrameHeightInPDF) + Double(boundsForCropBox.minY) + (1.0 - insetsVerticalScaleFactor) / 2 * Double(viewFrameInPDF.height)
-                    )
-                )
-                
-                let bottomRight = PDFDestination(
-                    page: page,
-                    at: CGPoint(x: newDestX + Double(boundsForCropBox.width), y: newDestY + Double(boundsForCropBox.height)))
-                
-                print("BEFORE POINT curPoint=\(curPoint) newDestPoint=\(newDest.point) \(boundsForCropBox)")
-                
-                if pdfOptions.rememberInPagePosition && notification.object != nil, let lastPosition = modelData?.updatedReadingPosition.lastPosition, page.pageRef?.pageNumber == lastPosition[0] {
-                    let lastDest = PDFDestination(
-                        page: page,
-                        at: CGPoint(
-                            x: lastPosition[1],
-                            y: lastPosition[2]
-                        )
-                    )
-                    print("BEFORE POINT lastDestPoint=\(lastDest.point) \(boundsForCropBox)")
-                    pdfView!.go(to: bottomRight)
-                    pdfView!.go(to: lastDest)
                 } else {
-                    pdfView!.go(to: bottomRight)
-                    pdfView!.go(to: newDest)
+                    return pdfOptions.lastScale
                 }
-                
-                print("AFTER POINT curDestPoint=\(pdfView!.currentDestination!.point) \(boundsForCropBox)")
+            }()
+            
+            //pdfView.scaleFactor = self.lastScale
+            print("scaleFactor \(pdfOptions.lastScale)")
+            
+            let navBarFrame = self.navigationController!.navigationBar.frame
+            let navBarFrameHeightInPDF = pdfView.convert(navBarFrame, to:curPage).height
+            let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
+            
+            let newDest = PDFDestination(
+                page: curPage,
+                at: CGPoint(
+                    x: pageViewPositionHistory[curPageNum]?.point.x ??
+                        newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
+                    y:pageViewPositionHistory[curPageNum]?.point.y ??
+                        newDestY + navBarFrameHeightInPDF + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
+                )
+            )
+            
+            print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+//            let bottomRight = PDFDestination(
+//                page: curPage,
+//                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY + boundsForCropBox.height))
+            
+            let bottomRight = PDFDestination(
+                page: curPage,
+                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY - boundsForCropBox.height))
+            
+            pdfView.scaleFactor = scaleFactor
+            pdfView.go(to: bottomRight)
+            
+            print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
 
-            }
+            pdfView.scaleFactor = scaleFactor
+            pdfView.go(to: newDest)
+            
+            print("AFTER POINT curDestPoint=\(pdfView.currentDestination!.point) \(boundsForCropBox)")
+            
         }
 
     }
@@ -485,35 +474,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         }
     }
     
-    func getPixelGreyLevel(pixelIndex: Int, data: UnsafePointer<UInt8>) -> Double {
-        let r = data[pixelIndex]
-        let g = data[pixelIndex + 1]
-        let b = data[pixelIndex + 2]
-        // let a = data[pixelIndex + 3]
-        // print("\(h) \(w) \(r) \(g) \(b) \(a)")
-        
-        if r < 250 && g < 250 && b < 250 {
-            return Double(UInt(255-r) + UInt(255-g) + UInt(255-b) / 3) / 255.0
-            //print("top=\(h) w=\(w) \(r) \(g) \(b) \(a)")
-            //isWhite = false
-            //break
-        } else {
-            return 0.0
-        }
-    }
-    
     func getVisibleContentsBound(pdfPage: PDFPage) -> CGRect{
-        print("pageNumber \(pdfPage.pageRef?.pageNumber)")
-        
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
         let sizeForThumbnailImage = getThumbnailImageSize(boundsForCropBox: boundsForCropBox)
         
         let image = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
-        
-        let cgimage = image.cgImage
-        let provider = cgimage!.dataProvider
-        let providerData = provider!.data
-        let data = CFDataGetBytePtr(providerData)
+        guard let cgimage = image.cgImage else { return boundsForCropBox }
         
         let numberOfComponents = 4
         
@@ -524,121 +490,31 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         
         print("bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
         print("sizeForThumbnailImage \(sizeForThumbnailImage)")
-        print("cgimage width=\(cgimage!.width) height=\(cgimage!.height)")
+        print("image width=\(image.size.width) height=\(image.size.height)")
         
         let align = 8
-        let padding = (align - cgimage!.width % align) % align
+        let padding = (align - Int(image.size.width) % align) % align
         print("CGIMAGE PADDING \(padding)")
         
         //TOP
-        var isWhite = true
-        for h in (0..<(cgimage!.height/4)) {
-            var nonWhiteDensity = 0.0
-            for w in (0..<cgimage!.width) {
-                let pixelIndex = ((Int(cgimage!.width + padding) * h) + w) * numberOfComponents
-                
-                nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data!)
-            }
-            if nonWhiteDensity > 0 {
-                print("nonWhiteDensity h=\(h) density=\(nonWhiteDensity)")
-                if Double(nonWhiteDensity) / Double(cgimage!.width) > pdfOptions.hMarginDetectStrength / 20.0 {
-                    isWhite = false
-                }
-            }
-            //print("isWhite h=\(h) \(isWhite)")
-            if !isWhite {
-                top = h
-                break
-            }
+        if let provider = cgimage.dataProvider,
+              let providerData = provider.data,
+              let data = CFDataGetBytePtr(providerData) {
+            top      = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .up, data: data)
+            bottom   = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .down, data: data)
+            leading  = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .right, data: data)
+            trailing = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .left, data: data)
         }
-        if isWhite {
-            top = cgimage!.height/4
-        }
-        
-        //BOTTOM
-        isWhite = true
-        for h in (0..<(cgimage!.height/4)) {
-            var nonWhiteDensity = 0.0
-            for w in (0..<cgimage!.width) {
-                let pixelIndex = ((Int(cgimage!.width + padding) * (cgimage!.height - h - 1)) + w) * numberOfComponents
-                
-                nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data!)
-            }
-            if nonWhiteDensity > 0 {
-                print("nonWhiteDensity h=\(h) density=\(nonWhiteDensity)")
-                if Double(nonWhiteDensity) / Double(cgimage!.width) > pdfOptions.hMarginDetectStrength / 20.0 {
-                    isWhite = false
-                }
-            }
-            //print("isWhite h=\(h) \(isWhite)")
-            if !isWhite {
-                bottom = cgimage!.height - h - 1
-                break
-            }
-        }
-        if isWhite {
-            bottom = cgimage!.height - cgimage!.height/4 - 1
-        }
-        
-        //LEADING
-        isWhite = true
-        for w in (0..<(cgimage!.width/4)) {
-            var nonWhiteDensity = 0.0
-            for h in (0..<(cgimage!.height)){
-                let pixelIndex = ((Int(cgimage!.width + padding) * (h)) + w) * numberOfComponents
-                
-                nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data!)
-            }
-            if nonWhiteDensity > 0 {
-                print("nonWhiteDensity w=\(w) density=\(nonWhiteDensity)")
-                if Double(nonWhiteDensity) / Double(cgimage!.width) > pdfOptions.vMarginDetectStrength / 20.0 {
-                    isWhite = false
-                }
-            }
-            //print("isWhite w=\(w) \(isWhite)")
-            if !isWhite {
-                leading = w
-                break
-            }
-        }
-        if isWhite {
-            leading = cgimage!.width/4
-        }
-        
-        //TRAILING
-        isWhite = true
-        for w in (0..<(cgimage!.width/4)) {
-            var nonWhiteDensity = 0.0
-            for h in (0..<(cgimage!.height)){
-                let pixelIndex = ((Int(cgimage!.width + padding) * (h)) + (cgimage!.width - w - 1)) * numberOfComponents
-                
-                nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data!)
-            }
-            if nonWhiteDensity > 0 {
-                print("nonWhiteDensity w=\(w) density=\(nonWhiteDensity)")
-                if Double(nonWhiteDensity) / Double(cgimage!.width) > pdfOptions.vMarginDetectStrength / 20.0 {
-                    isWhite = false
-                }
-            }
-            //print("isWhite w=\(w) \(isWhite)")
-            if !isWhite {
-                trailing = cgimage!.width - w - 1
-                break
-            }
-        }
-        if isWhite {
-            trailing = cgimage!.width - cgimage!.width/4 - 1
-        }
-        
+        print("white border \(top) \(bottom) \(leading) \(trailing)")
         
         let imageSize = image.size
         UIGraphicsBeginImageContextWithOptions(imageSize, false, CGFloat.zero)
         image.draw(at: CGPoint.zero)
         let rectangle = CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1)
         UIColor.black.setFill()
-        //UIRectFill(rectangle)
         UIRectFrame(rectangle)
         
+        #if DEBUG
         UIColor.red.setStroke()
         let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
         let drawBounds = CGRect(x: boundsForCropBox.minX * thumbnailScale,
@@ -646,6 +522,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
                                 width: sizeForThumbnailImage.width,
                                 height: sizeForThumbnailImage.height)
         UIRectFrame(drawBounds)
+        #endif
+        
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         
@@ -654,10 +532,110 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
         return CGRect(x: rectangle.minX / thumbnailScale, y: rectangle.minY / thumbnailScale, width: rectangle.width / thumbnailScale, height: rectangle.height / thumbnailScale)
     }
     
+    /*
+     from top to bottom
+     */
+    func getBlankBorderWidth(size: CGSize, padding: Int, numberOfComponents: Int, orientation: CGImagePropertyOrientation, data: UnsafePointer<UInt8>) -> Int {
+        var isWhite = true
+        let lineNumMax = { () -> Int in
+            switch(orientation) {
+            case .up, .down, .upMirrored, .downMirrored:
+                return Int(size.height)
+            case .left, .leftMirrored, .right, .rightMirrored:
+                return Int(size.width)
+            }
+        }()
+        let pixelNumMax = { () -> Int in
+            switch(orientation) {
+            case .up, .down, .upMirrored, .downMirrored:
+                return Int(size.width)
+            case .left, .leftMirrored, .right, .rightMirrored:
+                return Int(size.height)
+            }
+        }()
+        var border = lineNumMax/4
+        let pixelNumInRow = Int(size.width) + padding
+        for line in (1 ..< (lineNumMax/4)) {    //bypassing first line due to noises
+            var nonWhiteDensity = 0.0
+            for pixelInLine in (1 ..< pixelNumMax) {    //bypassing first line due to noises
+                let lineIndex = { () -> Int in
+                    switch(orientation) {
+                    case .up, .upMirrored, .right, .rightMirrored:
+                        return line     //top to bottom & left to right
+                    case .down, .downMirrored, .left, .leftMirrored:
+                        return lineNumMax - line - 1
+                    }
+                }()
+                
+                let pixelIndex = { () -> Int in
+                    switch(orientation) {
+                    case .up, .down, .upMirrored, .downMirrored:
+                        return pixelInLine + pixelNumInRow * lineIndex
+                    case .left, .leftMirrored, .right, .rightMirrored:
+                        return lineIndex + pixelNumInRow * pixelInLine  //pixelInLine is row number of data
+                    }
+                }() * numberOfComponents
+                
+                
+//                let pixelIndex = (
+//                    ( Int(size.width) + padding ) * lineIndex   //locating target line in data
+//                        + pixelInLine                           //moving to pixel
+//                ) * numberOfComponents
+                
+                nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data)
+            }
+            if nonWhiteDensity > 0 {
+                print("nonWhiteDensity h=\(line) density=\(nonWhiteDensity)")
+                if CGFloat(nonWhiteDensity) / CGFloat(pixelNumMax) > pdfOptions.hMarginDetectStrength / 20.0 {
+                    isWhite = false
+                }
+            }
+            //print("isWhite h=\(h) \(isWhite)")
+            if !isWhite {
+                border = line
+                break
+            }
+        }
+        
+        switch(orientation) {
+        case .up, .upMirrored, .right, .rightMirrored:
+            return border     //top to bottom & left to right
+        case .down, .downMirrored, .left, .leftMirrored:
+            return lineNumMax - border - 1
+        }
+        
+//        if bottomUp {
+//            border = Int(size.height) - border - 1
+//        }
+        
+//        return border
+        
+    }
+    
+    func getPixelGreyLevel(pixelIndex: Int, data: UnsafePointer<UInt8>) -> Double {
+        let r = data[pixelIndex]
+        let g = data[pixelIndex + 1]
+        let b = data[pixelIndex + 2]
+        // let a = data[pixelIndex + 3]
+        // print("\(h) \(w) \(r) \(g) \(b) \(a)")
+        
+        if r < 200 && g < 200 && b < 200 {
+            return Double(UInt(255-r) + UInt(255-g) + UInt(255-b) / 3) / 255.0
+            //print("top=\(h) w=\(w) \(r) \(g) \(b) \(a)")
+            //isWhite = false
+            //break
+        } else {
+            return 0.0
+        }
+    }
+    
     func handleOptionsChange(pdfOptions: PDFOptions) {
         print(pdfOptions)
         if self.pdfOptions != pdfOptions {
             self.pdfOptions = pdfOptions
+            if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
+                self.pageViewPositionHistory[pageNum]?.scaler = 0
+            }
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
     }
@@ -668,13 +646,13 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     
     @objc func handleScaleChange(_ sender: Any?)
     {
-        self.lastScale = pdfView!.scaleFactor
-        print("handleScaleChange: \(self.lastScale)")
+        pdfOptions.lastScale = pdfView.scaleFactor
+        print("handleScaleChange: \(pdfOptions.lastScale)")
     }
     
     @objc func handleDisplayBoxChange(_ sender: Any?)
     {
-        print("handleDisplayBoxChange: \(self.pdfView!.currentDestination!)")
+        print("handleDisplayBoxChange: \(self.pdfView.currentDestination!)")
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
@@ -685,81 +663,111 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, PDFDocumentDeleg
     
     func updateReadingProgress() {
         var position = [String : Any]()
-        if let curDest = pdfView?.currentDestination {
-            let pageNum = curDest.page!.pageRef?.pageNumber ?? 1
-            position["pageNumber"] = pageNum
-            position["pageOffsetX"] = curDest.point.x
-            let viewFrameInPDF = pdfView!.convert(pdfView!.frame, to: curDest.page!)
-            let navFrameInPDF = pdfView!.convert(navigationController!.navigationBar.frame, to: curDest.page!)
-            print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
-            position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
-            
-            let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView!.document!.pageCount)
-            
-            var chapterProgress = 0.0
-            let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
-            if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
-                let curIndex = firstIndex.advanced(by: 0)
-                let nextIndex = firstIndex.advanced(by: 1)
-                let chapterStartPageNum = tocList[curIndex].1
-                let chapterEndPageNum = nextIndex < tocList.count ?
-                    tocList[nextIndex].1 + 1 : pdfView!.document!.pageCount + 1
-                if chapterEndPageNum > chapterStartPageNum {
-                    chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
-                }
-            }
-            
-            modelData?.updatedReadingPosition.lastPosition[0] = curDest.page!.pageRef?.pageNumber ?? 1
-            modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
-            modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
-            modelData?.updatedReadingPosition.lastReadPage = curDest.page!.pageRef?.pageNumber ?? 1
-            modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
-            modelData?.updatedReadingPosition.lastProgress = bookProgress
-            modelData?.updatedReadingPosition.lastReadChapter = chapterName
-            modelData?.updatedReadingPosition.readerName = "YabrPDFView"
-            
-//            modelData?.updateCurrentPosition(progress: progress, position: position)
-        }
         
-        guard let realmConfig = getBookPreferenceConfig(book: modelData!.readingBook!, format: Format.PDF),
-              let realm = try? Realm(configuration: realmConfig)
+        guard let curDest = pdfView.currentDestination,
+              let pageNum = curDest.page?.pageRef?.pageNumber
         else { return }
         
-        let pdfOptionsRealm = PDFOptionsRealm()
-        pdfOptionsRealm.id = modelData!.readingBook!.id
-        pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
-        pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
-        pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
-        pdfOptionsRealm.hMarginAutoScaler = pdfOptions.hMarginAutoScaler
-        pdfOptionsRealm.vMarginAutoScaler = pdfOptions.vMarginAutoScaler
-        pdfOptionsRealm.hMarginDetectStrength = pdfOptions.hMarginDetectStrength
-        pdfOptionsRealm.vMarginDetectStrength = pdfOptions.vMarginDetectStrength
-        pdfOptionsRealm.lastScale = pdfOptions.lastScale
-        pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+        position["pageNumber"] = pageNum
+        position["pageOffsetX"] = curDest.point.x
+        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curDest.page!)
+        let navFrameInPDF = pdfView.convert(navigationController!.navigationBar.frame, to: curDest.page!)
+        print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
+        position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
         
-        let pdfOptionsRealmResult = realm.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: pdfOptionsRealm.id), pdfOptionsRealm.libraryName)
-        )
-        try? realm.write {
-            realm.delete(pdfOptionsRealmResult)
-            realm.add(pdfOptionsRealm)
+        let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView.document!.pageCount)
+        
+        var chapterProgress = 0.0
+        let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
+        if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
+            let curIndex = firstIndex.advanced(by: 0)
+            let nextIndex = firstIndex.advanced(by: 1)
+            let chapterStartPageNum = tocList[curIndex].1
+            let chapterEndPageNum = nextIndex < tocList.count ?
+                tocList[nextIndex].1 + 1 : pdfView.document!.pageCount + 1
+            if chapterEndPageNum > chapterStartPageNum {
+                chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
+            }
         }
+        
+        modelData?.updatedReadingPosition.lastPosition[0] = pageNum
+        modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
+        modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
+        modelData?.updatedReadingPosition.lastReadPage = pageNum
+        modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
+        modelData?.updatedReadingPosition.lastProgress = bookProgress
+        modelData?.updatedReadingPosition.lastReadChapter = chapterName
+        modelData?.updatedReadingPosition.readerName = "YabrPDFView"
+            
+//            modelData?.updateCurrentPosition(progress: progress, position: position)
+        
+        if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).filter(
+            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: modelData!.readingBook!.id), modelData!.readingBook!.library.name)
+        ).first {
+            try? realm?.write {
+                pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
+                pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
+                pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
+                pdfOptionsRealm.vMarginAutoScaler = Double(pdfOptions.vMarginAutoScaler)
+                pdfOptionsRealm.hMarginDetectStrength = Double(pdfOptions.hMarginDetectStrength)
+                pdfOptionsRealm.vMarginDetectStrength = Double(pdfOptions.vMarginDetectStrength)
+                pdfOptionsRealm.lastScale = Double(pdfOptions.lastScale)
+                pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+            }
+        } else {
+            let pdfOptionsRealm = PDFOptionsRealm()
+            pdfOptionsRealm.id = modelData!.readingBook!.id
+            pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
+            pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
+            pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
+            pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
+            pdfOptionsRealm.vMarginAutoScaler = Double(pdfOptions.vMarginAutoScaler)
+            pdfOptionsRealm.hMarginDetectStrength = Double(pdfOptions.hMarginDetectStrength)
+            pdfOptionsRealm.vMarginDetectStrength = Double(pdfOptions.vMarginDetectStrength)
+            pdfOptionsRealm.lastScale = Double(pdfOptions.lastScale)
+            pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+            try? realm?.write {
+                realm?.add(pdfOptionsRealm)
+            }
+        }
+        
     }
     
 //    @objc func lookupStarDict() {
-//        if let s = pdfView?.currentSelection?.string {
+//        if let s = pdfView.currentSelection?.string {
 //            print(s)
 //            starDictView.word = s
 //            self.present(starDictView, animated: true, completion: nil)
 //        }
 //    }
     @objc func lookupMDict() {
-        if let s = pdfView?.currentSelection?.string {
+        if let s = pdfView.currentSelection?.string {
             print(s)
             mDictView.title = s
             self.present(mDictView, animated: true, completion: nil)
         }
     }
+    
+    func updatePageViewPositionHistory() {
+        guard let dest = pdfView.currentDestination,
+              let curPage = dest.page,
+              let pageNum = curPage.pageRef?.pageNumber else { return }
+        
+        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
+        let navBarFrame = self.navigationController?.navigationBar.frame ?? CGRect()
+        let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
+
+        let pointUpperLeft = CGPoint(
+            x: dest.point.x,
+            y: dest.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        )
+        pageViewPositionHistory[pageNum] = PageViewPosition(scaler: pdfView.scaleFactor, point: pointUpperLeft)
+    }
+}
+
+struct PageViewPosition {
+    var scaler = CGFloat()
+    var point = CGPoint()
 }
 
 class PDFOptionsRealm: Object {
@@ -773,4 +781,12 @@ class PDFOptionsRealm: Object {
     @objc dynamic var vMarginDetectStrength = 2.0
     @objc dynamic var lastScale = -1.0
     @objc dynamic var rememberInPagePosition = true
+}
+
+extension YabrPDFViewController: PDFDocumentDelegate {
+    func classForPage() -> AnyClass {
+        return PDFPageWithBackground.self
+    }
+    
+    
 }

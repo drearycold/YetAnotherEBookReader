@@ -670,7 +670,7 @@ final class ModelData: ObservableObject {
         let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData! as Data))
                 ?? formatsVer1
         
-        print("CONVERT \(bookRealm.title) \(formatsVer1) \(formatsVer2)")
+        //print("CONVERT \(bookRealm.title) \(formatsVer1) \(formatsVer2)")
         
         var calibreBook = CalibreBook(
             id: bookRealm.id,
