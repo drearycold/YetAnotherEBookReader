@@ -23,11 +23,13 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     var shelfView: SectionShelfView!
     var shelfBookSink: AnyCancellable?
 
-#if canImport(GoogleMobileAds)
+    #if canImport(GoogleMobileAds)
     var bannerSize = kGADAdSizeBanner
     var bannerView: GADBannerView!
     var gadRequestInitialized = false
-#endif
+    #else
+    var bannerSize = CGRect.zero
+    #endif
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
@@ -80,11 +82,13 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         resizeSubviews(to: view.frame.size, to: traitCollection)
         
         //self.updateBookModel()
+        #if canImport(GoogleMobileAds)
         guard gadRequestInitialized == false else { return }
         gadRequestInitialized = true
         let gadRequest = GADRequest()
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
+        #endif
     }
 
     override func viewDidLoad() {
@@ -110,11 +114,6 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         print("SECTIONFRAME \(view.frame) \(kGADAdSizeBanner.size) \(tabBarHeight)")
         
         shelfView.delegate = self
-//        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
-//            DispatchQueue.main.async {
-//                self?.updateBookModel()
-//            }
-//        }
         view.addSubview(shelfView)
         
         bannerView = GADBannerView(
@@ -167,6 +166,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             tabBarHeight = tabBarController.tabBar.frame.height
         }
         
+        #if canImport(GoogleMobileAds)
         if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .regular {
             bannerSize = kGADAdSizeLeaderboard
         }
@@ -182,12 +182,6 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         
         bannerView.adSize = bannerSize
         
-        shelfView.frame = CGRect(
-            x: 0,
-            y: 0,
-            width: size.width,
-            height: size.height - bannerSize.size.height
-        )
         bannerView.frame = CGRect(
             x: (size.width - bannerSize.size.width) / 2,
             y: size.height - bannerSize.size.height,
@@ -195,7 +189,18 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             height: bannerSize.size.height
         )
         
+        #endif
+        
+        shelfView.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: size.width,
+            height: size.height - bannerSize.size.height
+        )
+        
+        #if canImport(GoogleMobileAds)
         print("SECTIONFRAME \(view.frame) \(shelfView.frame) \(bannerView.frame) \(tabBarHeight) \(bannerSize.size)")
+        #endif
     }
     
     override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {

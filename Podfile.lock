@@ -9,7 +9,7 @@ PODS:
     - SSZipArchive (= 2.1.1)
     - ZFDragableModalTransition (= 0.6)
   - FontBlaster (4.1.0)
-  - Google-Mobile-Ads-SDK (8.10.0):
+  - Google-Mobile-Ads-SDK (8.11.0):
     - GoogleAppMeasurement (< 9.0, >= 7.0)
     - GoogleUserMessagingPlatform (>= 1.1)
   - GoogleAppMeasurement (8.7.0):
@@ -46,6 +46,8 @@ PODS:
   - Kingfisher (5.15.8):
     - Kingfisher/Core (= 5.15.8)
   - Kingfisher/Core (5.15.8)
+  - Kingfisher/SwiftUI (5.15.8):
+    - Kingfisher/Core
   - MenuItemKit (3.1.3)
   - nanopb (2.30908.0):
     - nanopb/decode (= 2.30908.0)
@@ -66,6 +68,7 @@ PODS:
 DEPENDENCIES:
   - FolioReaderKit (from `../FolioReaderKit`)
   - Google-Mobile-Ads-SDK
+  - Kingfisher/SwiftUI (~> 5.0)
   - ShelfView (from `../ShelfView-iOS`)
 
 SPEC REPOS:
@@ -93,9 +96,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AEXML: 601f41fcaa7bda7605cad153b0f43db9ec006c0f
-  FolioReaderKit: 8687a81e76968fe645e0ab3df6d63ff5126243bc
+  FolioReaderKit: 4cd9012a3202e9cf4636c7091e9fa5c31a197af6
   FontBlaster: 127aa66419478d1c62926c7fdb39841633344a45
-  Google-Mobile-Ads-SDK: 9c78323a7069cd42ddf1ad2fddbaec889b085091
+  Google-Mobile-Ads-SDK: be2192b51b74d74a6ed70590c2e8275412f1b71e
   GoogleAppMeasurement: 2be61ce546ad074dbe4dd545f222ac6033bb1d9e
   GoogleUserMessagingPlatform: ab890ce5f6620f293a21b6bdd82e416a2c73aeca
   GoogleUtilities: 8de2a97a17e15b6b98e38e8770e2d129a57c0040
@@ -109,6 +112,6 @@ SPEC CHECKSUMS:
   SSZipArchive: 14401ade5f8e82aba1ff03e9f88e9de60937ae60
   ZFDragableModalTransition: 0d294eaaba6edfcb9839595de765f9ca06a4b524
 
-PODFILE CHECKSUM: 7d737c43dd294d8f59c4c7c5ff5f7df424d8de78
+PODFILE CHECKSUM: ec1aa4511a2a64e0f46df6ba012283223dde8ece
 
 COCOAPODS: 1.10.1

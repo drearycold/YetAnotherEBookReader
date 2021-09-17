@@ -11,9 +11,12 @@ import RealmSwift
 import SwiftUI
 import OSLog
 import Kingfisher
+
+import CryptoSwift
+#if canImport(R2Shared)
 import R2Shared
 import R2Streamer
-import CryptoSwift
+#endif
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -1041,8 +1044,8 @@ final class ModelData: ObservableObject {
     
     func onOpenURL(url: URL) {
         guard let localBaseUrl = documentServer?.localBaseUrl else { return }
-        
-        if url.isFileURL && !url.isAppFile {
+
+        if url.isFileURL {
             guard url.startAccessingSecurityScopedResource() else {
                 print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
                 return
@@ -1058,9 +1061,7 @@ final class ModelData: ObservableObject {
             
             url.stopAccessingSecurityScopedResource()
         }
-        if url.isHTTP {
-            
-        }
+        
     }
     
     func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
@@ -1083,6 +1084,7 @@ final class ModelData: ObservableObject {
             guard booksInShelf[book.inShelfId] == nil else {
                 return  //already loaded
             }
+            #if canImport(R2Shared)
             let streamer = Streamer()
             streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
                 guard let publication = try? result.get() else {
@@ -1125,7 +1127,7 @@ final class ModelData: ObservableObject {
                 
                 self.updateBook(book: book)
             }
-                
+            #endif
         }
     }
     

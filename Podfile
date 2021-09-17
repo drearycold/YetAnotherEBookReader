@@ -7,7 +7,7 @@ target 'YetAnotherEBookReader' do
 
   # Pods for YetAnotherEBookReader
   pod 'Google-Mobile-Ads-SDK'
-  # pod 'ShelfView', :git => 'https://github.com/drearycold/ShelfView-iOS', :branch => 'peter_dev'
+  pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
 
@@ -19,5 +19,16 @@ target 'YetAnotherEBookReader' do
   target 'YetAnotherEBookReaderUITests' do
     # Pods for testing
   end
+
+end
+
+target 'YetAnotherEBookReader-Catalyst' do
+  # Comment the next line if you don't want to use dynamic frameworks
+  use_frameworks!
+
+  # Pods for YetAnotherEBookReader
+  pod 'Kingfisher/SwiftUI', '~> 5.0'
+  pod 'ShelfView', :path => '../ShelfView-iOS'  
+  pod 'FolioReaderKit', path: '../FolioReaderKit'
 
 end

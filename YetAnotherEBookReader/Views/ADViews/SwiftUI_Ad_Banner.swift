@@ -5,7 +5,6 @@
 //  Created by 京太郎 on 2021/4/2.
 //
 
-#if canImport(GoogleMobileAds)
 import SwiftUI
 import UIKit
 import GoogleMobileAds
@@ -45,5 +44,3 @@ struct Banner_Previews: PreviewProvider {
         Banner()
     }
 }
-
-#endif

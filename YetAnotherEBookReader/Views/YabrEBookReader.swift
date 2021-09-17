@@ -9,8 +9,10 @@ import Foundation
 import UIKit
 import SwiftUI
 import FolioReaderKit
+#if canImport(R2Shared)
 import R2Shared
 import R2Streamer
+#endif
 
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: UIViewControllerRepresentable {
@@ -38,6 +40,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIViewController {
         let nav = UINavigationController()
+        #if canImport(R2Shared)
         if bookFormat == Format.EPUB && bookReader == ReaderType.ReadiumEPUB {
             
             guard let server = PublicationServer() else {
@@ -83,6 +86,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             return nav
         }
+        #endif
         
         if bookFormat == Format.EPUB && bookReader == ReaderType.FolioReader {
             let readerConfiguration = FolioReaderConfiguration(bookURL: bookURL)
@@ -102,6 +106,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return epubReaderContainer
         }
         
+        #if canImport(R2Shared)
         if bookFormat == Format.PDF && bookReader == ReaderType.ReadiumPDF {
             let nav = UINavigationController()
             
@@ -153,6 +158,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             return nav
         }
+        #endif
         
         if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDFView {
             let pdfViewController = YabrPDFViewController()
@@ -169,6 +175,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             return nav
         }
         
+        #if canImport(R2Shared)
         if bookFormat == Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
             let nav = UINavigationController()
             
@@ -218,6 +225,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             return nav
         }
+        #endif
         
         return UIViewController()
     }
