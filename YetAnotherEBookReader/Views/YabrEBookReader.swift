@@ -239,8 +239,8 @@ func FolioReaderConfiguration(bookURL: URL) -> FolioReaderConfig {
     
     #if DEBUG
 //    config.debug.formUnion([.borderHighlight])
-//    config.debug.formUnion([.viewTransition])
-//    config.debug.formUnion([.functionTrace])
+    config.debug.formUnion([.viewTransition])
+    config.debug.formUnion([.functionTrace])
     //config.debug.formUnion([.htmlStyling, .borderHighlight])
     #endif
     // See more at FolioReaderConfig.swift
