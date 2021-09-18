@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		1741595447654CBF38F09522 /* Pods_YetAnotherEBookReader.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A3BD35FBC8C10AAFDF26BF4F /* Pods_YetAnotherEBookReader.framework */; };
-		17C3957C8FAD6C8F240E2079 /* BuildFile in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; };
+		17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */; };
 		2A0EBA86267893740080BF5B /* Downloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA85267893740080BF5B /* Downloader.swift */; };
 		2A0EBA8826798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA8726798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift */; };
@@ -115,8 +115,6 @@
 		2AA07E9126D73239008CE451 /* BookDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */; };
 		2AA07E9326DB4ADD008CE451 /* BookPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */; };
 		2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */; };
-		2AA1F5BA26F4B23200170793 /* GoogleAppMeasurement.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A786726E8F6DF00F3C753 /* GoogleAppMeasurement.xcframework */; platformFilter = ios; };
-		2AA1F5BB26F4B23300170793 /* GoogleAppMeasurement.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A786726E8F6DF00F3C753 /* GoogleAppMeasurement.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2AA5DEB726D3571A00954255 /* ReadingPositionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */; };
 		2AAE409D267849E80058A501 /* LibraryInfoBookRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */; };
 		2AAE409F26784D080058A501 /* LibraryBookListFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */; };
@@ -272,13 +270,11 @@
 		2ADCD86026F4B96200FBAE11 /* PublicationMenuViewController.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D6C2663CB55007DCA20 /* PublicationMenuViewController.strings */; };
 		2ADCD86126F4B96200FBAE11 /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DA12663CB55007DCA20 /* Outline.storyboard */; };
 		2ADCD86926F4B96200FBAE11 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2AEE915B26F47B9700B012B0 /* KingfisherSwiftUI.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; platformFilter = ios; };
-		2AEE915C26F47B9700B012B0 /* KingfisherSwiftUI.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD02675F680006E92E0 /* SettingsView.swift */; };
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
 		31E33B3BEA4691709AC9E3E9 /* Pods_YetAnotherEBookReader_Catalyst.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55271F2BE92C4B4B9870FAEB /* Pods_YetAnotherEBookReader_Catalyst.framework */; };
-		4C8D6A8BE24380426C1F893E /* BuildFile in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; };
-		4E430763E1DF7DC24FA6D571 /* BuildFile in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; };
+		4C8D6A8BE24380426C1F893E /* (null) in Frameworks */ = {isa = PBXBuildFile; };
+		4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		61BB9B4B27B5540C21542AD4 /* Pods_YetAnotherEBookReaderTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 82B3A2CE2389D8DA08846A07 /* Pods_YetAnotherEBookReaderTests.framework */; };
 		6BE6DDB13475A85A1D94444B /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22BED5CB8454A86BCB647E0C /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */; };
 		6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; platformFilter = ios; };
@@ -325,7 +321,6 @@
 			dstSubfolderSpec = 10;
 			files = (
 				2A73B8F526DB7BE0004B001D /* ReadiumLCP.xcframework in Embed Frameworks */,
-				2AA1F5BB26F4B23300170793 /* GoogleAppMeasurement.xcframework in Embed Frameworks */,
 				2A73B8F726DB7BE1004B001D /* ReadiumOPDS.xcframework in Embed Frameworks */,
 				2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */,
 				6E76E9B5265FF35600885D26 /* GCDWebServer.xcframework in Embed Frameworks */,
@@ -336,7 +331,6 @@
 				6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */,
 				2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */,
 				6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */,
-				2AEE915C26F47B9700B012B0 /* KingfisherSwiftUI.xcframework in Embed Frameworks */,
 				6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */,
 				6E76E9C3265FF36900885D26 /* ZIPFoundation.xcframework in Embed Frameworks */,
 			);
@@ -584,14 +578,12 @@
 				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				6E76E9B4265FF35500885D26 /* GCDWebServer.xcframework in Frameworks */,
 				6E76E9C2265FF36900885D26 /* ZIPFoundation.xcframework in Frameworks */,
-				2AA1F5BA26F4B23200170793 /* GoogleAppMeasurement.xcframework in Frameworks */,
 				2A73B8F626DB7BE1004B001D /* ReadiumOPDS.xcframework in Frameworks */,
 				6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */,
 				2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */,
-				17C3957C8FAD6C8F240E2079 /* BuildFile in Frameworks */,
-				4E430763E1DF7DC24FA6D571 /* BuildFile in Frameworks */,
-				4C8D6A8BE24380426C1F893E /* BuildFile in Frameworks */,
-				2AEE915B26F47B9700B012B0 /* KingfisherSwiftUI.xcframework in Frameworks */,
+				17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */,
+				4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */,
+				4C8D6A8BE24380426C1F893E /* (null) in Frameworks */,
 				1741595447654CBF38F09522 /* Pods_YetAnotherEBookReader.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

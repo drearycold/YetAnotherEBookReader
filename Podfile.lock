@@ -4,8 +4,6 @@ PODS:
     - AEXML (= 4.3.3)
     - FontBlaster (= 4.1.0)
     - MenuItemKit (= 3.1.3)
-    - Realm (~> 5.0)
-    - RealmSwift (~> 5.0)
     - SSZipArchive (= 2.1.1)
     - ZFDragableModalTransition (= 0.6)
   - FontBlaster (4.1.0)
@@ -69,6 +67,8 @@ DEPENDENCIES:
   - FolioReaderKit (from `../FolioReaderKit`)
   - Google-Mobile-Ads-SDK
   - Kingfisher/SwiftUI (~> 5.0)
+  - Realm (~> 5.0)
+  - RealmSwift (~> 5.0)
   - ShelfView (from `../ShelfView-iOS`)
 
 SPEC REPOS:
@@ -96,7 +96,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AEXML: 601f41fcaa7bda7605cad153b0f43db9ec006c0f
-  FolioReaderKit: 4cd9012a3202e9cf4636c7091e9fa5c31a197af6
+  FolioReaderKit: b5bda79d66e55b80381fdcca898e98f017e43ff8
   FontBlaster: 127aa66419478d1c62926c7fdb39841633344a45
   Google-Mobile-Ads-SDK: be2192b51b74d74a6ed70590c2e8275412f1b71e
   GoogleAppMeasurement: 2be61ce546ad074dbe4dd545f222ac6033bb1d9e
@@ -112,6 +112,6 @@ SPEC CHECKSUMS:
   SSZipArchive: 14401ade5f8e82aba1ff03e9f88e9de60937ae60
   ZFDragableModalTransition: 0d294eaaba6edfcb9839595de765f9ca06a4b524
 
-PODFILE CHECKSUM: ec1aa4511a2a64e0f46df6ba012283223dde8ece
+PODFILE CHECKSUM: 9580695a9231d05d1a212a46273987da4a4d8833
 
 COCOAPODS: 1.10.1
