@@ -17,6 +17,7 @@ func getBookPreferenceConfig(book: CalibreBook, format: Format) -> Realm.Configu
 
 func getBookPreferenceConfig(bookFileURL: URL) -> Realm.Configuration? {
     return Realm.Configuration(
-        fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db")
+        fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
+        schemaVersion: ModelData.RealmSchemaVersion
     )
 }

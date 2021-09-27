@@ -22,6 +22,8 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     let bookReader: ReaderType
     let bookPosition: BookDeviceReadingPosition
     
+    let moduleDelegate = YabrEBookReaderModuleDelegate()
+    
     @EnvironmentObject var modelData: ModelData
     
     init(readerInfo: ReaderInfo) {
@@ -75,9 +77,34 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         book.progression = locator.jsonString
                     }
                     
-                    let readerVC = EpubReadiumReaderContainer(publication: publication, book: book, resourcesServer: server)
-                    readerVC.modelData = modelData
-                    readerVC.open()
+                    let readerVC = YabrReadiumEPUBViewController(publication: publication, book: book, resourcesServer: server)
+                    
+                    readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
+                        systemItem: .close,
+                        primaryAction: UIAction(
+                            handler: { [self] _ in
+                                readerVC.dismiss(animated: true, completion: nil)
+                                
+                                var updatedReadingPosition = modelData.updatedReadingPosition
+                                
+                                updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
+                                updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
+                                
+                                updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                                updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                                updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
+                                updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
+                                
+                                
+                                updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
+                                updatedReadingPosition.readerName = ReaderType.ReadiumEPUB.rawValue
+                                
+                                modelData.updatedReadingPosition = updatedReadingPosition
+                            }
+                        )
+                    )
+                    readerVC.moduleDelegate = moduleDelegate
+
                     nav.pushViewController(readerVC, animated: false)
                 } catch {
                     print(error)
@@ -89,7 +116,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         #endif
         
         if bookFormat == Format.EPUB && bookReader == ReaderType.FolioReader {
-            let readerConfiguration = FolioReaderConfiguration(bookURL: bookURL)
+            let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
             readerConfiguration.enableTTS = false
             readerConfiguration.allowSharing = false
 //            readerConfiguration.hideBars = true
@@ -142,13 +169,27 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         book.progression = locator.jsonString
                     }
                     
-                    let readerVC = PDFViewController(publication: publication, book: book)
-                    let closeItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
+                    let readerVC = YabrReadiumPDFViewController(publication: publication, book: book)
+                    readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
                         readerVC.dismiss(animated: true, completion: nil)
+                        var updatedReadingPosition = modelData.updatedReadingPosition
+                        
+                        updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
+                        updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
+                        
+                        updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                        updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                        updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
+                        updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
+                        
+                        updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
+                        
+                        updatedReadingPosition.readerName = ReaderType.ReadiumPDF.rawValue
+                        
+                        modelData.updatedReadingPosition = updatedReadingPosition
                     }))
                     
-                    readerVC.navigationItem.leftBarButtonItem = closeItem
-                    
+                    readerVC.moduleDelegate = moduleDelegate
                     
                     nav.pushViewController(readerVC, animated: false)
                 } catch {
@@ -211,12 +252,28 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         book.progression = locator.jsonString
                     }
                     
-                    let readerVC = CBZViewController(publication: publication, book: book)
-                    let closeItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
+                    let readerVC = YabrReadiumCBZViewController(publication: publication, book: book)
+                    readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
                         readerVC.dismiss(animated: true, completion: nil)
+                        
+                        var updatedReadingPosition = modelData.updatedReadingPosition
+                        
+                        updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
+                        updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
+                        
+                        updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                        updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+                        updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
+                        updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
+                        
+                        updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
+                        
+                        updatedReadingPosition.readerName = ReaderType.ReadiumCBZ.rawValue
+                        
+                        modelData.updatedReadingPosition = updatedReadingPosition
                     }))
                     
-                    readerVC.navigationItem.leftBarButtonItem = closeItem
+                    readerVC.moduleDelegate = moduleDelegate
                     nav.pushViewController(readerVC, animated: false)
                 } catch {
                     print(error)
@@ -238,43 +295,26 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
 }
 
-func FolioReaderConfiguration(bookURL: URL) -> FolioReaderConfig {
-    let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
-    config.shouldHideNavigationOnTap = false
-    config.scrollDirection = FolioReaderScrollDirection.vertical
-    config.allowSharing = true
-    config.displayTitle = true
+class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
+    private let factory = ReaderFactory()
     
-    #if DEBUG
-//    config.debug.formUnion([.borderHighlight])
-    config.debug.formUnion([.viewTransition])
-    config.debug.formUnion([.functionTrace])
-    //config.debug.formUnion([.htmlStyling, .borderHighlight])
-    #endif
-    // See more at FolioReaderConfig.swift
-//        config.canChangeScrollDirection = false
-//        config.enableTTS = false
-//        config.displayTitle = true
-//        config.allowSharing = false
-//        config.tintColor = UIColor.blueColor()
-//        config.toolBarTintColor = UIColor.redColor()
-//        config.toolBarBackgroundColor = UIColor.purpleColor()
-//        config.menuTextColor = UIColor.brownColor()
-//        config.menuBackgroundColor = UIColor.lightGrayColor()
-//        config.hidePageIndicator = true
-//        config.realmConfiguration = Realm.Configuration(fileURL: FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("highlights.realm"))
-
-    // Custom sharing quote background
-    config.quoteCustomBackgrounds = []
-    if let image = UIImage(named: "demo-bg") {
-        let customImageQuote = QuoteImage(withImage: image, alpha: 0.6, backgroundColor: UIColor.black)
-        config.quoteCustomBackgrounds.append(customImageQuote)
+    func presentOutline(of publication: Publication, delegate: OutlineTableViewControllerDelegate?, from viewController: UIViewController) {
+        let outlineTableVC: OutlineTableViewController = factory.make(publication: publication)
+        outlineTableVC.delegate = delegate
+        viewController.present(UINavigationController(rootViewController: outlineTableVC), animated: true)
     }
-
-    let textColor = UIColor(red:0.86, green:0.73, blue:0.70, alpha:1.0)
-    let customColor = UIColor(red:0.30, green:0.26, blue:0.20, alpha:1.0)
-    let customQuote = QuoteImage(withColor: customColor, alpha: 1.0, textColor: textColor)
-    config.quoteCustomBackgrounds.append(customQuote)
-
-    return config
+    
+    func presentDRM(for publication: Publication, from viewController: UIViewController) {
+        
+    }
+    
+    func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
+        
+    }
+    
+    func presentError(_ error: Error?, from viewController: UIViewController) {
+        
+    }
+    
+    
 }

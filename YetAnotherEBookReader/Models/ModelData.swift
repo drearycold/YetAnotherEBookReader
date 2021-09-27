@@ -246,17 +246,10 @@ final class ModelData: ObservableObject {
     
     private var defaultLog = Logger()
     
+    static let RealmSchemaVersion:UInt64 = 19
     private var realm: Realm!
     private var realmConf = Realm.Configuration(
-        
-        schemaVersion: 17,
-        migrationBlock: { migration, oldSchemaVersion in
-                if oldSchemaVersion < 9 {
-                    // if you added a new property or removed a property you don't
-                    // have to do anything because Realm automatically detects that
-                    
-                }
-            }
+        schemaVersion: RealmSchemaVersion
     )
     
     let kfImageCache = ImageCache.default
