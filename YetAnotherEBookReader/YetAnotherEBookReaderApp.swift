@@ -24,7 +24,7 @@ struct YetAnotherEBookReaderApp: App {
 
             switch(newScenePhase) {
             case .active:
-                modelData.probeServersReachability()
+                modelData.probeServersReachability(with: [])
                 break
             case .inactive:
                 break

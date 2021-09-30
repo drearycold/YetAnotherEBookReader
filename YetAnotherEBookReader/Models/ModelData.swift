@@ -172,6 +172,9 @@ final class ModelData: ObservableObject {
     @Published var filteredBookList = [Int32]()
     
     @Published var booksInShelf = [String: CalibreBook]()
+    let booksRefreshedPublisher = NotificationCenter.default.publisher(
+        for: Notification.Name("YABR.booksRefreshed")
+    ).eraseToAnyPublisher()
     
     var currentBookId: Int32 = -1 {
         didSet {
@@ -261,6 +264,7 @@ final class ModelData: ObservableObject {
     lazy var calibreServerService = CalibreServerService(modelData: self)
     
     var calibreServiceCancellable: AnyCancellable?
+    var shelfRefreshCancellable: AnyCancellable?
     
     init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
@@ -1494,7 +1498,7 @@ final class ModelData: ObservableObject {
         calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
     }
     
-    func probeServersReachability() {
+    func probeServersReachabilityOriginal() {
         calibreServers.forEach { id, server in
             if server.isLocal {
                 return
@@ -1502,9 +1506,10 @@ final class ModelData: ObservableObject {
             
             var isPublic = false
             var infoId = server.id + " " + isPublic.description
-            if calibreServerInfoStaging[infoId] == nil {
+            if calibreServerInfoStaging[infoId] == nil,
+               let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
                 calibreServerInfoStaging[infoId] =
-                    CalibreServerInfo(server: server, isPublic: isPublic, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
             }
             calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
             
@@ -1512,11 +1517,70 @@ final class ModelData: ObservableObject {
             
             isPublic = true
             infoId = server.id + " " + isPublic.description
-            if calibreServerInfoStaging[infoId] == nil {
+            if calibreServerInfoStaging[infoId] == nil,
+               let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
                 calibreServerInfoStaging[infoId] =
-                    CalibreServerInfo(server: server, isPublic: isPublic, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
             }
             calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
+        }
+    }
+    
+    func probeServersReachability(with serverIds: [String]) {
+        calibreServiceCancellable?.cancel()
+        
+        calibreServers.filter {
+            $0.value.isLocal == false
+        }.forEach { serverId, server in
+            [true, false].forEach { isPublic in
+                let infoId = serverId + " " + isPublic.description
+                
+                if calibreServerInfoStaging[infoId] == nil,
+                   let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
+                    calibreServerInfoStaging[infoId] =
+                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                }
+            }
+        }
+        
+        let probingList = calibreServerInfoStaging.filter {
+            if serverIds.isEmpty {
+                return true
+            } else {
+                return serverIds.contains($0.value.server.id)
+            }
+        }.sorted {
+            if $0.value.reachable == $1.value.reachable {
+                return $0.key < $1.key
+            }
+            return !$0.value.reachable  //put unreachable first
+        }
+        
+        calibreServiceCancellable = probingList.publisher.flatMap {
+            self.calibreServerService.probeServerReachabilityNew(serverInfo: $0.value)
+        }
+        .collect()
+        .eraseToAnyPublisher()
+        .receive(on: DispatchQueue.main)
+        .sink { results in
+            results.forEach {  (id, libraryInfo) in
+                guard var serverInfo = self.calibreServerInfoStaging[id] else { return }
+                if libraryInfo.libraryMap.isEmpty {
+                    serverInfo.reachable = false
+                    serverInfo.errorMsg = "Error Message to be Populated"
+                } else {
+                    serverInfo.reachable = true
+                    serverInfo.libraryMap = libraryInfo.libraryMap
+                    if let defaultLibrary = libraryInfo.defaultLibrary {
+                        serverInfo.defaultLibrary = defaultLibrary
+                    }
+                }
+                self.calibreServerInfoStaging[id] = serverInfo
+            }
+            
+            self.shelfRefreshCancellable?.cancel()
+            
+            self.refreshShelfMetadata(with: serverIds)
         }
     }
     
@@ -1524,5 +1588,52 @@ final class ModelData: ObservableObject {
         return calibreServerInfoStaging.filter {
             $1.server.id == server.id && $1.isPublic == isPublic
         }.first?.value.reachable
+    }
+    
+    func refreshShelfMetadata(with serverIds: [String]) {
+        shelfRefreshCancellable?.cancel()
+        
+        shelfRefreshCancellable = booksInShelf.values
+            .filter {
+                if serverIds.isEmpty {
+                    return true
+                } else {
+                    return serverIds.contains($0.library.server.id)
+                }
+            }
+            .compactMap(calibreServerService.buildMetadataTask(book:))
+            .publisher.flatMap(calibreServerService.getMetadataNew(task:))
+            .collect()
+            .eraseToAnyPublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { results in
+                results.compactMap { (task, entry) -> CalibreBook? in
+                    print("refreshShelfMetadata \(task) \(entry)")
+                    
+                    guard var book = self.booksInShelf[task.inShelfId] else { return nil }
+                    
+                    book.formats = entry.format_metadata.reduce(
+                        into: book.formats
+                    ) { result, format in
+                        var formatInfo = result[format.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+                        
+                        formatInfo.serverSize = format.value.size
+                        
+                        let dateFormatter = ISO8601DateFormatter()
+                        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+                        if let mtime = dateFormatter.date(from: format.value.mtime) {
+                            formatInfo.serverMTime = mtime
+                        }
+                        
+                        result[format.key.uppercased()] = formatInfo
+                    }
+                    
+                    return book
+                }.forEach {
+                    self.updateBook(book: $0)
+                }
+                
+                NotificationCenter.default.post(Notification(name: Notification.Name("YABR.booksRefreshed")))
+            }
     }
 }

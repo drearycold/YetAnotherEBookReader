@@ -505,6 +505,8 @@ struct ServerView: View {
         }).first?.id {
             modelData.currentCalibreLibraryId = defaultLibraryId
         }
+        modelData.probeServersReachability(with: [server.id])
+        
         calibreServerEditing = false
     }
     

@@ -58,7 +58,7 @@ struct BookDetailView: View {
             if let book = modelData.readingBook {
                 viewContent(book: book, isCompat: sizeClass == .compact)
                 .onAppear() {
-                    modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
+                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(book.title))
@@ -74,7 +74,7 @@ struct BookDetailView: View {
         }
         .onChange(of: modelData.readingBook) {book in
             if let book = book {
-                modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
+                modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
             }
         }
         .onChange(of: downloadStatus) { value in
@@ -474,7 +474,7 @@ struct BookDetailView: View {
                         if let coverUrl = book.coverURL {
                             modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                         }
-                        modelData.calibreServerService.getMetadataNew(oldbook: book, completion: initStates(book:))
+                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
                     }
                 }
             }) {

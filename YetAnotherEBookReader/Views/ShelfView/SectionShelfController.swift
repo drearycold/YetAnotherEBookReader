@@ -33,6 +33,8 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
+    var updateAndReloadCancellable: AnyCancellable?
+    
     override var canBecomeFirstResponder: Bool {
         true
     }
@@ -47,21 +49,42 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                     return $0.value.lastModified > $1.value.lastModified
                 }
             }
-            .reduce(into: [String: [BookModel]]()) {
-                print("updateBookModel \($1.value.title) \($1.value.lastModified)")
-                guard let coverUrl = $1.value.coverURL else { return }
-                guard let readerInfo = modelData.prepareBookReading(book: $1.value) else { return }
+            .reduce(into: [String: [BookModel]]()) { shelfList, entry in
+                let (inShelfId, book) = entry
+                print("updateBookModel \(book.title) \(book.lastModified)")
+                guard let coverUrl = book.coverURL else { return }
+                guard let readerInfo = modelData.prepareBookReading(book: book) else { return }
+                
+                let bookHasUpdate = book.formats.values.reduce(false) { hasUpdate, formatInfo in
+                    guard formatInfo.cached else { return hasUpdate }
+                    if formatInfo.cacheUptoDate {
+                        return hasUpdate
+                    } else {
+                        return true
+                    }
+                }
+                var bookStatus = BookModel.BookStatus.READY
+                if bookHasUpdate {
+                    bookStatus = .HASUPDATE
+                }
+                if modelData.activeDownloads.contains(where: { (url, download) in
+                    download.isDownloading && download.book.inShelfId == inShelfId
+                }) {
+                    bookStatus = .DOWNLOADING
+                }
+                
                 let newBook = BookModel(
                     bookCoverSource: coverUrl.absoluteString,
-                    bookId: $1.key,
-                    bookTitle: $1.value.title,
-                    bookProgress: Int(floor(readerInfo.position.lastProgress))
+                    bookId: inShelfId,
+                    bookTitle: book.title,
+                    bookProgress: Int(floor(readerInfo.position.lastProgress)),
+                    bookStatus: bookStatus
                 )
-                let shelfName = $1.value.inShelfName.isEmpty ? ($1.value.tags.first ?? "Untagged") : $1.value.inShelfName
-                if $0[shelfName] != nil {
-                    $0[shelfName]!.append(newBook)
+                let shelfName = book.inShelfName.isEmpty ? (book.tags.first ?? "Untagged") : book.inShelfName
+                if shelfList[shelfName] != nil {
+                    shelfList[shelfName]!.append(newBook)
                 } else {
-                    $0[shelfName] = [newBook]
+                    shelfList[shelfName] = [newBook]
                 }
             }
         bookModelSectionsArray = bookModel.sorted { $0.key < $1.key }.map {
@@ -71,10 +94,15 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             bookModelSectionsArray.append(BookModelSection(sectionName: "Default", sectionId: "Default", sectionBooks: []))
         }
     }
-        
+
     func reloadBookModel() {
         self.shelfView.reloadBooks(bookModelSection: bookModelSectionsArray)
     }
+    
+//    @objc func updateAndReload() {
+//        updateBookModel()
+//        reloadBookModel()
+//    }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -89,6 +117,13 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
         #endif
+        
+        updateAndReloadCancellable?.cancel()
+        updateAndReloadCancellable = modelData.booksRefreshedPublisher
+            .sink { _ in
+                self.updateBookModel()
+                self.reloadBookModel()
+            }
     }
 
     override func viewDidLoad() {
@@ -159,6 +194,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         #endif
+        
+//        NotificationCenter.default.addObserver(modelData.booksInShelf, selector: #selector(updateAndReload), name: nil, object: nil)
+        
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
@@ -272,8 +310,20 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
 
     }
     
-    @objc func onBookLongClickedDetailMenuItem(_ sender: Any?) {
+    func onBookRefreshClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+        print("I just clicked refresh \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
+        guard let book = modelData.booksInShelf[bookId] else { return }
+        
+        book.formats.filter {
+            $1.cached && !$1.cacheUptoDate
+        }.keys.forEach {
+            guard let format = Format(rawValue: $0) else { return }
+            let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+            if started {
+                
+            }
+        }
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {

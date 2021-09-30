@@ -49,8 +49,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     bookCoverSource: coverUrl.absoluteString,
                     bookId: $0,
                     bookTitle: $1.title,
-                    bookProgress: Int(floor(readerInfo.position.lastProgress)
-                    )
+                    bookProgress: Int(floor(readerInfo.position.lastProgress)),
+                    bookStatus: .READY
                 )
             }
         

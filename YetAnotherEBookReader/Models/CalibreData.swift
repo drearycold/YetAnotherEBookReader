@@ -365,27 +365,78 @@ struct CalibreBookLastReadPositionEntry: Codable {
     var pos_frac: Double = 0.0
 }
 
+struct CalibreBookTask {
+    var bookId: Int32
+    var inShelfId: String
+    var url: URL
+    var username: String
+}
+
+struct CalibreBookFormatMetadataEntry: Codable {
+    var path: String = ""
+    var size: UInt64 = 0
+    var mtime: String = ""
+}
+
+struct CalibreBookUserMetadataEntry: Codable {
+    var table: String = ""
+    var column: String = ""
+    var datatype: String = ""
+    var is_multiple: Bool? = nil
+    var kind: String = ""
+    var name: String = ""
+    var search_terms: [String] = []
+    var label: String = ""
+    var colnum: Int = 0
+    var display: [String: String?] = [:]
+    var is_custom: Bool = false
+    var is_category: Bool = false
+    var link_column: String = ""
+    var category_sort: String = ""
+    var is_csp: Bool = false
+    var is_editable: Bool = false
+    var rec_index: Int = 0
+    var value: Any? = nil   //dynamic
+    var extra: Any? = nil   //dynamic
+    //var is_multiple2: ???
+    
+    enum CodingKeys: String, CodingKey {
+        case table
+    }
+}
+
+struct CalibreBookEntry: Codable {
+    var author_link_map: [String: String] = [:]
+    var user_metadata: [String: CalibreBookUserMetadataEntry] = [:]
+    var tags: [String] = []
+    var author_sort: String = ""
+    var comments: String? = nil
+    var title_sort: String = ""
+    var thumbnail: String = ""
+    var timestamp: String = ""
+    var uuid: String = ""
+    var user_categories: [String: String] = [:]
+    var cover: String = ""
+    var title: String = ""
+    var last_modified: String = ""
+    var application_id: Int = 0
+    var series_index: Double? = nil
+    var author_sort_map: [String: String] = [:]
+    var identifiers: [String: String] = [:]
+    var languages: [String] = []
+    var publisher: String? = nil
+    var series: String? = nil
+    var pubdate: String = ""
+    var rating: Int = 0
+    var authors: [String] = []
+    var format_metadata: [String: CalibreBookFormatMetadataEntry] = [:]
+    var formats: [String] = []
+    var main_format: [String: String] = [:]
+    var other_formats: [String: String] = [:]
+    var category_urls: [String: [String: String]] = [:]
+}
+
 struct CalibreBookAnnotationEntry: Codable {
-    /*
-     {
-         "end_cfi": "/2/4/2/2/2/2/4/2/8/2/1:134",
-         "highlighted_text": "但愿在讨论这个令人感兴趣的问题时，激励我的只是对真理的热爱",
-         "spine_index": 4,
-         "spine_name": "populationch00.html",
-         "start_cfi": "/2/4/2/2/2/2/4/2/8/2/1:105",
-         "style": {
-           "kind": "color",
-           "type": "builtin",
-           "which": "yellow"
-         },
-         "timestamp": "2021-09-01T06:22:52.491Z",
-         "toc_family_titles": [
-           "序"
-         ],
-         "type": "highlight",
-         "uuid": "bXNJ7u7JhxE2k-CxAURl4A"
-     }
-     */
     var uuid: String
     var type: String
 

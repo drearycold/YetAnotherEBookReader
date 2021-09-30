@@ -18,7 +18,7 @@ struct CalibreServerService {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
 
-        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, reachable: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
+        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
 
         guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
             modelData.calibreServerInfo = serverInfo
@@ -297,7 +297,7 @@ struct CalibreServerService {
         return calibreServerLibraryBooks
     }
     
-    func getMetadataNew(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
+    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         guard let serverUrl = getServerUrlByReachability(server: oldbook.library.server) else {
             modelData.updatingMetadataStatus = "Server not Reachable"
             return
@@ -812,8 +812,57 @@ struct CalibreServerService {
         task.resume()
     }
     
-    
     // MARK: - Combine style below
+    
+    func probeServerReachabilityNew(serverInfo: CalibreServerInfo) -> AnyPublisher<(String, CalibreServerLibraryInfo), Never> {
+        var serverInfo = serverInfo
+        
+        serverInfo.reachable = false
+        serverInfo.errorMsg = "Unknown Error"
+        serverInfo.probingTask?.cancel()
+        
+        var url = serverInfo.url
+        url.appendPathComponent("/ajax/library-info", isDirectory: false)
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(serverInfo.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        return urlSession.dataTaskPublisher(for: url)
+            .map { $0.data }
+            .decode(type: CalibreServerLibraryInfo.self, decoder: JSONDecoder())
+            .replaceError(with: CalibreServerLibraryInfo(defaultLibrary: nil, libraryMap: [:]))
+            .map { (serverInfo.id, $0) }
+            .eraseToAnyPublisher()
+    }
+    
+    func buildMetadataTask(book: CalibreBook) -> CalibreBookTask? {
+        guard let serverUrl = getServerUrlByReachability(server: book.library.server) else {
+            return nil
+        }
+        var urlComponents = URLComponents()
+        urlComponents.path = "/get/json/\(book.id)/\(book.library.key)"
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
+        return CalibreBookTask(
+            bookId: book.id,
+            inShelfId: book.inShelfId,
+            url: endpointUrl, username: book.library.server.username)
+    }
+    
+    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        return urlSession.dataTaskPublisher(for: task.url)
+            .map { $0.data }
+            .decode(type: CalibreBookEntry.self, decoder: JSONDecoder())
+            .replaceError(with: CalibreBookEntry())
+            .map { (task, $0) }
+            .eraseToAnyPublisher()
+    }
     
     func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
         
@@ -1082,6 +1131,16 @@ struct CalibreServerService {
     }
 }
 
+struct CalibreServerLibraryInfo: Codable {
+    var defaultLibrary: String?
+    var libraryMap: [String:String]
+    
+    enum CodingKeys: String, CodingKey {
+        case defaultLibrary = "default_library"
+        case libraryMap = "library_map"
+    }
+}
+
 struct CalibreServerInfo: Identifiable {
     var id: String {
         server.id + " " + isPublic.description
@@ -1089,6 +1148,7 @@ struct CalibreServerInfo: Identifiable {
     
     let server: CalibreServer
     let isPublic: Bool
+    let url: URL
     var reachable: Bool
     var errorMsg: String
     var probingTask: URLSessionDataTask?
