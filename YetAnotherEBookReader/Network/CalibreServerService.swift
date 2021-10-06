@@ -824,6 +824,7 @@ struct CalibreServerService {
         var url = serverInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
         let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.timeoutIntervalForRequest = 10
         let urlSessionDelegate = CalibreServerTaskDelegate(serverInfo.server.username)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
         

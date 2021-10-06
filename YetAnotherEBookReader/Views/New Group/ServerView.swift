@@ -541,6 +541,8 @@ struct ServerView: View {
         
         modelData.updateServer(oldServer: oldServer, newServer: newServer)
         
+        modelData.probeServersReachability(with: [newServer.id])
+
         calibreServerEditing = false
     }
     

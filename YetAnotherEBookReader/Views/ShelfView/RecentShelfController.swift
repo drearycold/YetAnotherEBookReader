@@ -32,6 +32,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
+    var updateAndReloadCancellable: AnyCancellable?
 
     override var canBecomeFirstResponder: Bool {
         true
@@ -41,16 +42,37 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         bookModel = modelData.booksInShelf
             .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) }
             .sorted { $0.value.lastModified > $1.value.lastModified }
-            .compactMap {
-                guard let coverUrl = $1.coverURL else { return nil }
-                guard let readerInfo = modelData.prepareBookReading(book: $1) else { return nil }
+            .compactMap { (inShelfId, book) in
+                guard let coverUrl = book.coverURL else { return nil }
+                guard let readerInfo = modelData.prepareBookReading(book: book) else { return nil }
+                
+                let bookHasUpdate = book.formats.values.reduce(false) { hasUpdate, formatInfo in
+                    guard formatInfo.cached else { return hasUpdate }
+                    if formatInfo.cacheUptoDate {
+                        return hasUpdate
+                    } else {
+                        return true
+                    }
+                }
+                var bookStatus = BookModel.BookStatus.READY
+                if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
+                    bookStatus = .NOCONNECT
+                }
+                if bookHasUpdate {
+                    bookStatus = .HASUPDATE
+                }
+                if modelData.activeDownloads.contains(where: { (url, download) in
+                    download.isDownloading && download.book.inShelfId == inShelfId
+                }) {
+                    bookStatus = .DOWNLOADING
+                }
                 
                 return BookModel(
                     bookCoverSource: coverUrl.absoluteString,
-                    bookId: $0,
-                    bookTitle: $1.title,
+                    bookId: inShelfId,
+                    bookTitle: book.title,
                     bookProgress: Int(floor(readerInfo.position.lastProgress)),
-                    bookStatus: .READY
+                    bookStatus: bookStatus
                 )
             }
         
@@ -70,6 +92,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
         #endif
+        
+        updateAndReloadCancellable?.cancel()
+        updateAndReloadCancellable = modelData.booksRefreshedPublisher
+            .sink { _ in
+                self.updateBookModel()
+            }
     }
 
     override func viewDidLoad() {
@@ -241,6 +269,22 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
     }
 
+    func onBookRefreshClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+        print("I just clicked refresh \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
+        
+        guard let book = modelData.booksInShelf[bookId] else { return }
+        
+        book.formats.filter {
+            $1.cached && !$1.cacheUptoDate
+        }.keys.forEach {
+            guard let format = Format(rawValue: $0) else { return }
+            let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+            if started {
+                
+            }
+        }
+    }
+    
     @objc func refreshBook(_ sender: Any?) {
         print("refreshBook")
         

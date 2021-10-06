@@ -11,7 +11,7 @@ import WebKit
 
 open class MDictViewContainer : UIViewController, WKUIDelegate {
     var webView: WKWebView!
-    var server = "http://peter-mdict.lan/"
+    var server = ""
     var word = ""
     
     open override func viewDidLoad() {

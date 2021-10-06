@@ -124,6 +124,7 @@ final class ModelData: ObservableObject {
     //for LibraryInfoView
     @Published var defaultFormat = Format.PDF
     var formatReaderMap = [Format: [ReaderType]]()
+    var formatList = [Format]()
     
     @Published var searchString = "" {
         didSet {
@@ -721,8 +722,31 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func getCustomDictViewer() -> URL? {
+        return UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER)
+    }
+    
     func updateCustomDictViewer(enabled: Bool, value: String) {
-        //TODO
+        UserDefaults.standard.set(enabled ? URL(string: value) : nil, forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER)
+    }
+    
+    func getPreferredFormat() -> Format {
+        return Format(rawValue: UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT) ?? "" ) ?? defaultFormat
+    }
+    
+    func updatePreferredFormat(for format: Format) {
+        UserDefaults.standard.setValue(format.rawValue, forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT)
+    }
+    
+    // user preferred -> default -> unsupported
+    func getPreferredReader(for format: Format) -> ReaderType {
+        return ReaderType(
+            rawValue: UserDefaults.standard.string(forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)") ?? ""
+        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED
+    }
+    
+    func updatePreferredReader(for format: Format, with reader: ReaderType) {
+        UserDefaults.standard.setValue(reader.rawValue, forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)")
     }
     
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {

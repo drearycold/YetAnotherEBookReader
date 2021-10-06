@@ -64,6 +64,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                     }
                 }
                 var bookStatus = BookModel.BookStatus.READY
+                if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
+                    bookStatus = .NOCONNECT
+                }
                 if bookHasUpdate {
                     bookStatus = .HASUPDATE
                 }

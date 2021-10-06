@@ -10,4 +10,9 @@ import Foundation
 struct Constants {
     static let KEY_DEFAULTS_SELECTED_SERVER_ID = "io.github.yabr.KEY_DEFAULTS_SELECTED_SERVER_ID"
     static let KEY_DEFAULTS_SELECTED_LIBRARY_ID = "io.github.yabr.KEY_DEFAULTS_SELECTED_LIBRARY_ID"
+    
+    static let KEY_DEFAULTS_MDICT_VIEWER = "io.github.yabr.KEY_DEFAULTS_MDICT_VIEWER"
+
+    static let KEY_DEFAULTS_PREFERRED_FORMAT = "io.github.yabr.KEY_DEFAULTS_PREFERRED_FORMAT"
+    static let KEY_DEFAULTS_PREFERRED_READER_PREFIX = "io.github.yabr.KEY_DEFAULTS_PREFERRED_READER_"
 }
