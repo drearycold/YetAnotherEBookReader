@@ -119,6 +119,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
             readerConfiguration.enableTTS = false
             readerConfiguration.allowSharing = false
+            readerConfiguration.enableMDictViewer = modelData.getCustomDictViewer().0
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true
 //            readerConfiguration.shouldHideNavigationOnTap = true

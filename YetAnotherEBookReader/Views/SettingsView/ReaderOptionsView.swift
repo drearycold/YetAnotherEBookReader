@@ -12,10 +12,10 @@ struct ReaderOptionsView: View {
     
     @State private var customDictViewerEnabled = false
     @State private var customDictViewerURL = ""
-    @State private var customDictViewerMalformed = false
+    @State private var customDictViewerURLStored: URL?
+    @State private var customDictViewerURLMalformed = false
     @State private var customDictViewerInfoPresenting = false
     @State private var customDictViewerTestPresenting = false
-
     
     var body: some View {
         ScrollView {
@@ -83,6 +83,9 @@ struct ReaderOptionsView: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 Toggle("Enable Custom Dictionary Viewer", isOn: $customDictViewerEnabled)
+                    .onChange(of: customDictViewerEnabled, perform: { value in
+                        _ = modelData.updateCustomDictViewer(enabled: value, value: nil)
+                    })
 
                 HStack {
                     Text("Experimental!!!")
@@ -120,55 +123,48 @@ struct ReaderOptionsView: View {
                 
                 HStack {
                     Text("URL:")
-                    TextField("", text: $customDictViewerURL, onCommit: {
-                        modelData.updateCustomDictViewer(enabled: customDictViewerEnabled, value: customDictViewerURL)
-                    })
+                    TextField("", text: $customDictViewerURL)
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
                     .border(Color(UIColor.separator))
+                    .onChange(of: customDictViewerURL, perform: { value in
+                        customDictViewerURLMalformed = checkCustomDictViewerURL(value: value)
+                    })
+                    
                     Text("?word=hello")
                         .foregroundColor(.gray)
                 }
                 
                 HStack {
                     Spacer()
+                    if customDictViewerURL.isEmpty {
+                        Text("")
+                    }
+                    else if customDictViewerEnabled && customDictViewerURLMalformed {
+                        Text("URL Malformed").font(.caption).foregroundColor(.red)
+                    }
                     Button(action:{
-                        guard URL(string: customDictViewerURL) != nil else {
-                            customDictViewerMalformed = true
-                            return
-                        }
                         customDictViewerTestPresenting = true
-                        
                     }) {
-                        Text("Test")
-                    }.disabled(customDictViewerURL.isEmpty)
+                        Text("Preview")
+                    }.disabled(customDictViewerURLMalformed)
                     .sheet(isPresented: $customDictViewerTestPresenting, onDismiss: { customDictViewerTestPresenting = false }) {
                         MDictViewUIVC(server: URL(string: customDictViewerURL)!)
                     }
-                    .alert(isPresented: $customDictViewerMalformed, content: {
-                        Alert(title: Text("Error"), message: Text("URL Malformed"), dismissButton: .cancel())
-                    })
                     
                     Button(action:{
-                        guard URL(string: customDictViewerURL) != nil else {
-                            customDictViewerMalformed = true
-                            return
-                        }
-                        modelData.updateCustomDictViewer(enabled: customDictViewerEnabled, value: customDictViewerURL)
+                        customDictViewerURLStored = modelData.updateCustomDictViewer(enabled: customDictViewerEnabled, value: customDictViewerURL)
                     }) {
                         Text("Update")
-                    }.disabled(customDictViewerURL.isEmpty || customDictViewerURL == (modelData.getCustomDictViewer()?.absoluteString ?? ""))
+                    }.disabled(customDictViewerURLMalformed || URL(string: customDictViewerURL) == customDictViewerURLStored)
                     
                     Button(action:{
-                        customDictViewerURL = modelData.getCustomDictViewer()?.absoluteString ?? ""
+                        customDictViewerURL = customDictViewerURLStored?.absoluteString ?? ""
                     }) {
                         Text("Restore")
-                    }.disabled(customDictViewerURL == (modelData.getCustomDictViewer()?.absoluteString ?? ""))
+                    }.disabled(URL(string: customDictViewerURL) == customDictViewerURLStored)
                 }.disabled(!customDictViewerEnabled)
-                
-                
-                
             }.padding()
             
             Divider()
@@ -176,8 +172,9 @@ struct ReaderOptionsView: View {
             Spacer()
         }   //ScrollView
         .onAppear() {
-            customDictViewerURL = modelData.getCustomDictViewer()?.absoluteString ?? ""
-            customDictViewerEnabled = !customDictViewerURL.isEmpty
+            (customDictViewerEnabled, customDictViewerURLStored) = modelData.getCustomDictViewer()
+            customDictViewerURL = customDictViewerURLStored?.absoluteString ?? ""
+            customDictViewerURLMalformed = checkCustomDictViewerURL(value: customDictViewerURL)
         }
     }
     
@@ -200,6 +197,16 @@ struct ReaderOptionsView: View {
                 modelData.updatePreferredFormat(for: $0)
             }
         )
+    }
+    
+    private func checkCustomDictViewerURL(value: String) -> Bool {
+        guard let url = URL(string: value) else {
+            return true
+        }
+        guard url.scheme == "http" || url.scheme == "https" else {
+            return true
+        }
+        return false
     }
 }
 

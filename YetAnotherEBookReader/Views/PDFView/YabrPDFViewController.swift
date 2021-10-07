@@ -243,9 +243,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         self.view = pdfView
         
-        if mDictView.server.count > 0 {
+        if modelData?.getCustomDictViewer().0 ?? false {     // if enabled
             UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
             mDictView.loadViewIfNeeded()
+        } else {
+            UIMenuController.shared.menuItems = []
         }
         
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based

@@ -11,7 +11,7 @@ import WebKit
 
 open class MDictViewContainer : UIViewController, WKUIDelegate {
     var webView: WKWebView!
-    var server = ""
+    var server: String?
     var word = ""
     
     open override func viewDidLoad() {
@@ -20,7 +20,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         self.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
         print("MDICT viewDidLoad \(self.view.frame)")
-
+        
         // let webConfiguration = WKWebViewConfiguration()
         webView = WKWebView()
         webView.uiDelegate = self
@@ -37,6 +37,12 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         
         webView.translatesAutoresizingMaskIntoConstraints = false
         
+        let enabled = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED)
+        guard enabled else { return }
+        
+        server = UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)?.absoluteString
+        guard let server = server else { return }
+        
         if let url = URL(string: server) {
             webView.load(URLRequest(url: url))
         }
@@ -44,6 +50,8 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
     }
     
     open override func viewWillAppear(_ animated: Bool) {
+        guard let server = server else { return }
+
         word = self.title ?? "_"
         if let url = URL(string: server + "?word=" + word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) {
             webView.load(URLRequest(url: url))

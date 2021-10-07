@@ -1087,14 +1087,14 @@
 		2AC3EC5325BE7486004A6633 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */,
+				6E7733BF26663D51008318C3 /* BookFiles.swift */,
+				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 				2ABB913E261EC359004AA7C0 /* CalibreData.swift */,
 				2ABB9142261ED7E5004AA7C0 /* Constants.swift */,
-				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
-				2ACE265426A920E10037FCB4 /* YabrData.swift */,
+				2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */,
 				2ACE265826A921230037FCB4 /* RealmModel.swift */,
-				2A73B8F826DC8890004B001D /* BookPreference.swift */,
+				2ACE265426A920E10037FCB4 /* YabrData.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";

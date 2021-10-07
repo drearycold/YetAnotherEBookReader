@@ -722,12 +722,18 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func getCustomDictViewer() -> URL? {
-        return UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER)
+    func getCustomDictViewer() -> (Bool, URL?) {
+        return (UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED),
+            UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
+        )
     }
     
-    func updateCustomDictViewer(enabled: Bool, value: String) {
-        UserDefaults.standard.set(enabled ? URL(string: value) : nil, forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER)
+    func updateCustomDictViewer(enabled: Bool, value: String?) -> URL? {
+        UserDefaults.standard.set(enabled, forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED)
+        guard let value = value else { return nil }
+        let url = URL(string: value)
+        UserDefaults.standard.set(url, forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
+        return url
     }
     
     func getPreferredFormat() -> Format {
