@@ -357,7 +357,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let boundForVisibleContent = getVisibleContentsBound(pdfPage: curPage)
         
         if let pageViewPosition = pageViewPositionHistory[curPageNum],
-           pageViewPosition.scaler > 0 {
+           pageViewPosition.scaler > 0,
+           pageViewPosition.viewSize == pdfView.frame.size {
             let lastDest = PDFDestination(
                 page: curPage,
                 at: pageViewPosition.point
@@ -378,84 +379,99 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             return
         }
         
-        let curScale = pdfView.scaleFactor
-        if curScale > 0 {
-            let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
-            let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
-            print("curScale \(curScale) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView.scaleFactorForSizeToFit)")
-            
-            let newDestX = boundForVisibleContent.minX + 1
-            let newDestY = boundsForCropBox.height - boundForVisibleContent.minY
-            
-            let visibleRectInView = pdfView.convert(
-                CGRect(x: newDestX,
-                       y: newDestY,
-                       width: boundsForCropBox.width * visibleWidthRatio,
-                       height: boundsForCropBox.height * visibleHeightRatio),
-                from: curPage)
-            
-            print("pdfView frame \(pdfView.frame)")
-            
-            print("initialRect \(visibleRectInView)")
-            
-            // let insetsScaleFactor = 0.9
-            let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
-            let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
-            let scaleFactor = { () -> CGFloat in
-                if pdfOptions.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
-                    switch pdfOptions.selectedAutoScaler {
-                    case .Width:
-                        return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
-                    case .Height:
-                        return pdfView.scaleFactor * (pdfView.frame.height - self.navigationController!.navigationBar.frame.height) / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                    default:    // including .Page
-                        return min(
-                            pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
-                            pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
-                        )
-                    }
-                } else {
-                    return pdfOptions.lastScale
-                }
-            }()
-            
-            //pdfView.scaleFactor = self.lastScale
-            print("scaleFactor \(pdfOptions.lastScale)")
-            
-            let navBarFrame = self.navigationController!.navigationBar.frame
-            let navBarFrameHeightInPDF = pdfView.convert(navBarFrame, to:curPage).height
-            let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-            
-            let newDest = PDFDestination(
-                page: curPage,
-                at: CGPoint(
-                    x: pageViewPositionHistory[curPageNum]?.point.x ??
-                        newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
-                    y:pageViewPositionHistory[curPageNum]?.point.y ??
-                        newDestY + navBarFrameHeightInPDF + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
-                )
-            )
-            
-            print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
-//            let bottomRight = PDFDestination(
-//                page: curPage,
-//                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY + boundsForCropBox.height))
-            
-            let bottomRight = PDFDestination(
-                page: curPage,
-                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY - boundsForCropBox.height))
-            
-            pdfView.scaleFactor = scaleFactor
-            pdfView.go(to: bottomRight)
-            
-            print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        guard pdfView.scaleFactor > 0 else { return }
 
-            pdfView.scaleFactor = scaleFactor
-            pdfView.go(to: newDest)
-            
-            print("AFTER POINT curDestPoint=\(pdfView.currentDestination!.point) \(boundsForCropBox)")
-            
-        }
+        let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
+        let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
+        print("curScale \(pdfView.scaleFactor) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView.scaleFactorForSizeToFit)")
+        
+        let newDestX = boundForVisibleContent.minX + 1
+        let newDestY = boundsForCropBox.height - boundForVisibleContent.minY
+        
+        let visibleRectInView = pdfView.convert(
+            CGRect(x: newDestX,
+                   y: newDestY,
+                   width: boundsForCropBox.width * visibleWidthRatio,
+                   height: boundsForCropBox.height * visibleHeightRatio),
+            from: curPage)
+        
+        print("pdfView frame \(pdfView.frame)")
+        
+        print("initialRect \(visibleRectInView)")
+        
+        // let insetsScaleFactor = 0.9
+        let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
+        let insetsVerticalScaleFactor = 1.0 - (pdfOptions.vMarginAutoScaler * 2.0) / 100.0
+        let scaleFactor = { () -> CGFloat in
+            if pdfOptions.lastScale < 0 || pdfOptions.selectedAutoScaler != PDFAutoScaler.Custom {
+                switch pdfOptions.selectedAutoScaler {
+                case .Width:
+                    return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
+                case .Height:
+                    return pdfView.scaleFactor * (pdfView.frame.height - self.navigationController!.navigationBar.frame.height) / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
+                default:    // including .Page
+                    return min(
+                        pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
+                        pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
+                    )
+                }
+            } else {
+                return pdfOptions.lastScale
+            }
+        }()
+        
+        //pdfView.scaleFactor = self.lastScale
+        print("scaleFactor \(pdfOptions.lastScale)")
+        
+        pdfView.scaleFactor = scaleFactor
+
+        let navBarFrame = self.navigationController!.navigationBar.frame
+        let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
+        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
+        
+        let newDest = PDFDestination(
+            page: curPage,
+            at: CGPoint(
+                x: pageViewPositionHistory[curPageNum]?.point.x ??
+                    newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
+                y: pageViewPositionHistory[curPageNum]?.point.y ??
+                    newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
+            )
+        )
+        
+        print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        //            let bottomRight = PDFDestination(
+        //                page: curPage,
+        //                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY + boundsForCropBox.height))
+        
+        let bottomRight = PDFDestination(
+            page: curPage,
+            at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY - boundsForCropBox.height))
+        
+        pdfView.go(to: bottomRight)
+        
+        print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        
+        pdfView.go(to: newDest)
+        
+        var afterPointX = pdfView.currentDestination!.point.x
+        var afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        
+        print("AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        
+        let newDestForCompensation = PDFDestination(
+            page: curPage,
+            at: CGPoint(
+                x: newDest.point.x - (afterPointX - newDest.point.x),
+                y: newDest.point.y - (afterPointY - newDest.point.y)
+            )
+        )
+        
+        pdfView.go(to: bottomRight)
+        pdfView.go(to: newDestForCompensation)
+        afterPointX = pdfView.currentDestination!.point.x
+        afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        print("AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDestForCompensation.point) \(boundsForCropBox)")
 
     }
     
@@ -761,13 +777,19 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             x: dest.point.x,
             y: dest.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
         )
-        pageViewPositionHistory[pageNum] = PageViewPosition(scaler: pdfView.scaleFactor, point: pointUpperLeft)
+        pageViewPositionHistory[pageNum] = PageViewPosition(
+            scaler: pdfView.scaleFactor,
+            point: pointUpperLeft,
+            viewSize: pdfView.frame.size
+        )
+        print("updatePageViewPositionHistory \(pageViewPositionHistory[pageNum]!)")
     }
 }
 
 struct PageViewPosition {
     var scaler = CGFloat()
     var point = CGPoint()
+    var viewSize = CGSize()
 }
 
 class PDFOptionsRealm: Object {
