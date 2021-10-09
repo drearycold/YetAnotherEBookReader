@@ -75,11 +75,7 @@ final class ModelData: ObservableObject {
             guard var server = calibreServers[currentCalibreServerId] else { return }
             
             server.lastLibrary = library.name
-            do {
-                try updateServerRealm(server: server)
-            } catch {
-                
-            }
+            try? updateServerRealm(server: server)
             
             UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
             
@@ -87,7 +83,7 @@ final class ModelData: ObservableObject {
             currentBookId = 0
             filteredBookList.removeAll()
             calibreServerLibraryBooks.removeAll()
-            DispatchQueue(label: "data").async { [self] in
+            DispatchQueue.global(qos: .utility).async { [self] in
                 let realm = try! Realm(configuration: realmConf)
                 populateServerLibraryBooks(realm: realm)
                 updateFilteredBookList()
@@ -818,7 +814,7 @@ final class ModelData: ObservableObject {
      */
     func updateBooks(books: [CalibreBook]) {
         let realm = try! Realm(configuration: self.realmConf)
-        calibreServerLibraryBooks.values.forEach { (book) in
+        books.forEach { (book) in
             self.updateBookRealm(book: book, realm: realm)
             DispatchQueue.main.async {
                 self.calibreServerLibraryUpdatingProgress += 1
@@ -856,7 +852,7 @@ final class ModelData: ObservableObject {
             let deviceMapSerialize = try book.readPos.getCopy().compactMapValues { (value) throws -> Any? in
                 try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
             }
-            bookRealm.readPosData = try! JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
+            bookRealm.readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
             
             try realm.write {
                 realm.add(bookRealm, update: .modified)
@@ -875,7 +871,7 @@ final class ModelData: ObservableObject {
         
         let objects = realm.objects(CalibreBookRealm.self).filter( "primaryKey = '\(bookRealm.primaryKey!)'" )
         
-        try! realm.write {
+        try? realm.write {
             realm.delete(objects)
         }
     }

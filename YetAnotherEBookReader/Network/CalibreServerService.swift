@@ -190,6 +190,8 @@ struct CalibreServerService {
                     return
                 }
             
+                print("syncLibrary count=\(resultBooks.count)")
+                
                 modelData.updateBooks(books: resultBooks.map{$1})
                 
                 updatingStatus = "Refreshed"

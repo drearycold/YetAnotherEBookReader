@@ -111,10 +111,7 @@ struct BookDetailView: View {
             
             if isCompat {
                 VStack(alignment: .center, spacing: 8) {
-                    KFImage(book.coverURL)
-                        .placeholder {
-                            Text("Loading Cover ...")
-                        }
+                    coverViewContent(book: book)
                     VStack(alignment: .leading) {
                         metadataViewContent(book: book, isCompat: isCompat)
                         bookFormatViewContent(book: book, isCompat: isCompat)
@@ -123,10 +120,7 @@ struct BookDetailView: View {
                 }
             } else {
                 HStack(alignment: .top, spacing: 32) {
-                    KFImage(book.coverURL)
-                        .placeholder {
-                            Text("Loading Cover ...")
-                        }
+                    coverViewContent(book: book)
                     VStack(alignment: .leading) {
                         metadataViewContent(book: book, isCompat: isCompat)
                         bookFormatViewContent(book: book, isCompat: isCompat)
@@ -147,6 +141,29 @@ struct BookDetailView: View {
             
         }   //VStack
         //.fixedSize()
+    }
+    
+    @ViewBuilder
+    private func coverViewContent(book: CalibreBook) -> some View {
+        ZStack {
+            KFImage(book.coverURL)
+                .placeholder {
+                    Text("Loading Cover ...")
+                }
+            Button(action: {
+                _viewModel.readingPositionListViewModel.book = book
+                _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+                presentingReadPositionList = true
+            }) {
+                Image(systemName: "book")
+                    .resizable()
+                    .frame(width: 150, height: 150)
+                    .foregroundColor(.gray)
+                
+            }.disabled(book.inShelf == false)
+            .opacity(book.inShelf ? 0.6 : 0.0)
+        }
+        .frame(width: 300, height: 400)
     }
     
     @ViewBuilder
@@ -523,10 +540,18 @@ struct BookDetailView: View {
                     modelData.clearCache(inShelfId: book.inShelfId)
                     downloadStatus = .INITIAL
                 } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
-//                    if modelData.startDownloadFormat(book: book, format: selectedFormat) {
-//                        downloadStatus = .DOWNLOADING
-//                    }
                     //TODO prompt for formats
+                    var downloadFormat: Format? = nil
+                    if book.formats[modelData.getPreferredFormat().rawValue] != nil {
+                        downloadFormat = modelData.getPreferredFormat()
+                    } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
+                        downloadFormat = format
+                    }
+                    if downloadFormat != nil, modelData.startDownloadFormat(book: book, format: downloadFormat!) {
+                        downloadStatus = .DOWNLOADING
+                    } else {
+                        alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
+                    }
                 }
                 updater += 1
             }) {

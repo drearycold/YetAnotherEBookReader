@@ -14,34 +14,65 @@ struct MainView: View {
     @State private var alertItem: AlertItem?
 
     var body: some View {
-        TabView(selection: $modelData.activeTab) {
-            RecentShelfUI()
-                .tabItem {
-                    Image(systemName: "doc.text.fill")
-                    Text("Recent")
-                }
-                .tag(0)
+        ZStack {
+            TabView(selection: $modelData.activeTab) {
+                RecentShelfUI()
+                    .tabItem {
+                        Image(systemName: "doc.text.fill")
+                        Text("Recent")
+                    }
+                    .tag(0)
+                    
+                SectionShelfUI()
+                    .tabItem {
+                        Image(systemName: "books.vertical.fill")
+                        Text("Shelf")
+                    }
+                    .tag(1)
                 
-            SectionShelfUI()
-                .tabItem {
-                    Image(systemName: "books.vertical.fill")
-                    Text("Shelf")
+                LibraryInfoView()
+                    .tabItem {
+                        Image(systemName: "building.columns.fill")
+                        Text("Browse")
+                    }
+                    .tag(2)
+                
+                SettingsView()
+                    .tabItem {
+                        Image(systemName: "gearshape.fill")
+                        Text("Settings")
+                    }
+                    .tag(3)
+            }
+            if modelData.activeTab < 2 && modelData.calibreServerLibraryUpdating {
+                ProgressView("Initializing Library...")
+                    .background(Color.gray.opacity(0.4).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
+            }
+            if modelData.activeTab < 3 && modelData.booksInShelf.filter({$0.value.library.server.isLocal == false}).isEmpty {
+                VStack {
+                    Text("""
+                        Welcome!
+                        
+                        Get start from
+                        \"Settings\" -> \"Server & Library\"
+                        to link with Calibre Server.
+                        
+                        Then go to "Browse"
+                        to add book to Shelf by toggling \(Image(systemName: "star"))
+                        or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
+                        
+                        Start reading by touching book cover.
+                        
+                        Enjoy your book!
+                        
+                        (This notice will disappear after first book has been added to shelf)
+                        """)
+                        .multilineTextAlignment(.leading)
+                        .padding()
+                        .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
+                        .frame(maxWidth: 400)
                 }
-                .tag(1)
-            
-            LibraryInfoView()
-                .tabItem {
-                    Image(systemName: "building.columns.fill")
-                    Text("Browse")
-                }
-                .tag(2)
-            
-            SettingsView()
-                .tabItem {
-                    Image(systemName: "gearshape.fill")
-                    Text("Settings")
-                }
-                .tag(3)
+            }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             modelData.presentingEBookReaderFromShelf = false

@@ -116,13 +116,7 @@ struct ReadingPositionDetailView: View {
                     }
                     readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
                 }) {
-                    Text("Continue Reading")
-                }
-                
-                Button(action:{
-                    _VM.position.lastReadPage += 1
-                }) {
-                    Text("Test Progress")
+                    Text("Start Reading")
                 }
                 
                 Spacer()

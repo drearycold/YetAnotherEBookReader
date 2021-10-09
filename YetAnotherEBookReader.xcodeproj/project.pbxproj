@@ -278,6 +278,7 @@
 		2AF6FE0A2701B205002BA27E /* YabrReadiumPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */; };
 		2AF6FE0C2701D0F7002BA27E /* YabrReadiumReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */; };
 		2AF6FE0E2701E1DA002BA27E /* YabrReadiumCBZViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */; };
+		2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */; };
 		31E33B3BEA4691709AC9E3E9 /* Pods_YetAnotherEBookReader_Catalyst.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 55271F2BE92C4B4B9870FAEB /* Pods_YetAnotherEBookReader_Catalyst.framework */; };
 		4C8D6A8BE24380426C1F893E /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
@@ -545,6 +546,7 @@
 		2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumPDFViewController.swift; sourceTree = "<group>"; };
 		2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumReaderViewController.swift; sourceTree = "<group>"; };
 		2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumCBZViewController.swift; sourceTree = "<group>"; };
+		2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = YabrLaunchScreen.storyboard; path = YetAnotherEBookReader/YabrLaunchScreen.storyboard; sourceTree = "<group>"; };
 		55271F2BE92C4B4B9870FAEB /* Pods_YetAnotherEBookReader_Catalyst.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReader_Catalyst.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		5EC996F3A0D91B150367D231 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; sourceTree = "<group>"; };
 		65090A9734F3ABD319A180C2 /* Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig"; sourceTree = "<group>"; };
@@ -1019,6 +1021,7 @@
 		2AC3EC0F25BDBC10004A6633 = {
 			isa = PBXGroup;
 			children = (
+				2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */,
 				2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */,
 				2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */,
 				2AC3EC3C25BDBC11004A6633 /* YetAnotherEBookReaderUITests */,
@@ -1344,6 +1347,7 @@
 				2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */,
 				2A107DCB2663CB56007DCA20 /* OPDS.storyboard in Resources */,
 				2A107DD52663CB56007DCA20 /* Library.storyboard in Resources */,
+				2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */,
 				2A107E042663CB56007DCA20 /* Localizable.strings in Resources */,
 				2A107E0D2663CB56007DCA20 /* 2.epub in Resources */,
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,

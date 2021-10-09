@@ -12,15 +12,17 @@ extension EpubFolioReaderContainer {
     static func Configuration(bookURL: URL) -> FolioReaderConfig {
         let config = FolioReaderConfig(withIdentifier: bookURL.lastPathComponent)
         config.shouldHideNavigationOnTap = false
-        config.scrollDirection = FolioReaderScrollDirection.vertical
+        config.canChangeScrollDirection = true
         config.allowSharing = true
         config.displayTitle = true
+        //config.localizedShareWebLink = URL(string: "yabr://share.book/")
         
         #if DEBUG
     //    config.debug.formUnion([.borderHighlight])
-        config.debug.formUnion([.viewTransition])
-        config.debug.formUnion([.functionTrace])
+        //config.debug.formUnion([.viewTransition])
+        // config.debug.formUnion([.functionTrace])
         //config.debug.formUnion([.htmlStyling, .borderHighlight])
+        config.debug.formUnion([.htmlStyling])
         #endif
         // See more at FolioReaderConfig.swift
     //        config.canChangeScrollDirection = false
