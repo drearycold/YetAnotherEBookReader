@@ -13,6 +13,9 @@ struct MainView: View {
     
     @State private var alertItem: AlertItem?
 
+    @State private var positionActionPresenting = false
+    @State private var positionActionMessage = ""
+    
     var body: some View {
         ZStack {
             TabView(selection: $modelData.activeTab) {
@@ -83,11 +86,17 @@ struct MainView: View {
             }
             if modelData.updatedReadingPosition < originalPosition {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(originalPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                    alertItem = AlertItem(
+                        id: "BackwardProgress",
+                        msg: "You have reached a position behind last saved, is this alright?"
+                    )
                 }
             } else if originalPosition << modelData.updatedReadingPosition {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(originalPosition.description) VS Current \(modelData.updatedReadingPosition.description)")
+                    alertItem = AlertItem(
+                        id: "ForwardProgress",
+                        msg: "You have advanced more than 10% in this book, is this alright?"
+                    )
                 }
             }
             else {
@@ -101,17 +110,14 @@ struct MainView: View {
             }
         }
         .alert(item: $alertItem) { item in
-            if item.id == "ForwardProgress" {
-                return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
+            Alert(
+                title: Text("Confirm New Progress"),
+                message: Text(item.msg ?? ""),
+                primaryButton: .destructive(Text("Confirm")) {
                     modelData.updateCurrentPosition(alertDelegate: self)
-                }), secondaryButton: .cancel())
-            }
-            if item.id == "BackwardProgress" {
-                return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    modelData.updateCurrentPosition(alertDelegate: self)
-                }), secondaryButton: .cancel())
-            }
-            return Alert(title: Text(item.id), message: Text(item.msg ?? "Unexpected Error"))
+                },
+                secondaryButton: .cancel()
+            )
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)

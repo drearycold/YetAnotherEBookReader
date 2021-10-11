@@ -151,8 +151,14 @@ struct BookDetailView: View {
                     Text("Loading Cover ...")
                 }
             Button(action: {
-                _viewModel.readingPositionListViewModel.book = book
-                _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+                if _viewModel.listVM == nil {
+                    _viewModel.listVM = ReadingPositionListViewModel(
+                        modelData: modelData, book: book, positions: book.readPos.getDevices()
+                    )
+                } else {
+                    _viewModel.listVM.book = book
+                    _viewModel.listVM.positions = book.readPos.getDevices()
+                }
                 presentingReadPositionList = true
             }) {
                 Image(systemName: "book")
@@ -422,11 +428,11 @@ struct BookDetailView: View {
             }
         }
         .sheet(isPresented: $presentingReadPositionList, onDismiss: {
-            print("ReadingPositionListView dismiss \(book.readPos.getDevices().count) \(_viewModel.readingPositionListViewModel.book.readPos.getDevices().count)")
-            guard book.readPos.getDevices().count != _viewModel.readingPositionListViewModel.book.readPos.getDevices().count else { return }
-            modelData.updateReadingPosition(book: _viewModel.readingPositionListViewModel.book, alertDelegate: self)
+            print("ReadingPositionListView dismiss \(book.readPos.getDevices().count) \(_viewModel.listVM.book.readPos.getDevices().count)")
+            guard book.readPos.getDevices().count != _viewModel.listVM.book.readPos.getDevices().count else { return }
+            modelData.updateReadingPosition(book: _viewModel.listVM.book, alertDelegate: self)
         }) {
-            ReadingPositionListView(viewModel: _viewModel.readingPositionListViewModel)
+            ReadingPositionListView(viewModel: _viewModel.listVM)
         }
     }
     
@@ -568,8 +574,8 @@ struct BookDetailView: View {
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 guard let book = modelData.readingBook else { return }
-                _viewModel.readingPositionListViewModel.book = book
-                _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+                _viewModel.listVM.book = book
+                _viewModel.listVM.positions = book.readPos.getDevices()
                 presentingReadPositionList = true
             }) {
                 Image(systemName: "book")
@@ -633,13 +639,13 @@ struct BookDetailView: View {
         shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
         shelfNameCustomized = !book.tags.contains(shelfName)
         
-        if _viewModel.readingPositionListViewModel == nil {
-            _viewModel.readingPositionListViewModel = ReadingPositionListViewModel(
+        if _viewModel.listVM == nil {
+            _viewModel.listVM = ReadingPositionListViewModel(
                 modelData: modelData, book: book, positions: book.readPos.getDevices()
             )
         } else {
-            _viewModel.readingPositionListViewModel.book = book
-            _viewModel.readingPositionListViewModel.positions = book.readPos.getDevices()
+            _viewModel.listVM.book = book
+            _viewModel.listVM.positions = book.readPos.getDevices()
         }
         
         modelData.calibreServerService.getAnnotations(

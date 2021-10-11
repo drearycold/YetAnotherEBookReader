@@ -105,7 +105,7 @@ struct ReaderOptionsView: View {
                     .font(.title3)
 
                 HStack {
-                    Text("Experimental!!!")
+                    Text("Experimental!!! Instructions on the road")
                         .font(.caption)
                     Spacer()
                     Button(action:{ customDictViewerInfoPresenting = true}) {

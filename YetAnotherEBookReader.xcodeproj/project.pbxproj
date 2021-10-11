@@ -121,6 +121,8 @@
 		2AA5DEB726D3571A00954255 /* ReadingPositionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */; };
 		2AAB29922712BB250080B0CB /* ReaderOptionsCbzView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */; };
 		2AAB29942713CB690080B0CB /* ServerCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */; };
+		2AAB2996271411060080B0CB /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 2AAB2995271411060080B0CB /* Settings.bundle */; };
+		2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB2997271415E10080B0CB /* AppInfoView.swift */; };
 		2AAE409D267849E80058A501 /* LibraryInfoBookRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */; };
 		2AAE409F26784D080058A501 /* LibraryBookListFilter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */; };
 		2AAE40A1267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE40A0267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift */; };
@@ -499,6 +501,8 @@
 		2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionListView.swift; sourceTree = "<group>"; };
 		2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsCbzView.swift; sourceTree = "<group>"; };
 		2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCalibreIntroView.swift; sourceTree = "<group>"; };
+		2AAB2995271411060080B0CB /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; name = Settings.bundle; path = YetAnotherEBookReader/Settings.bundle; sourceTree = "<group>"; };
+		2AAB2997271415E10080B0CB /* AppInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoView.swift; sourceTree = "<group>"; };
 		2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookRow.swift; sourceTree = "<group>"; };
 		2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryBookListFilter.swift; sourceTree = "<group>"; };
 		2AAE40A0267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBatchDownloadSheet.swift; sourceTree = "<group>"; };
@@ -955,6 +959,7 @@
 				2AF8589C2712825400FA87AD /* FormatOptionsView.swift */,
 				2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */,
 				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
+				2AAB2997271415E10080B0CB /* AppInfoView.swift */,
 			);
 			path = SettingsView;
 			sourceTree = "<group>";
@@ -1036,6 +1041,7 @@
 		2AC3EC0F25BDBC10004A6633 = {
 			isa = PBXGroup;
 			children = (
+				2AAB2995271411060080B0CB /* Settings.bundle */,
 				2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */,
 				2AC3EC1A25BDBC10004A6633 /* YetAnotherEBookReader */,
 				2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */,
@@ -1366,6 +1372,7 @@
 				2A107E042663CB56007DCA20 /* Localizable.strings in Resources */,
 				2A107E0D2663CB56007DCA20 /* 2.epub in Resources */,
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,
+				2AAB2996271411060080B0CB /* Settings.bundle in Resources */,
 				2A107DD12663CB56007DCA20 /* PublicationMenuViewController.strings in Resources */,
 				2A107DF52663CB56007DCA20 /* Outline.storyboard in Resources */,
 			);
@@ -1596,6 +1603,7 @@
 				2AD38F8726D637B70053D01D /* ReadingPositionDetailView.swift in Sources */,
 				2A107DDA2663CB56007DCA20 /* BooksDatabase.swift in Sources */,
 				2A63F74026C1136E00DB5E98 /* BookFormatDownload.swift in Sources */,
+				2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */,
 				2ABB9158261F1A47004AA7C0 /* EpubFolioReaderContainer.swift in Sources */,
 				2A107DF72663CB56007DCA20 /* ReaderError.swift in Sources */,
 				2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */,

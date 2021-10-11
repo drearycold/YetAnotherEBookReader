@@ -9,7 +9,7 @@ import Foundation
 
 class BookDetailViewModel: ObservableObject {
     
-    var readingPositionListViewModel: ReadingPositionListViewModel!
+    var listVM: ReadingPositionListViewModel!
     
     init() {
         print("BookDetailViewModel INIT")
