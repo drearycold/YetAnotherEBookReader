@@ -145,8 +145,16 @@ class CalibreBookRealm: Object {
         deviceMapDict.forEach { key, value in
             guard let deviceName = key as? String,
                   let deviceReadingPositionDict = value as? [String: Any],
-                  let readerName = deviceReadingPositionDict["readerName"] as? String else {
+                  var readerName = deviceReadingPositionDict["readerName"] as? String else {
                 return
+            }
+            
+            // MARK: TEMPFIX for reader name changes
+            if readerName == "FolioReader" {
+                readerName = ReaderType.YabrEPUB.rawValue
+            }
+            if readerName == "YabrPDFView" {
+                readerName = ReaderType.YabrPDF.rawValue
             }
             
             var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: readerName)
