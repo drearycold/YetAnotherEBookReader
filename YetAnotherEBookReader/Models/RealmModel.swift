@@ -143,12 +143,14 @@ class CalibreBookRealm: Object {
         let deviceMapObject = readPosDict["deviceMap"]
         let deviceMapDict = deviceMapObject as! NSDictionary
         deviceMapDict.forEach { key, value in
-            let deviceName = key as! String
-            let deviceReadingPositionDict = value as! [String: Any]
+            guard let deviceName = key as? String,
+                  let deviceReadingPositionDict = value as? [String: Any],
+                  let readerName = deviceReadingPositionDict["readerName"] as? String else {
+                return
+            }
             
-            var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: "FolioReader")
+            var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: readerName)
             
-            deviceReadingPosition.readerName = deviceReadingPositionDict["readerName"] as! String
             deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
             deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
             deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0

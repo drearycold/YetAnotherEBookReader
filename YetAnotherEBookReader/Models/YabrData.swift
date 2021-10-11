@@ -37,8 +37,8 @@ struct FormatInfo: Codable {
 enum ReaderType: String, CaseIterable, Identifiable {
     case UNSUPPORTED
     
-    case FolioReader
-    case YabrPDFView
+    case YabrEPUB
+    case YabrPDF
     case ReadiumEPUB
     case ReadiumPDF
     case ReadiumCBZ

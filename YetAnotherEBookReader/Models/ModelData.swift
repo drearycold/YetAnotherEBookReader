@@ -366,8 +366,8 @@ final class ModelData: ObservableObject {
                 defaultFormat = Format.EPUB
         }
         
-        formatReaderMap[Format.EPUB] = [ReaderType.FolioReader, ReaderType.ReadiumEPUB]
-        formatReaderMap[Format.PDF] = [ReaderType.YabrPDFView, ReaderType.ReadiumPDF]
+        formatReaderMap[Format.EPUB] = [ReaderType.YabrEPUB, ReaderType.ReadiumEPUB]
+        formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
         downloadService.modelData = self
@@ -376,7 +376,7 @@ final class ModelData: ObservableObject {
             let library = calibreLibraries.first!.value
             
             var readPos = BookReadingPosition()
-            readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: "FolioReader", maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
+            readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: ReaderType.YabrEPUB.rawValue, maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
             
             self.readingBook = CalibreBook(
                 id: 1,

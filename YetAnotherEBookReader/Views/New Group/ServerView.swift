@@ -35,6 +35,8 @@ struct ServerView: View {
     @State private var dataAction = ""
     @State private var dataLoading = false
     
+    @State private var serverCalibreInfoPresenting = false
+    
     @State private var updater = 0
     
     var defaultLog = Logger()
@@ -45,6 +47,19 @@ struct ServerView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {  //Server & Library Settings
+                HStack {
+                    Spacer()
+                    Button(action:{
+                        serverCalibreInfoPresenting = true
+                    }) {
+                        Text("What's calibre server?")
+                            .font(.caption)
+                    }
+                }
+                .sheet(isPresented: $serverCalibreInfoPresenting, onDismiss: { serverCalibreInfoPresenting = false }, content: {
+                    ServerCalibreIntroView()
+                        .frame(maxWidth: 600)
+                })
                 HStack {
                     Picker("Switch Server", selection: $modelData.currentCalibreServerId) {
                         ForEach(modelData.calibreServers.values.map { $0.id }.sorted { $0 < $1 }, id: \.self) { serverId in
@@ -75,7 +90,7 @@ struct ServerView: View {
                             calibreServerEditing = true
                             dataAction = "Add"
                         }) {
-                            Image(systemName: "plus")
+                            Text("Add")
                         }
                         
                         Button(action:{
@@ -103,6 +118,7 @@ struct ServerView: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     if calibreServerEditing {
+                        
                         HStack {
                             Image(systemName: "at")
                             TextField("Name Your Server", text: $calibreServerName)
@@ -321,10 +337,11 @@ struct ServerView: View {
                     }
                 }
                 
-                VStack(alignment:.leading, spacing: 4) {
+                if modelData.currentCalibreServer?.isLocal == false {
+                    VStack(alignment:.leading, spacing: 4) {
                     Divider()
                     
-                    Text("Library Settings")
+                    Text("Advanced Library Settings")
                     Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
                         .onChange(of: enableStoreReadingPosition) { enabled in
                             modelData.updateStoreReadingPosition(enabled: enabled, value: storeReadingPositionColumnName)
@@ -347,8 +364,10 @@ struct ServerView: View {
                         }
                         Text("Please add a custom column of type \"Long text\" on calibre server.\nIf there are multiple users, it's better to add a unique column for each user.")
                             .font(.caption)
-                        Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
+                        if modelData.currentCalibreServer?.username.isEmpty ?? false {
+                            Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
                             .font(.caption)
+                        }
                         HStack {
                             Spacer()
                             Button(action:{
@@ -398,6 +417,7 @@ struct ServerView: View {
                             }
                         }
                     }
+                }
                 }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))

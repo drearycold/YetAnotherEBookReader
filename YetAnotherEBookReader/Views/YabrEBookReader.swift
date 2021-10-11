@@ -115,7 +115,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         }
         #endif
         
-        if bookFormat == Format.EPUB && bookReader == ReaderType.FolioReader {
+        if bookFormat == Format.EPUB && bookReader == ReaderType.YabrEPUB {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
 
             readerConfiguration.enableMDictViewer = modelData.getCustomDictViewer().0
@@ -201,7 +201,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         }
         #endif
         
-        if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDFView {
+        if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDF {
             let pdfViewController = YabrPDFViewController()
             
             let nav = UINavigationController(rootViewController: pdfViewController)

@@ -13,7 +13,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             List {
-                NavigationLink("Server & Library", destination: ServerView())
+                NavigationLink(destination: ServerView()) {
+                    Text("Server & Library")
+                    if modelData.calibreServers.filter({$0.value.isLocal == false}).isEmpty {
+                        Text("Start here").foregroundColor(.red)
+                    }
+                }
                 NavigationLink("Reader Options", destination: ReaderOptionsView())
                 Text("")
                 NavigationLink("Licenses", destination: Text("Licenses"))
@@ -25,7 +30,11 @@ struct SettingsView: View {
 }
 
 struct SettingsView_Previews: PreviewProvider {
+    static private var modelData = ModelData()
+
     static var previews: some View {
         SettingsView()
+            .environmentObject(modelData)
+
     }
 }

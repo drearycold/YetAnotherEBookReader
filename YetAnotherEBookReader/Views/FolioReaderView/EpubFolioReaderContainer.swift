@@ -92,7 +92,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
             updatedReadingPosition.cfi = cfi
         }
         
-        updatedReadingPosition.readerName = "FolioReader"
+        updatedReadingPosition.readerName = ReaderType.YabrEPUB.rawValue
         
         modelData?.updatedReadingPosition = updatedReadingPosition
     }

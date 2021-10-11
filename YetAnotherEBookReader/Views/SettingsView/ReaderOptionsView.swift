@@ -10,6 +10,11 @@ import SwiftUI
 struct ReaderOptionsView: View {
     @EnvironmentObject var modelData: ModelData
     
+    @State private var optionsFormatPresenting = false
+    @State private var optionsReaderEpubPresenting = false
+    @State private var optionsReaderPdfPresenting = false
+    @State private var optionsReaderCbzPresenting = false
+
     @State private var customDictViewerEnabled = false
     @State private var customDictViewerURL = ""
     @State private var customDictViewerURLStored: URL?
@@ -22,6 +27,7 @@ struct ReaderOptionsView: View {
             
             VStack(alignment: .leading, spacing: 8) {
                 Text("Preferred Book Format and Reader")
+                    .font(.title3)
                 
                 Text("Book Format")
                     .frame(minWidth: 160, alignment: .leading)
@@ -36,23 +42,22 @@ struct ReaderOptionsView: View {
                     .frame(maxWidth: 600)
                     
                     Button(action:{
-                        
-                    }) {
-                        Image(systemName: "gearshape")
-                    }
-                    
-                    Button(action:{
-                        
+                        optionsFormatPresenting = true
                     }) {
                         Image(systemName: "questionmark.circle")
                     }
                     Spacer()
-                }
+                }.sheet(isPresented: $optionsFormatPresenting, onDismiss: { optionsFormatPresenting = false}, content: {
+                    FormatOptionsView()
+                })
                 
                 ForEach(Format.allCases.dropFirst(), id: \.self) { format in
-                    Text("Reader for \(format.rawValue)")
+                    HStack {
+                        Text("Reader for \(format.rawValue)")
                         .frame(minWidth: 160, alignment: .leading)
                         .padding(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0))
+                        Spacer()
+                    }
                     
                     HStack {
                         Spacer()
@@ -64,28 +69,40 @@ struct ReaderOptionsView: View {
                         .frame(maxWidth: 600)
                         
                         Button(action:{
-                            
-                        }) {
-                            Image(systemName: "gearshape")
-                        }
-                        
-                        Button(action:{
-                            
+                            switch(format) {
+                            case .EPUB:
+                                optionsReaderEpubPresenting = true
+                            case .PDF:
+                                optionsReaderPdfPresenting = true
+                            case .CBZ:
+                                optionsReaderCbzPresenting = true
+                            default: break
+                            }
                         }) {
                             Image(systemName: "questionmark.circle")
                         }
                         Spacer()
                     }
-                }
+                }.sheet(isPresented: $optionsReaderEpubPresenting, onDismiss: { optionsReaderEpubPresenting = false }, content: {
+                        ReaderOptionsEpubView()
+                    
+                })
+                .sheet(isPresented: $optionsReaderPdfPresenting, onDismiss: { optionsReaderPdfPresenting = false }, content: {
+                        ReaderOptionsPdfView()
+                })
+                .sheet(isPresented: $optionsReaderCbzPresenting, onDismiss: { optionsReaderCbzPresenting = false }, content: {
+                        ReaderOptionsCbzView()
+                })
             }.padding()
             
             Divider()
             
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("Enable Custom Dictionary Viewer", isOn: $customDictViewerEnabled)
+                Toggle("Custom Dictionary Viewer", isOn: $customDictViewerEnabled)
                     .onChange(of: customDictViewerEnabled, perform: { value in
                         _ = modelData.updateCustomDictViewer(enabled: value, value: nil)
                     })
+                    .font(.title3)
 
                 HStack {
                     Text("Experimental!!!")
@@ -118,7 +135,8 @@ struct ReaderOptionsView: View {
                     }
                 }
                 
-                Text("If you are not satisfied with Apple's build-in dictionaries, we can make use of a private dictionary server powered by flask-mdict.\nLimited to FolioReader and YabrPDFView.")
+                Text("If you are not satisfied with Apple's build-in dictionaries, we can make use of a private dictionary server powered by flask-mdict. Limited to \(ReaderType.YabrEPUB.rawValue) and \(ReaderType.YabrPDF.rawValue).")
+                    .multilineTextAlignment(.leading)
                     .font(.caption)
                 
                 HStack {
