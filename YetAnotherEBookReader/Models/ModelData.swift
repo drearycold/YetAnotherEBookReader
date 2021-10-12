@@ -263,7 +263,7 @@ final class ModelData: ObservableObject {
     var calibreServiceCancellable: AnyCancellable?
     var shelfRefreshCancellable: AnyCancellable?
     
-    @Published var userFontDescriptors = [String: CTFontDescriptor]()
+    @Published var userFontInfos = [String: FontInfo]()
 
     init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
@@ -436,12 +436,24 @@ final class ModelData: ObservableObject {
         return fontDescriptorArrays
     }
     
+    func removeCustomFonts(at offsets: IndexSet) {
+        let list = userFontInfos.sorted {
+            ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
+        }
+        let candidates = offsets.map { list[$0] }
+        candidates.forEach { (fontId, fontInfo) in
+            guard let fileURL = fontInfo.fileURL else { return }
+            try? FileManager.default.removeItem(atPath: fileURL.path)
+        }
+    }
+    
     func reloadCustomFonts() {
         if let userFontDescriptors = loadUserFonts() {
-            self.userFontDescriptors = userFontDescriptors
+            self.userFontInfos = userFontDescriptors.mapValues { FontInfo(descriptor: $0) }
         } else {
-            self.userFontDescriptors.removeAll()
+            self.userFontInfos.removeAll()
         }
+        
     }
     
     func populateBookShelf() {

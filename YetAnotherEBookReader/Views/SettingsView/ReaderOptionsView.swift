@@ -18,6 +18,8 @@ struct ReaderOptionsView: View {
     @State private var fontsFolderPresenting = false
     @State private var fontsFolderPicked = [URL]()
     @State private var fontsDetailPresenting = false
+    @State private var fontsCount = 0
+    @State private var fontsImportNotice = ""
     
     @State private var customDictViewerEnabled = false
     @State private var customDictViewerURL = ""
@@ -107,57 +109,98 @@ struct ReaderOptionsView: View {
                 Text("Custom Fonts for \(ReaderType.YabrEPUB.rawValue)")
                     .font(.title3)
                 Group {
-                    Text("\(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with custom fonts")
-                    Text("You can place font files inside \"Fonts\" folder of this App. They will appear in \"Font\" tab of Reader's style menu.")
+                    Text("Don't get limited by eBook publisher's aesthetic. \(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with your favorite choosing.")
+                    Text("You can place font files inside \"Fonts\" folder of this App or import them directly from here. They will appear in the \"Font\" tab of \(ReaderType.YabrEPUB.rawValue)'s style menu.")
                     Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
                 }.font(.caption)
                 HStack {
-                    Text("Found \(modelData.userFontDescriptors.count) font(s)")
+                    Text("Loaded \(modelData.userFontInfos.count) font(s)")
                     Spacer()
                     
                     Button(action:{
+                        fontsCount = modelData.userFontInfos.count
                         fontsFolderPresenting = true
                     }) {
                         Text("Import")
                     }
                     
                     Button(action:{
+                        fontsCount = modelData.userFontInfos.count
                         fontsDetailPresenting = true
                     }) {
-                        Text("Show")
-                            .disabled(modelData.userFontDescriptors.isEmpty)
+                        Text("View")
+                            .disabled(modelData.userFontInfos.isEmpty)
                     }
                 }
+                HStack {
+                    Text(fontsImportNotice).font(.caption)
+                }
             }
-            .sheet(isPresented: $fontsDetailPresenting, onDismiss: {fontsDetailPresenting = false}) {
+            .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
+                fontsDetailPresenting = false
+                let newCount = modelData.userFontInfos.count
+                let deletedCount = fontsCount - newCount
+                if deletedCount > 0 {
+                    fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                }
+                fontsCount = newCount
+            }) {
                 NavigationView {
                     List {
-                        ForEach(modelData.userFontDescriptors.map { FontInfo(id: $0.key, descriptor: $0.value) }.sorted { $0.displayName < $1.displayName }, id: \.self ) { fontInfo in
-                            NavigationLink(destination: FontPreviewView(fontInfo: fontInfo)) {
+                        ForEach(
+                            modelData.userFontInfos.sorted {
+                                    ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
+                                } , id: \.key ) { (fontId, fontInfo) in
+                            NavigationLink(destination: FontPreviewView(fontId: fontId, fontInfo: fontInfo)) {
                                 VStack(alignment: .leading, spacing: 0) {
-                                    Text(fontInfo.displayName)
+                                    Text(fontInfo.localizedName ?? fontInfo.displayName ?? fontId)
+                                        .font(Font.custom(fontId, size: 20, relativeTo: .body))
                                     HStack {
                                         Spacer()
-                                        Text(fontInfo.fileName).font(.caption)
+                                        Text(fontInfo.fileURL?.lastPathComponent ?? "").font(.caption2)
                                     }
                                 }
                             }
-                        }
-                    }
+                        }.onDelete(perform: removeFontRows)
+                    }.navigationTitle("Favorite Fonts")
                 }
             }
             .sheet(isPresented: $fontsFolderPresenting, onDismiss: {
                 fontsFolderPresenting = false
             }) {
-                DocumentPicker(fontURLs: $fontsFolderPicked)
+                FontImportPicker(fontURLs: $fontsFolderPicked)
             }
-            .onChange(of: fontsFolderPicked) { urls in
+            .onChange(of: fontsFolderPicked) { tmpURLs in
+                let urls = tmpURLs.filter { $0 != FontImportPicker.FakeURL }
                 urls.forEach {
                     print("documentPicker \($0.absoluteString)")
                 }
-                modelData.importCustomFonts(urls: urls)
+                fontsImportNotice = ""
+                guard let imported = modelData.importCustomFonts(urls: urls) else {
+                    fontsImportNotice = "Error occured during import"
+                    return
+                }
                 modelData.reloadCustomFonts()
-                //updater += 1
+                let newCount = modelData.userFontInfos.count
+                let deletedCount = fontsCount + imported.count - newCount
+                if imported.count > 0 {
+                    fontsImportNotice = "Successfully imported \(imported.count) font(s)"
+                }
+                if deletedCount > 0 {
+                    if fontsImportNotice.count > 0 {
+                        fontsImportNotice = "\(fontsImportNotice), and deleted \(deletedCount) font(s)"
+                    } else {
+                        fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                    }
+                }
+                if urls.count - imported.count > 0 {
+                    if fontsImportNotice.count > 0 {
+                        fontsImportNotice = "\(fontsImportNotice), and failed \(urls.count - imported.count) font(s)"
+                    } else {
+                        fontsImportNotice = "Failed \(urls.count - imported.count) font(s)"
+                    }
+                }
+                fontsCount = newCount
             }
             .padding()
             
@@ -290,41 +333,12 @@ struct ReaderOptionsView: View {
         }
         return false
     }
-}
-
-    struct FontInfo: Identifiable, Hashable {
-        var id: String
-        var descriptor: CTFontDescriptor
-        
-        var displayName = ""
-        var fileName = ""
-        var languages = Set<String>()
-        
-        init(id: String, descriptor: CTFontDescriptor) {
-            self.id = id
-            self.descriptor = descriptor
-            
-            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontDisplayNameAttribute),
-               CFGetTypeID(attrib) == CFStringGetTypeID(),
-               let displayName = attrib as? String {
-                self.displayName = displayName
-            } else {
-                self.displayName = id
-            }
-            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute),
-                  CFGetTypeID(attrib) == CFURLGetTypeID(),
-                  let fontURL = attrib as? URL {
-                fileName = fontURL.lastPathComponent
-            } else {
-                fileName = "INTERNAL ERROR"
-            }
-            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontLanguagesAttribute),
-               CFGetTypeID(attrib) == CFArrayGetTypeID(),
-               let languages = attrib as? [String] {
-                self.languages.formUnion(languages)
-            }
-        }
+    
+    func removeFontRows(at offsets: IndexSet) {
+        modelData.removeCustomFonts(at: offsets)
+        modelData.reloadCustomFonts()
     }
+}
 
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {

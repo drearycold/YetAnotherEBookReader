@@ -97,7 +97,7 @@
 		2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */; };
 		2A47879D271526BF009C8770 /* FontsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47879C271526BF009C8770 /* FontsHelper.swift */; };
 		2A47879F2715426D009C8770 /* FontPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47879E2715426D009C8770 /* FontPreviewView.swift */; };
-		2A4787A127154E39009C8770 /* DocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4787A027154E39009C8770 /* DocumentPicker.swift */; };
+		2A4787A127154E39009C8770 /* FontImportPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4787A027154E39009C8770 /* FontImportPicker.swift */; };
 		2A63F74026C1136E00DB5E98 /* BookFormatDownload.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */; };
 		2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */; };
 		2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */; platformFilter = ios; };
@@ -483,7 +483,7 @@
 		2A3EB9B726B64333000D70F1 /* YetAnotherEBookReader copy2-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "YetAnotherEBookReader copy2-Info.plist"; path = "/Volumes/Data/git/YetAnotherEBookReader/YetAnotherEBookReader copy2-Info.plist"; sourceTree = "<absolute>"; };
 		2A47879C271526BF009C8770 /* FontsHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontsHelper.swift; sourceTree = "<group>"; };
 		2A47879E2715426D009C8770 /* FontPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontPreviewView.swift; sourceTree = "<group>"; };
-		2A4787A027154E39009C8770 /* DocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPicker.swift; sourceTree = "<group>"; };
+		2A4787A027154E39009C8770 /* FontImportPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontImportPicker.swift; sourceTree = "<group>"; };
 		2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormatDownload.swift; sourceTree = "<group>"; };
 		2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDictViewUIVC.swift; sourceTree = "<group>"; };
 		2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Shared.xcframework; path = Carthage/Build/R2Shared.xcframework; sourceTree = "<group>"; };
@@ -957,17 +957,17 @@
 		2A6FF9E7270D542D00811C50 /* SettingsView */ = {
 			isa = PBXGroup;
 			children = (
-				2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */,
-				2ABB914F261F1A47004AA7C0 /* ServerView.swift */,
-				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
-				2AF858982711BF3600FA87AD /* ReaderOptionsPdfView.swift */,
-				2AF8589A2711BF4900FA87AD /* ReaderOptionsEpubView.swift */,
+				2AAB2997271415E10080B0CB /* AppInfoView.swift */,
+				2A4787A027154E39009C8770 /* FontImportPicker.swift */,
+				2A47879E2715426D009C8770 /* FontPreviewView.swift */,
 				2AF8589C2712825400FA87AD /* FormatOptionsView.swift */,
 				2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */,
+				2AF8589A2711BF4900FA87AD /* ReaderOptionsEpubView.swift */,
+				2AF858982711BF3600FA87AD /* ReaderOptionsPdfView.swift */,
+				2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */,
 				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
-				2AAB2997271415E10080B0CB /* AppInfoView.swift */,
-				2A47879E2715426D009C8770 /* FontPreviewView.swift */,
-				2A4787A027154E39009C8770 /* DocumentPicker.swift */,
+				2ABB914F261F1A47004AA7C0 /* ServerView.swift */,
+				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
 			);
 			path = SettingsView;
 			sourceTree = "<group>";
@@ -1584,7 +1584,7 @@
 				2A107E142663CB96007DCA20 /* AppModule.swift in Sources */,
 				2A107DFA2663CB56007DCA20 /* EPUBModule.swift in Sources */,
 				2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift in Sources */,
-				2A4787A127154E39009C8770 /* DocumentPicker.swift in Sources */,
+				2A4787A127154E39009C8770 /* FontImportPicker.swift in Sources */,
 				2A107DC72663CB56007DCA20 /* OPDSGroupTableViewCell.swift in Sources */,
 				2A107DE62663CB56007DCA20 /* BarButtonItem.swift in Sources */,
 				2A107DC42663CB56007DCA20 /* OPDSGroupCollectionViewCell.swift in Sources */,

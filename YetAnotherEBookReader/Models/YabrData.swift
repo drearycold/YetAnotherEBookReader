@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreText
 
 enum Format: String, CaseIterable, Identifiable {
     case UNKNOWN
@@ -51,4 +52,37 @@ struct ReaderInfo {
     let format: Format
     let readerType: ReaderType
     let position: BookDeviceReadingPosition
+}
+
+struct FontInfo {
+    var descriptor: CTFontDescriptor
+    
+    var displayName: String?
+    var localizedName: String?
+    var fileURL: URL?
+    var languages = Set<String>()
+    
+    init(descriptor: CTFontDescriptor) {
+        self.descriptor = descriptor
+        
+        if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontDisplayNameAttribute),
+           CFGetTypeID(attrib) == CFStringGetTypeID(),
+           let displayName = attrib as? String {
+            self.displayName = displayName
+        }
+        if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute),
+           CFGetTypeID(attrib) == CFURLGetTypeID() {
+            self.fileURL = attrib as? URL
+        }
+        if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontLanguagesAttribute),
+           CFGetTypeID(attrib) == CFArrayGetTypeID(),
+           let languages = attrib as? [String] {
+            self.languages.formUnion(languages)
+        }
+        if let attrib = CTFontDescriptorCopyLocalizedAttribute(descriptor, kCTFontDisplayNameAttribute, nil),
+           CFGetTypeID(attrib) == CFStringGetTypeID(),
+           let localizedName = attrib as? String {
+            self.localizedName = localizedName
+        }
+    }
 }

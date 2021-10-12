@@ -119,7 +119,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
 
             readerConfiguration.enableMDictViewer = modelData.getCustomDictViewer().0
-            readerConfiguration.userFontDescriptors = modelData.userFontDescriptors
+            readerConfiguration.userFontDescriptors = modelData.userFontInfos.mapValues { $0.descriptor }
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true
 //            readerConfiguration.shouldHideNavigationOnTap = true

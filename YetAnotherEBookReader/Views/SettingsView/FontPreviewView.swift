@@ -8,14 +8,16 @@
 import SwiftUI
 
 struct FontPreviewView: View {
+    @State var fontId: String
     @State var fontInfo: FontInfo
     
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
-                Text(fontInfo.id)
-                Text(fontInfo.displayName)
-                Text(fontInfo.fileName)
+                Text(fontId)
+                Text(fontInfo.displayName ?? "")
+                Text(fontInfo.localizedName ?? "")
+                Text(fontInfo.fileURL?.lastPathComponent ?? "")
                 Group {
                     Text("The quick brown fox jumps over the lazy dog and runs away.")
                     Divider()
@@ -56,7 +58,7 @@ struct FontPreviewView: View {
                             1234567890
                             """)
                     }
-                }.font(Font.custom(fontInfo.id, size: 25, relativeTo: .headline))
+                }.font(Font.custom(fontId, size: 25, relativeTo: .headline))
             }.padding()
         }
     }
@@ -65,8 +67,8 @@ struct FontPreviewView: View {
 struct FontPreviewView_Previews: PreviewProvider {
     static var previews: some View {
         FontPreviewView(
+            fontId: "PingFangSC",
             fontInfo: FontInfo(
-                id: "PingFangSC",
                 descriptor: CTFontDescriptorCreateWithNameAndSize("PingFangSC" as CFString, 30)
             )
         )
