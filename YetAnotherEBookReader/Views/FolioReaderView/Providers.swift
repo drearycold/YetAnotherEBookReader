@@ -68,6 +68,7 @@ class FolioReaderPreferenceRealm: Object {
     @objc dynamic var currentTextIndent: Int = .min
     @objc dynamic var doWrapPara: Bool = false
     @objc dynamic var doClearClass: Bool = true
+    @objc dynamic var styleOverride: Int = .min
     @objc dynamic var savedPosition: Data?
 }
 
@@ -274,6 +275,16 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         guard let data = try? JSONSerialization.data(withJSONObject: value, options: []) else { return }
         try? realm?.write {
             prefObj?.savedPosition = data
+        }
+    }
+    
+    func preference(styleOverride defaults: Int) -> Int {
+        return prefObj?.styleOverride ?? defaults
+    }
+    
+    func preference(setStyleOverride value: Int) {
+        try? realm?.write {
+            prefObj?.styleOverride = value
         }
     }
     

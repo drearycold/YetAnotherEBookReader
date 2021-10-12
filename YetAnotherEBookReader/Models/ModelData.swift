@@ -246,7 +246,7 @@ final class ModelData: ObservableObject {
     
     private var defaultLog = Logger()
     
-    static let RealmSchemaVersion:UInt64 = 19
+    static let RealmSchemaVersion:UInt64 = 20
     private var realm: Realm!
     private var realmConf = Realm.Configuration(
         schemaVersion: RealmSchemaVersion
@@ -263,6 +263,8 @@ final class ModelData: ObservableObject {
     var calibreServiceCancellable: AnyCancellable?
     var shelfRefreshCancellable: AnyCancellable?
     
+    @Published var userFontDescriptors = [String: CTFontDescriptor]()
+
     init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -372,6 +374,8 @@ final class ModelData: ObservableObject {
 
         downloadService.modelData = self
         
+        self.reloadCustomFonts()
+        
         if mock {
             let library = calibreLibraries.first!.value
             
@@ -404,6 +408,39 @@ final class ModelData: ObservableObject {
                 inShelf: true,
                 inShelfName: "Default")
             self.booksInShelf[self.readingBook!.inShelfId] = self.readingBook
+        }
+    }
+    
+    func importCustomFonts(urls: [URL]) -> [CFArray]? {
+        guard let documentDirectory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        else { return nil }
+        
+        let fontsDirectory = documentDirectory.appendingPathComponent("Fonts",  isDirectory: true)
+        guard let _ = try? FileManager.default.createDirectory(atPath: fontsDirectory.path, withIntermediateDirectories: true, attributes: nil) else { return nil }
+    
+        var fontDescriptorArrays = [CFArray]()
+
+        urls.forEach { url in
+            guard let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
+            else { return }
+            
+            let fontDestFile = fontsDirectory.appendingPathComponent(url.lastPathComponent)
+            do {
+                try FileManager.default.moveItem(atPath: url.path, toPath: fontDestFile.path)
+                fontDescriptorArrays.append(ctFontDescriptorArray)
+            } catch {
+                print("importCustomFonts \(error.localizedDescription)")
+            }
+        }
+        
+        return fontDescriptorArrays
+    }
+    
+    func reloadCustomFonts() {
+        if let userFontDescriptors = loadUserFonts() {
+            self.userFontDescriptors = userFontDescriptors
+        } else {
+            self.userFontDescriptors.removeAll()
         }
     }
     

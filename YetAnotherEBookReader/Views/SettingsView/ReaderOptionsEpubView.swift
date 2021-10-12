@@ -20,9 +20,6 @@ struct ReaderOptionsEpubView: View {
                     • Highlight Syncing with Calibre
                     Try it Out! And let us know what you think.
                     """)
-                Text("★How to supply fonts").bold()
-                Text("Place font files inside \"Fonts\" folder of this App. They will appear in \"Font\" tab of Reader's style menu.")
-                Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
                 Text("")
                 Text("About \(ReaderType.ReadiumEPUB.rawValue)")
                     .font(.title3).bold()
@@ -30,13 +27,18 @@ struct ReaderOptionsEpubView: View {
                     Based on Readium Project. Could have better compatibility than YabrEPUB.
                     """)
             }
+            
             .padding()
         }
     }
 }
 
+
 struct ReaderOptionsEpubView_Previews: PreviewProvider {
+    static var modelData = ModelData(mock: true)
+
     static var previews: some View {
         ReaderOptionsEpubView()
+            .environmentObject(modelData)
     }
 }

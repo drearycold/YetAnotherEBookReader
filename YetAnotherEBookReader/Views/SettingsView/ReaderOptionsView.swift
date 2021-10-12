@@ -15,12 +15,18 @@ struct ReaderOptionsView: View {
     @State private var optionsReaderPdfPresenting = false
     @State private var optionsReaderCbzPresenting = false
 
+    @State private var fontsFolderPresenting = false
+    @State private var fontsFolderPicked = [URL]()
+    @State private var fontsDetailPresenting = false
+    
     @State private var customDictViewerEnabled = false
     @State private var customDictViewerURL = ""
     @State private var customDictViewerURLStored: URL?
     @State private var customDictViewerURLMalformed = false
     @State private var customDictViewerInfoPresenting = false
     @State private var customDictViewerTestPresenting = false
+    
+    @State private var updater = 0
     
     var body: some View {
         ScrollView {
@@ -96,6 +102,64 @@ struct ReaderOptionsView: View {
             }.padding()
             
             Divider()
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Custom Fonts for \(ReaderType.YabrEPUB.rawValue)")
+                    .font(.title3)
+                Group {
+                    Text("\(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with custom fonts")
+                    Text("You can place font files inside \"Fonts\" folder of this App. They will appear in \"Font\" tab of Reader's style menu.")
+                    Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
+                }.font(.caption)
+                HStack {
+                    Text("Found \(modelData.userFontDescriptors.count) font(s)")
+                    Spacer()
+                    
+                    Button(action:{
+                        fontsFolderPresenting = true
+                    }) {
+                        Text("Import")
+                    }
+                    
+                    Button(action:{
+                        fontsDetailPresenting = true
+                    }) {
+                        Text("Show")
+                            .disabled(modelData.userFontDescriptors.isEmpty)
+                    }
+                }
+            }
+            .sheet(isPresented: $fontsDetailPresenting, onDismiss: {fontsDetailPresenting = false}) {
+                NavigationView {
+                    List {
+                        ForEach(modelData.userFontDescriptors.map { FontInfo(id: $0.key, descriptor: $0.value) }.sorted { $0.displayName < $1.displayName }, id: \.self ) { fontInfo in
+                            NavigationLink(destination: FontPreviewView(fontInfo: fontInfo)) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(fontInfo.displayName)
+                                    HStack {
+                                        Spacer()
+                                        Text(fontInfo.fileName).font(.caption)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .sheet(isPresented: $fontsFolderPresenting, onDismiss: {
+                fontsFolderPresenting = false
+            }) {
+                DocumentPicker(fontURLs: $fontsFolderPicked)
+            }
+            .onChange(of: fontsFolderPicked) { urls in
+                urls.forEach {
+                    print("documentPicker \($0.absoluteString)")
+                }
+                modelData.importCustomFonts(urls: urls)
+                modelData.reloadCustomFonts()
+                //updater += 1
+            }
+            .padding()
             
             VStack(alignment: .leading, spacing: 4) {
                 Toggle("Custom Dictionary Viewer", isOn: $customDictViewerEnabled)
@@ -227,6 +291,40 @@ struct ReaderOptionsView: View {
         return false
     }
 }
+
+    struct FontInfo: Identifiable, Hashable {
+        var id: String
+        var descriptor: CTFontDescriptor
+        
+        var displayName = ""
+        var fileName = ""
+        var languages = Set<String>()
+        
+        init(id: String, descriptor: CTFontDescriptor) {
+            self.id = id
+            self.descriptor = descriptor
+            
+            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontDisplayNameAttribute),
+               CFGetTypeID(attrib) == CFStringGetTypeID(),
+               let displayName = attrib as? String {
+                self.displayName = displayName
+            } else {
+                self.displayName = id
+            }
+            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontURLAttribute),
+                  CFGetTypeID(attrib) == CFURLGetTypeID(),
+                  let fontURL = attrib as? URL {
+                fileName = fontURL.lastPathComponent
+            } else {
+                fileName = "INTERNAL ERROR"
+            }
+            if let attrib = CTFontDescriptorCopyAttribute(descriptor, kCTFontLanguagesAttribute),
+               CFGetTypeID(attrib) == CFArrayGetTypeID(),
+               let languages = attrib as? [String] {
+                self.languages.formUnion(languages)
+            }
+        }
+    }
 
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {

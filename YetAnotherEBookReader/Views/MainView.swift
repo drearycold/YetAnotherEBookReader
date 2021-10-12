@@ -66,6 +66,8 @@ struct MainView: View {
                         
                         Start reading by touching book cover.
                         
+                        Don't forget to play with "Reader Options" and various in-reader settings.
+                        
                         Enjoy your book!
                         
                         (This notice will disappear after first book has been added to shelf)
