@@ -246,7 +246,7 @@ final class ModelData: ObservableObject {
     
     private var defaultLog = Logger()
     
-    static let RealmSchemaVersion:UInt64 = 20
+    static let RealmSchemaVersion:UInt64 = 21
     private var realm: Realm!
     private var realmConf = Realm.Configuration(
         schemaVersion: RealmSchemaVersion

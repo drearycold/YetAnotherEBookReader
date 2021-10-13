@@ -36,7 +36,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     let thumbImageView = UIImageView()
     let thumbController = UIViewController()
     
-    var pdfOptions = PDFOptions()
+    var pdfOptions = PDFOptions() {
+        didSet {
+            switch (pdfOptions.themeMode) {
+            case .none:
+                PDFPageWithBackground.fillColor = nil
+            case .serpia:   //#FBF0D9
+                PDFPageWithBackground.fillColor = CGColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
+            case .forest:   //#BAD5C1
+                PDFPageWithBackground.fillColor = CGColor(
+                    red: CGFloat(Int("BA", radix: 16) ?? 255) / 255.0,
+                    green: CGFloat(Int("D5", radix: 16) ?? 255) / 255.0,
+                    blue: CGFloat(Int("C1", radix: 16) ?? 255) / 255.0,
+                    alpha: 1.0)
+            case .dark:     //CGBlendMode.exclusion, white inverts the background color values
+                PDFPageWithBackground.fillColor = .init(gray: 1.0, alpha: 1.0)
+
+            }
+        }
+    }
         
     var bookTitle: String!
     
@@ -59,6 +77,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
             realm = try? Realm(configuration: config)
             if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
+                var pdfOptions = PDFOptions()
+                pdfOptions.themeMode = PDFThemeMode.init(rawValue: pdfOptionsRealm.themeMode) ?? .serpia
                 pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
                 pdfOptions.readingDirection = PDFReadDirection.init(rawValue: pdfOptionsRealm.readingDirection) ?? .LtR_TtB
                 pdfOptions.hMarginAutoScaler = CGFloat(pdfOptionsRealm.hMarginAutoScaler)
@@ -67,6 +87,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 pdfOptions.vMarginDetectStrength = CGFloat(pdfOptionsRealm.vMarginDetectStrength)
                 pdfOptions.lastScale = CGFloat(pdfOptionsRealm.lastScale)
                 pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
+                self.pdfOptions = pdfOptions
             }
         }
         
@@ -650,7 +671,15 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     func handleOptionsChange(pdfOptions: PDFOptions) {
         print(pdfOptions)
         if self.pdfOptions != pdfOptions {
+            var needRedraw = false
+            if self.pdfOptions.themeMode != pdfOptions.themeMode {
+                needRedraw = true
+            }
             self.pdfOptions = pdfOptions
+            if needRedraw {
+//                self.pdfView.layoutDocumentView()
+                //self.pdfView.invalidateIntrinsicContentSize()
+            }
             if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
                 self.pageViewPositionHistory[pageNum]?.scaler = 0
             }
@@ -723,6 +752,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: modelData!.readingBook!.id), modelData!.readingBook!.library.name)
         ).first {
             try? realm?.write {
+                pdfOptionsRealm.themeMode = pdfOptions.themeMode.rawValue
                 pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
                 pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
                 pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
@@ -736,6 +766,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             let pdfOptionsRealm = PDFOptionsRealm()
             pdfOptionsRealm.id = modelData!.readingBook!.id
             pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
+            pdfOptionsRealm.themeMode = pdfOptions.themeMode.rawValue
             pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
             pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
             pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
@@ -797,6 +828,7 @@ struct PageViewPosition {
 class PDFOptionsRealm: Object {
     @objc dynamic var id: Int32 = 0
     @objc dynamic var libraryName = ""
+    @objc dynamic var themeMode = PDFThemeMode.serpia.rawValue
     @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
     @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
     @objc dynamic var hMarginAutoScaler = 5.0

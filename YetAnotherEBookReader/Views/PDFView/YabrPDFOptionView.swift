@@ -23,7 +23,17 @@ enum PDFReadDirection: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+enum PDFThemeMode: String, CaseIterable, Identifiable {
+    case none
+    case serpia
+    case forest
+    case dark
+    
+    var id: String { self.rawValue }
+}
+
 struct PDFOptions: Equatable {
+    var themeMode = PDFThemeMode.serpia
     var selectedAutoScaler = PDFAutoScaler.Width
     var readingDirection = PDFReadDirection.LtR_TtB
     var hMarginAutoScaler = CGFloat(5.0)
@@ -41,11 +51,24 @@ struct PDFOptionView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Spacer()
-                Button(action: {}, label: {
-                    Image(systemName: "questionmark.circle")
-                })
+//            HStack {
+//                Spacer()
+//                Button(action: {}, label: {
+//                    Image(systemName: "questionmark.circle")
+//                })
+//            }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Theme Mode")
+                    Spacer()
+                    Text("need reopen").font(.caption)
+                }
+                Picker(selection: $pdfOptions.themeMode, label: Text("Theme Mode")) {
+                    ForEach(PDFThemeMode.allCases, id: \.self) { themeMode in
+                        Image("icon-theme-\(themeMode.rawValue)").tag(themeMode)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Reading Direction")

@@ -151,7 +151,7 @@ struct ReaderOptionsView: View {
                             modelData.userFontInfos.sorted {
                                     ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
                                 } , id: \.key ) { (fontId, fontInfo) in
-                            NavigationLink(destination: FontPreviewView(fontId: fontId, fontInfo: fontInfo)) {
+                            NavigationLink(destination: FontPreviewBuilder(fontId: fontId, fontInfo: fontInfo)) {
                                 VStack(alignment: .leading, spacing: 0) {
                                     Text(fontInfo.localizedName ?? fontInfo.displayName ?? fontId)
                                         .font(Font.custom(fontId, size: 20, relativeTo: .body))
@@ -300,6 +300,59 @@ struct ReaderOptionsView: View {
             (customDictViewerEnabled, customDictViewerURLStored) = modelData.getCustomDictViewer()
             customDictViewerURL = customDictViewerURLStored?.absoluteString ?? ""
             customDictViewerURLMalformed = checkCustomDictViewerURL(value: customDictViewerURL)
+        }
+    }
+    
+    @ViewBuilder
+    private func FontPreviewBuilder(fontId: String, fontInfo: FontInfo) -> some View {
+        ScrollView {
+            VStack(spacing: 8) {
+                Text(fontId)
+                Text(fontInfo.displayName ?? "")
+                Text(fontInfo.localizedName ?? "")
+                Text(fontInfo.fileURL?.lastPathComponent ?? "")
+                Group {
+                    Text("The quick brown fox jumps over the lazy dog and runs away.")
+                    Divider()
+                    
+                    if fontInfo.languages.contains("en") {
+                        Text("""
+                            ABCDEFGHIJKLM
+                            NOPQRSTUVWXYZ
+                            abcdefghijklm
+                            nopqrstuvwxyz
+                            1234567890
+                            """)
+                        Divider()
+                    }
+                    if fontInfo.languages.contains("zh") {
+                        Text(
+                            """
+                            汉体书写信息技术标准相容
+                            档案下载使用界面简单
+                            支援服务升级资讯专业制作
+                            创意空间快速无线上网
+                            ㈠㈡㈢㈣㈤㈥㈦㈧㈨㈩
+                            AaBbCc ＡａＢｂＣｃ
+                            """
+                        )
+                        Divider()
+                    }
+                    if fontInfo.languages.contains("ja") {
+                        Text("""
+                            あのイーハトーヴォの
+                            すきとおった風、
+                            夏でも底に冷たさをもつ青いそら、
+                            うつくしい森で飾られたモリーオ市、
+                            郊外のぎらぎらひかる草の波。
+                            祇辻飴葛蛸鯖鰯噌庖箸
+                            ABCDEFGHIJKLM
+                            abcdefghijklm
+                            1234567890
+                            """)
+                    }
+                }.font(Font.custom(fontId, size: 25, relativeTo: .headline))
+            }.padding()
         }
     }
     
