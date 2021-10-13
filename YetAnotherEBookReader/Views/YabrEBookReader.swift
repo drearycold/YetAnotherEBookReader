@@ -204,15 +204,13 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         
         if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDF {
             let pdfViewController = YabrPDFViewController()
-            
+            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
+            pdfViewController.modelData = modelData
+                        
             let nav = UINavigationController(rootViewController: pdfViewController)
             nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
             nav.navigationBar.isTranslucent = false
             nav.setToolbarHidden(false, animated: true)
-            
-            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
-            pdfViewController.modelData = modelData
-            
             
             return nav
         }

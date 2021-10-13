@@ -38,6 +38,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     
     var pdfOptions = PDFOptions() {
         didSet {
+            var isDark = false
             switch (pdfOptions.themeMode) {
             case .none:
                 PDFPageWithBackground.fillColor = nil
@@ -49,10 +50,27 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     green: CGFloat(Int("D5", radix: 16) ?? 255) / 255.0,
                     blue: CGFloat(Int("C1", radix: 16) ?? 255) / 255.0,
                     alpha: 1.0)
-            case .dark:     //CGBlendMode.exclusion, white inverts the background color values
-                PDFPageWithBackground.fillColor = .init(gray: 1.0, alpha: 1.0)
-
+            case .dark:
+                PDFPageWithBackground.fillColor = .init(gray: 0.0, alpha: 1.0)
+                isDark = true
             }
+            let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor.init(gray: 1.0, alpha: 1.0))
+            self.navigationController?.navigationBar.barTintColor = backgroundColor
+            self.navigationController?.navigationBar.backgroundColor = backgroundColor
+            self.navigationController?.toolbar.barTintColor = backgroundColor
+            self.navigationController?.toolbar.backgroundColor = backgroundColor
+
+            self.tabBarController?.tabBar.barTintColor = backgroundColor
+            self.tabBarController?.tabBar.backgroundColor = backgroundColor
+            
+            let tintColor: UIColor = isDark ? .lightText : .darkText
+            pageIndicator.setTitleColor(tintColor, for: .normal)
+            titleInfoButton.setTitleColor(tintColor, for: .normal)
+            
+            //self.pdfView.pageShadowsEnabled
+//            pageSlider.backgroundColor = backgroundColor
+//            pageIndicator.backgroundColor = backgroundColor
+//            self.view.backgroundColor = backgroundColor
         }
     }
         
@@ -74,6 +92,13 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         logger.info("pdfDoc: \(pdfDoc.majorVersion) \(pdfDoc.minorVersion)")
         pdfView.document = pdfDoc
 
+        let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
+        
+        pageViewPositionHistory[intialPageNum] = PageViewPosition(
+            scaler: pdfOptions.lastScale,
+            point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
+        )
+        
         if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
             realm = try? Realm(configuration: config)
             if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
@@ -91,12 +116,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             }
         }
         
-        let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
         
-        pageViewPositionHistory[intialPageNum] = PageViewPosition(
-            scaler: pdfOptions.lastScale,
-            point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
-        )
         return 0
     }
     
@@ -116,7 +136,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pdfView.autoScales = false
 
         pageIndicator.setTitle("0 / 0", for: .normal)
-        pageIndicator.setTitleColor(.label, for: .normal)
         pageIndicator.addAction(UIAction(handler: { (action) in
             self.present(self.thumbController, animated: true, completion: nil)
         }), for: .primaryActionTriggered)
@@ -185,7 +204,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     let optionView = PDFOptionView(pdfViewController: self)
                     
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
-                    //optionViewController.preferredContentSize = CGSize(width:340, height:450)
+                    optionViewController.preferredContentSize = CGSize(width:340, height:600)
                     optionViewController.modalPresentationStyle = .popover
                     optionViewController.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItems?[1]
                     
@@ -247,7 +266,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
         
         titleInfoButton.setTitle("Title", for: .normal)
-        titleInfoButton.setTitleColor(.label, for: .normal)
         titleInfoButton.contentHorizontalAlignment = .center
         titleInfoButton.showsMenuAsPrimaryAction = true
         titleInfoButton.menu = navContentsMenu

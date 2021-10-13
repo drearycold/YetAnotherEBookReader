@@ -22,7 +22,7 @@ extension EpubFolioReaderContainer {
         //config.debug.formUnion([.viewTransition])
         // config.debug.formUnion([.functionTrace])
         //config.debug.formUnion([.htmlStyling, .borderHighlight])
-        config.debug.formUnion([.htmlStyling])
+        // config.debug.formUnion([.htmlStyling])
         #endif
         // See more at FolioReaderConfig.swift
     //        config.canChangeScrollDirection = false

@@ -116,7 +116,6 @@
 		2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */; };
 		2A8C26BA25C54C6B00FC7FC0 /* WebViewUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */; };
 		2A8C26D025C5A1E100FC7FC0 /* YabrPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */; };
-		2A8C26D825C5A7D000FC7FC0 /* YabrPDFViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */; };
 		2AA07E9126D73239008CE451 /* BookDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */; };
 		2AA07E9326DB4ADD008CE451 /* BookPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */; };
 		2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */; };
@@ -205,7 +204,6 @@
 		2ADCD80326F4B96200FBAE11 /* Bookmark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D9D2663CB55007DCA20 /* Bookmark.swift */; platformFilter = ios; };
 		2ADCD80426F4B96200FBAE11 /* LibraryModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D7C2663CB55007DCA20 /* LibraryModule.swift */; platformFilter = ios; };
 		2ADCD80526F4B96200FBAE11 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
-		2ADCD80626F4B96200FBAE11 /* YabrPDFViewContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */; };
 		2ADCD80726F4B96200FBAE11 /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D5B2663CB55007DCA20 /* OPDSNavigationTableViewCell.swift */; platformFilter = ios; };
 		2ADCD80826F4B96200FBAE11 /* OPDSCatalogSelectorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D652663CB55007DCA20 /* OPDSCatalogSelectorViewController.swift */; platformFilter = ios; };
 		2ADCD80926F4B96200FBAE11 /* YabrEBookReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9150261F1A47004AA7C0 /* YabrEBookReader.swift */; };
@@ -497,7 +495,6 @@
 		2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUIVC.swift; sourceTree = "<group>"; };
 		2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUI.swift; sourceTree = "<group>"; };
 		2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewController.swift; sourceTree = "<group>"; };
-		2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewContainer.swift; sourceTree = "<group>"; };
 		2A8C26DF25C9970B00FC7FC0 /* YetAnotherEBookReader.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YetAnotherEBookReader.entitlements; sourceTree = "<group>"; };
 		2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailViewModel.swift; sourceTree = "<group>"; };
 		2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreviewView.swift; sourceTree = "<group>"; };
@@ -995,7 +992,6 @@
 			isa = PBXGroup;
 			children = (
 				2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */,
-				2A8C26D725C5A7D000FC7FC0 /* YabrPDFViewContainer.swift */,
 				2A890570260076780072B580 /* YabrPDFOptionView.swift */,
 				2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */,
 			);
@@ -1637,7 +1633,6 @@
 				2A107DF22663CB56007DCA20 /* Bookmark.swift in Sources */,
 				2A107DDC2663CB56007DCA20 /* LibraryModule.swift in Sources */,
 				2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */,
-				2A8C26D825C5A7D000FC7FC0 /* YabrPDFViewContainer.swift in Sources */,
 				2A107DC32663CB56007DCA20 /* OPDSNavigationTableViewCell.swift in Sources */,
 				2A107DCC2663CB56007DCA20 /* OPDSCatalogSelectorViewController.swift in Sources */,
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
@@ -1769,7 +1764,6 @@
 				2ADCD80326F4B96200FBAE11 /* Bookmark.swift in Sources */,
 				2ADCD80426F4B96200FBAE11 /* LibraryModule.swift in Sources */,
 				2ADCD80526F4B96200FBAE11 /* ReaderOptionsView.swift in Sources */,
-				2ADCD80626F4B96200FBAE11 /* YabrPDFViewContainer.swift in Sources */,
 				2ADCD80726F4B96200FBAE11 /* OPDSNavigationTableViewCell.swift in Sources */,
 				2ADCD80826F4B96200FBAE11 /* OPDSCatalogSelectorViewController.swift in Sources */,
 				2ADCD80926F4B96200FBAE11 /* YabrEBookReader.swift in Sources */,
