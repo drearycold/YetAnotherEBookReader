@@ -150,6 +150,8 @@ struct BookDetailView: View {
                 .placeholder {
                     Text("Loading Cover ...")
                 }
+                .resizable()
+                .scaledToFit()
             Button(action: {
                 if _viewModel.listVM == nil {
                     _viewModel.listVM = ReadingPositionListViewModel(
@@ -288,6 +290,11 @@ struct BookDetailView: View {
                     HStack {
                         metadataIcon(systemName: "checkmark.shield")
                         Text("In Sync with Server")
+                    }
+                } else if modelData.updatingMetadataStatus == "Local File" {
+                    HStack {
+                        metadataIcon(systemName: "doc")
+                        Text("Local File")
                     }
                 } else if modelData.updatingMetadataStatus == "Deleted" {
                     HStack {

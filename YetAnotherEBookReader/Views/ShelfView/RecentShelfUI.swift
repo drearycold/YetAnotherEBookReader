@@ -17,8 +17,8 @@ struct RecentShelfUI: UIViewControllerRepresentable {
         return shelfController
     }
     
-    func updateUIViewController(_ uiView: RecentShelfController, context: Context) {
-        uiView.updateBookModel()
+    func updateUIViewController(_ uiViewController: RecentShelfController, context: Context) {
+        uiViewController.updateBookModel()
     }
     
 }

@@ -300,6 +300,12 @@ struct CalibreServerService {
     }
     
     func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
+        guard oldbook.library.server.isLocal == false else {
+            modelData.updatingMetadataStatus = "Local File"
+            modelData.updatingMetadataSucceed = true
+            return
+        }
+        
         guard let serverUrl = getServerUrlByReachability(server: oldbook.library.server) else {
             modelData.updatingMetadataStatus = "Server not Reachable"
             return

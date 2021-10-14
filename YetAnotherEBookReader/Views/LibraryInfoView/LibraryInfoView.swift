@@ -54,6 +54,7 @@ struct LibraryInfoView: View {
                         }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
                             //                            guard value == false else { return }
                             pageNo = 0
+                            updater += 1
                         }
                         
                         TextField("Search", text: $searchString, onCommit: {

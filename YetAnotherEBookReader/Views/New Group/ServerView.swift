@@ -37,6 +37,9 @@ struct ServerView: View {
     
     @State private var serverCalibreInfoPresenting = false
     
+    @State private var localLibraryImportBooksPicked = [URL]()
+    @State private var localLibraryImportPresenting = false
+    
     @State private var updater = 0
     
     var defaultLog = Logger()
@@ -118,7 +121,6 @@ struct ServerView: View {
                 
                 VStack(alignment: .leading, spacing: 8) {
                     if calibreServerEditing {
-                        
                         HStack {
                             Image(systemName: "at")
                             TextField("Name Your Server", text: $calibreServerName)
@@ -189,43 +191,40 @@ struct ServerView: View {
                             Spacer()
                             
                         }
-                        
-                        
-                    } else {
-                        if let server = modelData.currentCalibreServer {
-                            HStack {
-                                Text("Current Server: \(server.name)")
+                    } else if let server = modelData.currentCalibreServer {
+                        HStack {
+                            Text("Current Server: \(server.name)")
+                            
+                            Spacer()
+                            
+                            if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
+                                Image(
+                                    systemName: reachable ? "flag.circle" : "flag.slash.circle"
+                                ).foregroundColor(reachable ? .green : .red)
+                            }
+                            
+                            if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
+                                Image(
+                                    systemName: reachable ? "flag" : "flag.slash"
+                                ).foregroundColor(reachable ? .green : .red)
+                            }
+                        }
+                        if server.isLocal == false {
+                            HStack(alignment: .center, spacing: 8) {
+                                Text(modelData.calibreServerUpdatingStatus ?? "")
                                 
                                 Spacer()
                                 
-                                if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
-                                    Image(
-                                        systemName: reachable ? "flag.circle" : "flag.slash.circle"
-                                    ).foregroundColor(reachable ? .green : .red)
-                                }
+                                Text("\(modelData.currentCalibreServerLibraries.count) Library(s) in Server")
                                 
-                                if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
-                                    Image(
-                                        systemName: reachable ? "flag" : "flag.slash"
-                                    ).foregroundColor(reachable ? .green : .red)
+                                Button(action: {
+                                    guard let server = modelData.currentCalibreServer else { return }
+                                    dataAction = "Sync"
+                                    dataLoading = true  //ready for consuming results
+                                    modelData.calibreServerService.getServerLibraries(server: server)
+                                }) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
                                 }
-                            }
-                        }
-                        
-                        HStack(alignment: .center, spacing: 8) {
-                            Text(modelData.calibreServerUpdatingStatus ?? "")
-
-                            Spacer()
-                            
-                            Text("\(modelData.currentCalibreServerLibraries.count) Library(s) in Server")
-                            
-                            Button(action: {
-                                guard let server = modelData.currentCalibreServer else { return }
-                                dataAction = "Sync"
-                                dataLoading = true  //ready for consuming results
-                                modelData.calibreServerService.getServerLibraries(server: server)
-                            }) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
                             }
                         }
                     }
@@ -307,6 +306,30 @@ struct ServerView: View {
                         })
                         
                         Spacer()
+                        
+                        if modelData.currentCalibreServer?.isLocal == true {
+                            Button(action: {
+                                localLibraryImportBooksPicked.removeAll()
+                                localLibraryImportPresenting = true
+                            }) {
+                                Text("Import")
+                            }.sheet(isPresented: $localLibraryImportPresenting, onDismiss: {
+                                localLibraryImportPresenting = false
+                            }) {
+                                BookImportPicker(bookURLs: $localLibraryImportBooksPicked)
+                            }.onChange(of: localLibraryImportBooksPicked) { urls in
+                                guard urls.isEmpty == false else { return }
+                                
+                                let imported = urls.filter {
+                                    modelData.onOpenURL(url: $0)
+                                }
+                                
+                                modelData.calibreServerUpdatingStatus = "\(urls.count) selected, \(imported.count) imported"
+                                
+                                modelData.populateLocalLibraryBooks()
+
+                            }
+                        }
                         
                         Button(action: {
                             alertItem = AlertItem(id: "DelLibrary")

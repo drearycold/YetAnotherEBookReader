@@ -173,6 +173,10 @@ final class ModelData: ObservableObject {
         for: Notification.Name("YABR.booksRefreshed")
     ).eraseToAnyPublisher()
     
+    let readingBookRemovedFromShelfPublisher = NotificationCenter.default.publisher(
+        for: Notification.Name("YABR.readingBookRemovedFromShelf")
+    ).eraseToAnyPublisher()
+    
     var currentBookId: Int32 = -1 {
         didSet {
             self.selectedBookId = currentBookId
@@ -534,7 +538,7 @@ final class ModelData: ObservableObject {
             Must not run on main thread
      */
     func populateServerLibraryBooks(realm: Realm) {
-        guard let currentCalibreLibrary = calibreLibraries[currentCalibreLibraryId] else {
+        guard let currentCalibreLibrary = currentCalibreLibrary else {
             return
         }
         
@@ -561,6 +565,7 @@ final class ModelData: ObservableObject {
         
         DispatchQueue.main.sync {
             self.calibreServerLibraryBooks = calibreServerLibraryBooks
+            postProcessForLocalLibrary()
         }
     }
     
@@ -571,7 +576,7 @@ final class ModelData: ObservableObject {
         
         let tmpServer = CalibreServer(name: "Document Folder", baseUrl: ".", publicUrl: "", username: "", password: "")
         documentServer = calibreServers[tmpServer.id]
-        if documentServer == nil {
+        if documentServer == nil || documentServer?.name != tmpServer.name {
             calibreServers[tmpServer.id] = tmpServer
             documentServer = calibreServers[tmpServer.id]
             do {
@@ -651,11 +656,29 @@ final class ModelData: ObservableObject {
         
         removedBooks.forEach {
             self.removeFromShelf(inShelfId: $0.inShelfId)
-            self.removeFromRealm(book: $0)
+            // self.removeFromRealm(book: $0)
             print("populateLocalLibraryBooks removeFromShelf \($0)")
         }
         
+        postProcessForLocalLibrary()
+    }
+    
+    //remove non existing books from library list
+    func postProcessForLocalLibrary() {
+        guard currentCalibreLibrary?.server.isLocal == true else { return }
+        
+        calibreServerLibraryUpdating = true
+        calibreServerLibraryUpdatingProgress = 0
+        calibreServerLibraryUpdatingTotal = calibreServerLibraryBooks.count
+        
+        calibreServerLibraryBooks = calibreServerLibraryBooks.filter {
+            $0.value.inShelf
+        }
+        updateFilteredBookList()
 
+        calibreServerLibraryUpdatingProgress = calibreServerLibraryBooks.count
+        calibreServerLibraryUpdatingTotal = calibreServerLibraryBooks.count
+        calibreServerLibraryUpdating = false
     }
     
     func updateFilteredBookList() {
@@ -872,6 +895,17 @@ final class ModelData: ObservableObject {
         
     }
     
+    func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
+        return realm.objects(CalibreBookRealm.self).filter(
+            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
+                        book.library.server.baseUrl,
+                        book.library.server.username,
+                        book.library.name,
+                        NSNumber(value: book.id)
+            )
+        ).first
+    }
+
     func updateBookRealm(book: CalibreBook, realm: Realm) {
         let bookRealm = CalibreBookRealm()
         bookRealm.id = book.id
@@ -990,15 +1024,19 @@ final class ModelData: ObservableObject {
     func removeFromShelf(inShelfId: String) {
         if readingBook?.inShelfId == inShelfId {
             readingBook?.inShelf = false
+            NotificationCenter.default.post(Notification(name: Notification.Name("YABR.readingBookRemovedFromShelf")))
         }
-        booksInShelf[inShelfId]!.inShelf = false
         
-        let book = booksInShelf[inShelfId]!
+        guard var book = booksInShelf[inShelfId] else { return }
+        book.inShelf = false
+
         updateBookRealm(book: book, realm: self.realm)
         if book.library.id == currentCalibreLibraryId {
-            calibreServerLibraryBooks[book.id]!.inShelf = false
+            calibreServerLibraryBooks[book.id]?.inShelf = false
         }
         booksInShelf.removeValue(forKey: inShelfId)
+        
+        postProcessForLocalLibrary()
         
         if let book = readingBook, let library = calibreLibraries[book.library.id], let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
             let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
@@ -1039,11 +1077,10 @@ final class ModelData: ObservableObject {
             return
         }
         
-        book.formats.filter{$1.cached}.forEach {
+        book.formats.filter { $1.cached }.forEach {
             guard let format = Format(rawValue: $0.key) else { return }
             clearCache(book: book,  format: format)
         }
-        
     }
     
     func addedCache(book: CalibreBook, format: Format) {
@@ -1114,19 +1151,30 @@ final class ModelData: ObservableObject {
         return nil
     }
     
-    func onOpenURL(url: URL) {
-        guard let localBaseUrl = documentServer?.localBaseUrl else { return }
+    func onOpenURL(url: URL, doMove: Bool = false) -> Bool {
+        var ret = false
+        
+        guard let documentServer = documentServer,
+              let localLibrary = localLibrary,
+              let localBaseUrl = documentServer.localBaseUrl else { return ret }
 
         if url.isFileURL {
             guard url.startAccessingSecurityScopedResource() else {
                 print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
-                return
+                return ret
             }
 
             do {
-                try FileManager.default.copyItem(at: url, to: localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false))
+                let dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false)
+                if doMove {
+                    try FileManager.default.moveItem(at: url, to: dest)
+                } else {
+                    try FileManager.default.copyItem(at: url, to: dest)
+                }
                 
-                loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary!, on: documentServer!)
+                loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary, on: documentServer)
+                
+                ret = true
             } catch {
                 print("onOpenURL \(error)")
             }
@@ -1134,11 +1182,13 @@ final class ModelData: ObservableObject {
             url.stopAccessingSecurityScopedResource()
         }
         
+        return ret
     }
     
     func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
         Format.allCases.forEach { format in
-            guard fileName.hasSuffix(".\(format.ext)") else {
+            let suffix = ".\(format.ext)"
+            guard fileName.hasSuffix(suffix) else {
                 return
             }
             
@@ -1156,6 +1206,39 @@ final class ModelData: ObservableObject {
             guard booksInShelf[book.inShelfId] == nil else {
                 return  //already loaded
             }
+            
+            if let bookRealm = queryBookRealm(book: book, realm: realm) {
+                book = convert(library: library, bookRealm: bookRealm)
+            }
+            
+            var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
+            formatInfo.filename = fileName
+            if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
+                if let fileSize = fileAttribs[.size] as? NSNumber {
+                    formatInfo.serverSize = fileSize.uint64Value
+                    formatInfo.cacheSize = fileSize.uint64Value
+                }
+                if let fileTS = fileAttribs[.modificationDate] as? Date {
+                    formatInfo.serverMTime = fileTS
+                    formatInfo.cacheMTime = fileTS
+                    if book.lastModified < fileTS {
+                        book.lastModified = fileTS
+                    }
+                    if book.timestamp < fileTS {
+                        book.timestamp = fileTS
+                    }
+                }
+            }
+            
+            book.title = fileName
+            book.title.removeLast(suffix.count)
+            
+            book.formats[format.rawValue] = formatInfo
+            
+            book.inShelf = true
+            
+            self.updateBook(book: book)
+
             #if canImport(R2Shared)
             let streamer = Streamer()
             streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
@@ -1164,51 +1247,14 @@ final class ModelData: ObservableObject {
                     return
                 }
                 
-                var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
-                formatInfo.filename = fileName
-                do {
-                    let fileAttribs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-                    if let fileSize = fileAttribs[.size] as? NSNumber {
-                        formatInfo.serverSize = fileSize.uint64Value
-                        formatInfo.cacheSize = fileSize.uint64Value
-                    }
-                    if let fileTS = fileAttribs[.modificationDate] as? Date {
-                        formatInfo.serverMTime = fileTS
-                        formatInfo.cacheMTime = fileTS
-                    }
-                } catch {
-                    
-                }
-                
-                book.formats[format.rawValue] = formatInfo
-                
-                book.inShelf = true
-                
                 book.title = publication.metadata.title
                 if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
                     self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
                 }
                 
-                
-                book.readPos.addInitialPosition(
-                    self.deviceName,
-                    self.formatReaderMap[format]!.first!.rawValue
-                )
-                
-                self.booksInShelf[book.inShelfId] = book
-                
                 self.updateBook(book: book)
             }
             #endif
-        }
-    }
-    
-    func deleteLocalLibraryBook(book: CalibreBook, format: Format) {
-        guard let bookFileUrl = getSavedUrl(book: book, format: format) else { return }
-        do {
-            try FileManager.default.removeItem(at: bookFileUrl)
-        } catch {
-            print(error)
         }
     }
     
@@ -1245,6 +1291,7 @@ final class ModelData: ObservableObject {
         defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
         
         readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
+        readingBook.lastModified = Date()
         
         self.updateBook(book: readingBook)
         
@@ -1569,8 +1616,12 @@ final class ModelData: ObservableObject {
               else {
             return
         }
-        
-        calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
+        if server.isLocal {
+            populateLocalLibraryBooks()
+            calibreServerUpdatingStatus = ""
+        } else {
+            calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
+        }
     }
     
     func probeServersReachabilityOriginal() {

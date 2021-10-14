@@ -10,34 +10,56 @@ import SwiftUI
 struct AppInfoView: View {
     @Environment(\.openURL) var openURL
 
-    private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues"
+    private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
+    private let enhancementURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=enhancement&assignees=drearycold"
+
+    private let calibreURL = "https://calibre-ebook.com/"
+    private let folioReaderKitURL = "https://github.com/FolioReader/FolioReaderKit"
+    private let readiumURL = "https://github.com/readium/awesome-readium"
+    private let shelfViewURL = "https://github.com/tdscientist/ShelfView-iOS"
     
     var body: some View {
-        VStack(alignment: .center) {
-            VStack(alignment: .center, spacing: 16) {
-                Text("D&S Reader").font(.title)
-                
-                Image("logo_1024")
-                    .resizable().frame(width: 256, height: 256, alignment: .center)
-                Text("by Drearycold & Siyi")
-                Text("Version 0.1.0")
-            }
-            
-            List {
-                Button(action:{
-                    openURL(URL(string: issueURL)!)
-                }) {
-                    HStack {
-                        Spacer()
-                        Text("Report an Issue")
-                        Spacer()
-                        Image(systemName: "square.and.arrow.up")
-                        Spacer()
-                    }
+        ScrollView {
+            VStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .center, spacing: 16) {
+                    Text("D&S Reader").font(.title)
+                    
+                    Image("logo_1024")
+                        .resizable().frame(width: 256, height: 256, alignment: .center)
+                    Text("by Drearycold & Siyi")
+                    Text("Version 0.1.0")
                 }
+                
+                VStack(alignment: .center, spacing: 4) {
+                    linkButtonBuilder(title: "Report an Issue", url: issueURL)
+                    linkButtonBuilder(title: "Suggestion & Request", url: enhancementURL)
+                }
+                
+                VStack(alignment: .center, spacing: 4) {
+                    Text("Thanks to")
+                    linkButtonBuilder(title: "calibre", url: calibreURL)
+                    
+                    linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
+                    linkButtonBuilder(title: "Readium Project", url: readiumURL)
+                    linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
+                    
+                }
+            }.padding()
+            .frame(maxWidth: 500)
+        }
+    }
+    
+    @ViewBuilder
+    private func linkButtonBuilder(title: String, url: String) -> some View {
+        Button(action:{
+            openURL(URL(string: url)!)
+        }) {
+            HStack {
+                Text(title)
+                Spacer()
+                Image(systemName: "square.and.arrow.up")
             }
-        }.padding()
-        .frame(maxWidth: 600)
+        }
     }
 }
 

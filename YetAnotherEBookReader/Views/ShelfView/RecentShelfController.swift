@@ -40,7 +40,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     
     @objc func updateBookModel() {
         bookModel = modelData.booksInShelf
-            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) }
+            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) || $0.value.library.server.isLocal }
             .sorted { $0.value.lastModified > $1.value.lastModified }
             .compactMap { (inShelfId, book) in
                 guard let coverUrl = book.coverURL else { return nil }
@@ -65,6 +65,9 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     download.isDownloading && download.book.inShelfId == inShelfId
                 }) {
                     bookStatus = .DOWNLOADING
+                }
+                if book.library.server.isLocal {
+                    bookStatus = .LOCAL
                 }
                 
                 return BookModel(
@@ -233,11 +236,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         guard let book = modelData.readingBook else { return }
         
         if book.library.server.isLocal {
-            let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
-            let deleteMenuItem = UIMenuItem(title: "Delete", action: #selector(deleteBook(_:)))
-            UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
-            becomeFirstResponder()
-            UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
+            //same as options
+            onBookOptionsClicked(shelfView, index: index, bookId: bookId, bookTitle: bookTitle, frame: inShelfView)
         } else {
             let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
             let detailView = UIHostingController(
@@ -260,10 +260,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked options \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        guard modelData.readingBook != nil else { return }
+        guard let book = modelData.readingBook else { return }
         
         let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
-        let deleteMenuItem = UIMenuItem(title: "Delete", action: #selector(deleteBook(_:)))
+        let deleteMenuItem = UIMenuItem(title: book.library.server.isLocal ? "Delete" : "Remove", action: #selector(deleteBook(_:)))
         UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
         becomeFirstResponder()
         UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
@@ -293,16 +293,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     
     @objc func deleteBook(_ sender: Any?) {
         print("deleteBook")
-        guard let inShelfId = modelData.readingBookInShelfId,
-              let book = modelData.readingBook else { return }
+        guard let book = modelData.readingBook,
+              book.inShelfId == modelData.readingBookInShelfId  else { return }
         
-        book.formats.keys.forEach {
-            guard let format = Format(rawValue: $0) else { return }
-            modelData.clearCache(book: book, format: format)
-            modelData.deleteLocalLibraryBook(book: book, format: format)
-        }
-
-        modelData.removeFromShelf(inShelfId: inShelfId)
+        modelData.clearCache(inShelfId: book.inShelfId)
         
         updateBookModel()
     }

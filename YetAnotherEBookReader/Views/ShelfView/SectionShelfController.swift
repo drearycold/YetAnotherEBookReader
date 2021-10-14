@@ -34,6 +34,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
     var updateAndReloadCancellable: AnyCancellable?
+    var dismissControllerCancellable: AnyCancellable?
     
     override var canBecomeFirstResponder: Bool {
         true
@@ -41,7 +42,6 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     
     func updateBookModel() {
         bookModel = modelData.booksInShelf
-            .filter { $0.value.library.server.isLocal == false }
             .sorted {
                 if $0.value.lastModified == $1.value.lastModified {
                     return $0.value.title < $1.value.title
@@ -75,6 +75,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                 }) {
                     bookStatus = .DOWNLOADING
                 }
+                if book.library.server.isLocal {
+                    bookStatus = .LOCAL
+                }
                 
                 let newBook = BookModel(
                     bookCoverSource: coverUrl.absoluteString,
@@ -83,14 +86,37 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                     bookProgress: Int(floor(readerInfo.position.lastProgress)),
                     bookStatus: bookStatus
                 )
-                let shelfName = book.inShelfName.isEmpty ? (book.tags.first ?? "Untagged") : book.inShelfName
+                let shelfName = { () -> String in
+                    if book.inShelfName.isEmpty == false {
+                        return book.inShelfName
+                    }
+
+                    if book.library.server.isLocal {
+                        return "Local"
+                    }
+                    return book.tags.first ?? "Untagged"
+                }()
                 if shelfList[shelfName] != nil {
                     shelfList[shelfName]!.append(newBook)
                 } else {
                     shelfList[shelfName] = [newBook]
                 }
             }
-        bookModelSectionsArray = bookModel.sorted { $0.key < $1.key }.map {
+        bookModelSectionsArray = bookModel.sorted {
+            if $0.key == "Local" {
+                return true
+            }
+            if $1.key == "Local" {
+                return false
+            }
+            if $0.key == "Untagged" {
+                return true
+            }
+            if $1.key == "Untagged" {
+                return false
+            }
+            return $0.key < $1.key
+        }.map {
             BookModelSection(sectionName: $0.key, sectionId: $0.key, sectionBooks: $0.value)
         }
         if bookModelSectionsArray.isEmpty {
@@ -127,6 +153,11 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                 self.updateBookModel()
                 self.reloadBookModel()
             }
+        
+        dismissControllerCancellable?.cancel()
+        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
+            self.dismiss(animated: true, completion: nil)
+        }
     }
 
     override func viewDidLoad() {
