@@ -321,7 +321,7 @@ struct ServerView: View {
                                 guard urls.isEmpty == false else { return }
                                 
                                 let imported = urls.filter {
-                                    modelData.onOpenURL(url: $0)
+                                    modelData.onOpenURL(url: $0, doMove: true)
                                 }
                                 
                                 modelData.calibreServerUpdatingStatus = "\(urls.count) selected, \(imported.count) imported"

@@ -626,7 +626,14 @@ final class ModelData: ObservableObject {
             guard let fileName = $0 as? String else {
                 return
             }
-            
+            if fileName.hasSuffix(".db") { return }
+            if fileName.hasSuffix(".db.lock") { return }
+            if fileName.hasSuffix(".db.note") { return }
+            if fileName.hasSuffix(".db.management") { return }
+            if fileName.hasSuffix(".cv") { return }
+            if fileName.hasSuffix(".mx") { return }
+
+            print("populateLocalLibraryBooks \(fileName)")
             loadLocalLibraryBookMetadata(fileName: fileName, in: localLibrary!, on: documentServer!)
         }
         
@@ -661,6 +668,115 @@ final class ModelData: ObservableObject {
         }
         
         postProcessForLocalLibrary()
+    }
+    
+    func onOpenURL(url: URL, doMove: Bool = false) -> Bool {
+        var ret = false
+        
+        guard let documentServer = documentServer,
+              let localLibrary = localLibrary,
+              let localBaseUrl = documentServer.localBaseUrl else { return ret }
+
+        if url.isFileURL {
+            guard url.startAccessingSecurityScopedResource() else {
+                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
+                return ret
+            }
+
+            do {
+                let destFileName = url.deletingPathExtension().appendingPathExtension(url.pathExtension.lowercased()).lastPathComponent
+                let dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(destFileName, isDirectory: false)
+                if doMove {
+                    try FileManager.default.moveItem(at: url, to: dest)
+                } else {
+                    try FileManager.default.copyItem(at: url, to: dest)
+                }
+                
+                loadLocalLibraryBookMetadata(fileName: destFileName, in: localLibrary, on: documentServer)
+                
+                ret = true
+            } catch {
+                print("onOpenURL \(error)")
+            }
+            
+            url.stopAccessingSecurityScopedResource()
+        }
+        
+        return ret
+    }
+    
+    func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
+        Format.allCases.forEach { format in
+            let suffix = ".\(format.ext)"
+            guard fileName.hasSuffix(suffix) else {
+                return
+            }
+            
+            let fileURL = server.localBaseUrl!.appendingPathComponent(library.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+            guard let md5 = fileName.data(using: .utf8)?.md5() else {
+                return
+            }
+            let bookId = Int32(bigEndian: md5.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
+            
+            var book = CalibreBook(
+                id: bookId,
+                library: library
+            )
+            
+            guard let shelfBook = booksInShelf[book.inShelfId],
+                  getSavedUrl(book: shelfBook, format: format) == fileURL else {
+                return  //already loaded
+            }
+            
+            if let bookRealm = queryBookRealm(book: book, realm: realm) {
+                book = convert(library: library, bookRealm: bookRealm)
+            }
+            
+            var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
+            formatInfo.filename = fileName
+            if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
+                if let fileSize = fileAttribs[.size] as? NSNumber {
+                    formatInfo.serverSize = fileSize.uint64Value
+                    formatInfo.cacheSize = fileSize.uint64Value
+                }
+                if let fileTS = fileAttribs[.modificationDate] as? Date {
+                    formatInfo.serverMTime = fileTS
+                    formatInfo.cacheMTime = fileTS
+                    if book.lastModified < fileTS {
+                        book.lastModified = fileTS
+                    }
+                    if book.timestamp < fileTS {
+                        book.timestamp = fileTS
+                    }
+                }
+            }
+            
+            book.title = fileName
+            book.title.removeLast(suffix.count)
+            
+            book.formats[format.rawValue] = formatInfo
+            
+            book.inShelf = true
+            
+            self.updateBook(book: book)
+
+            #if canImport(R2Shared)
+            let streamer = Streamer()
+            streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
+                guard let publication = try? result.get() else {
+                    print("Streamer \(fileURL)")
+                    return
+                }
+                
+                book.title = publication.metadata.title
+                if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
+                    self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
+                }
+                
+                self.updateBook(book: book)
+            }
+            #endif
+        }
     }
     
     //remove non existing books from library list
@@ -806,6 +922,15 @@ final class ModelData: ObservableObject {
     
     func getPreferredFormat() -> Format {
         return Format(rawValue: UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT) ?? "" ) ?? defaultFormat
+    }
+    
+    func getPreferredFormat(for book: CalibreBook) -> Format? {
+        if book.formats[getPreferredFormat().rawValue] != nil {
+            return getPreferredFormat()
+        } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
+            return format
+        }
+        return nil
     }
     
     func updatePreferredFormat(for format: Format) {
@@ -1151,112 +1276,6 @@ final class ModelData: ObservableObject {
         return nil
     }
     
-    func onOpenURL(url: URL, doMove: Bool = false) -> Bool {
-        var ret = false
-        
-        guard let documentServer = documentServer,
-              let localLibrary = localLibrary,
-              let localBaseUrl = documentServer.localBaseUrl else { return ret }
-
-        if url.isFileURL {
-            guard url.startAccessingSecurityScopedResource() else {
-                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
-                return ret
-            }
-
-            do {
-                let dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(url.lastPathComponent, isDirectory: false)
-                if doMove {
-                    try FileManager.default.moveItem(at: url, to: dest)
-                } else {
-                    try FileManager.default.copyItem(at: url, to: dest)
-                }
-                
-                loadLocalLibraryBookMetadata(fileName: url.lastPathComponent, in: localLibrary, on: documentServer)
-                
-                ret = true
-            } catch {
-                print("onOpenURL \(error)")
-            }
-            
-            url.stopAccessingSecurityScopedResource()
-        }
-        
-        return ret
-    }
-    
-    func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
-        Format.allCases.forEach { format in
-            let suffix = ".\(format.ext)"
-            guard fileName.hasSuffix(suffix) else {
-                return
-            }
-            
-            let fileURL = server.localBaseUrl!.appendingPathComponent(library.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-            guard let md5 = fileName.data(using: .utf8)?.md5() else {
-                return
-            }
-            let bookId = Int32(bigEndian: md5.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
-            
-            var book = CalibreBook(
-                id: bookId,
-                library: library
-            )
-            
-            guard booksInShelf[book.inShelfId] == nil else {
-                return  //already loaded
-            }
-            
-            if let bookRealm = queryBookRealm(book: book, realm: realm) {
-                book = convert(library: library, bookRealm: bookRealm)
-            }
-            
-            var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
-            formatInfo.filename = fileName
-            if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
-                if let fileSize = fileAttribs[.size] as? NSNumber {
-                    formatInfo.serverSize = fileSize.uint64Value
-                    formatInfo.cacheSize = fileSize.uint64Value
-                }
-                if let fileTS = fileAttribs[.modificationDate] as? Date {
-                    formatInfo.serverMTime = fileTS
-                    formatInfo.cacheMTime = fileTS
-                    if book.lastModified < fileTS {
-                        book.lastModified = fileTS
-                    }
-                    if book.timestamp < fileTS {
-                        book.timestamp = fileTS
-                    }
-                }
-            }
-            
-            book.title = fileName
-            book.title.removeLast(suffix.count)
-            
-            book.formats[format.rawValue] = formatInfo
-            
-            book.inShelf = true
-            
-            self.updateBook(book: book)
-
-            #if canImport(R2Shared)
-            let streamer = Streamer()
-            streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
-                guard let publication = try? result.get() else {
-                    print("Streamer \(fileURL)")
-                    return
-                }
-                
-                book.title = publication.metadata.title
-                if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
-                    self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
-                }
-                
-                self.updateBook(book: book)
-            }
-            #endif
-        }
-    }
     
     func getSelectedReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
         return book.readPos.getPosition(selectedPosition)
@@ -1391,6 +1410,9 @@ final class ModelData: ObservableObject {
             candidatePositions.append(position)
         }
         candidatePositions.append(contentsOf: book.readPos.getDevices())
+        if let format = getPreferredFormat(for: book) {
+            candidatePositions.append(getInitialReadingPosition(book: book, format: format, reader: getPreferredReader(for: format)))
+        }
         
         var formatReaderPairArray = [(Format, ReaderType, BookDeviceReadingPosition)]()
         candidatePositions.forEach { position in

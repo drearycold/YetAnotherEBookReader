@@ -554,13 +554,7 @@ struct BookDetailView: View {
                     downloadStatus = .INITIAL
                 } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
                     //TODO prompt for formats
-                    var downloadFormat: Format? = nil
-                    if book.formats[modelData.getPreferredFormat().rawValue] != nil {
-                        downloadFormat = modelData.getPreferredFormat()
-                    } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
-                        downloadFormat = format
-                    }
-                    if downloadFormat != nil, modelData.startDownloadFormat(book: book, format: downloadFormat!) {
+                    if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
                         downloadStatus = .DOWNLOADING
                     } else {
                         alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
