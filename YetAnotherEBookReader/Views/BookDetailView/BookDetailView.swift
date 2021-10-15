@@ -44,8 +44,15 @@ struct BookDetailView: View {
 
     @State private var updater = 0
     
-    @State private var presentingReadSheet = false
-    @State private var presentingReadPositionList = false
+    @State private var presentingReadSheet = false {
+        willSet { if newValue { modelData.presentingStack.append($presentingReadSheet) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
+    
+    @State private var presentingReadPositionList = false {
+        willSet { if newValue { modelData.presentingStack.append($presentingReadPositionList) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
     
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
@@ -575,8 +582,14 @@ struct BookDetailView: View {
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 guard let book = modelData.readingBook else { return }
-                _viewModel.listVM.book = book
-                _viewModel.listVM.positions = book.readPos.getDevices()
+                if _viewModel.listVM == nil {
+                    _viewModel.listVM = ReadingPositionListViewModel(
+                        modelData: modelData, book: book, positions: book.readPos.getDevices()
+                    )
+                } else {
+                    _viewModel.listVM.book = book
+                    _viewModel.listVM.positions = book.readPos.getDevices()
+                }
                 presentingReadPositionList = true
             }) {
                 Image(systemName: "book")

@@ -170,12 +170,22 @@ final class ModelData: ObservableObject {
     
     @Published var booksInShelf = [String: CalibreBook]()
     let booksRefreshedPublisher = NotificationCenter.default.publisher(
-        for: Notification.Name("YABR.booksRefreshed")
+        for: .YABR_BooksRefreshed
     ).eraseToAnyPublisher()
     
     let readingBookRemovedFromShelfPublisher = NotificationCenter.default.publisher(
-        for: Notification.Name("YABR.readingBookRemovedFromShelf")
+        for: .YABR_ReadingBookRemovedFromShelf
     ).eraseToAnyPublisher()
+    
+    let bookImportedPublisher = NotificationCenter.default.publisher(
+        for: .YABR_BookImported
+    ).eraseToAnyPublisher()
+    
+    let dismissAllPublisher = NotificationCenter.default.publisher(
+        for: .YABR_DismissAll
+    ).eraseToAnyPublisher()
+    
+    var presentingStack = [Binding<Bool>]()
     
     var currentBookId: Int32 = -1 {
         didSet {
@@ -634,7 +644,9 @@ final class ModelData: ObservableObject {
             if fileName.hasSuffix(".mx") { return }
 
             print("populateLocalLibraryBooks \(fileName)")
-            loadLocalLibraryBookMetadata(fileName: fileName, in: localLibrary!, on: documentServer!)
+            let fileURL = documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+
+            loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: documentServer!)
         }
         
         let removedBooks: [CalibreBook] = booksInShelf.compactMap { inShelfId, book in
@@ -670,113 +682,161 @@ final class ModelData: ObservableObject {
         postProcessForLocalLibrary()
     }
     
-    func onOpenURL(url: URL, doMove: Bool = false) -> Bool {
-        var ret = false
+    // only move file when triggered by in-app importer, DO NOT MOVE FROM OTHER PLACES
+    func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
+        var bookImportInfo = BookImportInfo(url: url, bookId: nil, error: nil)
         
         guard let documentServer = documentServer,
               let localLibrary = localLibrary,
-              let localBaseUrl = documentServer.localBaseUrl else { return ret }
+              let localBaseUrl = documentServer.localBaseUrl else {
+            return bookImportInfo.with(error: .libraryAbsent)
+        }
+        
+        guard let format = Format(rawValue: url.pathExtension.uppercased()) else {
+            return bookImportInfo.with(error: .formatUnsupported)
+        }
 
         if url.isFileURL {
             guard url.startAccessingSecurityScopedResource() else {
                 print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
-                return ret
+                return bookImportInfo.with(error: .securityFail)
             }
-
+            defer {
+                url.stopAccessingSecurityScopedResource()
+            }
+            
             do {
-                let destFileName = url.deletingPathExtension().appendingPathExtension(url.pathExtension.lowercased()).lastPathComponent
-                let dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(destFileName, isDirectory: false)
+                guard let bookId = knownBookId ?? calcLocalFileBookId(for: url) else { return bookImportInfo.with(error: .idCalcFail) }
+                print("onOpenURL \(bookId)")
+                bookImportInfo.bookId = bookId
+                
+                // check for identical file
+                let bookForQuery = CalibreBook(id: bookId, library: localLibrary)
+                if let book = booksInShelf[bookForQuery.inShelfId],
+                   let readerInfo = prepareBookReading(book: book),
+                   readerInfo.url.pathExtension.lowercased() == url.pathExtension.lowercased() {
+                    return bookImportInfo
+                }
+                
+                // check for dest file
+                let basename = url.deletingPathExtension().lastPathComponent
+                var dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(basename, isDirectory: false).appendingPathExtension(format.ext)
+                if FileManager.default.fileExists(atPath: dest.path) {
+                    if !doOverwrite && !asNew {
+                        return bookImportInfo.with(error: .destConflict)
+                    }
+                    if doOverwrite && asNew {
+                        return bookImportInfo.with(error: .invalidArg)
+                    }
+                    if doOverwrite {
+                        if let book = booksInShelf.filter (
+                            {
+                                guard $1.library.server.isLocal, let formatInfo = $1.formats[format.rawValue] else { return false }
+                                return formatInfo.cached && formatInfo.filename == dest.lastPathComponent
+                            }).first {
+                            self.clearCache(book: book.value, format: format)   //should remove it from shelf
+                        }
+                    }
+                    if asNew {
+                        var found = false
+                        for i in (1..<100) {
+                            dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent("\(basename) (\(i))", isDirectory: false).appendingPathExtension(url.pathExtension.lowercased())
+                            if FileManager.default.fileExists(atPath: dest.path) == false {
+                                found = true
+                                break
+                            }
+                        }
+                        if !found {
+                            return bookImportInfo.with(error: .tooManyFiles)
+                        }
+                    }
+                }
+                
                 if doMove {
                     try FileManager.default.moveItem(at: url, to: dest)
                 } else {
                     try FileManager.default.copyItem(at: url, to: dest)
                 }
                 
-                loadLocalLibraryBookMetadata(fileName: destFileName, in: localLibrary, on: documentServer)
+                if bookId == loadLocalLibraryBookMetadata(fileURL: dest, in: localLibrary, on: documentServer, knownBookId: bookId) {
+                    return bookImportInfo
+                } else {
+                    return bookImportInfo.with(error: .loadMetaFail)
+                }
                 
-                ret = true
+                
             } catch {
                 print("onOpenURL \(error)")
+                return bookImportInfo.with(error: .fileOpFail)
             }
-            
-            url.stopAccessingSecurityScopedResource()
         }
         
-        return ret
+        return bookImportInfo.with(error: .protocolUnsupported)
     }
     
-    func loadLocalLibraryBookMetadata(fileName: String, in library: CalibreLibrary, on server: CalibreServer) {
-        Format.allCases.forEach { format in
-            let suffix = ".\(format.ext)"
-            guard fileName.hasSuffix(suffix) else {
+    func calcLocalFileBookId(for fileURL: URL) -> Int32? {
+        guard let digest = sha256new(for: fileURL) else { return nil }
+        
+        let bookId = Int32(bigEndian: digest.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
+        return bookId
+    }
+    
+    func loadLocalLibraryBookMetadata(fileURL: URL, in library: CalibreLibrary, on server: CalibreServer, knownBookId: Int32? = nil) -> Int32? {
+        guard let format = Format(rawValue: fileURL.pathExtension.uppercased()) else { return nil }
+            
+        guard let bookId = knownBookId ?? calcLocalFileBookId(for: fileURL) else { return nil }
+        
+        var book = CalibreBook(
+            id: bookId,
+            library: library
+        )
+        
+        if let bookRealm = queryBookRealm(book: book, realm: realm) {
+            book = convert(library: library, bookRealm: bookRealm)
+        }
+        
+        book.title = fileURL.deletingPathExtension().lastPathComponent
+        book.lastModified = Date()
+
+        var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
+        formatInfo.filename = fileURL.lastPathComponent
+        if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
+            if let fileSize = fileAttribs[.size] as? NSNumber {
+                formatInfo.serverSize = fileSize.uint64Value
+                formatInfo.cacheSize = fileSize.uint64Value
+            }
+            if let fileTS = fileAttribs[.modificationDate] as? Date {
+                formatInfo.serverMTime = fileTS
+                formatInfo.cacheMTime = fileTS
+                if book.timestamp < fileTS {
+                    book.timestamp = fileTS
+                }
+            }
+        }
+        
+        book.formats[format.rawValue] = formatInfo
+        
+        book.inShelf = true
+        
+        self.updateBook(book: book)
+        
+        #if canImport(R2Shared)
+        let streamer = Streamer()
+        streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
+            guard let publication = try? result.get() else {
+                print("Streamer \(fileURL)")
                 return
             }
             
-            let fileURL = server.localBaseUrl!.appendingPathComponent(library.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-            guard let md5 = fileName.data(using: .utf8)?.md5() else {
-                return
+            book.title = publication.metadata.title
+            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
+                self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
             }
-            let bookId = Int32(bigEndian: md5.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
-            
-            var book = CalibreBook(
-                id: bookId,
-                library: library
-            )
-            
-            guard let shelfBook = booksInShelf[book.inShelfId],
-                  getSavedUrl(book: shelfBook, format: format) == fileURL else {
-                return  //already loaded
-            }
-            
-            if let bookRealm = queryBookRealm(book: book, realm: realm) {
-                book = convert(library: library, bookRealm: bookRealm)
-            }
-            
-            var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
-            formatInfo.filename = fileName
-            if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
-                if let fileSize = fileAttribs[.size] as? NSNumber {
-                    formatInfo.serverSize = fileSize.uint64Value
-                    formatInfo.cacheSize = fileSize.uint64Value
-                }
-                if let fileTS = fileAttribs[.modificationDate] as? Date {
-                    formatInfo.serverMTime = fileTS
-                    formatInfo.cacheMTime = fileTS
-                    if book.lastModified < fileTS {
-                        book.lastModified = fileTS
-                    }
-                    if book.timestamp < fileTS {
-                        book.timestamp = fileTS
-                    }
-                }
-            }
-            
-            book.title = fileName
-            book.title.removeLast(suffix.count)
-            
-            book.formats[format.rawValue] = formatInfo
-            
-            book.inShelf = true
             
             self.updateBook(book: book)
-
-            #if canImport(R2Shared)
-            let streamer = Streamer()
-            streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
-                guard let publication = try? result.get() else {
-                    print("Streamer \(fileURL)")
-                    return
-                }
-                
-                book.title = publication.metadata.title
-                if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
-                    self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
-                }
-                
-                self.updateBook(book: book)
-            }
-            #endif
         }
+        #endif
+        return bookId
     }
     
     //remove non existing books from library list

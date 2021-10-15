@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CryptoKit
 
 func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
     if book.library.server.isLocal {
@@ -78,5 +79,50 @@ func removeFolioCache(book: CalibreBook, format: Format) {
         try FileManager.default.removeItem(at: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true))
     } catch {
         print(error)
+    }
+}
+
+func sha256new(for fileURL: URL) -> Data? {
+    guard let handle = try? FileHandle(forReadingFrom: fileURL) else { return nil }
+    let bufferSize = 1024*1024
+    var hasher = SHA256()
+    while autoreleasepool(invoking: {
+        let nextChunk = handle.readData(ofLength: bufferSize)
+        guard !nextChunk.isEmpty else { return false }
+        hasher.update(data: nextChunk)
+        return true
+    }) { }
+    let digest = hasher.finalize()
+    return Data(digest)
+    
+    // Here's how to convert to string form
+    //return digest.map { String(format: "%02hhx", $0) }.joined()
+}
+
+enum ImportError: String, CaseIterable, Hashable, Identifiable, Error {
+    case protocolUnsupported
+    case libraryAbsent
+    case securityFail
+    case idCalcFail
+    case destConflict
+    case fileOpFail
+    case loadMetaFail
+    case invalidArg
+    case tooManyFiles
+    case formatUnsupported
+    
+    var id: String {
+        return self.rawValue
+    }
+}
+
+struct BookImportInfo {
+    let url: URL
+    var bookId: Int32?
+    var error: ImportError?
+    
+    mutating func with(error: ImportError) -> BookImportInfo{
+        self.error = error
+        return self
     }
 }

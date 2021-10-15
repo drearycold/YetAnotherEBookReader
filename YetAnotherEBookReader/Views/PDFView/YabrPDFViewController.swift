@@ -426,7 +426,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
         print("curScale \(pdfView.scaleFactor) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView.scaleFactorForSizeToFit)")
         
-        let newDestX = boundForVisibleContent.minX + 1
+        let newDestX = boundForVisibleContent.minX + 4
         let newDestY = boundsForCropBox.height - boundForVisibleContent.minY
         
         let visibleRectInView = pdfView.convert(
@@ -762,7 +762,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
         modelData?.updatedReadingPosition.lastProgress = bookProgress
         modelData?.updatedReadingPosition.lastReadChapter = chapterName
-        modelData?.updatedReadingPosition.readerName = "YabrPDFView"
+        modelData?.updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         

@@ -35,10 +35,16 @@ struct ServerView: View {
     @State private var dataAction = ""
     @State private var dataLoading = false
     
-    @State private var serverCalibreInfoPresenting = false
+    @State private var serverCalibreInfoPresenting = false {
+        willSet { if newValue { modelData.presentingStack.append($serverCalibreInfoPresenting) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
     
     @State private var localLibraryImportBooksPicked = [URL]()
-    @State private var localLibraryImportPresenting = false
+    @State private var localLibraryImportPresenting = false {
+        willSet { if newValue { modelData.presentingStack.append($localLibraryImportPresenting) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
     
     @State private var updater = 0
     
@@ -320,9 +326,10 @@ struct ServerView: View {
                             }.onChange(of: localLibraryImportBooksPicked) { urls in
                                 guard urls.isEmpty == false else { return }
                                 
-                                let imported = urls.filter {
-                                    modelData.onOpenURL(url: $0, doMove: true)
+                                let result = urls.map {
+                                    modelData.onOpenURL(url: $0, doMove: true, doOverwrite: false, asNew: false)
                                 }
+                                let imported = result.filter { $0.error == nil }
                                 
                                 modelData.calibreServerUpdatingStatus = "\(urls.count) selected, \(imported.count) imported"
                                 

@@ -8,7 +8,11 @@
 import SwiftUI
 import Foundation
 
-struct AlertItem : Identifiable {
+struct AlertItem : Identifiable, Equatable {
+    static func == (lhs: AlertItem, rhs: AlertItem) -> Bool {
+        lhs.id == rhs.id
+    }
+
     var id: String
     var msg: String?
     var action: (() -> Void)?

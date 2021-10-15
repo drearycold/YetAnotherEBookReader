@@ -6,16 +6,26 @@
 //
 
 import SwiftUI
+import Combine
 
 @available(macCatalyst 14.0, *)
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
-    
+    @Environment(\.openURL) var openURL
+
     @State private var alertItem: AlertItem?
 
     @State private var positionActionPresenting = false
     @State private var positionActionMessage = ""
     
+    @State private var bookImportedCancellable: AnyCancellable?
+    @State private var dismissAllCancellable: AnyCancellable?
+
+    @State private var bookImportActionSheetPresenting = false
+    @State private var bookImportInfo: BookImportInfo?
+    
+    private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
+
     var body: some View {
         ZStack {
             TabView(selection: $modelData.activeTab) {
@@ -86,15 +96,15 @@ struct MainView: View {
             if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
                 return
             }
-            if modelData.updatedReadingPosition < originalPosition {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if false && modelData.updatedReadingPosition < originalPosition {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     alertItem = AlertItem(
                         id: "BackwardProgress",
                         msg: "You have reached a position behind last saved, is this alright?"
                     )
                 }
-            } else if originalPosition << modelData.updatedReadingPosition {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            } else if false && originalPosition << modelData.updatedReadingPosition {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     alertItem = AlertItem(
                         id: "ForwardProgress",
                         msg: "You have advanced more than 10% in this book, is this alright?"
@@ -111,23 +121,130 @@ struct MainView: View {
                 Text("No Suitable Format/Reader/Position Combo")
             }
         }
-        .alert(item: $alertItem) { item in
-            Alert(
-                title: Text("Confirm New Progress"),
-                message: Text(item.msg ?? ""),
-                primaryButton: .destructive(Text("Confirm")) {
-                    modelData.updateCurrentPosition(alertDelegate: self)
-                },
-                secondaryButton: .cancel()
-            )
-        }
+//        .alert(item: $alertItem) { item in
+//            if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
+//                return Alert(
+//                    title: Text("Confirm New Progress"),
+//                    message: Text(item.msg ?? ""),
+//                    primaryButton: .destructive(Text("Confirm")) {
+//                        modelData.updateCurrentPosition(alertDelegate: self)
+//                    },
+//                    secondaryButton: .cancel()
+//                )
+//            } else {
+//                return Alert(
+//                    title: Text(item.id),
+//                    message: Text(item.msg ?? ""),
+//                    primaryButton: .default(Text("OK"), action: item.action),
+//                    secondaryButton: .cancel()
+//                )
+//            }
+//        }
+        .actionSheet(isPresented: $bookImportActionSheetPresenting, content: {
+            guard let bookImportInfo = bookImportInfo else {
+                return ActionSheet(
+                    title: Text("Importing"),
+                    message: Text("Unexpected error occured (code empty result). Please consider report this."),
+                    buttons: [
+                        .default(Text("Report"), action: {
+                            openURL(URL(string: issueURL + "&title=Error+Importing+Book+Empty+Result&body=")!)
+                        }),
+                        .cancel()])
+            }
+            if bookImportInfo.error == nil, let bookId = bookImportInfo.bookId {
+                return ActionSheet(
+                    title: Text("Importing"),
+                    message: Text("Imported, read now?"),
+                    buttons: [
+                        .default(Text("Read"), action: {
+                            guard let localLibrary = modelData.localLibrary else { return }
+                            let book = CalibreBook(id: bookId, library: localLibrary)
+                            modelData.readingBookInShelfId = book.inShelfId
+                            modelData.presentingEBookReaderFromShelf = true
+                        }),
+                        .cancel()
+                    ]
+                )
+            }
+            if bookImportInfo.error == .destConflict {
+                return ActionSheet(
+                    title: Text("Importing"),
+                    message: Text("Book of same file name already exists. Do you wish to overwrite existing one?"),
+                    buttons: [
+                        .default(Text("As a new book"), action: {
+                            let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookImportInfo.bookId)
+                            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+                        }),
+                        .destructive(Text("Overwrite"), action: {
+                            let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookImportInfo.bookId)
+                            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+                        }),
+                        .cancel()
+                    ]
+                )
+            }
+            return ActionSheet(
+                title: Text("Importing"),
+                message: Text("Unexpected error occured (code \(bookImportInfo.error?.rawValue ?? "unknown")). Please consider report this."),
+                buttons: [
+                    .default(Text("Report"), action: {
+                        openURL(URL(string: issueURL + "&title=Error+Importing+Book+\(String(describing: bookImportInfo.error))&body=")!)
+                    }),
+                    .cancel()])
+        })
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .font(.headline)
         .onOpenURL { url in
             print("onOpenURL \(url)")
-            modelData.onOpenURL(url: url)
+            let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
+            
+            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+        }.onAppear {
+            dismissAllCancellable?.cancel()
+            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+                modelData.presentingEBookReaderFromShelf = false
+                positionActionPresenting = false
+            }
+
+            bookImportedCancellable?.cancel()
+            bookImportedCancellable = modelData.bookImportedPublisher.sink { notification in
+                print("bookImportedCancellable sink \(notification)")
+                guard let info = notification.userInfo?["result"] as? BookImportInfo else { return }
+                bookImportInfo = info
+                
+                print("dismissAll \(modelData.presentingStack.count)")
+                dismissAll() {
+                    NotificationCenter.default.post(name: .YABR_DismissAll, object: nil)
+                    modelData.activeTab = 0
+
+                    bookImportActionSheetPresenting = false
+                    DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
+                        bookImportActionSheetPresenting = true
+                    }
+                }
+            }
         }
         
+    }
+    
+    private func dismissAll(completion: @escaping () -> Void) {
+        print("dismissAll \(modelData.presentingStack)")
+        
+        if let latest = modelData.presentingStack.last {
+            if latest.wrappedValue == true {
+                latest.wrappedValue = false
+                print("dismissAll dismissed \(latest)")
+                DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
+                    dismissAll(completion: completion)
+                }
+            } else {
+                print("dismissAll already dismissed \(latest)")
+                _ = modelData.presentingStack.popLast()
+                dismissAll(completion: completion)
+            }
+        } else {
+            completion()
+        }
     }
     
 }

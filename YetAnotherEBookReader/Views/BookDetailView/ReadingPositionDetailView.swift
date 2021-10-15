@@ -12,7 +12,10 @@ struct ReadingPositionDetailView: View {
     
     @State private var overrideToggle = false
     
-    @State private var presentingReadSheet = false
+    @State private var presentingReadSheet = false {
+        willSet { if newValue { _VM.modelData.presentingStack.append($presentingReadSheet) } }
+        didSet { if oldValue { _ = _VM.modelData.presentingStack.popLast() } }
+    }
     @State private var alertItem: AlertItem?
 
     init(viewModel: ReadingPositionDetailViewModel) {
@@ -149,17 +152,15 @@ struct ReadingPositionDetailView: View {
         .fullScreenCover(
             isPresented: $presentingReadSheet,
             onDismiss: {
-                presentingReadSheet = false
-                
                 if let selectedPosition = _VM.modelData.readerInfo?.position {
                     if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
                         return
                     }
-                    if _VM.modelData.updatedReadingPosition < selectedPosition {
+                    if false && _VM.modelData.updatedReadingPosition < selectedPosition {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
                         }
-                    } else if selectedPosition << _VM.modelData.updatedReadingPosition {
+                    } else if false && selectedPosition << _VM.modelData.updatedReadingPosition {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
                         }

@@ -25,140 +25,148 @@ struct LibraryInfoView: View {
     @State private var batchDownloadSheetPresenting = false
     @State private var librarySwitcherPresenting = false
     
+    @State private var dismissAllCancellable: AnyCancellable?
+
     private var defaultLog = Logger()
     
     var body: some View {
-            NavigationView {
-                VStack(alignment: .leading) {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        HStack {
-                            Button(action: {
-                                modelData.syncLibrary(alertDelegate: self)
-                            }) {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                            if modelData.calibreServerLibraryUpdating {
-                                Text("\(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal)")
+        NavigationView {
+            VStack(alignment: .leading) {
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack {
+                        Button(action: {
+                            modelData.syncLibrary(alertDelegate: self)
+                        }) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        if modelData.calibreServerLibraryUpdating {
+                            Text("\(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal)")
+                        } else {
+                            if modelData.calibreServerLibraryBooks.count > 1 {
+                                Text("\(modelData.calibreServerLibraryBooks.count) Books")
                             } else {
-                                if modelData.calibreServerLibraryBooks.count > 1 {
-                                    Text("\(modelData.calibreServerLibraryBooks.count) Books")
-                                } else {
-                                    Text("\(modelData.calibreServerLibraryBooks.count) Book")
-                                }
-                            }
-                            
-                            Spacer()
-                            
-                            Text(modelData.calibreServerUpdatingStatus ?? "")
-                            filterMenuView()
-                        }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
-                            //                            guard value == false else { return }
-                            pageNo = 0
-                            updater += 1
-                        }
-                        
-                        TextField("Search", text: $searchString, onCommit: {
-                            modelData.searchString = searchString
-                            pageNo = 0
-                        })
-                        
-                        Divider()
-                    }.padding(4)    //top bar
-                    
-                    List(selection: $selectedBookIds) {
-                        ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
-                            NavigationLink (
-                                destination: BookDetailView(viewMode: .LIBRARY),
-                                tag: bookId,
-                                selection: $modelData.selectedBookId
-                            ) {
-                                LibraryInfoBookRow(bookId: bookId)
-                            }
-                            .isDetailLink(true)
-                            .contextMenu {
-                                if let book = modelData.calibreServerLibraryBooks[bookId] {
-                                    bookRowContextMenuView(book: book)
-                                }
-                            }
-                        }   //ForEach
-//                        .onDelete(perform: deleteFromList)
-                    }
-                    .popover(isPresented: $batchDownloadSheetPresenting,
-                             attachmentAnchor: .rect(.bounds),
-                             arrowEdge: .top
-                    ) {
-                        LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
-                    }
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Divider()
-                        
-                        HStack {
-                            Button(action:{
-                                librarySwitcherPresenting = true
-                            }) {
-                                Image(systemName: "arrow.left.arrow.right.circle")
-                            }
-                            .popover(isPresented: $librarySwitcherPresenting,
-                                     attachmentAnchor: .rect(.bounds),
-                                     arrowEdge: .top
-                            ) {
-                                LibraryInfoLibrarySwitcher(presenting: $librarySwitcherPresenting)
-                                    .environmentObject(modelData)
-                            }
-                            
-                            Spacer()
-                            
-                            Button(action:{
-                                if pageNo > 10 {
-                                    pageNo -= 10
-                                } else {
-                                    pageNo = 0
-                                }
-                            }) {
-                                Image(systemName: "chevron.backward.2")
-                            }
-                            Button(action:{
-                                if pageNo > 0 {
-                                    pageNo -= 1
-                                }
-                            }) {
-                                Image(systemName: "chevron.backward")
-                            }
-                            Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
-                            Button(action:{
-                                if ((pageNo + 1) * pageSize) < modelData.filteredBookList.count {
-                                    pageNo += 1
-                                }
-                            }) {
-                                Image(systemName: "chevron.forward")
-                            }
-                            Button(action:{
-                                for i in stride(from:10, to:1, by:-1) {
-                                    if ((pageNo + i) * pageSize) < modelData.filteredBookList.count {
-                                        pageNo += i
-                                        break
-                                    }
-                                }
-                            }) {
-                                Image(systemName: "chevron.forward.2")
+                                Text("\(modelData.calibreServerLibraryBooks.count) Book")
                             }
                         }
-                    }.padding(4)    //bottom bar
+                        
+                        Spacer()
+                        
+                        Text(modelData.calibreServerUpdatingStatus ?? "")
+                        filterMenuView()
+                    }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
+                        //                            guard value == false else { return }
+                        pageNo = 0
+                        updater += 1
+                    }
+                    
+                    TextField("Search", text: $searchString, onCommit: {
+                        modelData.searchString = searchString
+                        pageNo = 0
+                    })
+                    
+                    Divider()
+                }.padding(4)    //top bar
+                
+                List(selection: $selectedBookIds) {
+                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
+                        NavigationLink (
+                            destination: BookDetailView(viewMode: .LIBRARY),
+                            tag: bookId,
+                            selection: $modelData.selectedBookId
+                        ) {
+                            LibraryInfoBookRow(bookId: bookId)
+                        }
+                        .isDetailLink(true)
+                        .contextMenu {
+                            if let book = modelData.calibreServerLibraryBooks[bookId] {
+                                bookRowContextMenuView(book: book)
+                            }
+                        }
+                    }   //ForEach
+                    //                        .onDelete(perform: deleteFromList)
                 }
-                .padding(4)
-                .navigationTitle(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "Please Select a Library")
-                .navigationBarTitleDisplayMode(.automatic)
-                .statusBar(hidden: false)
-//                .toolbar {
-//                    toolbarContent()
-//                }   //List.toolbar
-                //.environment(\.editMode, self.$editMode)  //TODO
-            }   //NavigationView
-            .navigationViewStyle(DefaultNavigationViewStyle())
-            .listStyle(PlainListStyle())
-            .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
-            
+                .popover(isPresented: $batchDownloadSheetPresenting,
+                         attachmentAnchor: .rect(.bounds),
+                         arrowEdge: .top
+                ) {
+                    LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
+                }
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Divider()
+                    
+                    HStack {
+                        Button(action:{
+                            librarySwitcherPresenting = true
+                        }) {
+                            Image(systemName: "arrow.left.arrow.right.circle")
+                        }
+                        .popover(isPresented: $librarySwitcherPresenting,
+                                 attachmentAnchor: .rect(.bounds),
+                                 arrowEdge: .top
+                        ) {
+                            LibraryInfoLibrarySwitcher(presenting: $librarySwitcherPresenting)
+                                .environmentObject(modelData)
+                        }
+                        
+                        Spacer()
+                        
+                        Button(action:{
+                            if pageNo > 10 {
+                                pageNo -= 10
+                            } else {
+                                pageNo = 0
+                            }
+                        }) {
+                            Image(systemName: "chevron.backward.2")
+                        }
+                        Button(action:{
+                            if pageNo > 0 {
+                                pageNo -= 1
+                            }
+                        }) {
+                            Image(systemName: "chevron.backward")
+                        }
+                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
+                        Button(action:{
+                            if ((pageNo + 1) * pageSize) < modelData.filteredBookList.count {
+                                pageNo += 1
+                            }
+                        }) {
+                            Image(systemName: "chevron.forward")
+                        }
+                        Button(action:{
+                            for i in stride(from:10, to:1, by:-1) {
+                                if ((pageNo + i) * pageSize) < modelData.filteredBookList.count {
+                                    pageNo += i
+                                    break
+                                }
+                            }
+                        }) {
+                            Image(systemName: "chevron.forward.2")
+                        }
+                    }
+                }.padding(4)    //bottom bar
+            }
+            .padding(4)
+            .navigationTitle(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "Please Select a Library")
+            .navigationBarTitleDisplayMode(.automatic)
+            .statusBar(hidden: false)
+            //                .toolbar {
+            //                    toolbarContent()
+            //                }   //List.toolbar
+            //.environment(\.editMode, self.$editMode)  //TODO
+        }   //NavigationView
+        .navigationViewStyle(DefaultNavigationViewStyle())
+        .listStyle(PlainListStyle())
+        .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
+        .onAppear {
+            dismissAllCancellable?.cancel()
+            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+                librarySwitcherPresenting = false
+                batchDownloadSheetPresenting = false
+            }
+        }
         //Body
     }   //View
     

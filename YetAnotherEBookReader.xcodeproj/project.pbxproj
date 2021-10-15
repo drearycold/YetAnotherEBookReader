@@ -517,7 +517,7 @@
 		2ABB9142261ED7E5004AA7C0 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		2ABB914D261F1A47004AA7C0 /* BookDetailView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BookDetailView.swift; sourceTree = "<group>"; };
 		2ABB914E261F1A47004AA7C0 /* LibraryInfoView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LibraryInfoView.swift; sourceTree = "<group>"; };
-		2ABB914F261F1A47004AA7C0 /* ServerView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ServerView.swift; path = "../New Group/ServerView.swift"; sourceTree = "<group>"; };
+		2ABB914F261F1A47004AA7C0 /* ServerView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ServerView.swift; sourceTree = "<group>"; };
 		2ABB9150261F1A47004AA7C0 /* YabrEBookReader.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrEBookReader.swift; sourceTree = "<group>"; };
 		2ABB9151261F1A47004AA7C0 /* MainView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		2ABB9152261F1A47004AA7C0 /* EpubFolioReaderContainer.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = EpubFolioReaderContainer.swift; sourceTree = "<group>"; };

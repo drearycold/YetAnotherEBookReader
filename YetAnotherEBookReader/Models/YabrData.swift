@@ -86,3 +86,11 @@ struct FontInfo {
         }
     }
 }
+
+extension Notification.Name {
+    static let YABR_BooksRefreshed = Notification.Name("YABR.booksRefreshed")
+    static let YABR_ReadingBookRemovedFromShelf = Notification.Name("YABR.readingBookRemovedFromShelf")
+    static let YABR_BookImported = Notification.Name("YABR.bookImported")
+    static let YABR_DismissAll = Notification.Name("YABR.dismissAll")
+
+}

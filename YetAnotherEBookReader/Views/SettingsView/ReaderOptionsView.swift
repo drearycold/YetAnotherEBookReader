@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 struct ReaderOptionsView: View {
     @EnvironmentObject var modelData: ModelData
@@ -29,6 +30,8 @@ struct ReaderOptionsView: View {
     @State private var customDictViewerTestPresenting = false
     
     @State private var updater = 0
+    
+    @State private var dismissAllCancellable: AnyCancellable?
     
     var body: some View {
         ScrollView {
@@ -297,6 +300,18 @@ struct ReaderOptionsView: View {
             Spacer()
         }   //ScrollView
         .onAppear() {
+            dismissAllCancellable?.cancel()
+            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+                fontsFolderPresenting = false
+                fontsDetailPresenting = false
+                optionsFormatPresenting = false
+                optionsReaderEpubPresenting = false
+                optionsReaderPdfPresenting = false
+                optionsReaderCbzPresenting = false
+                customDictViewerInfoPresenting = false
+                customDictViewerTestPresenting = false
+            }
+            
             (customDictViewerEnabled, customDictViewerURLStored) = modelData.getCustomDictViewer()
             customDictViewerURL = customDictViewerURLStored?.absoluteString ?? ""
             customDictViewerURLMalformed = checkCustomDictViewerURL(value: customDictViewerURL)
