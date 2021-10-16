@@ -62,31 +62,34 @@ struct MainView: View {
                     .background(Color.gray.opacity(0.4).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
             }
             if modelData.activeTab < 3 && modelData.booksInShelf.filter({$0.value.library.server.isLocal == false}).isEmpty {
-                VStack {
-                    Text("""
-                        Welcome!
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Welcome!")
                         
+                    Text("""
                         Get start from
                         \"Settings\" -> \"Server & Library\"
                         to link with Calibre Server.
+                        """)
                         
+                    Text("""
                         Then go to "Browse"
                         to add book to Shelf by toggling \(Image(systemName: "star"))
                         or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
-                        
-                        Start reading by touching book cover.
-                        
-                        Don't forget to play with "Reader Options" and various in-reader settings.
-                        
-                        Enjoy your book!
-                        
-                        (This notice will disappear after first book has been added to shelf)
                         """)
-                        .multilineTextAlignment(.leading)
-                        .padding()
-                        .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
-                        .frame(maxWidth: 400)
+                        
+                    Text("Start reading by touching book cover.")
+                        
+                    Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
+                        
+                    Text("Enjoy your book!")
+                        
+                    Text("(This notice will disappear after first book has been added to shelf)")
+                        
                 }
+                .multilineTextAlignment(.leading)
+                .padding()
+                .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
+                .frame(maxWidth: 400)
             }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
