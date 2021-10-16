@@ -496,7 +496,7 @@ struct ServerView: View {
             if item.id == "DelLibrary" {
                 return Alert(
                     title: Text("Remove Library"),
-                    message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact"),
+                    message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact. (OR in the case of Local Library, remove ALL imported books.)"),
                     primaryButton: .destructive(Text("Confirm")) {
                         delLibraryConfirmed()
                     },

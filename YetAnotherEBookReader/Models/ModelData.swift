@@ -1511,7 +1511,8 @@ final class ModelData: ObservableObject {
             $0.value.library.id == libraryId
         }
         libraryBooksInShelf.forEach {
-            self.removeFromShelf(inShelfId: $0.key)
+            self.clearCache(inShelfId: $0.key)
+            self.removeFromShelf(inShelfId: $0.key)     //just in case
         }
         
         //remove library info
