@@ -191,7 +191,11 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
                 y: shelfView.frame.maxY,
                 width:  kGADAdSizeBanner.size.width,
                 height: kGADAdSizeBanner.size.height))
+        #if DEBUG
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
+        #else
+        bannerView.adUnitID = modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
+        #endif
         bannerView.rootViewController = self
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false

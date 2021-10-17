@@ -279,6 +279,8 @@ final class ModelData: ObservableObject {
     
     @Published var userFontInfos = [String: FontInfo]()
 
+    var resourceFileDictionary: NSDictionary?
+
     init(mock: Bool = false) {
         #if canImport(GoogleMobileAds)
         GADMobileAds.sharedInstance().start(completionHandler: nil)
@@ -301,6 +303,12 @@ final class ModelData: ObservableObject {
         kfImageCache.diskStorage.config.expiration = .never
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
+        
+        
+        //Load content of Info.plist into resourceFileDictionary dictionary
+        if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
+            resourceFileDictionary = NSDictionary(contentsOfFile: path)
+        }
         
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in

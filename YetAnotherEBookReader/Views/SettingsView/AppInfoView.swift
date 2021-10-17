@@ -10,9 +10,6 @@ import SwiftUI
 struct AppInfoView: View {
     @Environment(\.openURL) var openURL
 
-    private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
-    private let enhancementURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=enhancement&assignees=drearycold"
-
     private let calibreURL = "https://calibre-ebook.com/"
     private let folioReaderKitURL = "https://github.com/FolioReader/FolioReaderKit"
     private let readiumURL = "https://github.com/readium/awesome-readium"
@@ -31,18 +28,12 @@ struct AppInfoView: View {
                 }
                 
                 VStack(alignment: .center, spacing: 4) {
-                    linkButtonBuilder(title: "Report an Issue", url: issueURL)
-                    linkButtonBuilder(title: "Suggestion & Request", url: enhancementURL)
-                }
-                
-                VStack(alignment: .center, spacing: 4) {
                     Text("Thanks to")
                     linkButtonBuilder(title: "calibre", url: calibreURL)
                     
                     linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
                     linkButtonBuilder(title: "Readium Project", url: readiumURL)
                     linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
-                    
                 }
             }.padding()
             .frame(maxWidth: 500)

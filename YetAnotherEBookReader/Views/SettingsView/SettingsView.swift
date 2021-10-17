@@ -21,7 +21,8 @@ struct SettingsView: View {
                 }
                 NavigationLink("Reader Options", destination: ReaderOptionsView())
                 Text("")
-                NavigationLink("Support", destination: AppInfoView())
+                NavigationLink("Support", destination: SupportInfoView())
+                NavigationLink("About", destination: AppInfoView())
             }
         }.navigationViewStyle(StackNavigationViewStyle())
     }

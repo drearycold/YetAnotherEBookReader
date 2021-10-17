@@ -308,6 +308,8 @@
 	<array>
 		<string>arm64</string>
 	</array>
+	<key>GADBannerShelfUnitID</key>
+	<string>ca-app-pub-2603711004804215/2003928149</string>
 	<key>UIRequiresFullScreen</key>
 	<false/>
 	<key>UIStatusBarHidden</key>

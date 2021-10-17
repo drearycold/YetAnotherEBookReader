@@ -571,9 +571,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         UIColor.black.setFill()
         UIRectFrame(rectangle)
         
+        let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
+
         #if DEBUG
         UIColor.red.setStroke()
-        let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
         let drawBounds = CGRect(x: boundsForCropBox.minX * thumbnailScale,
                                 y: boundsForCropBox.minY * thumbnailScale,
                                 width: sizeForThumbnailImage.width,
