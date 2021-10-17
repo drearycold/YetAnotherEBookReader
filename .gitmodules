@@ -37,9 +37,6 @@
 [submodule "Carthage/Checkouts/r2-testapp-swift"]
 	path = Carthage/Checkouts/r2-testapp-swift
 	url = https://github.com/readium/r2-testapp-swift.git
-[submodule "Carthage/Checkouts/FolioReaderKit"]
-	path = Carthage/Checkouts/FolioReaderKit
-	url = https://github.com/drearycold/FolioReaderKit.git
 [submodule "Carthage/Checkouts/MBProgressHUD"]
 	path = Carthage/Checkouts/MBProgressHUD
 	url = https://github.com/jdg/MBProgressHUD.git
@@ -64,6 +61,3 @@
 [submodule "Carthage/Checkouts/r2-shared-swift"]
 	path = Carthage/Checkouts/r2-shared-swift
 	url = https://github.com/readium/r2-shared-swift.git
-[submodule "Carthage/Checkouts/ShelfView-iOS"]
-	path = Carthage/Checkouts/ShelfView-iOS
-	url = https://github.com/drearycold/ShelfView-iOS.git

@@ -7,6 +7,10 @@
 
 import SwiftUI
 
+#if canImport(UserMessagingPlatform)
+import UserMessagingPlatform
+#endif
+
 struct SupportInfoView: View {
     @Environment(\.openURL) var openURL
 
@@ -19,6 +23,12 @@ struct SupportInfoView: View {
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
             List {
+                #if canImport(UserMessagingPlatform)
+                Button(action: { UMPConsentInformation.sharedInstance.reset() }) {
+                    Text("Reset Tracking Consent")
+                }.padding()
+                #endif
+                
                 Button(action: { privacyWebViewPresenting = true }) {
                     Text("Private Policy")
                     Spacer()

@@ -7,6 +7,12 @@
 
 import SwiftUI
 import Combine
+import AppTrackingTransparency
+
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+import UserMessagingPlatform
+#endif
 
 @available(macCatalyst 14.0, *)
 struct MainView: View {
@@ -23,6 +29,8 @@ struct MainView: View {
 
     @State private var bookImportActionSheetPresenting = false
     @State private var bookImportInfo: BookImportInfo?
+    
+    @State private var umpFormLoaded = false
     
     private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
 
@@ -203,6 +211,8 @@ struct MainView: View {
             
             NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
         }.onAppear {
+            requestIDFA()
+            
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 modelData.presentingEBookReaderFromShelf = false
@@ -250,6 +260,61 @@ struct MainView: View {
         }
     }
     
+    private func requestIDFA() {
+        ATTrackingManager.requestTrackingAuthorization(completionHandler: { status in
+            // Tracking authorization completed. Start loading ads here.
+            showConsentInformation()
+        })
+    }
+
+    private func showConsentInformation() {
+        let parameters = UMPRequestParameters()
+//        #if DEBUG
+//        let debugSettings = UMPDebugSettings()
+//        debugSettings.testDeviceIdentifiers = ["kGADSimulatorID"]
+//        debugSettings.geography = UMPDebugGeography.EEA
+//        parameters.debugSettings = debugSettings
+//        #endif
+
+        // false means users are not under age.
+        parameters.tagForUnderAgeOfConsent = false
+        
+        UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(
+            with: parameters,
+            completionHandler: { error in
+                if error != nil {
+                    // Handle the error.
+                } else {
+                    // The consent information state was updated.
+                    // You are now ready to check if a form is available.
+                    let formStatus = UMPConsentInformation.sharedInstance.formStatus
+                    if formStatus == UMPFormStatus.available {
+                        loadForm()
+                    }
+                }
+            })
+    }
+    
+    #if canImport(GoogleMobileAds)
+    private func loadForm() {
+        UMPConsentForm.load(
+            completionHandler: { form, loadError in
+                if loadError != nil {
+                    // Handle the error
+                } else {
+                    // Present the form
+                    if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.required {
+                        form?.present(from: UIApplication.shared.windows.first!.rootViewController! as UIViewController, completionHandler: { dimissError in
+                            if UMPConsentInformation.sharedInstance.consentStatus == UMPConsentStatus.obtained {
+                                // App can start requesting ads.
+                                GADMobileAds.sharedInstance().start(completionHandler: nil)
+                            }
+                        })
+                    }
+                }
+            })
+    }
+    #endif
 }
 
 extension MainView: AlertDelegate {

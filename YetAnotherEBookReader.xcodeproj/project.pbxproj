@@ -10,6 +10,11 @@
 		1741595447654CBF38F09522 /* Pods_YetAnotherEBookReader.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A3BD35FBC8C10AAFDF26BF4F /* Pods_YetAnotherEBookReader.framework */; };
 		17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		2A0A0487271BF65A00589B87 /* SupportInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A0486271BF65A00589B87 /* SupportInfoView.swift */; };
+		2A0A0489271BFEE500589B87 /* AppTrackingTransparency.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A0488271BFEE500589B87 /* AppTrackingTransparency.framework */; };
+		2A0A0490271C39CE00589B87 /* Realm.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048C271C39B400589B87 /* Realm.xcframework */; };
+		2A0A0491271C39CE00589B87 /* Realm.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048C271C39B400589B87 /* Realm.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		2A0A0492271C39D000589B87 /* RealmSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048E271C39C100589B87 /* RealmSwift.xcframework */; };
+		2A0A0493271C39D000589B87 /* RealmSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048E271C39C100589B87 /* RealmSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */; };
 		2A0EBA86267893740080BF5B /* Downloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA85267893740080BF5B /* Downloader.swift */; };
 		2A0EBA8826798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA8726798C4B0080BF5B /* LibraryInfoLibrarySwitcher.swift */; };
@@ -343,10 +348,12 @@
 				6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */,
 				6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */,
 				6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */,
+				2A0A0493271C39D000589B87 /* RealmSwift.xcframework in Embed Frameworks */,
 				2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */,
 				6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */,
 				2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */,
 				6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */,
+				2A0A0491271C39CE00589B87 /* Realm.xcframework in Embed Frameworks */,
 				6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */,
 				6E76E9C3265FF36900885D26 /* ZIPFoundation.xcframework in Embed Frameworks */,
 			);
@@ -370,6 +377,9 @@
 		2150B616017401937AD07ADB /* Pods-YetAnotherEBookReader.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader.release.xcconfig"; sourceTree = "<group>"; };
 		22BED5CB8454A86BCB647E0C /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0A0486271BF65A00589B87 /* SupportInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportInfoView.swift; sourceTree = "<group>"; };
+		2A0A0488271BFEE500589B87 /* AppTrackingTransparency.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppTrackingTransparency.framework; path = System/Library/Frameworks/AppTrackingTransparency.framework; sourceTree = SDKROOT; };
+		2A0A048C271C39B400589B87 /* Realm.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Realm.xcframework; path = Carthage/Build/Realm.xcframework; sourceTree = "<group>"; };
+		2A0A048E271C39C100589B87 /* RealmSwift.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = RealmSwift.xcframework; path = Carthage/Build/RealmSwift.xcframework; sourceTree = "<group>"; };
 		2A0A782426E8F65300F3C753 /* YetAnotherEBookReader_for_macOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReader_for_macOSApp.swift; sourceTree = "<group>"; };
 		2A0A782626E8F65300F3C753 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		2A0A782826E8F65500F3C753 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -605,10 +615,13 @@
 				6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */,
 				6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */,
 				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
+				2A0A0489271BFEE500589B87 /* AppTrackingTransparency.framework in Frameworks */,
 				2A73B8F426DB7BE0004B001D /* ReadiumLCP.xcframework in Frameworks */,
 				2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */,
 				6E76E9C0265FF36600885D26 /* SwiftSoup.xcframework in Frameworks */,
+				2A0A0492271C39D000589B87 /* RealmSwift.xcframework in Frameworks */,
 				2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */,
+				2A0A0490271C39CE00589B87 /* Realm.xcframework in Frameworks */,
 				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				6E76E9B4265FF35500885D26 /* GCDWebServer.xcframework in Frameworks */,
 				6E76E9C2265FF36900885D26 /* ZIPFoundation.xcframework in Frameworks */,
@@ -1163,6 +1176,9 @@
 		8AF6E969197F21B99627BB3C /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				2A0A048C271C39B400589B87 /* Realm.xcframework */,
+				2A0A048E271C39C100589B87 /* RealmSwift.xcframework */,
+				2A0A0488271BFEE500589B87 /* AppTrackingTransparency.framework */,
 				2A8B6A5F26F97E3D004197D7 /* RealmSwift.framework */,
 				2AEE915826F47B5300B012B0 /* Kingfisher.framework */,
 				2AEE914626F471CE00B012B0 /* AEXML.framework */,

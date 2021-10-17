@@ -62,7 +62,7 @@
 			<key>File</key>
 			<string>com.mono0926.LicensePlist/Google-Mobile-Ads-SDK</string>
 			<key>Title</key>
-			<string>Google-Mobile-Ads-SDK (8.11.0)</string>
+			<string>Google-Mobile-Ads-SDK (8.12.0)</string>
 			<key>Type</key>
 			<string>PSChildPaneSpecifier</string>
 		</dict>
@@ -70,7 +70,7 @@
 			<key>File</key>
 			<string>com.mono0926.LicensePlist/GoogleAppMeasurement</string>
 			<key>Title</key>
-			<string>GoogleAppMeasurement (8.7.0)</string>
+			<string>GoogleAppMeasurement (8.8.0)</string>
 			<key>Type</key>
 			<string>PSChildPaneSpecifier</string>
 		</dict>
@@ -188,14 +188,6 @@
 		</dict>
 		<dict>
 			<key>File</key>
-			<string>com.mono0926.LicensePlist/Realm</string>
-			<key>Title</key>
-			<string>Realm (5.5.1)</string>
-			<key>Type</key>
-			<string>PSChildPaneSpecifier</string>
-		</dict>
-		<dict>
-			<key>File</key>
 			<string>com.mono0926.LicensePlist/realm-cocoa</string>
 			<key>Title</key>
 			<string>Realm (3.21.0)</string>
@@ -207,14 +199,6 @@
 			<string>com.mono0926.LicensePlist/realm-core</string>
 			<key>Title</key>
 			<string>RealmCore (5.23.5)</string>
-			<key>Type</key>
-			<string>PSChildPaneSpecifier</string>
-		</dict>
-		<dict>
-			<key>File</key>
-			<string>com.mono0926.LicensePlist/RealmSwift</string>
-			<key>Title</key>
-			<string>RealmSwift (5.5.1)</string>
 			<key>Type</key>
 			<string>PSChildPaneSpecifier</string>
 		</dict>

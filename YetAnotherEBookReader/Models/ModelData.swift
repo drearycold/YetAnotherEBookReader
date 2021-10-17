@@ -18,10 +18,6 @@ import R2Shared
 import R2Streamer
 #endif
 
-#if canImport(GoogleMobileAds)
-import GoogleMobileAds
-#endif
-
 final class ModelData: ObservableObject {
     @Published var deviceName = UIDevice.current.name
     
@@ -282,9 +278,6 @@ final class ModelData: ObservableObject {
     var resourceFileDictionary: NSDictionary?
 
     init(mock: Bool = false) {
-        #if canImport(GoogleMobileAds)
-        GADMobileAds.sharedInstance().start(completionHandler: nil)
-        #endif
         
         if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
             realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
@@ -1853,4 +1846,6 @@ final class ModelData: ObservableObject {
                 NotificationCenter.default.post(Notification(name: Notification.Name("YABR.booksRefreshed")))
             }
     }
+    
+        
 }

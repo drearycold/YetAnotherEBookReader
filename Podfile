@@ -8,8 +8,8 @@ target 'YetAnotherEBookReader' do
   # Pods for YetAnotherEBookReader
   pod 'Google-Mobile-Ads-SDK'
   pod 'Kingfisher/SwiftUI', '~> 5.0'
-  pod 'Realm', '~> 5.0'
-  pod 'RealmSwift', '~> 5.0'
+  # pod 'Realm', '~> 5.0'
+  # pod 'RealmSwift', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
 
@@ -32,7 +32,7 @@ target 'YetAnotherEBookReader-Catalyst' do
   pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
-  pod 'Realm', '~> 5.0'
-  pod 'RealmSwift', '~> 5.0'
+  # pod 'Realm', '~> 5.0'
+  # pod 'RealmSwift', '~> 5.0'
 
 end
