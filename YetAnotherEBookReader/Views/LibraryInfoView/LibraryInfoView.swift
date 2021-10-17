@@ -59,7 +59,7 @@ struct LibraryInfoView: View {
                         updater += 1
                     }
                     
-                    TextField("Search", text: $searchString, onCommit: {
+                    TextField("Search Title & Authors", text: $searchString, onCommit: {
                         modelData.searchString = searchString
                         pageNo = 0
                     })

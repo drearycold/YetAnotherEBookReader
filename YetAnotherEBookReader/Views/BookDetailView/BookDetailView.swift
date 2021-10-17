@@ -490,18 +490,18 @@ struct BookDetailView: View {
     
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button(action: {
-                alertItem = AlertItem(id: "Delete")
-            }) {
-                if viewMode == .LIBRARY {
-                Image(systemName: "trash")
-                    .accentColor(.red)
-                } else {
-                    EmptyView().hidden()
-                }
-            }.disabled(!modelData.updatingMetadataSucceed)
-        }
+//        ToolbarItem(placement: .cancellationAction) {
+//            Button(action: {
+//                alertItem = AlertItem(id: "Delete")
+//            }) {
+//                if viewMode == .LIBRARY {
+//                Image(systemName: "trash")
+//                    .accentColor(.red)
+//                } else {
+//                    EmptyView().hidden()
+//                }
+//            }.disabled(!modelData.updatingMetadataSucceed)
+//        }
         ToolbarItem(placement: .cancellationAction) {
             Button(action: {
                 if modelData.updatingMetadata {

@@ -859,12 +859,12 @@ final class ModelData: ObservableObject {
     }
     
     func updateFilteredBookList() {
+        let searchTerms = searchString.trimmingCharacters(in: .whitespacesAndNewlines).split { $0.isWhitespace }
         let filteredBookList = calibreServerLibraryBooks.values.filter { [self] (book) -> Bool in
-            if !(searchString.isEmpty || book.title.contains(searchString) || book.authors.reduce(into: false, { result, author in
-                result = result || author.contains(searchString)
-            })) {
-                return false
-            }
+            guard searchTerms.isEmpty || searchTerms.filter({ term in
+                book.title.localizedCaseInsensitiveContains(term) || book.authors.filter({ $0.localizedCaseInsensitiveContains(term) }).count > 0
+            }).count == searchTerms.count
+            else { return false }
             if !(filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription)) {
                 return false
             }
