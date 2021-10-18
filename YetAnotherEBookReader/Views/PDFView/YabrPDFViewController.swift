@@ -324,6 +324,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
+        blankView.contentMode = .scaleAspectFill
         pdfView.addSubview(blankView)
 
         self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))

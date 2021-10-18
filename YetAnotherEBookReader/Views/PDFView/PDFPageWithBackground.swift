@@ -60,16 +60,16 @@ class PDFPageWithBackground : PDFPage {
         let grayComponents = fillColor.converted(to: CGColorSpace(name: CGColorSpace.linearGray)!, intent: .defaultIntent, options: nil)?.components ?? []
         print("draw gray \(grayComponents)")
         
-        let rect = CGRect(origin: .zero, size: image.size)
+        UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
+        guard let context = UIGraphicsGetCurrentContext() else { return image }
         defer {
             UIGraphicsEndImageContext()
         }
+
+        let rect = CGRect(origin: .zero, size: image.size)
+        image.draw(in: rect)
+
         if grayComponents.count > 1, grayComponents[0] < 0.3 {
-            UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
-            
-            guard let context = UIGraphicsGetCurrentContext() else { return image }
-            image.draw(in: rect)
-            
             context.setBlendMode(.exclusion)
             context.setFillColor(gray: 1.0 - grayComponents[0], alpha: 1.0)
             context.fill(rect)
@@ -77,24 +77,14 @@ class PDFPageWithBackground : PDFPage {
             context.setBlendMode(.darken)
             context.setFillColor(gray: 0.7, alpha: 1.0)
             context.fill(rect)
-            
-            guard let coloredImg = UIGraphicsGetImageFromCurrentImageContext() else { return image }
-            
-            return coloredImg
         } else {
-            UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
-            
-            guard let context = UIGraphicsGetCurrentContext() else { return image }
-            image.draw(in: rect)
-            
             context.setBlendMode(.darken)
             context.setFillColor(fillColorDeviceRGB)
             context.fill(rect)
-            
-            guard let coloredImg = UIGraphicsGetImageFromCurrentImageContext() else { return image }
-        
-            return coloredImg
         }
+        guard let coloredImg = UIGraphicsGetImageFromCurrentImageContext() else { return image }
+        
+        return coloredImg
     }
     
     override func thumbnail(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
