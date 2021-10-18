@@ -17,6 +17,7 @@ import FolioReaderKit
 class YabrPDFViewController: UIViewController, PDFViewDelegate {
     var modelData: ModelData?
     var pdfView = PDFView()
+    var blankView = UIImageView()
     var mDictView = MDictViewContainer()
     
     let logger = Logger()
@@ -67,6 +68,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             pageIndicator.setTitleColor(tintColor, for: .normal)
             titleInfoButton.setTitleColor(tintColor, for: .normal)
             
+            self.pdfView.backgroundColor = backgroundColor
             //self.pdfView.pageShadowsEnabled
 //            pageSlider.backgroundColor = backgroundColor
 //            pageIndicator.backgroundColor = backgroundColor
@@ -145,6 +147,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pageSlider.isContinuous = true
         pageSlider.addAction(UIAction(handler: { (action) in
             if let destPage = self.pdfView.document?.page(at: Int(self.pageSlider.value.rounded())) {
+                self.addBlankSubView(page: destPage)
                 self.pdfView.go(to: destPage)
             }
         }), for: .valueChanged)
@@ -152,6 +155,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
         pagePrevButton.addAction(UIAction(handler: { (action) in
             self.updatePageViewPositionHistory()
+            self.addBlankSubView(page: self.pdfView.currentPage)    //FIXME get actual page
 
             if self.pdfView.displaysRTL {
                 self.pdfView.goToNextPage(self.pagePrevButton)
@@ -163,6 +167,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pageNextButton.setImage(UIImage(systemName: "arrow.right"), for: .normal)
         pageNextButton.addAction(UIAction(handler: { (action) in
             self.updatePageViewPositionHistory()
+            self.addBlankSubView(page: self.pdfView.currentPage)    //FIXME get actual page
 
             if self.pdfView.displaysRTL {
                 self.pdfView.goToPreviousPage(self.pagePrevButton)
@@ -249,6 +254,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                             self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
                             self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
                         }
+                        if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                            self.addBlankSubView(page: curPage)
+                        }
                         self.pdfView.go(to: curPage)
                     })
                     
@@ -257,6 +265,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
                     self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
                         
+                    if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                        self.addBlankSubView(page: dest.page)
+                    }
                     self.pdfView.go(to: dest)
                 })
                 
@@ -279,9 +290,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         tapGestureRecognizer.numberOfTapsRequired = 2
         
         pdfView.addGestureRecognizer(tapGestureRecognizer)
+        pdfView.delegate = self
         
         self.view = pdfView
-        
+
         if modelData?.getCustomDictViewer().0 ?? false {     // if enabled
             UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
             mDictView.loadViewIfNeeded()
@@ -292,6 +304,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
         if let page = pdfView.document?.page(at: destPageIndex) {
+            if page.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                self.addBlankSubView(page: page)
+            }
             pdfView.go(to: page)
         }
         
@@ -309,6 +324,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
+        pdfView.addSubview(blankView)
+
         self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
     }
 
@@ -358,6 +375,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         var titleLabel = self.bookTitle
         guard let curPage = pdfView.currentPage else { return }
 
+        addBlankSubView(page: curPage)
+        
+        defer {
+            clearBlankSubView()
+        }
+        
         if var outlineRoot = pdfView.document?.outlineRoot {
             while outlineRoot.numberOfChildren == 1 {
                 outlineRoot = outlineRoot.child(at: 0)!
@@ -536,6 +559,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let sizeForThumbnailImage = getThumbnailImageSize(boundsForCropBox: boundsForCropBox)
         
         let image = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
+        
         guard let cgimage = image.cgImage else { return boundsForCropBox }
         
         let numberOfComponents = 4
@@ -684,6 +708,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             //break
         } else {
             return 0.0
+        }
+    }
+    
+    func addBlankSubView(page: PDFPage?) {
+        let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor.init(gray: 1.0, alpha: 1.0))
+        
+        if let page = page as? PDFPageWithBackground {
+            let thumbImage = page.thumbnailWithBackground(of: pdfView.frame.size, for: .cropBox)
+            blankView.image = thumbImage
+        }
+        
+        blankView.tintColor = backgroundColor
+        blankView.backgroundColor = backgroundColor
+        blankView.frame.size = pdfView.frame.size
+    }
+    
+    func clearBlankSubView() {
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(200))) {
+            self.blankView.frame.size = .zero
         }
     }
     
