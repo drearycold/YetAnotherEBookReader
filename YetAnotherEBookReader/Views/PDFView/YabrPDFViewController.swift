@@ -19,6 +19,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     var pdfView = PDFView()
     var blankView = UIImageView()
     var mDictView = MDictViewContainer()
+    var doubleTapLeftLabel = UILabel()
+    var doubleTapRightLabel = UILabel()
     
     let logger = Logger()
     
@@ -321,6 +323,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
         stackView.frame = self.navigationController?.toolbar.frame ?? .zero
+        
+        doubleTapLeftLabel.text = "Double Tap\nto Turn Page"
+        doubleTapLeftLabel.textAlignment = .center
+        doubleTapLeftLabel.numberOfLines = 0
+        doubleTapLeftLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
+        doubleTapLeftLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
+        doubleTapLeftLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.4).cgColor
+        doubleTapLeftLabel.layer.cornerRadius = 8
+        doubleTapLeftLabel.layer.masksToBounds = true
+        
+        doubleTapRightLabel.text = "Double Tap\nto Turn Page"
+        doubleTapRightLabel.textAlignment = .center
+        doubleTapRightLabel.numberOfLines = 0
+        doubleTapRightLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
+        doubleTapRightLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
+        doubleTapRightLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.4).cgColor
+        doubleTapRightLabel.layer.cornerRadius = 8
+        doubleTapRightLabel.layer.masksToBounds = true
+        
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -330,9 +351,26 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
         blankView.contentMode = .scaleAspectFill
-        pdfView.addSubview(blankView)
+        
+        doubleTapLeftLabel.frame = CGRect(origin: CGPoint(x: 0, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
+        
+        doubleTapRightLabel.frame = CGRect(origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
+        
 
+        UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
+            pdfView.addSubview(doubleTapLeftLabel)
+            pdfView.addSubview(doubleTapRightLabel)
+        }
+        pdfView.addSubview(blankView)
+        
         self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
+        
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(2))) { [weak self] in
+            UIView.animate(withDuration: TimeInterval(0.5)) {
+                self?.doubleTapLeftLabel.removeFromSuperview()
+                self?.doubleTapRightLabel.removeFromSuperview()
+            }
+        }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
