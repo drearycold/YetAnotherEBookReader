@@ -33,14 +33,14 @@ struct SupportInfoView: View {
                     Text("Private Policy")
                     Spacer()
                 }.sheet(isPresented: $privacyWebViewPresenting) {
-                    privacyWebView()
+                    SupportInfoView.privacyWebView()
                 }.padding()
                 
                 Button(action: { termsWebViewPresenting = true }) {
                     Text("Terms & Conditions")
                     Spacer()
                 }.sheet(isPresented: $termsWebViewPresenting) {
-                    termsWebView()
+                    SupportInfoView.termsWebView()
                 }.padding()
                 
                 linkButtonBuilder(title: "Report an Issue", url: issueURL).padding()
@@ -64,7 +64,7 @@ struct SupportInfoView: View {
     }
     
     @ViewBuilder
-    private func privacyWebView() -> some View {
+    static func privacyWebView() -> some View {
         WebViewUI(content:"""
             <!DOCTYPE html>
                 <html>
@@ -180,7 +180,7 @@ struct SupportInfoView: View {
     }
     
     @ViewBuilder
-    private func termsWebView() -> some View {
+    static func termsWebView() -> some View {
         WebViewUI(content: """
             <!DOCTYPE html>
                 <html>

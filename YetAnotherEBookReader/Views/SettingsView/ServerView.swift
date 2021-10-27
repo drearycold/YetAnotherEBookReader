@@ -99,7 +99,7 @@ struct ServerView: View {
                             calibreServerEditing = true
                             dataAction = "Add"
                         }) {
-                            Text("Add")
+                            Text("Add Server")
                         }
                         
                         Button(action:{
@@ -318,7 +318,7 @@ struct ServerView: View {
                                 localLibraryImportBooksPicked.removeAll()
                                 localLibraryImportPresenting = true
                             }) {
-                                Text("Import")
+                                Text("Import Book Files")
                             }.sheet(isPresented: $localLibraryImportPresenting, onDismiss: {
                                 localLibraryImportPresenting = false
                             }) {

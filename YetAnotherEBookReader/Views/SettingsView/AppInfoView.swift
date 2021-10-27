@@ -8,6 +8,8 @@
 import SwiftUI
 
 struct AppInfoView: View {
+    @EnvironmentObject var modelData: ModelData
+
     @Environment(\.openURL) var openURL
 
     private let calibreURL = "https://calibre-ebook.com/"
@@ -19,12 +21,15 @@ struct AppInfoView: View {
         ScrollView {
             VStack(alignment: .center, spacing: 8) {
                 VStack(alignment: .center, spacing: 16) {
-                    Text("D&S Reader").font(.title)
+                    Text("D.S.Reader").font(.title)
                     
                     Image("logo_1024")
                         .resizable().frame(width: 256, height: 256, alignment: .center)
                     Text("by Drearycold & Siyi")
-                    Text("Version 0.1.0")
+                    HStack {
+                        Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+                        Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+                    }
                 }
                 
                 VStack(alignment: .center, spacing: 4) {
@@ -55,7 +60,10 @@ struct AppInfoView: View {
 }
 
 struct ReportView_Previews: PreviewProvider {
+    static private var modelData = ModelData()
+
     static var previews: some View {
         AppInfoView()
+            .environmentObject(modelData)
     }
 }

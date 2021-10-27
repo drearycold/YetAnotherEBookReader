@@ -698,10 +698,11 @@ final class ModelData: ObservableObject {
         }
 
         if url.isFileURL {
-            guard url.startAccessingSecurityScopedResource() else {
-                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
-                return bookImportInfo.with(error: .securityFail)
-            }
+            let _ = url.startAccessingSecurityScopedResource()
+//            else {
+//                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
+//                return bookImportInfo.with(error: .securityFail)
+//            }
             defer {
                 url.stopAccessingSecurityScopedResource()
             }

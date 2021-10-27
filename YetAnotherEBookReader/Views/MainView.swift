@@ -21,6 +21,10 @@ struct MainView: View {
 
     @State private var alertItem: AlertItem?
 
+    @State private var initialTermsAgreementPresenting = false
+    @State private var privacyWebViewPresenting = false
+    @State private var termsWebViewPresenting = false
+    
     @State private var positionActionPresenting = false
     @State private var positionActionMessage = ""
     
@@ -69,35 +73,38 @@ struct MainView: View {
                 ProgressView("Initializing Library...")
                     .background(Color.gray.opacity(0.4).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
             }
-            if modelData.activeTab < 3 && modelData.booksInShelf.filter({$0.value.library.server.isLocal == false}).isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Welcome!")
+            if modelData.activeTab < 2 && modelData.booksInShelf.isEmpty {
+                VStack {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Welcome!")
                         
-                    Text("""
+                        Text("""
                         Get start from
                         \"Settings\" -> \"Server & Library\"
                         to link with Calibre Server.
                         """)
                         
-                    Text("""
+                        Text("""
                         Then go to "Browse"
                         to add book to Shelf by toggling \(Image(systemName: "star"))
                         or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
                         """)
                         
-                    Text("Start reading by touching book cover.")
+                        Text("Start reading by touching book cover.")
                         
-                    Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
+                        Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
                         
-                    Text("Enjoy your book!")
+                        Text("Enjoy your book!")
                         
-                    Text("(This notice will disappear after first book has been added to shelf)")
-                        
+                        Text("(This notice will disappear after first book has been added to shelf)")
+                    }
+                    .multilineTextAlignment(.leading)
+                    .padding()
+                    .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
+                    .frame(maxWidth: 400)
+                    
+                    Rectangle().frame(height: 50).opacity(0.0)
                 }
-                .multilineTextAlignment(.leading)
-                .padding()
-                .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
-                .frame(maxWidth: 400)
             }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
@@ -132,25 +139,81 @@ struct MainView: View {
                 Text("No Suitable Format/Reader/Position Combo")
             }
         }
-//        .alert(item: $alertItem) { item in
-//            if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
-//                return Alert(
-//                    title: Text("Confirm New Progress"),
-//                    message: Text(item.msg ?? ""),
-//                    primaryButton: .destructive(Text("Confirm")) {
-//                        modelData.updateCurrentPosition(alertDelegate: self)
-//                    },
-//                    secondaryButton: .cancel()
-//                )
-//            } else {
-//                return Alert(
-//                    title: Text(item.id),
-//                    message: Text(item.msg ?? ""),
-//                    primaryButton: .default(Text("OK"), action: item.action),
-//                    secondaryButton: .cancel()
-//                )
-//            }
-//        }
+        .alert(item: $alertItem) { item in
+            if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
+                return Alert(
+                    title: Text("Confirm New Progress"),
+                    message: Text(item.msg ?? ""),
+                    primaryButton: .destructive(Text("Confirm")) {
+                        modelData.updateCurrentPosition(alertDelegate: self)
+                    },
+                    secondaryButton: .cancel()
+                )
+            }
+            if item.id == "ATTNotice" {
+                return Alert(title: Text("Tracking Request"),
+                             message: Text("This free App is ads-Supported. We value our users' privary. Tracking will allow our ads providers to deliver personalized ads to you. Please make a choice in the next notice."),
+                             dismissButton: .default(Text("Continue"), action: {
+                    requestIDFA()
+                }))
+            }
+            return Alert(
+                title: Text(item.id),
+                message: Text(item.msg ?? ""),
+                primaryButton: .default(Text("OK"), action: item.action),
+                secondaryButton: .cancel()
+            )
+        }
+        .sheet(isPresented: $initialTermsAgreementPresenting, onDismiss: {
+            UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
+            alertItem = AlertItem(id: "ATTNotice")
+        }, content: {
+            VStack(spacing: 4) {
+                VStack(spacing: 16) {
+                    Text("D.S.Reader").font(.title)
+                    
+                    Image("logo_1024")
+                        .resizable().frame(width: 128, height: 128, alignment: .center)
+                    
+                    Text("")
+                }
+                Text("""
+                    Welcome to D.S.Reader, an e-Book Reader for EPUB, PDF and CBZ formats, with custom fonts and custom dictionary support.
+                    
+                    When paired with calibre Content Server, you can easily browse your libraries, download books for reading.
+                    It will track and sync you reading progress and highlights across all devices paired with the same server.
+                    
+                    Accept our "Private Policy" and "Terms & Conditions" to start.
+                    
+                    (Dismissing this notice means you will accept.")
+                    """)
+                Button(action: { privacyWebViewPresenting = true }) {
+                    Text("Private Policy")
+                }.sheet(isPresented: $privacyWebViewPresenting) {
+                    SupportInfoView.privacyWebView()
+                }
+                Button(action: { termsWebViewPresenting = true }) {
+                    Text("Terms & Conditions")
+                }.sheet(isPresented: $termsWebViewPresenting) {
+                    SupportInfoView.termsWebView()
+                }
+                
+                HStack {
+                    Button(action: {
+                        UserDefaults.standard.setValue(false, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
+                        exit(1)
+                    }) {
+                        Text("Decline and Exit").foregroundColor(.red)
+                    }.padding()
+                    
+                    Button(action: {
+                        initialTermsAgreementPresenting = false
+                    }) {
+                        Text("Accept")
+                    }.padding()
+                }
+            }.padding()
+        })
         .actionSheet(isPresented: $bookImportActionSheetPresenting, content: {
             guard let bookImportInfo = bookImportInfo else {
                 return ActionSheet(
@@ -211,7 +274,12 @@ struct MainView: View {
             
             NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
         }.onAppear {
-            requestIDFA()
+            let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
+            if !termsAccepted {
+                initialTermsAgreementPresenting = true
+            } else {
+                requestIDFA()
+            }
             
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in

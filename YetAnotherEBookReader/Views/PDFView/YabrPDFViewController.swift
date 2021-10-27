@@ -217,6 +217,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 }
             ),
         ], animated: true)
+        self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
         
         var tableOfContents = [UIMenuElement]()
         
@@ -253,6 +254,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                             let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(children)
                             self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
                             self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                            if children.isEmpty {
+                                self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
+                            }
                         }
                         if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
                             self.addBlankSubView(page: curPage)
@@ -264,6 +268,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(historyItems)
                     self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
                     self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                    self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
                         
                     if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
                         self.addBlankSubView(page: dest.page)

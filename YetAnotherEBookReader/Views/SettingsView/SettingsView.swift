@@ -15,7 +15,7 @@ struct SettingsView: View {
             List {
                 NavigationLink(destination: ServerView()) {
                     Text("Server & Library")
-                    if modelData.calibreServers.filter({$0.value.isLocal == false}).isEmpty {
+                    if modelData.booksInShelf.isEmpty {
                         Text("Start here").foregroundColor(.red)
                     }
                 }
@@ -34,6 +34,5 @@ struct SettingsView_Previews: PreviewProvider {
     static var previews: some View {
         SettingsView()
             .environmentObject(modelData)
-
     }
 }

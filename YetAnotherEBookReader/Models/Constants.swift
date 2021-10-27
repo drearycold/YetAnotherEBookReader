@@ -8,6 +8,8 @@
 import Foundation
 
 struct Constants {
+    static let KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED = "io.github.yabr.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED"
+    
     static let KEY_DEFAULTS_SELECTED_SERVER_ID = "io.github.yabr.KEY_DEFAULTS_SELECTED_SERVER_ID"
     static let KEY_DEFAULTS_SELECTED_LIBRARY_ID = "io.github.yabr.KEY_DEFAULTS_SELECTED_LIBRARY_ID"
     
