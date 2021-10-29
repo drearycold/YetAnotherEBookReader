@@ -75,7 +75,7 @@ class CalibreLibraryRealm: Object {
     var customColumns = List<CalibreCustomColumnRealm>()
     
     @objc dynamic var readPosColumnName: String?
-    @objc dynamic var goodreadsSyncProfileName: String?
+    @objc dynamic var goodreadsSync: CalibreLibraryGoodreadsSyncRealm?
 }
 
 class CalibreBookRealm: Object {
@@ -231,6 +231,18 @@ class CalibreCustomColumnRealm: Object {
     }
 }
 
+class CalibreLibraryGoodreadsSyncRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    
+    @objc dynamic var profileName: String?
+    @objc dynamic var tagsColumnName: String?
+    @objc dynamic var ratingColumnName: String?
+    @objc dynamic var dateReadColumnName: String?
+    @objc dynamic var reviewColumnName: String?
+    @objc dynamic var readingProgressColumnName: String?
+}
+
 public protocol Persistable {
     associatedtype ManagedObject: RealmSwift.Object
     init(managedObject: ManagedObject)
@@ -254,6 +266,38 @@ extension CalibreCustomColumnInfo: Persistable {
         let obj = CalibreCustomColumnRealm()
         obj.label = label
         obj.name = name
+        obj.datatype = datatype
+        obj.editable = editable
+        obj.normalized = normalized
+        obj.num = num
+        obj.isMultiple = isMultiple
+        
+        return obj
+    }
+}
+
+extension CalibreLibraryGoodreadsSync: Persistable {
+    public init(managedObject: CalibreLibraryGoodreadsSyncRealm) {
+        isEnabled = managedObject.isEnabled
+        isDefault = managedObject.isDefault
+        profileName = managedObject.profileName ?? profileName
+        tagsColumnName = managedObject.tagsColumnName ?? tagsColumnName
+        ratingColumnName = managedObject.ratingColumnName ?? ratingColumnName
+        dateReadColumnName = managedObject.dateReadColumnName ?? dateReadColumnName
+        reviewColumnName = managedObject.reviewColumnName ?? reviewColumnName
+        readingProgressColumnName = managedObject.readingProgressColumnName ?? readingProgressColumnName
+    }
+    
+    public func managedObject() -> CalibreLibraryGoodreadsSyncRealm {
+        let obj = CalibreLibraryGoodreadsSyncRealm()
+        obj.isEnabled = isEnabled
+        obj.isDefault = isDefault
+        obj.profileName = profileName
+        obj.tagsColumnName = tagsColumnName
+        obj.ratingColumnName = ratingColumnName
+        obj.dateReadColumnName = dateReadColumnName
+        obj.reviewColumnName = reviewColumnName
+        obj.readingProgressColumnName = readingProgressColumnName
         return obj
     }
 }

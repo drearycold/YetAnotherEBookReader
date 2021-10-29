@@ -366,7 +366,7 @@ struct CalibreServerService {
             }
             
                 
-            guard var newbook = handleLibraryBookOneNew(oldbook: oldbook, json: data) else {
+            guard var newbook = handleLibraryBookOne(oldbook: oldbook, json: data) else {
                 updatingMetadataStatus = "Failed to Parse Calibre Server Response."
                 return
             }
@@ -390,115 +390,117 @@ struct CalibreServerService {
         task.resume()
     }
     
-    func handleLibraryBookOneNew(oldbook: CalibreBook, json: Data) -> CalibreBook? {
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
+    func handleLibraryBookOne(oldbook: CalibreBook, json: Data) -> CalibreBook? {
+        let decoder = JSONDecoder()
+        
+        guard let entry = try? decoder.decode(CalibreBookEntry.self, from: json),
+              let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
             return nil
         }
         
         var book = oldbook
-        if let v = root["title"] as? String {
-            book.title = v
-        }
-        if let v = root["publisher"] as? String {
-            book.publisher = v
-        }
-        if let v = root["series"] as? String {
-            book.series = v
-        }
+        book.title = entry.title
+        book.publisher = entry.publisher ?? ""
+        book.series = entry.series ?? ""
+        book.seriesIndex = entry.series_index ?? 0.0
         
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = .withInternetDateTime
-        if let v = root["pubdate"] as? String, let date = dateFormatter.date(from: v) {
-            book.pubDate = date
-        }
-        if let v = root["last_modified"] as? String, let date = dateFormatter.date(from: v) {
-            book.lastModified = date
-        }
-        if let v = root["timestamp"] as? String, let date = dateFormatter.date(from: v) {
-            book.timestamp = date
-        }
+        book.pubDate = dateFormatter.date(from: entry.pubdate) ?? .distantPast
+        book.lastModified = dateFormatter.date(from: entry.last_modified) ?? .init()
+        book.timestamp = dateFormatter.date(from: entry.last_modified) ?? .init()
         
-        if let v = root["tags"] as? NSArray {
-            book.tags = v.compactMap { (t) -> String? in
-                t as? String
-            }
-        }
+        book.tags = entry.tags
         
-        if let v = root["format_metadata"] as? NSDictionary {
-            book.formats = v.reduce(
-                into: book.formats
-            ) { result, format in
-                if let fKey = format.key as? String,
-                   let fVal = format.value as? NSDictionary,
-                   let sizeVal = fVal["size"] as? NSNumber,
-                   let mtimeVal = fVal["mtime"] as? String {
-                    var formatInfo = result[fKey.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-                    
-                    formatInfo.serverSize = sizeVal.uint64Value
-                    
-                    let dateFormatter = ISO8601DateFormatter()
-                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-                    if let mtime = dateFormatter.date(from: mtimeVal) {
-                        formatInfo.serverMTime = mtime
-                    }
-                    
-                    result[fKey.uppercased()] = formatInfo
-                }
-            }
+        
+//        if let v = root["format_metadata"] as? NSDictionary {
+//            book.formats = v.reduce(
+//                into: book.formats
+//            ) { result, format in
+//                if let fKey = format.key as? String,
+//                   let fVal = format.value as? NSDictionary,
+//                   let sizeVal = fVal["size"] as? NSNumber,
+//                   let mtimeVal = fVal["mtime"] as? String {
+//                    var formatInfo = result[fKey.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+//
+//                    formatInfo.serverSize = sizeVal.uint64Value
+//
+//                    let dateFormatter = ISO8601DateFormatter()
+//                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+//                    if let mtime = dateFormatter.date(from: mtimeVal) {
+//                        formatInfo.serverMTime = mtime
+//                    }
+//
+//                    result[fKey.uppercased()] = formatInfo
+//                }
+//            }
+//        }
+        
+        book.formats = entry.format_metadata.reduce(into: book.formats) {
+            var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+            
+            formatInfo.serverSize = $1.value.size
+            
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+            formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
+            
+            $0[$1.key.uppercased()] = formatInfo
         }
         
         book.size = 0   //parse later
         
-        if let v = root["rating"] as? NSNumber {
-            book.rating = v.intValue * 2
-        }
+        book.rating = entry.rating * 2
+        book.authors = entry.authors
+        book.identifiers = entry.identifiers
+        book.comments = entry.comments ?? ""
         
-        if let v = root["authors"] as? NSArray {
-            book.authors = v.compactMap { (t) -> String? in
-                t as? String
+        if let userMetadata = root["user_metadata"] as? NSDictionary {
+            book.userMetadatas = userMetadata.reduce(into: book.userMetadatas) {
+                guard let dict = $1.value as? NSDictionary,
+                    let label = dict["label"] as? String,
+                    let value = dict["#value#"]
+                else { return }
+                $0[label] = value
             }
-        }
-
-        if let v = root["identifiers"] as? NSDictionary {
-            if let ids = v as? [String: String] {
-                book.identifiers = ids
-            }
-        }
-        
-        if let v = root["comments"] as? String {
-            book.comments = v
         }
         
         //Parse Reading Position
         if let readPosColumnName = modelData.calibreLibraries[oldbook.library.id]?.readPosColumnName,
-              let userMetadata = root["user_metadata"] as? NSDictionary,
-              let userMetadataReadPosDict = userMetadata[readPosColumnName] as? NSDictionary,
-              let readPosString = userMetadataReadPosDict["#value#"] as? String,
-              let readPosData = Data(base64Encoded: readPosString),
-              let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-              let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
+           let readPosString = book.userMetadatas[readPosColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
+           let readPosData = Data(base64Encoded: readPosString),
+           let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
+           //let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+           //let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
+           let deviceMapDict = readPosDictNew["deviceMap"] {
+            
             deviceMapDict.forEach { key, value in
-                let deviceName = key as! String
+                let deviceName = key// as! String
                 
                 if deviceName == modelData.deviceName && modelData.getDeviceReadingPosition(book: book) != nil {
                     //ignore server, trust local record
                     return
                 }
                 
-                let deviceReadingPositionDict = value as! [String: Any]
-                //TODO merge
-                var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
+//                let deviceReadingPositionDict = value as! [String: Any]
+//                //TODO merge
+//
+//                var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
+//
+//                deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
+//                deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+//                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
+//                deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
+//                deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
+//                deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
+//                deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+//                if let lastPosition = deviceReadingPositionDict["lastPosition"] {
+//                    deviceReadingPosition.lastPosition = lastPosition as! [Int]
+//                }
                 
-                deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-                deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
-                deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-                deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-                deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-                deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-                if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                    deviceReadingPosition.lastPosition = lastPosition as! [Int]
-                }
+                var deviceReadingPosition = value
+                deviceReadingPosition.id = deviceName
+                
                 book.readPos.updatePosition(deviceName, deviceReadingPosition)
                 
                 defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
@@ -860,7 +862,7 @@ struct CalibreServerService {
             url: endpointUrl, username: book.library.server.username)
     }
     
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
+    func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
@@ -873,6 +875,16 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
+    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        
+        let a = urlSession.dataTaskPublisher(for: task.url)
+            .map { (task, $0.data, $0.response) }
+            .eraseToAnyPublisher()
+        return a
+    }
     func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
         
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {

@@ -256,11 +256,9 @@ final class ModelData: ObservableObject {
     
     private var defaultLog = Logger()
     
-    static let RealmSchemaVersion:UInt64 = 22
+    static var RealmSchemaVersion:UInt64 = 1
     private var realm: Realm!
-    private var realmConf = Realm.Configuration(
-        schemaVersion: RealmSchemaVersion
-    )
+    private var realmConf: Realm.Configuration!
     
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
@@ -278,6 +276,18 @@ final class ModelData: ObservableObject {
     var resourceFileDictionary: NSDictionary?
 
     init(mock: Bool = false) {
+        //Load content of Info.plist into resourceFileDictionary dictionary
+        if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
+            resourceFileDictionary = NSDictionary(contentsOfFile: path)
+        }
+        
+        ModelData.RealmSchemaVersion = UInt64(resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1") ?? 1
+        realmConf = Realm.Configuration(
+            schemaVersion: ModelData.RealmSchemaVersion
+        )
+        realm = try! Realm(
+            configuration: realmConf
+        )
         
         if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
             realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
@@ -289,19 +299,9 @@ final class ModelData: ObservableObject {
             }
         }
         
-        realm = try! Realm(
-            configuration: realmConf
-        )
-        
         kfImageCache.diskStorage.config.expiration = .never
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
-        
-        
-        //Load content of Info.plist into resourceFileDictionary dictionary
-        if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
-            resourceFileDictionary = NSDictionary(contentsOfFile: path)
-        }
         
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in
@@ -539,7 +539,7 @@ final class ModelData: ObservableObject {
                     $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                 },
                 readPosColumnName: libraryRealm.readPosColumnName,
-                goodreadsSyncProfileName: libraryRealm.goodreadsSyncProfileName
+                goodreadsSync: CalibreLibraryGoodreadsSync(managedObject: libraryRealm.goodreadsSync ?? CalibreLibraryGoodreadsSyncRealm())
                 )
             
             calibreLibraries[calibreLibrary.id] = calibreLibrary
@@ -969,8 +969,8 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func updateGoodreadsSyncProfileName(enabled: Bool, value: String) {
-        calibreLibraries[currentCalibreLibraryId]?.goodreadsSyncProfileName = enabled ? value : nil
+    func updateGoodreadsSync(goodreadsSync: CalibreLibraryGoodreadsSync) {
+        calibreLibraries[currentCalibreLibraryId]?.goodreadsSync = goodreadsSync
         do {
             try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
         } catch {
@@ -1059,7 +1059,7 @@ final class ModelData: ObservableObject {
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
         libraryRealm.readPosColumnName = library.readPosColumnName
-        libraryRealm.goodreadsSyncProfileName = library.goodreadsSyncProfileName
+        libraryRealm.goodreadsSync = library.goodreadsSync.managedObject()
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         try realm.write {
             realm.add(libraryRealm, update: .all)
@@ -1213,8 +1213,11 @@ final class ModelData: ObservableObject {
         updateBookRealm(book: book, realm: self.realm)
         booksInShelf[book.inShelfId] = book
         
-        if let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = book.library.goodreadsSyncProfileName, goodreadsSyncProfileName.isEmpty == false {
-            let connector = GoodreadsSyncConnector(server: book.library.server, profileName: goodreadsSyncProfileName)
+        if let library = calibreLibraries[book.library.id],
+           let goodreadsId = book.identifiers["goodreads"],
+           library.goodreadsSync.isEnabled,
+           library.goodreadsSync.profileName.isEmpty == false {
+            let connector = GoodreadsSyncConnector(server: book.library.server, profileName: book.library.goodreadsSync.profileName)
             let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
         }
     }
@@ -1236,8 +1239,11 @@ final class ModelData: ObservableObject {
         
         postProcessForLocalLibrary()
         
-        if let book = readingBook, let library = calibreLibraries[book.library.id], let goodreadsId = book.identifiers["goodreads"], let goodreadsSyncProfileName = library.goodreadsSyncProfileName, goodreadsSyncProfileName.count > 0 {
-            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+        if let library = calibreLibraries[book.library.id],
+           let goodreadsId = book.identifiers["goodreads"],
+           library.goodreadsSync.isEnabled,
+           library.goodreadsSync.profileName.isEmpty == false {
+            let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
             let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
             if let position = getDeviceReadingPosition(book: book), position.lastProgress > 99 {
@@ -1405,9 +1411,9 @@ final class ModelData: ObservableObject {
             if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
                let library = calibreLibraries[readingBook.library.id],
                let goodreadsId = readingBook.identifiers["goodreads"],
-               let goodreadsSyncProfileName = library.goodreadsSyncProfileName,
-               goodreadsSyncProfileName.count > 0 {
-                let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSyncProfileName)
+               library.goodreadsSync.isEnabled,
+               library.goodreadsSync.profileName.isEmpty == false {
+                let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
                 connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
             }
         }
@@ -1647,7 +1653,7 @@ final class ModelData: ObservableObject {
                         $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                     },
                     readPosColumnName: oldLibraryRealm.readPosColumnName,
-                    goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
+                    goodreadsSync: CalibreLibraryGoodreadsSync(managedObject: oldLibraryRealm.goodreadsSync  ?? CalibreLibraryGoodreadsSyncRealm()))
                 
                 
                 let newLibrary = CalibreLibrary(
@@ -1656,7 +1662,7 @@ final class ModelData: ObservableObject {
                     name: oldLibraryRealm.name!,
                     customColumnInfos: oldLibrary.customColumnInfos,
                     readPosColumnName: oldLibraryRealm.readPosColumnName,
-                    goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
+                    goodreadsSync: oldLibrary.goodreadsSync)
                 
                 do {
                     try realm.write {
@@ -1807,7 +1813,7 @@ final class ModelData: ObservableObject {
                 }
             }
             .compactMap(calibreServerService.buildMetadataTask(book:))
-            .publisher.flatMap(calibreServerService.getMetadataNew(task:))
+            .publisher.flatMap(calibreServerService.getMetadata(task:))
             .collect()
             .eraseToAnyPublisher()
             .receive(on: DispatchQueue.main)

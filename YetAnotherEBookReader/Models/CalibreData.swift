@@ -70,7 +70,22 @@ struct CalibreLibrary: Hashable, Identifiable {
     var name: String
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
-    
+    var customColumnInfoNumberKeys: [String] {
+        customColumnInfos.filter{ $1.datatype == "int" || $1.datatype == "float" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    }
+    var customColumnInfoCommentKeys: [String] {
+        customColumnInfos.filter{ $1.datatype == "comments" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    }
+    var customColumnInfoDateKeys: [String] {
+        customColumnInfos.filter{ $1.datatype == "date" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    }
+    var customColumnInfoRatingKeys: [String] {
+        customColumnInfos.filter{ $1.datatype == "rating" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    }
+    var customColumnInfoMultiTextKeys: [String] {
+        customColumnInfos.filter{ $1.datatype == "text" && $1.isMultiple }.keys.map{"#" + $0}.sorted{$0 < $1}
+    }
+        
     var readPosColumnName: String? = nil
     var readPosColumnNameDefault: String {
         if server.username.isEmpty {
@@ -80,10 +95,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         }
     }
     
-    var goodreadsSyncProfileName: String? = nil
-    var goodreadsSyncProfileNameDefault: String {
-        return "Default"
-    }
+    var goodreadsSync = CalibreLibraryGoodreadsSync()
     
     var urlForDeleteBook: URL? {
         guard let keyEncoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -142,6 +154,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         }
         return series
     }
+    var seriesIndex = 0.0
     var rating = 0
     var ratingDescription: String {
         if rating > 9 {
@@ -196,6 +209,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var readPos = BookReadingPosition()
     
     var identifiers = [String: String]()
+    
+    var userMetadatas = [String: Any?]()
     
     var coverURL : URL? {
         guard let keyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -294,19 +309,33 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         hasher.combine(readerName)
     }
     
-    var id: String  //device name
+    var id: String = ""  //device name
     
     var readerName: String
     var maxPage = 0
     var lastReadPage = 0
     var lastReadChapter = ""
+    /// range 0 - 100
     var lastChapterProgress = 0.0
+    /// range 0 - 100
     var lastProgress = 0.0
     var furthestReadPage = 0
     var furthestReadChapter = ""
     var lastPosition = [0, 0, 0]
     var cfi = "/"
     var epoch = 0.0
+    
+    enum CodingKeys: String, CodingKey {
+        case readerName
+        case lastReadPage
+        case lastReadChapter
+        case lastChapterProgress
+        case lastProgress
+        case furthestReadPage
+        case furthestReadChapter
+        case maxPage
+        case lastPosition
+    }
     
     var description: String {
         return """
@@ -544,4 +573,16 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
         
         case allowHalfStars = "allow_half_stars"
     }
+}
+
+struct CalibreLibraryGoodreadsSync: Codable, Hashable {
+    var isEnabled = false
+    var isDefault = false
+    
+    var profileName = "Default"
+    var tagsColumnName = "do not use"
+    var ratingColumnName = "do not use"
+    var dateReadColumnName = "do not use"
+    var reviewColumnName = "do not use"
+    var readingProgressColumnName = "do not use"
 }

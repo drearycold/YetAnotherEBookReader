@@ -30,9 +30,11 @@ struct ServerView: View {
     @State private var storeReadingPositionColumnName = ""
     @State private var isDefaultReadingPosition = false
     
-    @State private var enableGoodreadsSync = false
-    @State private var goodreadsSyncProfileName = ""
-    @State private var isDefaultGoodreadsSync = false
+//    @State private var enableGoodreadsSync = false
+//    @State private var goodreadsSyncProfileName = ""
+//    @State private var isDefaultGoodreadsSync = false
+    
+    @State private var goodreadsSync = CalibreLibraryGoodreadsSync()
     
     //
     @State private var calibreServerEditing = false
@@ -89,17 +91,18 @@ struct ServerView: View {
             })
             
             Button(action: {
-                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
-                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
+//                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+//                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
+                goodreadsSync = library.goodreadsSync
                 
                 goodreadsSyncOptionPresenting = true
             }) {
                 Text("Goodreads Sync")
             }
             .sheet(isPresented: $goodreadsSyncOptionPresenting, onDismiss: {
-                modelData.updateGoodreadsSyncProfileName(enabled: enableGoodreadsSync, value: goodreadsSyncProfileName)
+                modelData.updateGoodreadsSync(goodreadsSync: goodreadsSync)
             }, content: {
-                LibraryOptionsGoodreadsSync(library: library, enableGoodreadsSync: $enableGoodreadsSync, goodreadsSyncProfileName: $goodreadsSyncProfileName, isDefaultGoodreadsSync: $isDefaultGoodreadsSync)
+                LibraryOptionsGoodreadsSync(library: library, goodreadsSync: $goodreadsSync)
                     .padding()
                     .frame(maxWidth: 600)
             })
@@ -420,7 +423,11 @@ struct ServerView: View {
                         Spacer()
                         
                         if modelData.calibreServerLibraryUpdating {
-                            Text("Refreshing Metadata \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal), please wait a moment...")
+                            Text("""
+                                Refreshing Metadata
+                                \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal),
+                                please wait a moment...
+                                """)
                         } else {
                             Text("\(modelData.calibreServerLibraryBooks.count) Book(s) in Library")
                         }
@@ -435,7 +442,7 @@ struct ServerView: View {
                     }
                 }
                 
-                if true || modelData.currentCalibreServer?.isLocal == false, let library = modelData.currentCalibreLibrary {
+                if modelData.currentCalibreServer?.isLocal == false, let library = modelData.currentCalibreLibrary {
                     
                     advancedLibrarySettingsView(library: library)
                 }

@@ -19,7 +19,7 @@ struct LibraryOptionsReadingPosition: View {
 
             Text("""
                 Therefore reading positions can be synced between devices.
-                Please add a custom column of type \"Long text\" on calibre server.
+                Please add a custom column of type \"Long text, like comments\" on calibre server.
                 If there are multiple users, it's better to add a unique column for each user.
                 Defaults to #read_pos(_username).
                 """)
@@ -34,14 +34,16 @@ struct LibraryOptionsReadingPosition: View {
                 HStack {
                     Text("Current Column: \(storeReadingPositionColumnName)")
                     Spacer()
-                    if library.customColumnInfos[storeReadingPositionColumnName.trimmingCharacters(in: CharacterSet(["#"]))] == nil {
+                    if let columnInfo = library.customColumnInfos[storeReadingPositionColumnName.trimmingCharacters(in: CharacterSet(["#"]))] {
+                        Text(columnInfo.datatype).font(.caption).foregroundColor(.red)
+                    } else {
                         Text("unavailable").font(.caption).foregroundColor(.red)
                     }
                 }
                 HStack {
                     Spacer()
                     Picker("Pick another Column", selection: $storeReadingPositionColumnName) {
-                        ForEach(library.customColumnInfos.keys.map{"#" + $0}.sorted{$0 < $1}, id: \.self) {
+                        ForEach(library.customColumnInfos.filter{ $1.datatype == "comments" }.keys.map{"#" + $0}.sorted{$0 < $1}, id: \.self) {
                             Text($0)
                         }
                     }.pickerStyle(MenuPickerStyle())
