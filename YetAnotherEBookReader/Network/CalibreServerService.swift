@@ -1138,6 +1138,53 @@ struct CalibreServerService {
         
         return 0
     }
+    
+    func getCustomColumns(library: CalibreLibrary, completion: (([String: CalibreCustomColumnInfo]) -> Void)? = nil) -> Int {
+        guard let serverURL = getServerUrlByReachability(server: library.server),
+              var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
+            return -1
+        }
+        
+        endpointURLComponent.path.append("/cdb/cmd/custom_columns/0")
+        endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: library.key)]
+
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
+        guard let postData = "[]".data(using: .utf8) else {
+            return -2
+        }
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = postData
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
+            .tryMap { output in
+                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: [String:CalibreCustomColumnInfo]].self, decoder: JSONDecoder())
+            .replaceError(with: [:])
+            .eraseToAnyPublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { results in
+                print("\(#function) count=\(results.count) result=\(results)")
+                completion?(results["result"] ?? [:])
+            }
+        
+        return 0
+    }
 }
 
 struct CalibreServerLibraryInfo: Codable {

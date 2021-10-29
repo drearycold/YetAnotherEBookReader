@@ -19,7 +19,12 @@ struct ServerView: View {
     @State private var calibreServerNeedAuth = false
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
-
+    
+    // selections for options
+    // @State private var selectedOption: String?
+    @State private var readingPositionSyncOptionPresenting = false
+    @State private var goodreadsSyncOptionPresenting = false
+    
     // bindings for library options
     @State private var enableStoreReadingPosition = false
     @State private var storeReadingPositionColumnName = ""
@@ -52,6 +57,79 @@ struct ServerView: View {
     
     @State private var alertItem: AlertItem?
     @State private var alertContent: String = ""
+    
+    
+    @ViewBuilder
+    private func goodreadsSyncStack(library: CalibreLibrary) -> some View {
+        
+    }
+    
+    @ViewBuilder
+    private func advancedLibrarySettingsView(library: CalibreLibrary) -> some View {
+        VStack(alignment:.leading, spacing: 8) {
+            Divider()
+            
+            Text("Life of Ease Options")
+            
+            Button(action: {
+                storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
+                enableStoreReadingPosition = library.readPosColumnName != nil
+                
+                print("readingPositionSyncOptionPresenting \(enableStoreReadingPosition) \(storeReadingPositionColumnName)")
+                readingPositionSyncOptionPresenting = true
+            }) {
+                Text("Reading Postions Sync")
+            }
+            .sheet(isPresented: $readingPositionSyncOptionPresenting, onDismiss: {
+                modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
+            }, content: {
+                LibraryOptionsReadingPosition(library: library, enableStoreReadingPosition: $enableStoreReadingPosition, storeReadingPositionColumnName: $storeReadingPositionColumnName, isDefaultReadingPosition: $isDefaultReadingPosition)
+                        .padding()
+                        .frame(maxWidth: 600)
+            })
+            
+            Button(action: {
+                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
+                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
+                
+                goodreadsSyncOptionPresenting = true
+            }) {
+                Text("Goodreads Sync")
+            }
+            .sheet(isPresented: $goodreadsSyncOptionPresenting, onDismiss: {
+                modelData.updateGoodreadsSyncProfileName(enabled: enableGoodreadsSync, value: goodreadsSyncProfileName)
+            }, content: {
+                LibraryOptionsGoodreadsSync(library: library, enableGoodreadsSync: $enableGoodreadsSync, goodreadsSyncProfileName: $goodreadsSyncProfileName, isDefaultGoodreadsSync: $isDefaultGoodreadsSync)
+                    .padding()
+                    .frame(maxWidth: 600)
+            })
+            
+            // not working, no idea
+//            List {
+//                NavigationLink(
+//                    destination: LibraryOptionsReadingPosition(library: library, enableStoreReadingPosition: $enableStoreReadingPosition, storeReadingPositionColumnName: $storeReadingPositionColumnName, isDefaultReadingPosition: $isDefaultReadingPosition)
+//
+//                        .padding()
+//                        .frame(maxWidth: 600),
+//                    tag: "ReadingPositionOption",
+//                    selection: $selectedOption
+//                ) {
+//                    Text("Reading Postions Sync").frame(minWidth: 300, minHeight: 100)
+//                }
+//                NavigationLink(
+//                    destination: goodreadsSyncStack(library: library)
+//                        .padding()
+//                        .frame(maxWidth: 600),
+//                    tag: "GoodreadsSyncOption",
+//                    selection: $selectedOption
+//                ) {
+//                    Text("Goodreads Sync").frame(minWidth: 300, minHeight: 100)
+//                }
+//            }
+            
+            Divider()
+        }
+    }
     
     var body: some View {
         ScrollView {
@@ -301,16 +379,7 @@ struct ServerView: View {
                             }
                         }
                         .pickerStyle(MenuPickerStyle())
-                        .onChange(of: modelData.currentCalibreLibraryId, perform: { value in
-                            guard let library = modelData.currentCalibreLibrary else { return }
-                            
-                            enableStoreReadingPosition = library.readPosColumnName != nil
-                            storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
-                            
-                            enableGoodreadsSync = library.goodreadsSyncProfileName != nil
-                            goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
-                        })
-                        
+
                         Spacer()
                         
                         if modelData.currentCalibreServer?.isLocal == true {
@@ -334,7 +403,6 @@ struct ServerView: View {
                                 modelData.calibreServerUpdatingStatus = "\(urls.count) selected, \(imported.count) imported"
                                 
                                 modelData.populateLocalLibraryBooks()
-
                             }
                         }
                         
@@ -367,106 +435,15 @@ struct ServerView: View {
                     }
                 }
                 
-                if modelData.currentCalibreServer?.isLocal == false {
-                    VStack(alignment:.leading, spacing: 4) {
-                    Divider()
+                if true || modelData.currentCalibreServer?.isLocal == false, let library = modelData.currentCalibreLibrary {
                     
-                    Text("Advanced Library Settings")
-                    Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
-                        .onChange(of: enableStoreReadingPosition) { enabled in
-                            modelData.updateStoreReadingPosition(enabled: enabled, value: storeReadingPositionColumnName)
-                            if enabled {
-                                
-                            }
-                        }
-                    Text("Therefore reading positions can be synced between devices.")
-                        .font(.caption)
-                    if enableStoreReadingPosition {
-                        HStack {
-                            Text("Column:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                            TextField("#name", text: $storeReadingPositionColumnName, onCommit:  {
-                                modelData.updateStoreReadingPosition(enabled: true, value: storeReadingPositionColumnName)
-                            })
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                        }
-                        Text("Please add a custom column of type \"Long text\" on calibre server.\nIf there are multiple users, it's better to add a unique column for each user.")
-                            .font(.caption)
-                        if modelData.currentCalibreServer?.username.isEmpty ?? false {
-                            Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
-                            .font(.caption)
-                        }
-                        HStack {
-                            Spacer()
-                            Button(action:{
-                                isDefaultReadingPosition = true
-                            }) {
-                                Text("Set as Server-wide Default")
-                            }
-                            if isDefaultReadingPosition {
-                                Image(systemName: "checkmark")
-                            } else {
-                                Image(systemName: "checkmark")
-                                    .hidden()
-                            }
-                        }
-                    }
-                    
-                    Toggle("Enable Goodreads Sync", isOn: $enableGoodreadsSync)
-                        .onChange(of: enableGoodreadsSync, perform: { value in
-                            modelData.updateGoodreadsSyncProfileName(enabled: value, value: goodreadsSyncProfileName)
-                        })
-                    if enableGoodreadsSync {
-                        HStack {
-                            Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                            TextField("Name", text: $goodreadsSyncProfileName, onCommit:  {
-                                modelData.updateGoodreadsSyncProfileName(enabled: true, value: goodreadsSyncProfileName)
-                            })
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                        }
-                        Text("This is a Work-in-Progress, please stay tuned!")
-                            .font(.caption)
-                        
-                        HStack {
-                            Spacer()
-                            Button(action:{
-                                isDefaultGoodreadsSync = true
-                            }) {
-                                Text("Set as Server-wide Default")
-                            }
-                            if isDefaultGoodreadsSync {
-                                Image(systemName: "checkmark")
-                            } else {
-                                Image(systemName: "checkmark")
-                                    .hidden()
-                            }
-                        }
-                    }
-                }
+                    advancedLibrarySettingsView(library: library)
                 }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating || dataLoading)
             
             Spacer()
-        }
-        .onAppear() {
-//            calibreServerId = modelData.currentCalibreServerId
-//            calibreServerLibraryId = modelData.currentCalibreLibraryId
-            
-            if let library = modelData.currentCalibreLibrary {
-                enableStoreReadingPosition = library.readPosColumnName != nil
-                storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
-                
-                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
-                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
-                print("StoreReadingPosition \(enableStoreReadingPosition) \(storeReadingPositionColumnName) \(library)")
-            }
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)

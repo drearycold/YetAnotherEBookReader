@@ -256,7 +256,7 @@ final class ModelData: ObservableObject {
     
     private var defaultLog = Logger()
     
-    static let RealmSchemaVersion:UInt64 = 21
+    static let RealmSchemaVersion:UInt64 = 22
     private var realm: Realm!
     private var realmConf = Realm.Configuration(
         schemaVersion: RealmSchemaVersion
@@ -531,7 +531,17 @@ final class ModelData: ObservableObject {
                 print("Unknown Server: \(libraryRealm)")
                 return
             }
-            let calibreLibrary = CalibreLibrary(server: calibreServer, key: libraryRealm.key ?? libraryRealm.name!, name: libraryRealm.name!, readPosColumnName: libraryRealm.readPosColumnName, goodreadsSyncProfileName: libraryRealm.goodreadsSyncProfileName)
+            let calibreLibrary = CalibreLibrary(
+                server: calibreServer,
+                key: libraryRealm.key ?? libraryRealm.name!,
+                name: libraryRealm.name!,
+                customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
+                    $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
+                },
+                readPosColumnName: libraryRealm.readPosColumnName,
+                goodreadsSyncProfileName: libraryRealm.goodreadsSyncProfileName
+                )
+            
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
         
@@ -951,7 +961,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateStoreReadingPosition(enabled: Bool, value: String) {
-        calibreLibraries[currentCalibreLibraryId]!.readPosColumnName = enabled ? value : nil
+        calibreLibraries[currentCalibreLibraryId]?.readPosColumnName = enabled ? value : nil
         do {
             try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
         } catch {
@@ -960,7 +970,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateGoodreadsSyncProfileName(enabled: Bool, value: String) {
-        calibreLibraries[currentCalibreLibraryId]!.goodreadsSyncProfileName = enabled ? value : nil
+        calibreLibraries[currentCalibreLibraryId]?.goodreadsSyncProfileName = enabled ? value : nil
         do {
             try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
         } catch {
@@ -1050,6 +1060,7 @@ final class ModelData: ObservableObject {
         libraryRealm.serverUsername = library.server.username
         libraryRealm.readPosColumnName = library.readPosColumnName
         libraryRealm.goodreadsSyncProfileName = library.goodreadsSyncProfileName
+        libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         try realm.write {
             realm.add(libraryRealm, update: .all)
         }
@@ -1632,6 +1643,9 @@ final class ModelData: ObservableObject {
                     server: oldServer,
                     key: oldLibraryRealm.key!,
                     name: oldLibraryRealm.name!,
+                    customColumnInfos: oldLibraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
+                        $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
+                    },
                     readPosColumnName: oldLibraryRealm.readPosColumnName,
                     goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
                 
@@ -1640,6 +1654,7 @@ final class ModelData: ObservableObject {
                     server: newServer,
                     key: oldLibraryRealm.key!,
                     name: oldLibraryRealm.name!,
+                    customColumnInfos: oldLibrary.customColumnInfos,
                     readPosColumnName: oldLibraryRealm.readPosColumnName,
                     goodreadsSyncProfileName: oldLibraryRealm.goodreadsSyncProfileName)
                 
@@ -1705,35 +1720,14 @@ final class ModelData: ObservableObject {
             populateLocalLibraryBooks()
             calibreServerUpdatingStatus = ""
         } else {
-            calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
-        }
-    }
-    
-    func probeServersReachabilityOriginal() {
-        calibreServers.forEach { id, server in
-            if server.isLocal {
-                return
+            calibreServerService.getCustomColumns(library: library) { columnInfos in
+                var library = library
+                library.customColumnInfos = columnInfos
+                self.calibreLibraries[library.id] = library
+                try? self.updateLibraryRealm(library: library)
+                
+                self.calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
             }
-            
-            var isPublic = false
-            var infoId = server.id + " " + isPublic.description
-            if calibreServerInfoStaging[infoId] == nil,
-               let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
-                calibreServerInfoStaging[infoId] =
-                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
-            }
-            calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
-            
-            if server.publicUrl.isEmpty { return }
-            
-            isPublic = true
-            infoId = server.id + " " + isPublic.description
-            if calibreServerInfoStaging[infoId] == nil,
-               let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
-                calibreServerInfoStaging[infoId] =
-                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
-            }
-            calibreServerService.probeServerReachability(server: server, isPublic: isPublic)
         }
     }
     

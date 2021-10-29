@@ -72,6 +72,8 @@ class CalibreLibraryRealm: Object {
         primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
     }
     
+    var customColumns = List<CalibreCustomColumnRealm>()
+    
     @objc dynamic var readPosColumnName: String?
     @objc dynamic var goodreadsSyncProfileName: String?
 }
@@ -188,3 +190,70 @@ class CalibreBookRealm: Object {
     }
 }
 
+class CalibreCustomColumnRealm: Object {
+    @objc dynamic var label = ""
+    @objc dynamic var name = ""
+    @objc dynamic var datatype = ""
+    @objc dynamic var editable = false
+    
+    @objc dynamic var normalized = false
+    @objc dynamic var num = 0
+    @objc dynamic var isMultiple = false
+    
+    @objc dynamic var multipleSepsCacheToList: String?
+    @objc dynamic var multipleSepsUiToList: String?
+    @objc dynamic var multipleSepsListToUi: String?
+
+    @objc dynamic var displayDescription = ""
+    
+    //type text
+    @objc dynamic var displayIsNames = false
+    
+    //tyoe composite
+    @objc dynamic var displayCompositeTemplate: String?
+    @objc dynamic var displayCompositeSort: String?
+    @objc dynamic var displayUseDecorations = 0
+    @objc dynamic var displayMakeCategory = false
+    @objc dynamic var displayContainsHtml = false
+    
+    //type int, float
+    @objc dynamic var displayNumberFormat: String?
+    
+    //type comments
+    @objc dynamic var displayHeadingPosition: String?
+    @objc dynamic var displayInterpretAs: String?
+    
+    //type rating
+    @objc dynamic var displayAllowHalfStars = false
+    
+    override static func primaryKey() -> String? {
+        return "label"
+    }
+}
+
+public protocol Persistable {
+    associatedtype ManagedObject: RealmSwift.Object
+    init(managedObject: ManagedObject)
+    func managedObject() -> ManagedObject
+}
+
+extension CalibreCustomColumnInfo: Persistable {
+    public init(managedObject: CalibreCustomColumnRealm) {
+        label = managedObject.label
+        name = managedObject.name
+        datatype = managedObject.datatype
+        editable = managedObject.editable
+        normalized = managedObject.normalized
+        num = managedObject.num
+        isMultiple = managedObject.isMultiple
+        multipleSeps = [:]
+        display = CalibreCustomColumnDisplayInfo(description: "", isNames: nil, compositeTemplate: nil, compositeSort: nil, useDecorations: nil, makeCategory: nil, containsHtml: nil, numberFormat: nil, headingPosition: nil, interpretAs: nil, allowHalfStars: nil)
+    }
+    
+    public func managedObject() -> CalibreCustomColumnRealm {
+        let obj = CalibreCustomColumnRealm()
+        obj.label = label
+        obj.name = name
+        return obj
+    }
+}

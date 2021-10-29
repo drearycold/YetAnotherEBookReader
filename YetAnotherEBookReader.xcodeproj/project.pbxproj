@@ -100,6 +100,8 @@
 		2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
 		2A21BCE327017A9900825BBB /* Configuration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A21BCE227017A9900825BBB /* Configuration.swift */; };
 		2A21BCE527017F9400825BBB /* Providers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A21BCE427017F9400825BBB /* Providers.swift */; };
+		2A25E245272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */; };
+		2A25E249272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */; };
 		2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */; };
 		2A47879D271526BF009C8770 /* FontsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47879C271526BF009C8770 /* FontsHelper.swift */; };
 		2A4787A127154E39009C8770 /* FontImportPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A4787A027154E39009C8770 /* FontImportPicker.swift */; };
@@ -489,6 +491,8 @@
 		2A1A4BFD2619EBE300E95ED5 /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
 		2A21BCE227017A9900825BBB /* Configuration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Configuration.swift; sourceTree = "<group>"; };
 		2A21BCE427017F9400825BBB /* Providers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Providers.swift; sourceTree = "<group>"; };
+		2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsReadingPosition.swift; sourceTree = "<group>"; };
+		2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsGoodreadsSync.swift; sourceTree = "<group>"; };
 		2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerService.swift; sourceTree = "<group>"; };
 		2A3EB9B726B64333000D70F1 /* YetAnotherEBookReader copy2-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "YetAnotherEBookReader copy2-Info.plist"; path = "/Volumes/Data/git/YetAnotherEBookReader/YetAnotherEBookReader copy2-Info.plist"; sourceTree = "<absolute>"; };
 		2A47879C271526BF009C8770 /* FontsHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontsHelper.swift; sourceTree = "<group>"; };
@@ -954,6 +958,26 @@
 			path = ReadiumView;
 			sourceTree = "<group>";
 		};
+		2A25E246272BAC18009D5341 /* ReaderOptions */ = {
+			isa = PBXGroup;
+			children = (
+				2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */,
+				2AF8589A2711BF4900FA87AD /* ReaderOptionsEpubView.swift */,
+				2AF858982711BF3600FA87AD /* ReaderOptionsPdfView.swift */,
+				2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */,
+			);
+			path = ReaderOptions;
+			sourceTree = "<group>";
+		};
+		2A25E247272BAC3B009D5341 /* LibraryOptions */ = {
+			isa = PBXGroup;
+			children = (
+				2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */,
+				2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */,
+			);
+			path = LibraryOptions;
+			sourceTree = "<group>";
+		};
 		2A2C38D926C4AF9D007E2F3B /* Network */ = {
 			isa = PBXGroup;
 			children = (
@@ -969,14 +993,12 @@
 		2A6FF9E7270D542D00811C50 /* SettingsView */ = {
 			isa = PBXGroup;
 			children = (
+				2A25E247272BAC3B009D5341 /* LibraryOptions */,
+				2A25E246272BAC18009D5341 /* ReaderOptions */,
 				2AAB2997271415E10080B0CB /* AppInfoView.swift */,
 				2A4787A027154E39009C8770 /* FontImportPicker.swift */,
 				2A78A6312717D96000A81E53 /* BookImportPicker.swift */,
 				2AF8589C2712825400FA87AD /* FormatOptionsView.swift */,
-				2AAB29912712BB250080B0CB /* ReaderOptionsCbzView.swift */,
-				2AF8589A2711BF4900FA87AD /* ReaderOptionsEpubView.swift */,
-				2AF858982711BF3600FA87AD /* ReaderOptionsPdfView.swift */,
-				2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */,
 				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
 				2ABB914F261F1A47004AA7C0 /* ServerView.swift */,
 				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
@@ -1621,6 +1643,7 @@
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
 				2A107DC92663CB56007DCA20 /* OPDSFactory.swift in Sources */,
 				2AF8589D2712825400FA87AD /* FormatOptionsView.swift in Sources */,
+				2A25E249272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift in Sources */,
 				2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */,
 				2AF858992711BF3600FA87AD /* ReaderOptionsPdfView.swift in Sources */,
 				2A8C26D025C5A1E100FC7FC0 /* YabrPDFViewController.swift in Sources */,
@@ -1657,6 +1680,7 @@
 				2A107DDC2663CB56007DCA20 /* LibraryModule.swift in Sources */,
 				2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */,
 				2A107DC32663CB56007DCA20 /* OPDSNavigationTableViewCell.swift in Sources */,
+				2A25E245272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift in Sources */,
 				2A107DCC2663CB56007DCA20 /* OPDSCatalogSelectorViewController.swift in Sources */,
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,

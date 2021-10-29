@@ -181,7 +181,7 @@ struct MainView: View {
                     Welcome to D.S.Reader, an e-Book Reader for EPUB, PDF and CBZ formats, with custom fonts and custom dictionary support.
                     
                     When paired with calibre Content Server, you can easily browse your libraries, download books for reading.
-                    It will track and sync you reading progress and highlights across all devices paired with the same server.
+                    It will track and sync your reading progress and highlights across all devices paired with the same server.
                     
                     Accept our "Private Policy" and "Terms & Conditions" to start.
                     

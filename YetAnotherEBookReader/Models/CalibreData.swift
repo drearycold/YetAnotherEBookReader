@@ -69,6 +69,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     var key: String
     var name: String
     
+    var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
+    
     var readPosColumnName: String? = nil
     var readPosColumnNameDefault: String {
         if server.username.isEmpty {
@@ -473,4 +475,73 @@ struct CalibreBookAnnotationEntry: Codable {
 struct CalibreBookAnnotationsResult: Codable {
     var last_read_positions: [CalibreBookLastReadPositionEntry]
     var annotations_map: [String: [CalibreBookAnnotationEntry]]
+}
+
+struct CalibreCustomColumnInfo: Codable, Hashable {
+    var label: String
+    var name: String
+    var datatype: String
+    var editable: Bool
+    
+    var display: CalibreCustomColumnDisplayInfo
+    
+    var normalized: Bool
+    var num: Int
+    var isMultiple: Bool
+    var multipleSeps: [String: String]
+    
+    enum CodingKeys: String, CodingKey {
+        case label
+        case name
+        case datatype
+        case editable
+        case display
+        case normalized
+        case num
+        case isMultiple = "is_multiple"
+        case multipleSeps = "multiple_seps"
+    }
+}
+
+struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
+    var description: String
+    
+    //type text
+    var isNames: Bool?
+    
+    //tyoe composite
+    var compositeTemplate: String?
+    var compositeSort: String?
+    var useDecorations: Int?
+    var makeCategory: Bool?
+    var containsHtml: Bool?
+    
+    //type int, float
+    var numberFormat: String?
+    
+    //type comments
+    var headingPosition: String?
+    var interpretAs: String?
+    
+    //type rating
+    var allowHalfStars: Bool?
+    
+    enum CodingKeys: String, CodingKey {
+        case description
+        
+        case isNames = "is_names"
+        
+        case compositeTemplate = "composite_template"
+        case compositeSort = "composite_sort"
+        case useDecorations = "use_decorations"
+        case makeCategory = "make_category"
+        case containsHtml = "contains_html"
+        
+        case numberFormat = "number_format"
+        
+        case headingPosition = "heading_position"
+        case interpretAs = "interpret_as"
+        
+        case allowHalfStars = "allow_half_stars"
+    }
 }
