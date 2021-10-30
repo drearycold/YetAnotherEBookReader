@@ -11,15 +11,6 @@ struct LibraryOptionsGoodreadsSync: View {
     let library: CalibreLibrary
 
     @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
-//    @Binding var enableGoodreadsSync: Bool
-//    @Binding var goodreadsSyncProfileName: String
-//    @Binding var isDefaultGoodreadsSync: Bool
-//
-//    @State var tagsColumnName: String = "do not use"
-//    @State var ratingColumnName: String = "do not use"
-//    @State var dateReadColumnName: String = "do not use"
-//    @State var reviewColumnName: String = "do not use"
-//    @State var readingProgressColumnName: String = "do not use"
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -43,51 +34,28 @@ struct LibraryOptionsGoodreadsSync: View {
                     .font(.title3)
                     .padding(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
                 VStack(spacing: 8) {
-                    HStack {
-                        Text("Tags: ")
-                        Spacer()
-                        Picker(goodreadsSync.tagsColumnName, selection: $goodreadsSync.tagsColumnName) {
-                            ForEach(library.customColumnInfoMultiTextKeys.reduce(into: ["do not use"]) { $0.append($1) }, id: \.self) {
-                                Text($0)
-                            }
-                        }.pickerStyle(MenuPickerStyle()).frame(minWidth: 100)
-                    }
-                    HStack {
-                        Text("Rating: ")
-                        Spacer()
-                        Picker(goodreadsSync.ratingColumnName, selection: $goodreadsSync.ratingColumnName) {
-                            ForEach(library.customColumnInfoRatingKeys.reduce(into: ["do not use"]) { $0.append($1) }, id: \.self) {
-                                Text($0)
-                            }
-                        }.pickerStyle(MenuPickerStyle()).frame(minWidth: 100)
-                    }
-                    HStack {
-                        Text("Date read: ")
-                        Spacer()
-                        Picker(goodreadsSync.dateReadColumnName, selection: $goodreadsSync.dateReadColumnName) {
-                            ForEach(library.customColumnInfoDateKeys.reduce(into: ["do not use"]) { $0.append($1) }, id: \.self) {
-                                Text($0)
-                            }
-                        }.pickerStyle(MenuPickerStyle()).frame(minWidth: 100)
-                    }
-                    HStack {
-                        Text("Review text: ")
-                        Spacer()
-                        Picker(goodreadsSync.reviewColumnName, selection: $goodreadsSync.reviewColumnName) {
-                            ForEach(library.customColumnInfoCommentKeys.reduce(into: ["do not use"]) { $0.append($1) }, id: \.self) {
-                                Text($0)
-                            }
-                        }.pickerStyle(MenuPickerStyle()).frame(minWidth: 100)
-                    }
-                    HStack {
-                        Text("Reading progress: ")
-                        Spacer()
-                        Picker(goodreadsSync.readingProgressColumnName, selection: $goodreadsSync.readingProgressColumnName) {
-                            ForEach(library.customColumnInfoNumberKeys.reduce(into: ["do not use"]) { $0.append($1) }, id: \.self) {
-                                Text($0)
-                            }
-                        }.pickerStyle(MenuPickerStyle()).frame(minWidth: 100)
-                    }
+
+                    columnPickerRowView(
+                        label: "Tags",
+                        selection: $goodreadsSync.tagsColumnName,
+                        source: library.customColumnInfoMultiTextKeys)
+                    columnPickerRowView(
+                        label: "Rating",
+                        selection: $goodreadsSync.ratingColumnName,
+                        source: library.customColumnInfoRatingKeys)
+                    columnPickerRowView(
+                        label: "Date read",
+                        selection: $goodreadsSync.dateReadColumnName,
+                        source: library.customColumnInfoDateKeys)
+                    columnPickerRowView(
+                        label: "Review text",
+                        selection: $goodreadsSync.reviewColumnName,
+                        source: library.customColumnInfoTextKeys)
+                    columnPickerRowView(
+                        label: "Reading progress",
+                        selection: $goodreadsSync.readingProgressColumnName,
+                        source: library.customColumnInfoNumberKeys)
+                    
                 }.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
                 
                 Toggle("Set as Server-wide Default", isOn: $goodreadsSync.isDefault)
@@ -96,6 +64,23 @@ struct LibraryOptionsGoodreadsSync: View {
             .disabled(!goodreadsSync.isEnabled)
         }   //ends VStack
     }   //ends body
+    
+    @ViewBuilder
+    private func columnPickerRowView(label: String, selection: Binding<String>, source: [CalibreCustomColumnInfo]) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            Picker(source.first { "#" + $0.label == selection.wrappedValue }?.name ?? "not set",
+                selection: selection) {
+                ForEach(source.reduce(
+                    into: [("not set", "#")]) {
+                    $0.append(($1.name, "#" + $1.label))
+                }, id: \.1) {    //(name, label), prepend label with "#"
+                    Text("\($0) (\($1))").tag($1)
+                }
+            }.pickerStyle(MenuPickerStyle()).frame(minWidth: 150, alignment: .leading)
+        }
+    }
 }
 
 struct LibraryOptionsGoodreadsSYnc_Previews: PreviewProvider {

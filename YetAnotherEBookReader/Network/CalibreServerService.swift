@@ -404,11 +404,13 @@ struct CalibreServerService {
         book.series = entry.series ?? ""
         book.seriesIndex = entry.series_index ?? 0.0
         
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime
-        book.pubDate = dateFormatter.date(from: entry.pubdate) ?? .distantPast
-        book.lastModified = dateFormatter.date(from: entry.last_modified) ?? .init()
-        book.timestamp = dateFormatter.date(from: entry.last_modified) ?? .init()
+        let parserOne = ISO8601DateFormatter()
+        parserOne.formatOptions = .withInternetDateTime
+        let parserTwo = ISO8601DateFormatter()
+        parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        book.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
+        book.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .init()
+        book.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .init()
         
         book.tags = entry.tags
         

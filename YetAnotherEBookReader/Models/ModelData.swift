@@ -948,6 +948,9 @@ final class ModelData: ObservableObject {
         if bookRealm.identifiersData != nil {
             calibreBook.identifiers = bookRealm.identifiers()
         }
+        if bookRealm.userMetaData != nil {
+            calibreBook.userMetadatas = bookRealm.userMetadatas()
+        }
         calibreBook.authors.append(contentsOf: bookRealm.authors)
         calibreBook.tags.append(contentsOf: bookRealm.tags)
         
@@ -1128,7 +1131,10 @@ final class ModelData: ObservableObject {
             let encoder = JSONEncoder()
             bookRealm.formatsData = try encoder.encode(book.formats) as NSData
             
-            bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
+            //bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
+            bookRealm.identifiersData = try JSONEncoder().encode(book.identifiers) as NSData
+            
+            bookRealm.userMetaData = try JSONSerialization.data(withJSONObject: book.userMetadatas, options: []) as NSData
             
             let deviceMapSerialize = try book.readPos.getCopy().compactMapValues { (value) throws -> Any? in
                 try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))

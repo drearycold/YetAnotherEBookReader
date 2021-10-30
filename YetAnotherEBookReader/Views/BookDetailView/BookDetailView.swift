@@ -186,6 +186,13 @@ struct BookDetailView: View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
+                    metadataIcon(systemName: "face.smiling")
+                    Text(book.ratingDescription)
+                    if let ratingGRDescription = book.ratingGRDescription {
+                        Text(" (\(ratingGRDescription))")
+                    }
+                }
+                HStack {
                     if book.authors.count <= 1 {
                         metadataIcon(systemName: "person")
                     } else if book.authors.count == 2 {
@@ -243,47 +250,61 @@ struct BookDetailView: View {
                     }
                 }
                 
-                HStack {
-                    metadataIcon(systemName: "envelope.open")
-                    Text(book.lastModifiedByLocale)
-                }
-                
-                HStack {
-                    metadataIcon(systemName: "books.vertical")
-                    if shelfNameCustomized {
-                        TextField("Shelf Name", text: $shelfName)
-                    } else {
-                        Picker(shelfName, selection: $shelfName) {
-                            ForEach(book.tags, id:\.self) {
-                                Text($0).tag($0)
+                Group {     // lastModified readDate(GR) ShelfName
+                    HStack {
+                        metadataIcon(systemName: "envelope.open")
+                        Text(book.lastModifiedByLocale)
+                    }
+                    
+                    
+                    HStack {
+                        metadataIcon(systemName: "text.book.closed")
+                        if let readDateGR = book.readDateGRByLocale {
+                            Text("\(Image(systemName: "arrow.down.to.line")) \(readDateGR)")
+                        } else if let readProgressGR = book.readProgressGRDescription {
+                            Text("\(Image(systemName: "hourglass")) \(readProgressGR)%")
+                        } else {
+                            Text("\(Image(systemName: "book.circle")) \(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
+                        }
+                    }
+                    
+                    HStack {
+                        metadataIcon(systemName: "books.vertical")
+                        if shelfNameCustomized {
+                            TextField("Shelf Name", text: $shelfName)
+                        } else {
+                            Picker(shelfName, selection: $shelfName) {
+                                ForEach(book.tags, id:\.self) {
+                                    Text($0).tag($0)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                            
+                        }
+                        
+                        Button(action: { shelfNameShowDetail.toggle() } ) {
+                            if shelfNameShowDetail {
+                                Image(systemName: "chevron.up")
+                            } else {
+                                Image(systemName: "chevron.down")
                             }
                         }
-                        .pickerStyle(MenuPickerStyle())
                         
-                    }
-                    
-                    Button(action: { shelfNameShowDetail.toggle() } ) {
-                        if shelfNameShowDetail {
-                            Image(systemName: "chevron.up")
-                        } else {
-                            Image(systemName: "chevron.down")
+                        if book.tags.count > 1 {
+                            Text("(\(book.tags.count))")
                         }
                     }
-                    
-                    if book.tags.count > 1 {
-                        Text("(\(book.tags.count))")
+                    .onChange(of: shelfName) { value in
+                        modelData.readingBook!.inShelfName = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        modelData.updateBook(book: modelData.readingBook!)
                     }
-                }
-                .onChange(of: shelfName) { value in
-                    modelData.readingBook!.inShelfName = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    modelData.updateBook(book: modelData.readingBook!)
-                }
-                .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-                
-                if shelfNameShowDetail {
-                    HStack {
-                        metadataIcon(systemName: "books.vertical").hidden()
-                        Toggle("Customize Shelf Name", isOn: $shelfNameCustomized)
+                    .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
+                    
+                    if shelfNameShowDetail {
+                        HStack {
+                            metadataIcon(systemName: "books.vertical").hidden()
+                            Toggle("Customize Shelf Name", isOn: $shelfNameCustomized)
+                        }
                     }
                 }
             }

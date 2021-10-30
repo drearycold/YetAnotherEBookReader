@@ -116,24 +116,27 @@ class CalibreBookRealm: Object {
     @objc dynamic var formatsData: NSData?
     @objc dynamic var readPosData: NSData?
     @objc dynamic var identifiersData: NSData?
+    @objc dynamic var userMetaData: NSData?
     
     @objc dynamic var inShelf = false
     @objc dynamic var inShelfName = ""
     
     func formats() -> [String: String] {
-        do {
-            if let formats = try JSONSerialization.jsonObject(with: formatsData! as Data, options: []) as? [String: String] {
-                return formats
-            }
-        } catch {
-            
-        }
-        return [:]
+        guard let formatsData = formatsData as Data? else { return [:] }
+        return (try? JSONDecoder().decode([String:String].self, from: formatsData)) ?? [:]
+        //return (try? JSONSerialization.jsonObject(with: formatsData as Data, options: []) as? [String: String]) ?? [:]
     }
     
     func identifiers() -> [String: String] {
-        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
-        return identifiers
+        guard let identifiersData = identifiersData as Data? else { return [:] }
+        return (try? JSONDecoder().decode([String:String].self, from: identifiersData)) ?? [:]
+//        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
+//        return identifiers
+    }
+    
+    func userMetadatas() -> [String: Any] {
+        guard let userMetaData = userMetaData as Data? else { return [:] }
+        return (try? JSONSerialization.jsonObject(with: userMetaData, options: []) as? [String:Any]) ?? [:]
     }
     
     func readPos() -> BookReadingPosition {

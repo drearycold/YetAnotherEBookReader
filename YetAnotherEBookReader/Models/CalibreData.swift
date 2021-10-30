@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 
 struct CalibreServer: Hashable, Identifiable {
     var id: String {
@@ -70,20 +69,20 @@ struct CalibreLibrary: Hashable, Identifiable {
     var name: String
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
-    var customColumnInfoNumberKeys: [String] {
-        customColumnInfos.filter{ $1.datatype == "int" || $1.datatype == "float" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    var customColumnInfoNumberKeys: [CalibreCustomColumnInfo] {
+        customColumnInfos.filter{ $1.datatype == "int" || $1.datatype == "float" }.values.sorted{$0.name < $1.name}
     }
-    var customColumnInfoCommentKeys: [String] {
-        customColumnInfos.filter{ $1.datatype == "comments" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    var customColumnInfoTextKeys: [CalibreCustomColumnInfo] {
+        customColumnInfos.filter{ $1.datatype == "comments" || $1.datatype == "text" }.values.sorted{$0.name < $1.name}
     }
-    var customColumnInfoDateKeys: [String] {
-        customColumnInfos.filter{ $1.datatype == "date" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    var customColumnInfoDateKeys: [CalibreCustomColumnInfo] {
+        customColumnInfos.filter{ $1.datatype == "datetime" }.values.sorted{$0.name < $1.name}
     }
-    var customColumnInfoRatingKeys: [String] {
-        customColumnInfos.filter{ $1.datatype == "rating" }.keys.map{"#" + $0}.sorted{$0 < $1}
+    var customColumnInfoRatingKeys: [CalibreCustomColumnInfo] {
+        customColumnInfos.filter{ $1.datatype == "rating" }.values.sorted{$0.name < $1.name}
     }
-    var customColumnInfoMultiTextKeys: [String] {
-        customColumnInfos.filter{ $1.datatype == "text" && $1.isMultiple }.keys.map{"#" + $0}.sorted{$0 < $1}
+    var customColumnInfoMultiTextKeys: [CalibreCustomColumnInfo] {
+        customColumnInfos.filter{ $1.datatype == "text" && $1.isMultiple }.values.sorted{$0.name < $1.name}
     }
         
     var readPosColumnName: String? = nil
@@ -171,7 +170,36 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
             return "☆"
         }
     }
+    var ratingGRDescription: String? {
+        guard library.goodreadsSync.isEnabled,
+              let rating = userMetadatas[library.goodreadsSync.ratingColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? Int else { return nil }
+        switch(rating) {
+        case 10:
+            return "★★★★★"
+        case 9:
+            return "★★★★☆"
+        case 8:
+            return "★★★★"
+        case 7:
+            return "★★★☆"
+        case 6:
+            return "★★★"
+        case 5:
+            return "★★☆"
+        case 4:
+            return "★★"
+        case 3:
+            return "★☆"
+        case 2:
+            return "★"
+        case 1:
+            return "☆"
+        default:
+            return "-"
+        }
+    }
     var size = 0
+    
     var pubDate = Date(timeIntervalSince1970: .zero)
     var pubDateByLocale: String {
         let dateFormatter = DateFormatter()
@@ -180,7 +208,9 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: pubDate)
     }
+    
     var timestamp = Date(timeIntervalSince1970: .zero)
+    
     var lastModified = Date(timeIntervalSince1970: .zero)
     var lastModifiedByLocale: String {
         let dateFormatter = DateFormatter()
@@ -189,6 +219,28 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: lastModified)
     }
+    var readDateGRByLocale: String? {
+        guard library.goodreadsSync.isEnabled,
+              let dateReadString = userMetadatas[library.goodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
+        
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = .withInternetDateTime
+        guard let dateRead = parser.date(from: dateReadString) else { return nil }
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: dateRead)
+    }
+    
+    var readProgressGRDescription: String? {
+        guard library.goodreadsSync.isEnabled,
+              let progressAny = userMetadatas[library.goodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))] else { return nil }
+        
+        return Int(String(describing: progressAny))?.description
+    }
+    
     var tags = [String]()
     var tagsDescription: String {
         if tags.count == 0 {
@@ -580,9 +632,9 @@ struct CalibreLibraryGoodreadsSync: Codable, Hashable {
     var isDefault = false
     
     var profileName = "Default"
-    var tagsColumnName = "do not use"
-    var ratingColumnName = "do not use"
-    var dateReadColumnName = "do not use"
-    var reviewColumnName = "do not use"
-    var readingProgressColumnName = "do not use"
+    var tagsColumnName = "#"
+    var ratingColumnName = "#"
+    var dateReadColumnName = "#"
+    var reviewColumnName = "#"
+    var readingProgressColumnName = "#"
 }

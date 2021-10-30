@@ -100,6 +100,7 @@ struct ServerView: View {
                 Text("Goodreads Sync")
             }
             .sheet(isPresented: $goodreadsSyncOptionPresenting, onDismiss: {
+                print("goodreadsSyncOption dismiss \(goodreadsSync)")
                 modelData.updateGoodreadsSync(goodreadsSync: goodreadsSync)
             }, content: {
                 LibraryOptionsGoodreadsSync(library: library, goodreadsSync: $goodreadsSync)
