@@ -560,7 +560,56 @@ struct CalibreServerService {
         task.resume()
     }
     
+    ///metadata: [[key1, value1], [key2, value2], ...]
+    func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) -> Int {
+        guard var endpointURLComponent = URLComponents(string: library.server.serverUrl) else {
+            return -1
+        }
+        
+        endpointURLComponent.path = "/cdb/cmd/set_metadata/0"
+        endpointURLComponent.query = "library_id=\(library.name)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
+        let json:[Any] = ["fields", bookId, metadata]
+        
+        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
+            return -1
+        }
+        defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
+        
+        var request = URLRequest(url: endpointUrl)
+        request.httpMethod = "POST"
+        request.httpBody = data
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+//        if updatingMetadata && updatingMetadataTask != nil {
+//            updatingMetadataTask!.cancel()
+//        }
+        
+        let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+            print("\(#function) \(data) \(response) \(error)")
+        }
+        
+        setCredential(server: library.server, task: updatingMetadataTask)
+        updatingMetadataTask.resume()
+        
+        return 0
+    }
+    
     func updateBookReadingPosition(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate, success: (() -> Void)?) -> Int {
+        guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
+            return -1
+        }
+        
+        endpointURLComponent.path = "/cdb/cmd/set_metadata/0"
+        endpointURLComponent.query = "library_id=\(book.library.name)"
+        guard let endpointUrl = endpointURLComponent.url else {
+            return -1
+        }
+        
         var deviceMapSerialize = [String: Any]()
         
         book.readPos.getCopy().forEach { key, value in
@@ -575,16 +624,6 @@ struct CalibreServerService {
         }
         
         guard let readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString() else { return -1 }
-        
-        guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
-            return -1
-        }
-        
-        endpointURLComponent.path = "/cdb/cmd/set_metadata/0"
-        endpointURLComponent.query = "library_id=\(book.library.name)"
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
         
         let json:[Any] = ["fields", book.id, [[columnName, readPosData]]]
         
@@ -694,6 +733,27 @@ struct CalibreServerService {
         return 0
     }
     
+    /// read-modify-write version
+    func updateBookReadingPositionNew(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate, success: (() -> Void)?) -> Int {
+        
+        guard let task = buildMetadataTask(book: book) else { return -1 }
+        
+        modelData.calibreServiceCancellable = getMetadataNew(task: task)
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { _ in
+                
+            }, receiveValue: { (task, data, urlResponse) in
+                guard var newBook = handleLibraryBookOne(oldbook: book, json: data) else { return }
+                guard let newPosition = book.readPos.getPosition(modelData.deviceName) else { return }
+                newBook.readPos.updatePosition(modelData.deviceName, newPosition)
+                modelData.updateBook(book: newBook)
+                
+                _ = updateBookReadingPosition(book: newBook, columnName: columnName, alertDelegate: alertDelegate, success: success)
+            })
+
+        return 0
+    }
+
     func setCredential(server: CalibreServer, task: URLSessionDataTask) {
         if let protectionSpace = getProtectionSpace(server: server),
             let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {

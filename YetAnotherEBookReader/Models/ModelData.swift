@@ -1416,11 +1416,17 @@ final class ModelData: ObservableObject {
         let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: readPosColumnName, alertDelegate: alertDelegate) { [self] in
             if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
                let library = calibreLibraries[readingBook.library.id],
-               let goodreadsId = readingBook.identifiers["goodreads"],
-               library.goodreadsSync.isEnabled,
-               library.goodreadsSync.profileName.isEmpty == false {
-                let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
-                connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+               library.goodreadsSync.isEnabled {
+                if let goodreadsId = readingBook.identifiers["goodreads"],
+                   library.goodreadsSync.profileName.isEmpty == false {
+                    let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
+                    connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+                }
+                if library.goodreadsSync.readingProgressColumnName.count > 1 {
+                    calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
+                        [library.goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                    ])
+                }
             }
         }
         if ret != 0 {
@@ -1430,6 +1436,7 @@ final class ModelData: ObservableObject {
         }
     }
     
+    /// used for removing position entries
     func updateReadingPosition(book: CalibreBook, alertDelegate: AlertDelegate) {
         self.updateBook(book: book)
         
