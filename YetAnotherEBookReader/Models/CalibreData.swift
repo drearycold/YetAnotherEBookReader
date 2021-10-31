@@ -124,16 +124,7 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         if authors.count == 0 {
             return "Unknown"
         }
-        if authors.count == 1 {
-            return authors[0]
-        }
-        return authors.reduce("") { (desc, author) -> String in
-            if desc.count == 0 {
-                return author
-            } else {
-                return desc + ", " + author
-            }
-        }
+        return authors.joined(separator: ", ")
     }
     var authorsDescriptionShort: String {
         if authors.count == 0 {

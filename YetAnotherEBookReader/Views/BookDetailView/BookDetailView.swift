@@ -222,19 +222,21 @@ struct BookDetailView: View {
                 
                 HStack {
                     metadataIcon(systemName: "link")
-                    if let id = book.identifiers["goodreads"] {
-                        Button(action:{
-                            openURL(URL(string: "https://www.goodreads.com/book/show/\(id)")!)
-                        }) {
-                            metadataLinkIcon("icon-goodreads")
+                    
+                    Button(action:{
+                        if let goodreadsId = book.identifiers["goodreads"],
+                           let url = URL(string: "https://www.goodreads.com/book/show/\(goodreadsId)") {
+                            openURL(url)
+                        } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
+                            urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
+                            if let url = urlComponents.url {
+                                openURL(url)
+                            }
                         }
-                    } else {
-                        Button(action:{
-                            openURL(URL(string: "https://www.goodreads.com/")!)
-                        }) {
-                            metadataLinkIcon("icon-goodreads")
-                        }.hidden()
+                    }) {
+                        metadataLinkIcon("icon-goodreads")
                     }
+                    
                     if let id = book.identifiers["amazon"] {
                         Button(action:{
                             openURL(URL(string: "http://www.amazon.com/dp/\(id)")!)

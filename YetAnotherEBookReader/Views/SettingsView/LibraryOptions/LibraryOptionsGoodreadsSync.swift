@@ -14,24 +14,12 @@ struct LibraryOptionsGoodreadsSync: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Goodreads Sync", isOn: $goodreadsSync.isEnabled)
+            Toggle("Enable", isOn: $goodreadsSync.isEnabled)
+                .font(.title2)
             
             Group {
-                VStack(spacing: 4) {
-                    HStack {
-                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0))
-                        TextField("Name", text: $goodreadsSync.profileName)
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                    }
-                    Text("This is a Work-in-Progress, please stay tuned!")
-                        .font(.caption)
-                }   //ends profile
-                
                 Text("Synchronisable Custom Columns")
-                    .font(.title3)
+                    .font(.title2)
                     .padding(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
                 VStack(spacing: 8) {
 
@@ -57,6 +45,26 @@ struct LibraryOptionsGoodreadsSync: View {
                         source: library.customColumnInfoNumberKeys)
                     
                 }.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
+                
+                Divider()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Auto Syncing with Goodreads Account")
+                        .font(.title2)
+
+                    HStack {
+                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 0))
+                        TextField("Name", text: $goodreadsSync.profileName)
+                            .keyboardType(.alphabet)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .border(Color(UIColor.separator))
+                    }
+                    Text("We are working on the ability to update reading progress and shelf status to goodreads.com automatically. Please stay tuned.")
+                        .font(.caption)
+                        .padding(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                }   //ends profile
+                
+                Divider()
                 
                 Toggle("Set as Server-wide Default", isOn: $goodreadsSync.isDefault)
                 

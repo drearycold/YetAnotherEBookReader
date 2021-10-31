@@ -34,6 +34,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     var modelData: ModelData!
     var updateAndReloadCancellable: AnyCancellable?
 
+    var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
+    
     override var canBecomeFirstResponder: Bool {
         true
     }
@@ -266,9 +268,16 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         modelData.readingBookInShelfId = bookId
         guard let book = modelData.readingBook else { return }
         
+        let gotoMenuItem = UIMenuItem(title: "Go to ...", action: #selector(gotoAction))
         let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
         let deleteMenuItem = UIMenuItem(title: book.library.server.isLocal ? "Delete" : "Remove", action: #selector(deleteBook(_:)))
-        UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
+        
+        if book.library.server.isLocal {
+            UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
+        } else {
+            menuTargetRect = inShelfView
+            UIMenuController.shared.menuItems = [gotoMenuItem, refreshMenuItem, deleteMenuItem]
+        }
         becomeFirstResponder()
         UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
     }
@@ -287,6 +296,55 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 
             }
         }
+    }
+    
+    @objc func gotoAction(_ sender: Any?) {
+        let detailMenuItem = UIMenuItem(title: "Details", action: #selector(detailAction))
+        let goodreadsMenuItem = UIMenuItem(title: "Goodreads", action: #selector(goodreadsAction))
+        let doubanMenuItem = UIMenuItem(title: "Douban", action: #selector(doubanAction))
+        
+        UIMenuController.shared.hideMenu()
+        UIMenuController.shared.menuItems = [detailMenuItem, goodreadsMenuItem, doubanMenuItem]
+        UIMenuController.shared.showMenu(from: shelfView, rect: menuTargetRect)
+    }
+    
+    @objc func goodreadsAction(_ sender: Any?) {
+        guard let book = modelData.readingBook else { return }
+        
+        if let id = book.identifiers["goodreads"],
+           let url = URL(string: "https://www.goodreads.com/book/show/\(id)") {
+            UIApplication.shared.open(url)
+        } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
+            urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
+            if let url = urlComponents.url {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+    
+    @objc func doubanAction(_ sender: Any?) {
+        guard let book = modelData.readingBook else { return }
+        
+        if let id = book.identifiers["douban"],
+           let url = URL(string: "https://m.douban.com/book/subject/\(id)/") {
+            UIApplication.shared.open(url)
+        } else if var urlComponents = URLComponents(string: "https://m.douban.com/search/") {
+            urlComponents.queryItems = [
+                URLQueryItem(name: "query", value: book.title + " " + book.authors.joined(separator: " ")),
+                URLQueryItem(name: "type", value: "book")
+            ]
+            if let url = urlComponents.url {
+                UIApplication.shared.open(url)
+            }
+        }
+    }
+    
+    @objc func detailAction(_ sender: Any?) {
+        defer {
+            UIMenuController.shared.hideMenu()
+        }
+        guard let bookId = modelData.readingBookInShelfId else { return }
+        self.onBookLongClicked(shelfView, index: 0, bookId: bookId, bookTitle: "", frame: .zero)
     }
     
     @objc func refreshBook(_ sender: Any?) {
