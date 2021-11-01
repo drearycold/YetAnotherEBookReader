@@ -638,15 +638,16 @@ struct CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-//        if updatingMetadata && updatingMetadataTask != nil {
-//            updatingMetadataTask!.cancel()
-//        }
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookInShelfId: book.inShelfId, libraryId: nil)
         
         let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             var newBook = book
             
             defer {
+                modelData.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
                     modelData.updatingMetadata = false

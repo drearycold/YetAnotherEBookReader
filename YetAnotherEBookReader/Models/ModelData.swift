@@ -391,6 +391,8 @@ final class ModelData: ObservableObject {
         
         self.reloadCustomFonts()
         
+        cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+
         if mock {
             let library = calibreLibraries.first!.value
             
@@ -423,6 +425,9 @@ final class ModelData: ObservableObject {
                 inShelf: true,
                 inShelfName: "Default")
             self.booksInShelf[self.readingBook!.inShelfId] = self.readingBook
+            
+            cleanCalibreActivities(startDatetime: Date())
+            logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookInShelfId: "0^Default", libraryId: nil)
         }
     }
     
@@ -1861,5 +1866,75 @@ final class ModelData: ObservableObject {
             }
     }
     
+    func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookInShelfId: String?, libraryId: String?) {
+        DispatchQueue.global(qos: .utility).async {
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+            
+            let obj = CalibreActivityLogEntry()
+            
+            obj.type = type
+            
+            obj.startDatetime = startDatetime
+            obj.bookInShelfId = bookInShelfId
+            obj.libraryId = libraryId
+            
+            obj.endpoingURL = request.url?.absoluteString
+            obj.httpMethod = request.httpMethod
+            obj.httpBody = request.httpBody
+            request.allHTTPHeaderFields?.forEach {
+                obj.requestHeaders.append($0.key)
+                obj.requestHeaders.append($0.value)
+            }
+            
+            try? realm.write {
+                realm.add(obj)
+            }
+        }
+    }
+    
+    func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
+        DispatchQueue.global(qos: .utility).async {
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+            
+            guard let activity = realm.objects(CalibreActivityLogEntry.self).filter(
+                NSPredicate(format: "type = %@ AND startDatetime = %@ AND endpoingURL = %@",
+                            type,
+                            startDatetime as NSDate,
+                            request.url?.absoluteString ?? ""
+                )
+            ).first else { return }
+            
+            try? realm.write {
+                activity.finishDatetime = finishDatetime
+                activity.errMsg = errMsg
+            }
+        }
+    }
+    
+    func listCalibreActivities() -> [CalibreActivityLogEntry] {
+        guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
+        let activities = realm.objects(CalibreActivityLogEntry.self).filter(
+            NSPredicate(
+                format: "startDatetime > %@",
+                Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate
+            )
+        )
+        
+        return activities.map { $0 }
+    }
+    
+    func cleanCalibreActivities(startDatetime: Date) {
+        guard let realm = try? Realm(configuration: self.realmConf) else { return }
+
+        let activities = realm.objects(CalibreActivityLogEntry.self).filter(
+            NSPredicate(
+                format: "startDatetime < %@",
+                startDatetime as NSDate
+            )
+        )
+        try? realm.write {
+            realm.delete(activities)
+        }
+    }
 }

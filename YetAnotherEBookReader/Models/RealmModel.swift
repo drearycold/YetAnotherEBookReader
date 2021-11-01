@@ -304,3 +304,56 @@ extension CalibreLibraryGoodreadsSync: Persistable {
         return obj
     }
 }
+
+class CalibreActivityLogEntry: Object {
+    @objc dynamic var type: String?
+    
+    @objc dynamic var startDatetime: Date?
+    @objc dynamic var finishDatetime: Date?
+    
+    //book or library, not both
+    @objc dynamic var bookInShelfId: String?
+    @objc dynamic var libraryId: String?
+    
+    @objc dynamic var endpoingURL: String?
+    @objc dynamic var httpMethod: String?
+    @objc dynamic var httpBody: Data?       //if any
+    let requestHeaders = List<String>()     //key1, value1, key2, value2, ...
+    
+    @objc dynamic var errMsg: String?
+    
+    var startDateByLocale: String? {
+        guard let startDatetime = startDatetime else { return nil }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: startDatetime)
+    }
+    var startDateByLocaleLong: String? {
+        guard let startDatetime = startDatetime else { return nil }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: startDatetime)
+    }
+    
+    var finishDateByLocale: String? {
+        guard let finishDatetime = finishDatetime else { return nil }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: finishDatetime)
+    }
+    
+    var finishDateByLocaleLong: String? {
+        guard let finishDatetime = finishDatetime else { return nil }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: finishDatetime)
+    }
+}

@@ -21,6 +21,7 @@ struct SettingsView: View {
                 }
                 NavigationLink("Reader Options", destination: ReaderOptionsView())
                 Text("")
+                NavigationLink("Activity Logs", destination: ActivityList())
                 NavigationLink("Support", destination: SupportInfoView())
                 NavigationLink("About", destination: AppInfoView())
             }
