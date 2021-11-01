@@ -10,28 +10,32 @@ import SwiftUI
 struct ActivityList: View {
     @EnvironmentObject var modelData: ModelData
     
+    var libraryId: String? = nil
+    var bookId: Int32? = nil
+    
     var body: some View {
         List {
-            ForEach(modelData.listCalibreActivities(), id: \.self) { obj in
+            ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
                 NavigationLink(destination: detail(obj: obj), label: {
                     row(obj: obj)
                 })
             }
-        }
+        }.navigationTitle("Recent Activities")
     }
     
     @ViewBuilder
     private func row(obj: CalibreActivityLogEntry) -> some View {
         VStack {
             HStack {
-                if let bookInShelfId = obj.bookInShelfId,
-                   let book = modelData.booksInShelf[bookInShelfId] {
-                    Text(book.title)
-                } else if let libraryId = obj.libraryId,
-                          let library = modelData.calibreLibraries[libraryId] {
-                    Text(library.name)
+                if let libraryId = obj.libraryId,
+                   let library = modelData.calibreLibraries[libraryId] {
+                    if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
+                        Text(book.title)
+                    } else {
+                        Text(library.name)
+                    }
                 } else {
-                    Text("Unknown Entity")
+                    Text("No Entity")
                 }
                 Spacer()
                 
@@ -55,16 +59,17 @@ struct ActivityList: View {
     private func detail(obj: CalibreActivityLogEntry) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if let bookInShelfId = obj.bookInShelfId,
-                   let book = modelData.booksInShelf[bookInShelfId] {
-                    Text("Book:").frame(minWidth: 100, alignment: .leading)
-                    Text(book.title)
-                } else if let libraryId = obj.libraryId,
-                          let library = modelData.calibreLibraries[libraryId] {
-                    Text("Library:").frame(minWidth: 100, alignment: .leading)
-                    Text(library.name)
+                if let libraryId = obj.libraryId,
+                   let library = modelData.calibreLibraries[libraryId] {
+                    if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
+                        Text("Book Title:").frame(minWidth: 100, alignment: .leading)
+                        Text(book.title).navigationTitle(book.title)
+                    } else {
+                        Text("Library Name:").frame(minWidth: 100, alignment: .leading)
+                        Text(library.name).navigationTitle(library.name)
+                    }
                 } else {
-                    Text("Unknown Entity")
+                    Text("No Entity")
                 }
                 Spacer()
             }.font(.title2)
@@ -109,6 +114,8 @@ struct ActivityList: View {
                     }
                 }
             }.font(.caption)
+            
+            Spacer()
         }
         .padding()
     }

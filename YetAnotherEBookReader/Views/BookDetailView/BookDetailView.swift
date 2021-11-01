@@ -54,6 +54,11 @@ struct BookDetailView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
+    @State private var activityListViewPresenting = false {
+        willSet { if newValue { modelData.presentingStack.append($activityListViewPresenting) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
+
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
     @State private var shelfNameCustomized = false
@@ -117,22 +122,28 @@ struct BookDetailView: View {
             #endif
             
             if isCompat {
-                VStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .center, spacing: 16) {
                     coverViewContent(book: book)
-                    VStack(alignment: .leading) {
-                        metadataViewContent(book: book, isCompat: isCompat)
-                        bookFormatViewContent(book: book, isCompat: isCompat)
-                    }
-                    .frame(maxWidth: 300)
+                    
+                    metadataViewContent(book: book, isCompat: isCompat)
+                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                    connectivityViewContent(book: book, isCompat: isCompat)
+                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                    bookFormatViewContent(book: book, isCompat: isCompat)
+                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                    
                 }
             } else {
                 HStack(alignment: .top, spacing: 32) {
                     coverViewContent(book: book)
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 16) {
                         metadataViewContent(book: book, isCompat: isCompat)
+                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                        connectivityViewContent(book: book, isCompat: isCompat)
+                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         bookFormatViewContent(book: book, isCompat: isCompat)
+                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     }
-                    .frame(maxWidth: 300)
                 }
             }
             
@@ -183,174 +194,190 @@ struct BookDetailView: View {
     
     @ViewBuilder
     private func metadataViewContent(book: CalibreBook, isCompat: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    metadataIcon(systemName: "face.smiling")
-                    Text(book.ratingDescription)
-                    if let ratingGRDescription = book.ratingGRDescription {
-                        Text(" (\(ratingGRDescription))")
-                    }
-                }
-                HStack {
-                    if book.authors.count <= 1 {
-                        metadataIcon(systemName: "person")
-                    } else if book.authors.count == 2 {
-                        metadataIcon(systemName: "person.2")
-                    } else {
-                        metadataIcon(systemName: "person.3")
-                    }
-                    Text(book.authorsDescription)
-                }
-                HStack {
-                    metadataIcon(systemName: "house")
-                    Text(book.publisher)
-                }
-                HStack {
-                    metadataIcon(systemName: "calendar")
-                    Text(book.pubDateByLocale)
-                }
-                HStack {
-                    metadataIcon(systemName: "tray.2")
-                    Text(book.seriesDescription)
-                }
-                
-                HStack {
-                    metadataIcon(systemName: "tag")
-                    Text(book.tagsDescription)
-                }
-                
-                HStack {
-                    metadataIcon(systemName: "link")
-                    
-                    Button(action:{
-                        if let goodreadsId = book.identifiers["goodreads"],
-                           let url = URL(string: "https://www.goodreads.com/book/show/\(goodreadsId)") {
-                            openURL(url)
-                        } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
-                            urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
-                            if let url = urlComponents.url {
-                                openURL(url)
-                            }
-                        }
-                    }) {
-                        metadataLinkIcon("icon-goodreads")
-                    }
-                    
-                    if let id = book.identifiers["amazon"] {
-                        Button(action:{
-                            openURL(URL(string: "http://www.amazon.com/dp/\(id)")!)
-                        }) {
-                            metadataLinkIcon("icon-amazon")
-                        }
-                    } else {
-                        Button(action:{
-                            openURL(URL(string: "https://www.amazon.com/")!)
-                        }) {
-                            metadataLinkIcon("icon-amazon")
-                        }.hidden()
-                    }
-                }
-                
-                Group {     // lastModified readDate(GR) ShelfName
-                    HStack {
-                        metadataIcon(systemName: "envelope.open")
-                        Text(book.lastModifiedByLocale)
-                    }
-                    
-                    
-                    HStack {
-                        metadataIcon(systemName: "text.book.closed")
-                        if let readDateGR = book.readDateGRByLocale {
-                            Text("\(Image(systemName: "arrow.down.to.line")) \(readDateGR)")
-                        } else if let readProgressGR = book.readProgressGRDescription {
-                            Text("\(Image(systemName: "hourglass")) \(readProgressGR)%")
-                        } else {
-                            Text("\(Image(systemName: "book.circle")) \(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
-                        }
-                    }
-                    
-                    HStack {
-                        metadataIcon(systemName: "books.vertical")
-                        if shelfNameCustomized {
-                            TextField("Shelf Name", text: $shelfName)
-                        } else {
-                            Picker(shelfName, selection: $shelfName) {
-                                ForEach(book.tags, id:\.self) {
-                                    Text($0).tag($0)
-                                }
-                            }
-                            .pickerStyle(MenuPickerStyle())
-                            
-                        }
-                        
-                        Button(action: { shelfNameShowDetail.toggle() } ) {
-                            if shelfNameShowDetail {
-                                Image(systemName: "chevron.up")
-                            } else {
-                                Image(systemName: "chevron.down")
-                            }
-                        }
-                        
-                        if book.tags.count > 1 {
-                            Text("(\(book.tags.count))")
-                        }
-                    }
-                    .onChange(of: shelfName) { value in
-                        modelData.readingBook!.inShelfName = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                        modelData.updateBook(book: modelData.readingBook!)
-                    }
-                    .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
-                    
-                    if shelfNameShowDetail {
-                        HStack {
-                            metadataIcon(systemName: "books.vertical").hidden()
-                            Toggle("Customize Shelf Name", isOn: $shelfNameCustomized)
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                metadataIcon(systemName: "face.smiling")
+                Text(book.ratingDescription)
+                if let ratingGRDescription = book.ratingGRDescription {
+                    Text(" (\(ratingGRDescription))")
                 }
             }
-            .lineLimit(2)
-            .font(.subheadline)
+            HStack {
+                if book.authors.count <= 1 {
+                    metadataIcon(systemName: "person")
+                } else if book.authors.count == 2 {
+                    metadataIcon(systemName: "person.2")
+                } else {
+                    metadataIcon(systemName: "person.3")
+                }
+                Text(book.authorsDescription)
+            }
+            HStack {
+                metadataIcon(systemName: "house")
+                Text(book.publisher)
+            }
+            HStack {
+                metadataIcon(systemName: "calendar")
+                Text(book.pubDateByLocale)
+            }
+            HStack {
+                metadataIcon(systemName: "tray.2")
+                Text(book.seriesDescription)
+            }
             
-//            Rectangle().frame(width: 32, height: 16).foregroundColor(.none).opacity(0)
+            HStack {
+                metadataIcon(systemName: "tag")
+                Text(book.tagsDescription)
+            }
             
-            VStack(alignment: .leading, spacing: 8) {
-                if modelData.updatingMetadataStatus == "Success" {
-                    HStack {
-                        metadataIcon(systemName: "checkmark.shield")
-                        Text("In Sync with Server")
+            HStack {
+                metadataIcon(systemName: "link")
+                
+                Button(action:{
+                    if let goodreadsId = book.identifiers["goodreads"],
+                       let url = URL(string: "https://www.goodreads.com/book/show/\(goodreadsId)") {
+                        openURL(url)
+                    } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
+                        urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
+                        if let url = urlComponents.url {
+                            openURL(url)
+                        }
                     }
-                } else if modelData.updatingMetadataStatus == "Local File" {
-                    HStack {
-                        metadataIcon(systemName: "doc")
-                        Text("Local File")
-                    }
-                } else if modelData.updatingMetadataStatus == "Deleted" {
-                    HStack {
-                        metadataIcon(systemName: "xmark.shield")
-                        Text("Been Deleted on Server")
-                    }
-                } else if modelData.updatingMetadataStatus == "Updating" {
-                    HStack {
-                        metadataIcon(systemName: "arrow.clockwise")
-                        Text("Syncing with Server")
+                }) {
+                    metadataLinkIcon("icon-goodreads")
+                }
+                
+                if let id = book.identifiers["amazon"] {
+                    Button(action:{
+                        openURL(URL(string: "http://www.amazon.com/dp/\(id)")!)
+                    }) {
+                        metadataLinkIcon("icon-amazon")
                     }
                 } else {
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Button(action:{
-                            alertItem = AlertItem(id: "Sync Error", msg: modelData.updatingMetadataStatus)
-                        }) {
-                            HStack {
-                                metadataIcon(systemName: "exclamationmark.shield")
-                                Text("Sync Error Encounted")
+                    Button(action:{
+                        openURL(URL(string: "https://www.amazon.com/")!)
+                    }) {
+                        metadataLinkIcon("icon-amazon")
+                    }.hidden()
+                }
+            }
+            
+            Group {     // lastModified readDate(GR) ShelfName
+                HStack {
+                    metadataIcon(systemName: "envelope.open")
+                    Text(book.lastModifiedByLocale)
+                }
+                
+                
+                HStack {
+                    metadataIcon(systemName: "text.book.closed")
+                    if let readDateGR = book.readDateGRByLocale {
+                        Text("\(Image(systemName: "arrow.down.to.line")) \(readDateGR)")
+                    } else if let readProgressGR = book.readProgressGRDescription {
+                        Text("\(Image(systemName: "hourglass")) \(readProgressGR)%")
+                    } else {
+                        Text("\(Image(systemName: "book.circle")) \(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
+                    }
+                }
+                
+                HStack {
+                    metadataIcon(systemName: "books.vertical")
+                    if shelfNameCustomized {
+                        TextField("Shelf Name", text: $shelfName)
+                    } else {
+                        Picker(shelfName, selection: $shelfName) {
+                            ForEach(book.tags, id:\.self) {
+                                Text($0).tag($0)
                             }
                         }
+                        .pickerStyle(MenuPickerStyle())
                         
+                    }
+                    
+                    Button(action: { shelfNameShowDetail.toggle() } ) {
+                        if shelfNameShowDetail {
+                            Image(systemName: "chevron.up")
+                        } else {
+                            Image(systemName: "chevron.down")
+                        }
+                    }
+                    
+                    if book.tags.count > 1 {
+                        Text("(\(book.tags.count))")
+                    }
+                }
+                .onChange(of: shelfName) { value in
+                    modelData.readingBook!.inShelfName = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    modelData.updateBook(book: modelData.readingBook!)
+                }
+                .padding(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 16))
+                
+                if shelfNameShowDetail {
+                    HStack {
+                        metadataIcon(systemName: "books.vertical").hidden()
+                        Toggle("Customize Shelf Name", isOn: $shelfNameCustomized)
                     }
                 }
             }
         }
+        .lineLimit(2)
+        .font(.subheadline)
+        
+    }
+    
+    @ViewBuilder
+    private func connectivityViewContent(book: CalibreBook, isCompat: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if modelData.updatingMetadataStatus == "Success" {
+                HStack {
+                    metadataIcon(systemName: "checkmark.shield")
+                    Text("In Sync with Server")
+                }
+            } else if modelData.updatingMetadataStatus == "Local File" {
+                HStack {
+                    metadataIcon(systemName: "doc")
+                    Text("Local File")
+                }
+            } else if modelData.updatingMetadataStatus == "Deleted" {
+                HStack {
+                    metadataIcon(systemName: "xmark.shield")
+                    Text("Been Deleted on Server")
+                }
+            } else if modelData.updatingMetadataStatus == "Updating" {
+                HStack {
+                    metadataIcon(systemName: "arrow.clockwise")
+                    Text("Syncing with Server")
+                }
+            } else {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Button(action:{
+                        alertItem = AlertItem(id: "Sync Error", msg: modelData.updatingMetadataStatus)
+                    }) {
+                        HStack {
+                            metadataIcon(systemName: "exclamationmark.shield")
+                            Text("Sync Error Encounted")
+                        }
+                    }
+                    
+                }
+            }
+            HStack {
+                metadataIcon(systemName: "scroll")
+                Button(action: {
+                    activityListViewPresenting = true
+                }) {
+                    Text("Activity Logs")
+                }.sheet(isPresented: $activityListViewPresenting, onDismiss: {
+                    
+                }, content: {
+                    NavigationView {
+                        ActivityList(libraryId: book.library.id, bookId: book.id)
+                    }
+                })
+            }
+            
+        }
+
     }
     
     @ViewBuilder

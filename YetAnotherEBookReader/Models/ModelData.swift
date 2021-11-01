@@ -257,8 +257,10 @@ final class ModelData: ObservableObject {
     private var defaultLog = Logger()
     
     static var RealmSchemaVersion:UInt64 = 1
-    private var realm: Realm!
+    var realm: Realm!
     private var realmConf: Realm.Configuration!
+    
+    let activityDispatchQueue = DispatchQueue(label: "io.github.dsreader.activity")
     
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
@@ -427,7 +429,7 @@ final class ModelData: ObservableObject {
             self.booksInShelf[self.readingBook!.inShelfId] = self.readingBook
             
             cleanCalibreActivities(startDatetime: Date())
-            logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookInShelfId: "0^Default", libraryId: nil)
+            logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookId: 1, libraryId: library.id)
         }
     }
     
@@ -1866,8 +1868,8 @@ final class ModelData: ObservableObject {
             }
     }
     
-    func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookInShelfId: String?, libraryId: String?) {
-        DispatchQueue.global(qos: .utility).async {
+    func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
+        activityDispatchQueue.async {
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
             
             let obj = CalibreActivityLogEntry()
@@ -1875,7 +1877,7 @@ final class ModelData: ObservableObject {
             obj.type = type
             
             obj.startDatetime = startDatetime
-            obj.bookInShelfId = bookInShelfId
+            obj.bookId = bookId ?? 0
             obj.libraryId = libraryId
             
             obj.endpoingURL = request.url?.absoluteString
@@ -1893,7 +1895,7 @@ final class ModelData: ObservableObject {
     }
     
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
-        DispatchQueue.global(qos: .utility).async {
+        activityDispatchQueue.async {
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
             
             guard let activity = realm.objects(CalibreActivityLogEntry.self).filter(
@@ -1911,17 +1913,41 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func listCalibreActivities() -> [CalibreActivityLogEntry] {
+    func removeCalibreActivity(obj: CalibreActivityLogEntry) {
+        try? realm.write {
+            realm.delete(obj)
+        }
+    }
+    
+    func listCalibreActivities(libraryId: String? = nil, bookId: Int32? = nil, startDatetime: Date = Date(timeIntervalSinceNow: TimeInterval(-86400))) -> [CalibreActivityLogEntry] {
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
-        let activities = realm.objects(CalibreActivityLogEntry.self).filter(
-            NSPredicate(
+        var pred = NSPredicate()
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                pred = NSPredicate(
+                    format: "startDatetime >= %@ AND libraryId = %@ AND bookId = %@",
+                    Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate,
+                    libraryId,
+                    NSNumber(value: bookId)
+                )
+            } else {
+                pred = NSPredicate(
+                    format: "startDatetime >= %@ AND libraryId = %@",
+                    Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate,
+                    libraryId
+                )
+            }
+        } else {
+            pred = NSPredicate(
                 format: "startDatetime > %@",
                 Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate
             )
-        )
+        }
         
-        return activities.map { $0 }
+        let activities = realm.objects(CalibreActivityLogEntry.self).filter(pred)
+        
+        return activities.map { $0 }.sorted { $1.startDatetime < $0.startDatetime }
     }
     
     func cleanCalibreActivities(startDatetime: Date) {

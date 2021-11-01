@@ -55,8 +55,14 @@ struct CalibreServerService {
             URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
         }
 
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        let request = URLRequest(url: url)
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, bookId: nil, libraryId: nil)
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
             defer {
+                modelData.logFinishCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: serverInfo.errorMsg)
+                
                 DispatchQueue.main.async {
                     modelData.calibreServerInfo = serverInfo
                     modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
@@ -148,7 +154,15 @@ struct CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, bookId: nil, libraryId: library.id)
+
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            defer {
+                modelData.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingStatus)
+            }
+            var updatingStatus = "Failed"
+            
             if let error = error {
                 self.defaultLog.warning("error: \(error.localizedDescription)")
 
@@ -175,7 +189,6 @@ struct CalibreServerService {
             
             if let mimeType = httpResponse.mimeType, mimeType == "application/json",
                let data = data {
-                var updatingStatus = "Failed"
                 defer {
                     DispatchQueue.main.async {
                         modelData.calibreServerUpdating = false
@@ -321,11 +334,15 @@ struct CalibreServerService {
         //let endpointUrl = URL(string: oldbook.library.server.serverUrl + "/get/json/\(oldbook.id)/" + oldbook.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
-        
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknonwn Error"
             var bookResult = oldbook
             defer {
+                modelData.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
                     modelData.updatingMetadata = false
@@ -517,9 +534,13 @@ struct CalibreServerService {
 
         let request = URLRequest(url: endpointUrl)
         
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+
         let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             defer {
+                modelData.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
                     modelData.updatingMetadata = false
@@ -588,9 +609,12 @@ struct CalibreServerService {
 //        if updatingMetadata && updatingMetadataTask != nil {
 //            updatingMetadataTask!.cancel()
 //        }
-        
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+
         let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             print("\(#function) \(data) \(response) \(error)")
+            modelData.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
         }
         
         setCredential(server: library.server, task: updatingMetadataTask)
@@ -639,7 +663,7 @@ struct CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookInShelfId: book.inShelfId, libraryId: nil)
+        modelData.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
         
         let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
@@ -948,6 +972,7 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
         return a
     }
+    
     func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
         
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
@@ -972,7 +997,7 @@ struct CalibreServerService {
         urlRequest.httpBody = postData
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
-        
+
         modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 print("setLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
@@ -1081,6 +1106,9 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+
         modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 print("updateAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
@@ -1098,9 +1126,11 @@ struct CalibreServerService {
                     print("updateAnnotations \(completion)")
                     switch completion {
                     case .finished:
+                        modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Empty Result")
                         break
                     case .failure(let error):
-                        fatalError(error.localizedDescription)
+                        modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
+                        break
                     }
                 },
                 receiveValue: { results in
@@ -1108,6 +1138,7 @@ struct CalibreServerService {
                     results.forEach { result in
                         print("updateAnnotations \(result)")
                     }
+                    modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Updated")
                 }
             )
 
@@ -1193,7 +1224,7 @@ struct CalibreServerService {
                     case .finished:
                         break
                     case .failure(let error):
-                        fatalError(error.localizedDescription)
+                        break
                     }
                 },
                 receiveValue: { results in

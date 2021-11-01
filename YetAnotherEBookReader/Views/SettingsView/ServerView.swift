@@ -24,6 +24,7 @@ struct ServerView: View {
     // @State private var selectedOption: String?
     @State private var readingPositionSyncOptionPresenting = false
     @State private var goodreadsSyncOptionPresenting = false
+    @State private var activityListViewPresenting = false
     
     // bindings for library options
     @State private var enableStoreReadingPosition = false
@@ -72,6 +73,7 @@ struct ServerView: View {
             Divider()
             
             Text("Life of Ease Options")
+            
             
             Button(action: {
                 storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
@@ -132,6 +134,18 @@ struct ServerView: View {
 //            }
             
             Divider()
+            
+            Button(action: {
+                activityListViewPresenting = true
+            }) {
+                Text("Activity Logs")
+            }.sheet(isPresented: $activityListViewPresenting, onDismiss: {
+                
+            }, content: {
+                NavigationView {
+                    ActivityList(libraryId: modelData.currentCalibreLibraryId, bookId: nil)
+                }
+            })
         }
     }
     

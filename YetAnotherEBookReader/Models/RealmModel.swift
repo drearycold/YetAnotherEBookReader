@@ -308,11 +308,11 @@ extension CalibreLibraryGoodreadsSync: Persistable {
 class CalibreActivityLogEntry: Object {
     @objc dynamic var type: String?
     
-    @objc dynamic var startDatetime: Date?
+    @objc dynamic var startDatetime = Date.distantPast
     @objc dynamic var finishDatetime: Date?
     
     //book or library, not both
-    @objc dynamic var bookInShelfId: String?
+    @objc dynamic var bookId: Int32 = 0
     @objc dynamic var libraryId: String?
     
     @objc dynamic var endpoingURL: String?
@@ -323,7 +323,6 @@ class CalibreActivityLogEntry: Object {
     @objc dynamic var errMsg: String?
     
     var startDateByLocale: String? {
-        guard let startDatetime = startDatetime else { return nil }
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .short
         dateFormatter.timeStyle = .medium
@@ -331,7 +330,6 @@ class CalibreActivityLogEntry: Object {
         return dateFormatter.string(from: startDatetime)
     }
     var startDateByLocaleLong: String? {
-        guard let startDatetime = startDatetime else { return nil }
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .long
         dateFormatter.timeStyle = .long
