@@ -23,6 +23,10 @@ struct BookFormatDownloadService {
         
         download.value.downloadTask?.cancel()
         
+        if let request = download.value.downloadTask?.originalRequest {
+            modelData.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Cancelled")
+        }
+
         modelData.activeDownloads[download.key]?.isDownloading = false
         modelData.activeDownloads[download.key]?.progress = 0.0
         modelData.activeDownloads[download.key]?.resumeData = nil
@@ -42,6 +46,11 @@ struct BookFormatDownloadService {
                 modelData.activeDownloads[download.key]?.resumeData = resumeData
             }
         })
+        
+        if let request = download.value.downloadTask?.originalRequest {
+            modelData.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Paused")
+        }
+
     }
     
     func resumeDownload(_ book: CalibreBook, format: Format) -> Bool {
@@ -71,7 +80,11 @@ struct BookFormatDownloadService {
         modelData.activeDownloads[bookFormatDownload.sourceURL]?.isDownloading = true
         modelData.activeDownloads[bookFormatDownload.sourceURL]?.resumeData = nil
         modelData.activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
-                
+        
+        if let request = downloadTask.originalRequest {
+            modelData.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Resumed")
+        }
+        
         downloadTask.resume()
         
         return true
@@ -103,7 +116,7 @@ struct BookFormatDownloadService {
             return false
         }
         
-        var bookFormatDownload = BookFormatDownload(book: book, format: format, sourceURL: url, savedURL: savedURL, modificationDate: formatInfo.serverMTime, downloadService: self)
+        var bookFormatDownload = BookFormatDownload(book: book, format: format, startDatetime: Date(), sourceURL: url, savedURL: savedURL, modificationDate: formatInfo.serverMTime, downloadService: self)
         
         let downloadDelegate = BookFormatDownloadDelegate(download: bookFormatDownload)
         
@@ -113,7 +126,10 @@ struct BookFormatDownloadService {
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
         
         let downloadTask = downloadSession.downloadTask(with: url)
-        
+        if let request = downloadTask.originalRequest {
+            modelData.logStartCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, bookId: book.id, libraryId: book.library.id)
+        }
+
         if book.library.server.username.count > 0 && book.library.server.password.count > 0 {
             var authMethod = NSURLAuthenticationMethodDefault
             if url.scheme == "http" {
@@ -154,6 +170,7 @@ struct BookFormatDownload {
     var resumeData: Data?
     var book: CalibreBook
     var format: Format
+    var startDatetime: Date
     
     var sourceURL: URL
     var savedURL: URL
@@ -171,6 +188,7 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
     var download: BookFormatDownload
     
     var isFileExist = false
+    var fileSize = UInt64.zero
     
     init(download: BookFormatDownload) {
         self.download = download
@@ -194,6 +212,7 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
             try FileManager.default.setAttributes(attributes, ofItemAtPath: download.savedURL.path)
             
             isFileExist = FileManager.default.fileExists(atPath: download.savedURL.path)
+            self.fileSize = fileSize.uint64Value
             self.defaultLog.info("isFileExist: \(self.isFileExist)")
             
         } catch {
@@ -212,14 +231,19 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
            (200...299).contains(httpResponse.statusCode),
            isFileExist {
             DispatchQueue.main.async { [self] in
-                
                 guard let modelData = download.downloadService?.modelData
                        else { return }
                 
                 modelData.addedCache(book: download.book, format: download.format)
-                
+                guard let request = download.downloadTask?.originalRequest ?? task.originalRequest else { return }
+                modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(fileSize)")
             }
+        } else {
+            guard let modelData = download.downloadService?.modelData,
+                  let request = download.downloadTask?.originalRequest
+                   else { return }
             
+            modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Failed, response=\(String(describing: task.response)) error=\(String(describing: error))")
         }
     }
     

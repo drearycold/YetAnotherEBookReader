@@ -102,6 +102,7 @@
 		2A21BCE527017F9400825BBB /* Providers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A21BCE427017F9400825BBB /* Providers.swift */; };
 		2A25E245272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */; };
 		2A25E249272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */; };
+		2A264A3F27301EDE00C4CEFA /* VersionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */; };
 		2A270B1F272D41DE006552A3 /* RealmSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048E271C39C100589B87 /* RealmSwift.xcframework */; };
 		2A270B20272D41DE006552A3 /* RealmSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048E271C39C100589B87 /* RealmSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A270B21272D41E6006552A3 /* Realm.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A0A048C271C39B400589B87 /* Realm.xcframework */; };
@@ -500,6 +501,7 @@
 		2A21BCE427017F9400825BBB /* Providers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Providers.swift; sourceTree = "<group>"; };
 		2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsReadingPosition.swift; sourceTree = "<group>"; };
 		2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsGoodreadsSync.swift; sourceTree = "<group>"; };
+		2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionHistoryView.swift; sourceTree = "<group>"; };
 		2A270B24272F7E07006552A3 /* ActivityList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityList.swift; sourceTree = "<group>"; };
 		2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerService.swift; sourceTree = "<group>"; };
 		2A3EB9B726B64333000D70F1 /* YetAnotherEBookReader copy2-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "YetAnotherEBookReader copy2-Info.plist"; path = "/Volumes/Data/git/YetAnotherEBookReader/YetAnotherEBookReader copy2-Info.plist"; sourceTree = "<absolute>"; };
@@ -1021,6 +1023,7 @@
 				2ABB914F261F1A47004AA7C0 /* ServerView.swift */,
 				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
 				2A0A0486271BF65A00589B87 /* SupportInfoView.swift */,
+				2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */,
 			);
 			path = SettingsView;
 			sourceTree = "<group>";
@@ -1652,6 +1655,7 @@
 				2A107E002663CB56007DCA20 /* UserSettingsNavigationController.swift in Sources */,
 				2A107E022663CB56007DCA20 /* EPUBViewController.swift in Sources */,
 				2AAB29922712BB250080B0CB /* ReaderOptionsCbzView.swift in Sources */,
+				2A264A3F27301EDE00C4CEFA /* VersionHistoryView.swift in Sources */,
 				2A107DD42663CB56007DCA20 /* LibraryService.swift in Sources */,
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
 				2A107DF12663CB56007DCA20 /* BookmarkCell.swift in Sources */,

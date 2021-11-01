@@ -11,6 +11,7 @@ struct SettingsView: View {
     @EnvironmentObject var modelData: ModelData
     
     var body: some View {
+        VStack {
         NavigationView {
             List {
                 NavigationLink(destination: ServerView()) {
@@ -21,11 +22,20 @@ struct SettingsView: View {
                 }
                 NavigationLink("Reader Options", destination: ReaderOptionsView())
                 Text("")
+                NavigationLink("Version History", destination: VersionHistoryView())
                 NavigationLink("Activity Logs", destination: ActivityList())
                 NavigationLink("Support", destination: SupportInfoView())
                 NavigationLink("About", destination: AppInfoView())
             }
+            
         }.navigationViewStyle(StackNavigationViewStyle())
+            Spacer()
+            HStack {
+                Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+                Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+            }.font(.caption).foregroundColor(.gray)
+        }
+        
     }
 }
 

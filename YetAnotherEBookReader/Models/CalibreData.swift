@@ -227,9 +227,9 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     
     var readProgressGRDescription: String? {
         guard library.goodreadsSync.isEnabled,
-              let progressAny = userMetadatas[library.goodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))] else { return nil }
-        
-        return Int(String(describing: progressAny))?.description
+              let progressAny = userMetadatas[library.goodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))],
+              let prog = progressAny else { return nil }
+        return Int(String(describing: prog))?.description
     }
     
     var tags = [String]()
