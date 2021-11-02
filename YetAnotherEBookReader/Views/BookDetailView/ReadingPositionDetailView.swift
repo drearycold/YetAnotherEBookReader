@@ -152,22 +152,25 @@ struct ReadingPositionDetailView: View {
         .fullScreenCover(
             isPresented: $presentingReadSheet,
             onDismiss: {
-                if let selectedPosition = _VM.modelData.readerInfo?.position {
-                    if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
-                        return
+                guard let book = _VM.modelData.readingBook,
+                    let selectedPosition = _VM.modelData.readerInfo?.position else { return }
+                
+                _VM.modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: _VM.modelData.updatedReadingPosition)
+                
+                if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
+                    return
+                }
+                if false && _VM.modelData.updatedReadingPosition < selectedPosition {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
                     }
-                    if false && _VM.modelData.updatedReadingPosition < selectedPosition {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                        }
-                    } else if false && selectedPosition << _VM.modelData.updatedReadingPosition {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                            alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                        }
+                } else if false && selectedPosition << _VM.modelData.updatedReadingPosition {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
                     }
-                    else {
-                        updatePosition()
-                    }
+                }
+                else {
+                    updatePosition()
                 }
             } ) {
             if let readerInfo = _VM.modelData.readerInfo {
@@ -197,7 +200,7 @@ struct ReadingPositionDetailView: View {
         _VM.modelData.updatedReadingPosition.update(with: _VM.position)
         
         presentingReadSheet = true
-        
+        _VM.modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: _VM.position, startDatetime: Date())
     }
 
     func updatePosition() {

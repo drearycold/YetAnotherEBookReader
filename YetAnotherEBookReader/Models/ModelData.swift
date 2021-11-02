@@ -1914,6 +1914,8 @@ final class ModelData: ObservableObject {
     }
     
     func removeCalibreActivity(obj: CalibreActivityLogEntry) {
+        guard let realm = try? Realm(configuration: self.realmConf) else { return }
+
         try? realm.write {
             realm.delete(obj)
         }
@@ -1951,8 +1953,6 @@ final class ModelData: ObservableObject {
     }
     
     func cleanCalibreActivities(startDatetime: Date) {
-        guard let realm = try? Realm(configuration: self.realmConf) else { return }
-
         let activities = realm.objects(CalibreActivityLogEntry.self).filter(
             NSPredicate(
                 format: "startDatetime < %@",
@@ -1962,5 +1962,52 @@ final class ModelData: ObservableObject {
         try? realm.write {
             realm.delete(activities)
         }
+    }
+    
+    func logBookDeviceReadingPositionHistoryStart(book: CalibreBook, startPosition: BookDeviceReadingPosition, startDatetime: Date) {
+        activityDispatchQueue.async {
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+            
+            let historyEntry = BookDeviceReadingPositionHistoryRealm()
+            historyEntry.bookId = book.id
+            historyEntry.libraryId = book.library.id
+            historyEntry.startDatetime = startDatetime
+            historyEntry.startPosition = startPosition.managedObject()
+            
+            try? realm.write {
+                realm.add(historyEntry)
+            }
+        }
+    }
+    
+    func logBookDeviceReadingPositionHistoryFinish(book: CalibreBook, endPosition: BookDeviceReadingPosition) {
+        activityDispatchQueue.async {
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+            
+            guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
+                NSPredicate(format: "bookId = %@ AND libraryId = %@",
+                            NSNumber(value: book.id),
+                            book.library.id
+                )
+            ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
+            
+            guard historyEntry.endPosition == nil else { return }
+            
+            try? realm.write {
+                historyEntry.endPosition = endPosition.managedObject()
+            }
+        }
+    }
+    
+    func listBookDeviceReadingPositionHistory(bookId: Int32, libraryId: String) -> [BookDeviceReadingPositionHistoryRealm] {
+        guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
+
+        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
+            NSPredicate(format: "bookId = %@ AND libraryId = %@",
+                        NSNumber(value: bookId), libraryId
+            )
+        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+        print("\(#function) \(results.count)")
+        return results.map {$0}
     }
 }

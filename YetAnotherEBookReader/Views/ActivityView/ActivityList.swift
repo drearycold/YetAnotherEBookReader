@@ -63,10 +63,10 @@ struct ActivityList: View {
                    let library = modelData.calibreLibraries[libraryId] {
                     if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
                         Text("Book Title:").frame(minWidth: 100, alignment: .leading)
-                        Text(book.title).navigationTitle(book.title)
+                        Text(book.title)
                     } else {
                         Text("Library Name:").frame(minWidth: 100, alignment: .leading)
-                        Text(library.name).navigationTitle(library.name)
+                        Text(library.name)
                     }
                 } else {
                     Text("No Entity")
@@ -75,7 +75,7 @@ struct ActivityList: View {
             }.font(.title2)
             HStack {
                 Text("Task:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.type ?? "Unknown")
+                Text(obj.type ?? "Unknown").navigationTitle(obj.type ?? "")
                 Spacer()
             }.font(.title3)
             HStack {

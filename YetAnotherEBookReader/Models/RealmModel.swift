@@ -355,3 +355,96 @@ class CalibreActivityLogEntry: Object {
         return dateFormatter.string(from: finishDatetime)
     }
 }
+
+class BookDeviceReadingPositionRealm: Object {
+    @objc dynamic var id = ""
+    
+    @objc dynamic var readerName = ""
+    @objc dynamic var maxPage = 0
+    @objc dynamic var lastReadPage = 0
+    @objc dynamic var lastReadChapter = ""
+    /// range 0 - 100
+    @objc dynamic var lastChapterProgress = 0.0
+    /// range 0 - 100
+    @objc dynamic var lastProgress = 0.0
+    @objc dynamic var furthestReadPage = 0
+    @objc dynamic var furthestReadChapter = ""
+    let lastPosition = List<Int>()
+    @objc dynamic var cfi = "/"
+    @objc dynamic var epoch = 0.0
+    
+    var epochByLocale: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+    
+    var epochLocaleLong: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+}
+
+extension BookDeviceReadingPosition: Persistable {
+    public init(managedObject: BookDeviceReadingPositionRealm) {
+        id = managedObject.id
+        readerName = managedObject.readerName
+        maxPage = managedObject.maxPage
+        lastReadPage = managedObject.lastReadPage
+        lastReadChapter = managedObject.lastReadChapter
+        lastChapterProgress = managedObject.lastChapterProgress
+        lastProgress = managedObject.lastProgress
+        furthestReadPage = managedObject.furthestReadPage
+        furthestReadChapter = managedObject.furthestReadChapter
+        lastPosition = managedObject.lastPosition.map{$0}
+        cfi = managedObject.cfi
+        epoch = managedObject.epoch
+    }
+    
+    public func managedObject() -> BookDeviceReadingPositionRealm {
+        let obj = BookDeviceReadingPositionRealm()
+        obj.id = id
+        obj.readerName = readerName
+        obj.maxPage = maxPage
+        obj.lastReadPage = lastReadPage
+        obj.lastReadChapter = lastReadChapter
+        obj.lastChapterProgress = lastChapterProgress
+        obj.lastProgress = lastProgress
+        obj.furthestReadPage = furthestReadPage
+        obj.furthestReadChapter = furthestReadChapter
+        obj.lastPosition.append(objectsIn: lastPosition)
+        obj.cfi = cfi
+        obj.epoch = epoch
+        
+        return obj
+    }
+}
+
+class BookDeviceReadingPositionHistoryRealm: Object {
+    @objc dynamic var bookId = Int32()
+    @objc dynamic var libraryId = ""
+    
+    @objc dynamic var startDatetime = Date()
+    @objc dynamic var startPosition: BookDeviceReadingPositionRealm?
+    @objc dynamic var endPosition: BookDeviceReadingPositionRealm?
+    
+    var startDateByLocale: String? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: startDatetime)
+    }
+    var startDateByLocaleLong: String? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: startDatetime)
+    }
+}

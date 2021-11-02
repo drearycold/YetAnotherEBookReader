@@ -317,6 +317,9 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
             return
         }
         modelData.presentingEBookReaderFromShelf = true
+        
+        guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+        modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
     }
 
     func onBookLongClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {

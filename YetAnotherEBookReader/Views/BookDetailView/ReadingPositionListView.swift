@@ -74,6 +74,30 @@ struct ReadingPositionListView: View {
                                 
                             }
                         }
+                    } else {
+                        Text("Device History Positions")
+                        ForEach(
+                            _positionViewModel.modelData.listBookDeviceReadingPositionHistory(
+                                bookId: _positionViewModel.book.id,
+                                libraryId: _positionViewModel.book.library.id
+                            ).compactMap({ $0.endPosition })
+                            .compactMap({ BookDeviceReadingPosition(managedObject: $0) }),
+                            id: \.epoch) { position in
+                            NavigationLink(
+                                destination: ReadingPositionDetailView(
+                                    viewModel: ReadingPositionDetailViewModel(
+                                        modelData: _positionViewModel.modelData,
+                                        listModel: _positionViewModel,
+                                        position: position)
+                                )
+                            ) {
+                                VStack(alignment: .leading) {
+                                    Text("\(position.id)")
+                                    Text("\(String(format: "%.2f%%", position.lastProgress)), with \((_positionViewModel.modelData.formatOfReader(readerName: position.readerName) ?? Format.UNKNOWN).rawValue) by \(position.readerName)")
+                                    Text("\(position.epochByLocale)")
+                                }
+                            }
+                        }
                     }
                 }
             }

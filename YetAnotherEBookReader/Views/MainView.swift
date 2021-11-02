@@ -108,8 +108,10 @@ struct MainView: View {
             }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
-            modelData.presentingEBookReaderFromShelf = false
-            guard let readerInfo = modelData.readerInfo else { return }
+            guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+
+            modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)
+
             let originalPosition = readerInfo.position
             if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
                 return
@@ -234,7 +236,10 @@ struct MainView: View {
                             guard let localLibrary = modelData.localLibrary else { return }
                             let book = CalibreBook(id: bookId, library: localLibrary)
                             modelData.readingBookInShelfId = book.inShelfId
+                            guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+
                             modelData.presentingEBookReaderFromShelf = true
+                            modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
                         }),
                         .cancel()
                     ]

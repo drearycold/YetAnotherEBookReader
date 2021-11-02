@@ -851,6 +851,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         modelData?.updatedReadingPosition.lastProgress = bookProgress
         modelData?.updatedReadingPosition.lastReadChapter = chapterName
         modelData?.updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
+        modelData?.updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         

@@ -59,6 +59,11 @@ struct BookDetailView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
 
+    @State private var readingPositionHistoryViewPresenting = false {
+        willSet { if newValue { modelData.presentingStack.append($readingPositionHistoryViewPresenting) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
+    
     @State private var shelfNameShowDetail = false
     @State private var shelfName = ""
     @State private var shelfNameCustomized = false
@@ -271,13 +276,38 @@ struct BookDetailView: View {
                 
                 HStack {
                     metadataIcon(systemName: "text.book.closed")
+                    
                     if let readDateGR = book.readDateGRByLocale {
-                        Text("\(Image(systemName: "arrow.down.to.line")) \(readDateGR)")
+                        Image(systemName: "arrow.down.to.line")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                        Text(readDateGR)
                     } else if let readProgressGR = book.readProgressGRDescription {
-                        Text("\(Image(systemName: "hourglass")) \(readProgressGR)%")
+                        Image(systemName: "hourglass")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                        Text("\(readProgressGR)%")
                     } else {
-                        Text("\(Image(systemName: "book.circle")) \(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
+                        Image(systemName: "book.circle")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                        Text("\(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
                     }
+                    
+                    Button(action: {
+                        readingPositionHistoryViewPresenting = true
+                    }) {
+                        Image(systemName: "clock")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 20, height: 20)
+                    }.padding(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 0))
+                    .sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {}, content: {
+                        ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+                    })
                 }
                 
                 HStack {

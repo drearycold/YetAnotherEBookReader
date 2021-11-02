@@ -366,7 +366,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var furthestReadChapter = ""
     var lastPosition = [0, 0, 0]
     var cfi = "/"
-    var epoch = 0.0
+    var epoch = 0.0     //timestamp
     
     enum CodingKeys: String, CodingKey {
         case readerName
@@ -420,6 +420,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         lastChapterProgress = other.lastChapterProgress
         lastProgress = other.lastProgress
         lastPosition = other.lastPosition
+        epoch = other.epoch
     }
     
     func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
@@ -429,6 +430,22 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
             return true
         }
         return false
+    }
+    
+    var epochByLocale: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+    
+    var epochLocaleLong: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
     }
 }
 

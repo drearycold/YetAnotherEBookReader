@@ -98,7 +98,8 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                                 
                                 updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
                                 updatedReadingPosition.readerName = ReaderType.ReadiumEPUB.rawValue
-                                
+                                updatedReadingPosition.epoch = Date().timeIntervalSince1970
+
                                 modelData.updatedReadingPosition = updatedReadingPosition
                             }
                         )
@@ -186,7 +187,8 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
                         
                         updatedReadingPosition.readerName = ReaderType.ReadiumPDF.rawValue
-                        
+                        updatedReadingPosition.epoch = Date().timeIntervalSince1970
+
                         modelData.updatedReadingPosition = updatedReadingPosition
                     }))
                     
@@ -268,7 +270,8 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
                         
                         updatedReadingPosition.readerName = ReaderType.ReadiumCBZ.rawValue
-                        
+                        updatedReadingPosition.epoch = Date().timeIntervalSince1970
+
                         modelData.updatedReadingPosition = updatedReadingPosition
                     }))
                     
