@@ -271,16 +271,13 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         modelData.readingBookInShelfId = bookId
         guard let book = modelData.readingBook else { return }
         
-        let gotoMenuItem = UIMenuItem(title: "Go to ...", action: #selector(gotoAction))
+        let detailMenuItem = UIMenuItem(title: "Details", action: #selector(detailAction))
         let refreshMenuItem = UIMenuItem(title: "Refresh", action: #selector(refreshBook(_:)))
         let deleteMenuItem = UIMenuItem(title: book.library.server.isLocal ? "Delete" : "Remove", action: #selector(deleteBook(_:)))
+        let gotoMenuItem = UIMenuItem(title: "Go to ...", action: #selector(gotoAction))
         
-        if book.library.server.isLocal {
-            UIMenuController.shared.menuItems = [refreshMenuItem, deleteMenuItem]
-        } else {
-            menuTargetRect = inShelfView
-            UIMenuController.shared.menuItems = [gotoMenuItem, refreshMenuItem, deleteMenuItem]
-        }
+        menuTargetRect = inShelfView
+        UIMenuController.shared.menuItems = [detailMenuItem, refreshMenuItem, deleteMenuItem, gotoMenuItem]
         becomeFirstResponder()
         UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
     }
@@ -302,12 +299,11 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     }
     
     @objc func gotoAction(_ sender: Any?) {
-        let detailMenuItem = UIMenuItem(title: "Details", action: #selector(detailAction))
         let goodreadsMenuItem = UIMenuItem(title: "Goodreads", action: #selector(goodreadsAction))
         let doubanMenuItem = UIMenuItem(title: "Douban", action: #selector(doubanAction))
         
         UIMenuController.shared.hideMenu()
-        UIMenuController.shared.menuItems = [detailMenuItem, goodreadsMenuItem, doubanMenuItem]
+        UIMenuController.shared.menuItems = [goodreadsMenuItem, doubanMenuItem]
         UIMenuController.shared.showMenu(from: shelfView, rect: menuTargetRect)
     }
     
