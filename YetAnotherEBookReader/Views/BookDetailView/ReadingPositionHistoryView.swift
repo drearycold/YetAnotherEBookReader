@@ -6,22 +6,55 @@
 //
 
 import SwiftUI
+import SwiftUICharts
 
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
         
     var libraryId: String
     var bookId: Int32
-        
+    
+    @State private var readingStatistics = [Double]()
+    @State private var maxMinutes = 0
+    @State private var avgMinutes = 0
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-                    NavigationLink(destination: detail(obj: obj), label: {
-                        row(obj: obj)
-                    })
-                }
-            }.navigationTitle("Reading History")
+        VStack(spacing: 4) {
+            
+            VStack(spacing: 8) {
+            Text("Statistics")
+                .font(.title)
+                
+            
+            
+            HStack {
+                Spacer()
+                BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
+                Spacer()
+            }
+            
+            HStack {
+                Spacer()
+                Text("Of Last 7 Days: ")
+                Text("Max \(maxMinutes), Mean \(avgMinutes)")
+                Text("(Min./Day)")
+                Spacer()
+            }
+            }.padding([.top, .bottom], 4)
+            
+            NavigationView {
+                List {
+                    ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
+                        NavigationLink(destination: detail(obj: obj), label: {
+                            row(obj: obj)
+                        })
+                    }
+                }.navigationTitle("Reading History")
+                .navigationBarTitleDisplayMode(.inline)
+            }
+        }.onAppear {
+            readingStatistics = modelData.getReadingStatistics(bookId: bookId, libraryId: libraryId)
+            maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
+            avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
         }
     }
     

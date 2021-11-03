@@ -1999,15 +1999,38 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func listBookDeviceReadingPositionHistory(bookId: Int32, libraryId: String) -> [BookDeviceReadingPositionHistoryRealm] {
+    func listBookDeviceReadingPositionHistory(bookId: Int32, libraryId: String, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistoryRealm] {
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
 
-        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
-            NSPredicate(format: "bookId = %@ AND libraryId = %@",
-                        NSNumber(value: bookId), libraryId
+        var pred = NSPredicate(format: "bookId = %@ AND libraryId = %@",
+                               NSNumber(value: bookId), libraryId
+                   )
+        if let startDateAfter = startDateAfter {
+            pred = NSPredicate(
+                format: "bookId = %@ AND libraryId = %@ AND startDatetime >= %@",
+                NSNumber(value: bookId), libraryId, startDateAfter as NSDate
             )
-        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+        }
+        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter(pred)
+            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
         print("\(#function) \(results.count)")
         return results.map {$0}
+    }
+    
+    func getReadingStatistics(bookId: Int32, libraryId: String, limitDays: Int = 7) -> [Double] {
+        let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
+        
+        let list = listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId, startDateAfter: startDate)
+        let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
+            guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
+            let duration = epoch - history.startDatetime.timeIntervalSince1970
+            let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
+            let nowDayDate = Calendar.current.startOfDay(for: Date())
+            let offset = limitDays - Int(floor(nowDayDate.timeIntervalSince(readDayDate) / 86400.0))
+            if offset < 0 || offset > limitDays { return }
+            result[offset] += duration / 60
+        }
+        return result
     }
 }
