@@ -16,6 +16,7 @@ struct AppInfoView: View {
     private let folioReaderKitURL = "https://github.com/FolioReader/FolioReaderKit"
     private let readiumURL = "https://github.com/readium/awesome-readium"
     private let shelfViewURL = "https://github.com/tdscientist/ShelfView-iOS"
+    private let ozzyURL = "https://github.com/cfhamlet"
     
     var body: some View {
         ScrollView {
@@ -32,13 +33,18 @@ struct AppInfoView: View {
 //                    }
                 }
                 
-                VStack(alignment: .center, spacing: 4) {
-                    Text("Thanks to")
-                    linkButtonBuilder(title: "calibre", url: calibreURL)
-                    
-                    linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
-                    linkButtonBuilder(title: "Readium Project", url: readiumURL)
-                    linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
+                VStack(spacing: 8) {
+                    Text("Special Thanks to")
+                    VStack(spacing: 4) {
+                        linkButtonBuilder(title: "calibre", url: calibreURL)
+                        linkButtonBuilder(title: "cfhamlet (Ozzy)", url: ozzyURL)
+                    }
+                    VStack(spacing: 4) {
+                        linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
+                        linkButtonBuilder(title: "Readium Project", url: readiumURL)
+                        linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
+                    }
+
                 }
             }.padding()
             .frame(maxWidth: 500)
@@ -54,7 +60,7 @@ struct AppInfoView: View {
                 Text(title)
                 Spacer()
                 Image(systemName: "square.and.arrow.up")
-            }
+            }.padding([.leading, .trailing], 32)
         }
     }
 }
