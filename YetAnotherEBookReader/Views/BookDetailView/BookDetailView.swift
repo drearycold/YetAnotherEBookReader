@@ -296,19 +296,17 @@ struct BookDetailView: View {
                             .frame(width: 20, height: 20)
                         Text("\(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
                     }
-                    
-                    Button(action: {
-                        readingPositionHistoryViewPresenting = true
-                    }) {
-                        Image(systemName: "clock")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                    }.padding(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 0))
-                    .sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {}, content: {
-                        ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
-                    })
-                }
+                }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
+                    readingPositionHistoryViewPresenting = false
+                }, content: {
+                    NavigationView {
+                        if let book = modelData.readingBook {
+                            ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+                        } else {
+                            Text("Unexpected Internal Error")
+                        }
+                    }
+                })
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
@@ -661,19 +659,14 @@ struct BookDetailView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                guard let book = modelData.readingBook else { return }
-                if _viewModel.listVM == nil {
-                    _viewModel.listVM = ReadingPositionListViewModel(
-                        modelData: modelData, book: book, positions: book.readPos.getDevices()
-                    )
-                } else {
-                    _viewModel.listVM.book = book
-                    _viewModel.listVM.positions = book.readPos.getDevices()
-                }
-                presentingReadPositionList = true
+                guard modelData.readingBook != nil else { return }
+                readingPositionHistoryViewPresenting = true
             }) {
-                Image(systemName: "book")
-            }.disabled(modelData.readingBook?.inShelf == false)
+                Image(systemName: "clock")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 20, height: 20)
+            }
         }
     }
     

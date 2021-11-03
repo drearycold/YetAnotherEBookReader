@@ -1999,26 +1999,39 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func listBookDeviceReadingPositionHistory(bookId: Int32, libraryId: String, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistoryRealm] {
+    func listBookDeviceReadingPositionHistory(bookId: Int32? = nil, libraryId: String? = nil, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistoryRealm] {
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
 
-        var pred = NSPredicate(format: "bookId = %@ AND libraryId = %@",
+        var pred: NSPredicate? = nil
+        if let bookId = bookId, let libraryId = libraryId {
+            pred = NSPredicate(format: "bookId = %@ AND libraryId = %@",
                                NSNumber(value: bookId), libraryId
                    )
-        if let startDateAfter = startDateAfter {
-            pred = NSPredicate(
-                format: "bookId = %@ AND libraryId = %@ AND startDatetime >= %@",
-                NSNumber(value: bookId), libraryId, startDateAfter as NSDate
-            )
+            if let startDateAfter = startDateAfter {
+                pred = NSPredicate(
+                    format: "bookId = %@ AND libraryId = %@ AND startDatetime >= %@",
+                    NSNumber(value: bookId), libraryId, startDateAfter as NSDate
+                )
+            }
+        } else {
+            if let startDateAfter = startDateAfter {
+                pred = NSPredicate(
+                    format: "startDatetime >= %@",
+                    startDateAfter as NSDate
+                )
+            }
         }
-        let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(pred)
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+        
+        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self);
+        if let predNotNil = pred {
+            results = results.filter(predNotNil)
+        }
+        results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
         print("\(#function) \(results.count)")
         return results.map {$0}
     }
     
-    func getReadingStatistics(bookId: Int32, libraryId: String, limitDays: Int = 7) -> [Double] {
+    func getReadingStatistics(bookId: Int32? = nil, libraryId: String? = nil, limitDays: Int = 7) -> [Double] {
         let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
         
         let list = listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId, startDateAfter: startDate)

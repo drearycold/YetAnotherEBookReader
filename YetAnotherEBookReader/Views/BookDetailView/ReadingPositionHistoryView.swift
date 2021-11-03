@@ -11,8 +11,8 @@ import SwiftUICharts
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
         
-    var libraryId: String
-    var bookId: Int32
+    var libraryId: String?
+    var bookId: Int32?
     
     @State private var readingStatistics = [Double]()
     @State private var maxMinutes = 0
@@ -21,36 +21,30 @@ struct ReadingPositionHistoryView: View {
         VStack(spacing: 4) {
             
             VStack(spacing: 8) {
-            Text("Statistics")
-                .font(.title)
+                HStack {
+                    Spacer()
+                    BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
+                    Spacer()
+                }
                 
+                HStack {
+                    Spacer()
+                    Text("Of Last 7 Days: ")
+                    Text("Max \(maxMinutes), Mean \(avgMinutes)")
+                    Text("(Min./Day)")
+                    Spacer()
+                }
+            }.padding([.top, .bottom], 8)
             
-            
-            HStack {
-                Spacer()
-                BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
-                Spacer()
-            }
-            
-            HStack {
-                Spacer()
-                Text("Of Last 7 Days: ")
-                Text("Max \(maxMinutes), Mean \(avgMinutes)")
-                Text("(Min./Day)")
-                Spacer()
-            }
-            }.padding([.top, .bottom], 4)
-            
-            NavigationView {
-                List {
-                    ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-                        NavigationLink(destination: detail(obj: obj), label: {
-                            row(obj: obj)
-                        })
-                    }
-                }.navigationTitle("Reading History")
-                .navigationBarTitleDisplayMode(.inline)
-            }
+            Text("History").font(.title2)
+            List {
+                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
+                    NavigationLink(destination: detail(obj: obj), label: {
+                        row(obj: obj)
+                    })
+                }
+            }.navigationTitle("Reading Statistics")
+            .navigationBarTitleDisplayMode(.inline)
         }.onAppear {
             readingStatistics = modelData.getReadingStatistics(bookId: bookId, libraryId: libraryId)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
@@ -96,7 +90,7 @@ struct ReadingPositionHistoryView: View {
             HStack {
                 if let libraryId = obj.libraryId,
                    let library = modelData.calibreLibraries[libraryId] {
-                    if let book = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm) {
+                    if let bookId = bookId, let book = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm) {
                         Text("Book Title:").frame(minWidth: 100, alignment: .leading)
                         Text(book.title)
                     } else {
@@ -104,7 +98,8 @@ struct ReadingPositionHistoryView: View {
                         Text(library.name)
                     }
                 } else {
-                    Text("No Entity")
+                    Text("Device:").frame(minWidth: 100, alignment: .leading)
+                    Text(modelData.deviceName)
                 }
                 Spacer()
             }.font(.title2)
