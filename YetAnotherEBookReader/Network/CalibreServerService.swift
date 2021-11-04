@@ -485,8 +485,9 @@ struct CalibreServerService {
         }
         
         //Parse Reading Position
-        if let readPosColumnName = modelData.calibreLibraries[oldbook.library.id]?.readPosColumnName,
-           let readPosString = book.userMetadatas[readPosColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
+        if let pluginReadingPosition = modelData.calibreLibraries[oldbook.library.id]?.pluginReadingPosition,
+           pluginReadingPosition.isEnabled(),
+           let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
            let readPosData = Data(base64Encoded: readPosString),
            let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
            //let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,

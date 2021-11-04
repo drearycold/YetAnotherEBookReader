@@ -58,11 +58,20 @@ struct CalibreServer: Hashable, Identifiable {
 
 
 struct CalibreLibrary: Hashable, Identifiable {
+    static let PLUGIN_READING_POSITION = "Reading Position"
+    static let PLUGIN_GOODREADS_SYNC = "Goodreads Sync"
+    static let PLUGIN_COUNT_PAGES = "Count Pages"
+    
     var id: String {
         get { return server.id + " - " + name }
     }
     static func == (lhs: CalibreLibrary, rhs: CalibreLibrary) -> Bool {
         lhs.server == rhs.server && lhs.id == rhs.id
+    }
+    func hash(into hasher: inout Hasher) {
+        server.hash(into: &hasher)
+        hasher.combine(key)
+        hasher.combine(name)
     }
     var server: CalibreServer
     var key: String
@@ -85,7 +94,6 @@ struct CalibreLibrary: Hashable, Identifiable {
         customColumnInfos.filter{ $1.datatype == "text" && $1.isMultiple }.values.sorted{$0.name < $1.name}
     }
         
-    var readPosColumnName: String? = nil
     var readPosColumnNameDefault: String {
         if server.username.isEmpty {
             return "#read_pos"
@@ -94,7 +102,31 @@ struct CalibreLibrary: Hashable, Identifiable {
         }
     }
     
-    var goodreadsSync = CalibreLibraryGoodreadsSync()
+    var pluginColumns = [String: CalibreLibraryPluginColumnInfo]()
+    var pluginReadingPosition: CalibreLibraryReadingPosition? {
+        get {
+            pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] as? CalibreLibraryReadingPosition
+        }
+        set {
+            pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = newValue
+        }
+    }
+    var pluginGoodreadsSync: CalibreLibraryGoodreadsSync? {
+        get {
+            pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] as? CalibreLibraryGoodreadsSync
+        }
+        set {
+            pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = newValue
+        }
+    }
+    var pluginCountPage: CalibreLibraryCountPages? {
+        get {
+            pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] as? CalibreLibraryCountPages
+        }
+        set {
+            pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = newValue
+        }
+    }
     
     var urlForDeleteBook: URL? {
         guard let keyEncoded = key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -162,8 +194,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         }
     }
     var ratingGRDescription: String? {
-        guard library.goodreadsSync.isEnabled,
-              let rating = userMetadatas[library.goodreadsSync.ratingColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? Int else { return nil }
+        guard let pluginGoodreadsSync = library.pluginGoodreadsSync, pluginGoodreadsSync.isEnabled(),
+              let rating = userMetadatas[pluginGoodreadsSync.ratingColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? Int else { return nil }
         switch(rating) {
         case 10:
             return "★★★★★"
@@ -211,8 +243,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         return dateFormatter.string(from: lastModified)
     }
     var readDateGRByLocale: String? {
-        guard library.goodreadsSync.isEnabled,
-              let dateReadString = userMetadatas[library.goodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
+        guard let pluginGoodreadsSync = library.pluginGoodreadsSync, pluginGoodreadsSync.isEnabled(),
+              let dateReadString = userMetadatas[pluginGoodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
         
         let parser = ISO8601DateFormatter()
         parser.formatOptions = .withInternetDateTime
@@ -226,8 +258,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     
     var readProgressGRDescription: String? {
-        guard library.goodreadsSync.isEnabled,
-              let progressAny = userMetadatas[library.goodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))],
+        guard let pluginGoodreadsSync = library.pluginGoodreadsSync, pluginGoodreadsSync.isEnabled(),
+              let progressAny = userMetadatas[pluginGoodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))],
               let prog = progressAny else { return nil }
         return Int(String(describing: prog))?.description
     }
@@ -254,6 +286,17 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var identifiers = [String: String]()
     
     var userMetadatas = [String: Any?]()
+    func userMetadataNumberAsIntDescription(column: String) -> String? {
+        guard let numberAny = userMetadatas[column.trimmingCharacters(in: CharacterSet(["#"]))],
+              let number = numberAny else { return nil }
+        return Int(String(describing: number))?.description
+    }
+    func userMetadataNumberAsFloatDescription(column: String) -> String? {
+        guard let numberAny = userMetadatas[column.trimmingCharacters(in: CharacterSet(["#"]))],
+              let number = numberAny else { return nil }
+        guard let d = Double(String(describing: number)) else { return nil }
+        return String(format: "%.2f", d)
+    }
     
     var coverURL : URL? {
         guard let keyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) else {
@@ -635,9 +678,31 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     }
 }
 
-struct CalibreLibraryGoodreadsSync: Codable, Hashable {
-    var isEnabled = false
-    var isDefault = false
+public protocol CalibreLibraryPluginColumnInfo {
+    func getID() -> String
+    func isEnabled() -> Bool
+    func isDefault() -> Bool
+}
+
+struct CalibreLibraryGoodreadsSync: CalibreLibraryPluginColumnInfo, Codable, Hashable, Identifiable {
+    var id: String {
+        return CalibreLibrary.PLUGIN_GOODREADS_SYNC
+    }
+    
+    func getID() -> String {
+        return id
+    }
+    
+    func isEnabled() -> Bool {
+        return _isEnabled
+    }
+    
+    func isDefault() -> Bool {
+        return _isDefault
+    }
+    
+    var _isEnabled = false
+    var _isDefault = false
     
     var profileName = "Default"
     var tagsColumnName = "#"
@@ -646,3 +711,54 @@ struct CalibreLibraryGoodreadsSync: Codable, Hashable {
     var reviewColumnName = "#"
     var readingProgressColumnName = "#"
 }
+
+struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, Hashable, Identifiable {
+    var id: String {
+        return CalibreLibrary.PLUGIN_READING_POSITION
+    }
+    
+    func getID() -> String {
+        return id
+    }
+    
+    func isEnabled() -> Bool {
+        return _isEnabled
+    }
+    
+    func isDefault() -> Bool {
+        return _isDefault
+    }
+    
+    var _isEnabled = false
+    var _isDefault = false
+    
+    var readingPositionCN = "#"
+}
+
+struct CalibreLibraryCountPages: CalibreLibraryPluginColumnInfo, Codable, Hashable, Identifiable {
+    var id: String {
+        return CalibreLibrary.PLUGIN_COUNT_PAGES
+    }
+    
+    func getID() -> String {
+        return id
+    }
+    
+    func isEnabled() -> Bool {
+        return _isEnabled
+    }
+    
+    func isDefault() -> Bool {
+        return _isDefault
+    }
+    
+    var _isEnabled = false
+    var _isDefault = false
+    
+    var pageCountCN = "#"
+    var wordCountCN = "#"
+    var fleschReadingEaseCN = "#"
+    var fleschKincaidGradeCN = "#"
+    var gunningFogIndexCN = "#"
+}
+

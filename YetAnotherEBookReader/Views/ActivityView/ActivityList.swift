@@ -23,7 +23,6 @@ struct ActivityList: View {
         }.frame(maxWidth: 500)
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
-
     }
     
     @ViewBuilder

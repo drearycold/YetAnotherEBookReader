@@ -545,9 +545,20 @@ final class ModelData: ObservableObject {
                 customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                     $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                 },
-                readPosColumnName: libraryRealm.readPosColumnName,
-                goodreadsSync: CalibreLibraryGoodreadsSync(managedObject: libraryRealm.goodreadsSync ?? CalibreLibraryGoodreadsSyncRealm())
-                )
+                pluginColumns: {
+                    var result = [String: CalibreLibraryPluginColumnInfo]()
+                    if let plugin = libraryRealm.pluginReadingPosition {
+                        result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
+                    }
+                    if let plugin = libraryRealm.pluginGoodreadsSync {
+                        result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(managedObject: plugin)
+                    }
+                    if let plugin = libraryRealm.pluginCountPages {
+                        result[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(managedObject: plugin)
+                    }
+                    return result
+                }()
+            )
             
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
@@ -950,17 +961,8 @@ final class ModelData: ObservableObject {
         return calibreBook
     }
     
-    func updateStoreReadingPosition(enabled: Bool, value: String) {
-        calibreLibraries[currentCalibreLibraryId]?.readPosColumnName = enabled ? value : nil
-        do {
-            try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
-        } catch {
-            
-        }
-    }
-    
-    func updateGoodreadsSync(goodreadsSync: CalibreLibraryGoodreadsSync) {
-        calibreLibraries[currentCalibreLibraryId]?.goodreadsSync = goodreadsSync
+    func updateLibraryPluginColumnInfo(type: String, columnInfo: CalibreLibraryPluginColumnInfo) {
+        calibreLibraries[currentCalibreLibraryId]?.pluginColumns[type] = columnInfo
         do {
             try updateLibraryRealm(library: calibreLibraries[currentCalibreLibraryId]!)
         } catch {
@@ -1048,8 +1050,17 @@ final class ModelData: ObservableObject {
         libraryRealm.name = library.name
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
-        libraryRealm.readPosColumnName = library.readPosColumnName
-        libraryRealm.goodreadsSync = library.goodreadsSync.managedObject()
+        library.pluginColumns.forEach {
+            if let plugin = $0.value as? CalibreLibraryReadingPosition {
+                libraryRealm.pluginReadingPosition = plugin.managedObject()
+            }
+            if let plugin = $0.value as? CalibreLibraryGoodreadsSync {
+                libraryRealm.pluginGoodreadsSync = plugin.managedObject()
+            }
+            if let plugin = $0.value as? CalibreLibraryCountPages {
+                libraryRealm.pluginCountPages = plugin.managedObject()
+            }
+        }
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         try realm.write {
             realm.add(libraryRealm, update: .all)
@@ -1208,9 +1219,10 @@ final class ModelData: ObservableObject {
         
         if let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
-           library.goodreadsSync.isEnabled,
-           library.goodreadsSync.profileName.isEmpty == false {
-            let connector = GoodreadsSyncConnector(server: book.library.server, profileName: book.library.goodreadsSync.profileName)
+           let goodreadsSync = library.pluginGoodreadsSync,
+           goodreadsSync.isEnabled(),
+           goodreadsSync.profileName.isEmpty == false {
+            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSync.profileName)
             let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
         }
     }
@@ -1234,9 +1246,10 @@ final class ModelData: ObservableObject {
         
         if let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
-           library.goodreadsSync.isEnabled,
-           library.goodreadsSync.profileName.isEmpty == false {
-            let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
+           let goodreadsSync = library.pluginGoodreadsSync,
+           goodreadsSync.isEnabled(),
+           goodreadsSync.profileName.isEmpty == false {
+            let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSync.profileName)
             let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
             if let position = getDeviceReadingPosition(book: book), position.lastProgress > 99 {
@@ -1396,42 +1409,44 @@ final class ModelData: ObservableObject {
             calibreServerService.updateAnnotations(book: readingBook, format: readerInfo.format, highlights: highlights)
         }
         
-        guard let readPosColumnName = calibreLibraries[readingBook.library.id]?.readPosColumnName else {
-            return
-        }
-
-        let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: readPosColumnName, alertDelegate: alertDelegate) { [self] in
-            if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
-               let library = calibreLibraries[readingBook.library.id],
-               library.goodreadsSync.isEnabled {
-                if let goodreadsId = readingBook.identifiers["goodreads"],
-                   library.goodreadsSync.profileName.isEmpty == false {
-                    let connector = GoodreadsSyncConnector(server: library.server, profileName: library.goodreadsSync.profileName)
-                    connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-                }
-                if library.goodreadsSync.readingProgressColumnName.count > 1 {
-                    calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
-                        [library.goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                    ])
-                }
+        if let pluginReadingPosition = calibreLibraries[readingBook.library.id]?.pluginReadingPosition, pluginReadingPosition.isEnabled() {
+            let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: pluginReadingPosition.readingPositionCN, alertDelegate: alertDelegate, success: nil)
+            
+            if ret != 0 {
+                updatingMetadataStatus = "Internal Error"
+                updatingMetadata = false
+                alertDelegate.alert(msg: updatingMetadataStatus)
+                return
             }
         }
-        if ret != 0 {
-            updatingMetadataStatus = "Internal Error"
-            updatingMetadata = false
-            alertDelegate.alert(msg: updatingMetadataStatus)
+        
+        if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress,
+           let library = calibreLibraries[readingBook.library.id],
+           let goodreadsSync = library.pluginGoodreadsSync,
+           goodreadsSync.isEnabled() {
+            if let goodreadsId = readingBook.identifiers["goodreads"],
+               goodreadsSync.profileName.isEmpty == false {
+                let connector = GoodreadsSyncConnector(server: library.server, profileName: goodreadsSync.profileName)
+                connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+            }
+            if goodreadsSync.readingProgressColumnName.count > 1 {
+                calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
+                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                ])
+            }
         }
+        
     }
     
     /// used for removing position entries
     func updateReadingPosition(book: CalibreBook, alertDelegate: AlertDelegate) {
         self.updateBook(book: book)
         
-        guard let readPosColumnName = calibreLibraries[book.library.id]?.readPosColumnName else {
+        guard let pluginReadingPosition = calibreLibraries[book.library.id]?.pluginReadingPosition, pluginReadingPosition.isEnabled() else {
             return
         }
 
-        let ret = calibreServerService.updateBookReadingPosition(book: book, columnName: readPosColumnName, alertDelegate: alertDelegate) {
+        let ret = calibreServerService.updateBookReadingPosition(book: book, columnName: pluginReadingPosition.readingPositionCN, alertDelegate: alertDelegate) {
             // empty
         }
         if ret != 0 {
@@ -1642,31 +1657,42 @@ final class ModelData: ObservableObject {
             
             //update library
             let librariesCached = realm.objects(CalibreLibraryRealm.self)
-            librariesCached.forEach { oldLibraryRealm in
-                guard oldLibraryRealm.serverUrl == oldServer.baseUrl && oldLibraryRealm.serverUsername == oldServer.username else { return }
+            librariesCached.forEach { libraryRealm in
+                guard libraryRealm.serverUrl == oldServer.baseUrl && libraryRealm.serverUsername == oldServer.username else { return }
                     
                 let oldLibrary = CalibreLibrary(
                     server: oldServer,
-                    key: oldLibraryRealm.key!,
-                    name: oldLibraryRealm.name!,
-                    customColumnInfos: oldLibraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
+                    key: libraryRealm.key!,
+                    name: libraryRealm.name!,
+                    customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                         $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                     },
-                    readPosColumnName: oldLibraryRealm.readPosColumnName,
-                    goodreadsSync: CalibreLibraryGoodreadsSync(managedObject: oldLibraryRealm.goodreadsSync  ?? CalibreLibraryGoodreadsSyncRealm()))
+                    pluginColumns: {
+                        var result = [String: CalibreLibraryPluginColumnInfo]()
+                        if let plugin = libraryRealm.pluginReadingPosition {
+                            result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
+                        }
+                        if let plugin = libraryRealm.pluginGoodreadsSync {
+                            result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(managedObject: plugin)
+                        }
+                        if let plugin = libraryRealm.pluginCountPages {
+                            result[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(managedObject: plugin)
+                        }
+                        return result
+                    }()
+                )
                 
                 
                 let newLibrary = CalibreLibrary(
                     server: newServer,
-                    key: oldLibraryRealm.key!,
-                    name: oldLibraryRealm.name!,
+                    key: oldLibrary.key,
+                    name: oldLibrary.name,
                     customColumnInfos: oldLibrary.customColumnInfos,
-                    readPosColumnName: oldLibraryRealm.readPosColumnName,
-                    goodreadsSync: oldLibrary.goodreadsSync)
+                    pluginColumns: oldLibrary.pluginColumns)
                 
                 do {
                     try realm.write {
-                        realm.delete(oldLibraryRealm)
+                        realm.delete(libraryRealm)
                     }
                 } catch {
                     

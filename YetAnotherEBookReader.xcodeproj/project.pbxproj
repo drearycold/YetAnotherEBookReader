@@ -168,6 +168,7 @@
 		2ACE265D26A97BE70037FCB4 /* ImageRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */; };
 		2AD38F8726D637B70053D01D /* ReadingPositionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */; };
 		2AD38F8926D639EE0053D01D /* ReadingPositionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */; };
+		2ADC45BE2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */; };
 		2ADCD7D126F4B96200FBAE11 /* CBZViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D8E2663CB55007DCA20 /* CBZViewController.swift */; platformFilter = ios; };
 		2ADCD7D226F4B96200FBAE11 /* AppModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107E102663CB96007DCA20 /* AppModule.swift */; platformFilter = ios; };
 		2ADCD7D326F4B96200FBAE11 /* EPUBModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107DA82663CB55007DCA20 /* EPUBModule.swift */; platformFilter = ios; };
@@ -568,6 +569,7 @@
 		2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageRequest.swift; sourceTree = "<group>"; };
 		2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionDetailView.swift; sourceTree = "<group>"; };
 		2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionViewModel.swift; sourceTree = "<group>"; };
+		2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsCountPages.swift; sourceTree = "<group>"; };
 		2ADCD87626F4B96200FBAE11 /* YetAnotherEBookReader-Catalyst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "YetAnotherEBookReader-Catalyst.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2ADCD87726F4B96900FBAE11 /* YetAnotherEBookReader copy3-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "YetAnotherEBookReader copy3-Info.plist"; path = "/Volumes/Data/git/YetAnotherEBookReader/YetAnotherEBookReader copy3-Info.plist"; sourceTree = "<absolute>"; };
 		2AEE912D26F4712800B012B0 /* AEXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = AEXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -990,6 +992,7 @@
 			children = (
 				2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */,
 				2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */,
+				2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */,
 			);
 			path = LibraryOptions;
 			sourceTree = "<group>";
@@ -1765,6 +1768,7 @@
 				2ABB9135261DE894004AA7C0 /* RecentShelfUI.swift in Sources */,
 				2A107DE52663CB56007DCA20 /* UIViewController.swift in Sources */,
 				2ABB9154261F1A47004AA7C0 /* LibraryInfoView.swift in Sources */,
+				2ADC45BE2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift in Sources */,
 				2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */,
 				2A107DD82663CB56007DCA20 /* LibraryError.swift in Sources */,
 				2A107DD22663CB56007DCA20 /* LibraryViewController.swift in Sources */,
@@ -2143,7 +2147,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2223,7 +2227,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 29;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

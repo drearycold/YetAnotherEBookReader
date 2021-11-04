@@ -24,19 +24,14 @@ struct ServerView: View {
     // @State private var selectedOption: String?
     @State private var readingPositionSyncOptionPresenting = false
     @State private var goodreadsSyncOptionPresenting = false
+    @State private var countPagesOptionPresenting = false
+
     @State private var activityListViewPresenting = false
     
     // bindings for library options
-    @State private var enableStoreReadingPosition = false
-    @State private var storeReadingPositionColumnName = ""
-    @State private var isDefaultReadingPosition = false
-    
-//    @State private var enableGoodreadsSync = false
-//    @State private var goodreadsSyncProfileName = ""
-//    @State private var isDefaultGoodreadsSync = false
-    
+    @State private var readingPosition = CalibreLibraryReadingPosition()
     @State private var goodreadsSync = CalibreLibraryGoodreadsSync()
-    
+    @State private var countPages = CalibreLibraryCountPages()
     //
     @State private var calibreServerEditing = false
     
@@ -74,41 +69,56 @@ struct ServerView: View {
             
             Text("Life of Ease Options")
             
-            
             Button(action: {
-                storeReadingPositionColumnName = library.readPosColumnName ?? library.readPosColumnNameDefault
-                enableStoreReadingPosition = library.readPosColumnName != nil
-                
-                print("readingPositionSyncOptionPresenting \(enableStoreReadingPosition) \(storeReadingPositionColumnName)")
+                if let readingPosition = library.pluginReadingPosition {
+                    self.readingPosition = readingPosition
+                }
                 readingPositionSyncOptionPresenting = true
             }) {
                 Text("Reading Postions Sync")
             }
             .sheet(isPresented: $readingPositionSyncOptionPresenting, onDismiss: {
-                modelData.updateStoreReadingPosition(enabled: enableStoreReadingPosition, value: storeReadingPositionColumnName)
+                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_READING_POSITION, columnInfo: readingPosition)
             }, content: {
-                LibraryOptionsReadingPosition(library: library, enableStoreReadingPosition: $enableStoreReadingPosition, storeReadingPositionColumnName: $storeReadingPositionColumnName, isDefaultReadingPosition: $isDefaultReadingPosition)
+                LibraryOptionsReadingPosition(library: library, readingPosition: $readingPosition)
                         .padding()
                         .frame(maxWidth: 600)
             })
             
             Button(action: {
-//                enableGoodreadsSync = library.goodreadsSyncProfileName != nil
-//                goodreadsSyncProfileName = library.goodreadsSyncProfileName ?? library.goodreadsSyncProfileNameDefault
-                goodreadsSync = library.goodreadsSync
-                
+                if let goodreadsSync = library.pluginGoodreadsSync {
+                    self.goodreadsSync = goodreadsSync
+                }
                 goodreadsSyncOptionPresenting = true
             }) {
-                Text("Goodreads Sync")
+                Text("Plugin Goodreads Sync")
             }
             .sheet(isPresented: $goodreadsSyncOptionPresenting, onDismiss: {
                 print("goodreadsSyncOption dismiss \(goodreadsSync)")
-                modelData.updateGoodreadsSync(goodreadsSync: goodreadsSync)
+                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_GOODREADS_SYNC, columnInfo: goodreadsSync)
             }, content: {
                 LibraryOptionsGoodreadsSync(library: library, goodreadsSync: $goodreadsSync)
                     .padding()
                     .frame(maxWidth: 600)
             })
+            
+            Button(action: {
+                if let countPages = library.pluginCountPage {
+                    self.countPages = countPages
+                }
+                countPagesOptionPresenting = true
+            }) {
+                Text("Plugin Count Pages")
+            }
+            .sheet(isPresented: $countPagesOptionPresenting, onDismiss: {
+                print("countPagesSyncOption dismiss \(countPages)")
+                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_COUNT_PAGES, columnInfo: countPages)
+            }, content: {
+                LibraryOptionsCountPages(library: library, countPages: $countPages)
+                    .padding()
+                    .frame(maxWidth: 600)
+            })
+            
             
             // not working, no idea
 //            List {
@@ -514,7 +524,7 @@ struct ServerView: View {
             return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
                 item.action?()
             })
-        }.frame(maxWidth: 500)
+        }.frame(maxWidth: 720)
         .navigationTitle("Server & Library")
         .navigationBarTitleDisplayMode(.inline)
     }

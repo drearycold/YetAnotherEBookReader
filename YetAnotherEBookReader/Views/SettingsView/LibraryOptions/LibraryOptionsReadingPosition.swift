@@ -9,13 +9,12 @@ import SwiftUI
 
 struct LibraryOptionsReadingPosition: View {
     let library: CalibreLibrary
-    @Binding var enableStoreReadingPosition: Bool
-    @Binding var storeReadingPositionColumnName: String
-    @Binding var isDefaultReadingPosition: Bool
+    
+    @Binding var readingPosition: CalibreLibraryReadingPosition
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Store Reading Position in Custom Column", isOn: $enableStoreReadingPosition)
+            Toggle("Store Reading Position in Custom Column", isOn: $readingPosition._isEnabled)
 
             Text("""
                 Therefore reading positions can be synced between devices.
@@ -32,39 +31,37 @@ struct LibraryOptionsReadingPosition: View {
 
             VStack(spacing: 4) {
                 HStack {
-                    Text("Current Column: \(storeReadingPositionColumnName)")
+                    Text("Current Column: \(readingPosition.readingPositionCN)")
                     Spacer()
-                    if let columnInfo = library.customColumnInfos[storeReadingPositionColumnName.trimmingCharacters(in: CharacterSet(["#"]))] {
-                        Text(columnInfo.datatype).font(.caption).foregroundColor(.red)
+                    if let columnInfo = library.customColumnInfos[readingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] {
+                        Text("datatype \(columnInfo.datatype)").font(.caption)
                     } else {
-                        Text("unavailable").font(.caption).foregroundColor(.red)
+                        Text("column unavailable").font(.caption).foregroundColor(.red)
                     }
                 }
                 HStack {
                     Spacer()
-                    Picker("Pick another Column", selection: $storeReadingPositionColumnName) {
+                    Picker("Pick another Column", selection: $readingPosition.readingPositionCN) {
                         ForEach(library.customColumnInfos.filter{ $1.datatype == "comments" }.keys.map{"#" + $0}.sorted{$0 < $1}, id: \.self) {
                             Text($0)
                         }
                     }.pickerStyle(MenuPickerStyle())
-                    
                 }
                 
-                Toggle("Set as Server-wide Default", isOn: $isDefaultReadingPosition)
+                Toggle("Set as Server-wide Default", isOn: $readingPosition._isDefault)
                 
             }
-            .disabled(!enableStoreReadingPosition)
+            .disabled(!readingPosition.isEnabled())
         }
     }
 }
 
 struct LibraryOptionsReadingPosition_Previews: PreviewProvider {
     @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
-    @State static private var enableStoreReadingPosition = false
-    @State static private var storeReadingPositionColumnName = ""
-    @State static private var isDefaultReadingPosition = false
+    
+    @State static private var readingPosition = CalibreLibraryReadingPosition()
     
     static var previews: some View {
-        LibraryOptionsReadingPosition(library: library, enableStoreReadingPosition: $enableStoreReadingPosition, storeReadingPositionColumnName: $storeReadingPositionColumnName, isDefaultReadingPosition: $isDefaultReadingPosition)
+        LibraryOptionsReadingPosition(library: library, readingPosition: $readingPosition)
     }
 }

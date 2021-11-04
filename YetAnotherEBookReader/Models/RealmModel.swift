@@ -8,6 +8,12 @@
 import Foundation
 import RealmSwift
 
+public protocol Persistable {
+    associatedtype ManagedObject: RealmSwift.Object
+    init(managedObject: ManagedObject)
+    func managedObject() -> ManagedObject
+}
+
 class CalibreServerRealm: Object {
     @objc dynamic var primaryKey: String?
     
@@ -74,8 +80,9 @@ class CalibreLibraryRealm: Object {
     
     var customColumns = List<CalibreCustomColumnRealm>()
     
-    @objc dynamic var readPosColumnName: String?
-    @objc dynamic var goodreadsSync: CalibreLibraryGoodreadsSyncRealm?
+    @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
+    @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
+    @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
 }
 
 class CalibreBookRealm: Object {
@@ -234,24 +241,6 @@ class CalibreCustomColumnRealm: Object {
     }
 }
 
-class CalibreLibraryGoodreadsSyncRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    
-    @objc dynamic var profileName: String?
-    @objc dynamic var tagsColumnName: String?
-    @objc dynamic var ratingColumnName: String?
-    @objc dynamic var dateReadColumnName: String?
-    @objc dynamic var reviewColumnName: String?
-    @objc dynamic var readingProgressColumnName: String?
-}
-
-public protocol Persistable {
-    associatedtype ManagedObject: RealmSwift.Object
-    init(managedObject: ManagedObject)
-    func managedObject() -> ManagedObject
-}
-
 extension CalibreCustomColumnInfo: Persistable {
     public init(managedObject: CalibreCustomColumnRealm) {
         label = managedObject.label
@@ -279,10 +268,22 @@ extension CalibreCustomColumnInfo: Persistable {
     }
 }
 
+class CalibreLibraryGoodreadsSyncRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    
+    @objc dynamic var profileName: String?
+    @objc dynamic var tagsColumnName: String?
+    @objc dynamic var ratingColumnName: String?
+    @objc dynamic var dateReadColumnName: String?
+    @objc dynamic var reviewColumnName: String?
+    @objc dynamic var readingProgressColumnName: String?
+}
+
 extension CalibreLibraryGoodreadsSync: Persistable {
     public init(managedObject: CalibreLibraryGoodreadsSyncRealm) {
-        isEnabled = managedObject.isEnabled
-        isDefault = managedObject.isDefault
+        _isEnabled = managedObject.isEnabled
+        _isDefault = managedObject.isDefault
         profileName = managedObject.profileName ?? profileName
         tagsColumnName = managedObject.tagsColumnName ?? tagsColumnName
         ratingColumnName = managedObject.ratingColumnName ?? ratingColumnName
@@ -293,14 +294,72 @@ extension CalibreLibraryGoodreadsSync: Persistable {
     
     public func managedObject() -> CalibreLibraryGoodreadsSyncRealm {
         let obj = CalibreLibraryGoodreadsSyncRealm()
-        obj.isEnabled = isEnabled
-        obj.isDefault = isDefault
+        obj.isEnabled = isEnabled()
+        obj.isDefault = isDefault()
         obj.profileName = profileName
         obj.tagsColumnName = tagsColumnName
         obj.ratingColumnName = ratingColumnName
         obj.dateReadColumnName = dateReadColumnName
         obj.reviewColumnName = reviewColumnName
         obj.readingProgressColumnName = readingProgressColumnName
+        return obj
+    }
+}
+
+class CalibreLibraryCountPageRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    
+    @objc dynamic var pageCountCN: String?
+    @objc dynamic var wordCountCN: String?
+    @objc dynamic var fleschReadingEaseCN: String?
+    @objc dynamic var fleschKincaidGradeCN: String?
+    @objc dynamic var gunningFogIndexCN: String?
+}
+
+extension CalibreLibraryCountPages: Persistable {
+    public init(managedObject: CalibreLibraryCountPageRealm) {
+        _isEnabled = managedObject.isEnabled
+        _isDefault = managedObject.isDefault
+        pageCountCN = managedObject.pageCountCN ?? pageCountCN
+        wordCountCN = managedObject.wordCountCN ?? wordCountCN
+        fleschReadingEaseCN = managedObject.fleschReadingEaseCN ?? fleschReadingEaseCN
+        fleschKincaidGradeCN = managedObject.fleschKincaidGradeCN ?? fleschKincaidGradeCN
+        gunningFogIndexCN = managedObject.gunningFogIndexCN ?? gunningFogIndexCN
+    }
+    
+    public func managedObject() -> CalibreLibraryCountPageRealm {
+        let obj = CalibreLibraryCountPageRealm()
+        obj.isEnabled = isEnabled()
+        obj.isDefault = isDefault()
+        obj.pageCountCN = pageCountCN
+        obj.wordCountCN = wordCountCN
+        obj.fleschReadingEaseCN = fleschReadingEaseCN
+        obj.fleschKincaidGradeCN = fleschKincaidGradeCN
+        obj.gunningFogIndexCN = gunningFogIndexCN
+        return obj
+    }
+}
+
+class CalibreLibraryReadingPositionRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    
+    @objc dynamic var readingPositionCN: String?
+}
+
+extension CalibreLibraryReadingPosition: Persistable {
+    public init(managedObject: CalibreLibraryReadingPositionRealm) {
+        _isEnabled = managedObject.isEnabled
+        _isDefault = managedObject.isDefault
+        readingPositionCN = managedObject.readingPositionCN ?? readingPositionCN
+    }
+    
+    public func managedObject() -> CalibreLibraryReadingPositionRealm {
+        let obj = CalibreLibraryReadingPositionRealm()
+        obj.isEnabled = isEnabled()
+        obj.isDefault = isDefault()
+        obj.readingPositionCN = readingPositionCN
         return obj
     }
 }

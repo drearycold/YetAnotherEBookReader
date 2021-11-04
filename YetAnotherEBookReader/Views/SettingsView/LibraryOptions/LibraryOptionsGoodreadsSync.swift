@@ -14,7 +14,7 @@ struct LibraryOptionsGoodreadsSync: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Enable", isOn: $goodreadsSync.isEnabled)
+            Toggle("Enable", isOn: $goodreadsSync._isEnabled)
                 .font(.title2)
             
             Group {
@@ -66,10 +66,10 @@ struct LibraryOptionsGoodreadsSync: View {
                 
                 Divider()
                 
-                Toggle("Set as Server-wide Default", isOn: $goodreadsSync.isDefault)
+                Toggle("Set as Server-wide Default", isOn: $goodreadsSync._isDefault)
                 
             }   //ends Group
-            .disabled(!goodreadsSync.isEnabled)
+            .disabled(!goodreadsSync.isEnabled())
         }   //ends VStack
     }   //ends body
     
@@ -94,9 +94,6 @@ struct LibraryOptionsGoodreadsSync: View {
 struct LibraryOptionsGoodreadsSYnc_Previews: PreviewProvider {
     @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
 
-//    @State static private var enableGoodreadsSync = false
-//    @State static private var goodreadsSyncProfileName = ""
-//    @State static private var isDefaultGoodreadsSync = false
     @State static private var goodreadsSync = CalibreLibraryGoodreadsSync()
     
     static var previews: some View {

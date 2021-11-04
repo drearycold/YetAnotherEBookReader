@@ -137,6 +137,10 @@ struct BookDetailView: View {
                     bookFormatViewContent(book: book, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
+                    if let countPage = book.library.pluginCountPage, countPage.isEnabled() {
+                        countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
+                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                    }
                 }
             } else {
                 HStack(alignment: .top, spacing: 32) {
@@ -148,6 +152,11 @@ struct BookDetailView: View {
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         bookFormatViewContent(book: book, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                        
+                        if let countPage = book.library.pluginCountPage, countPage.isEnabled() {
+                            countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
+                                .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
+                        }
                     }
                 }
             }
@@ -273,40 +282,7 @@ struct BookDetailView: View {
                     Text(book.lastModifiedByLocale)
                 }
                 
-                
-                HStack {
-                    metadataIcon(systemName: "text.book.closed")
-                    
-                    if let readDateGR = book.readDateGRByLocale {
-                        Image(systemName: "arrow.down.to.line")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text(readDateGR)
-                    } else if let readProgressGR = book.readProgressGRDescription {
-                        Image(systemName: "hourglass")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text("\(readProgressGR)%")
-                    } else {
-                        Image(systemName: "book.circle")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                        Text("\(Int(modelData.getSelectedReadingPosition(book: book)?.lastProgress ?? 0.0))%")
-                    }
-                }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
-                    readingPositionHistoryViewPresenting = false
-                }, content: {
-                    NavigationView {
-                        if let book = modelData.readingBook {
-                            ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
-                        } else {
-                            Text("Unexpected Internal Error")
-                        }
-                    }
-                })
+                progressView(book: book, isCompat: isCompat)
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
@@ -351,6 +327,45 @@ struct BookDetailView: View {
         .lineLimit(2)
         .font(.subheadline)
         
+    }
+    
+    @ViewBuilder
+    private func progressView(book: CalibreBook, isCompat: Bool) -> some View {
+        HStack {
+            metadataIcon(systemName: "text.book.closed")
+            
+            if let readDateGR = book.readDateGRByLocale {
+                Image(systemName: "arrow.down.to.line")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 20, height: 20)
+                Text(readDateGR)
+            } else if let readProgressGR = book.readProgressGRDescription {
+                Image(systemName: "hourglass")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 20, height: 20)
+                Text("\(readProgressGR)%")
+            } else if let position = modelData.getSelectedReadingPosition(book: book) {
+                Image(systemName: "book.circle")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 20, height: 20)
+                Text(String(format: "%.1f%%", position.lastProgress))
+                Text("on")
+                Text(position.id)
+            }
+        }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
+            readingPositionHistoryViewPresenting = false
+        }, content: {
+            NavigationView {
+                if let book = modelData.readingBook {
+                    ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+                } else {
+                    Text("Unexpected Internal Error")
+                }
+            }
+        })
     }
     
     @ViewBuilder
@@ -430,6 +445,22 @@ struct BookDetailView: View {
             .resizable()
             .aspectRatio(contentMode: .fit)
             .frame(width: 24, height: 24)
+    }
+    
+    @ViewBuilder
+    private func countPagesCorner(book: CalibreBook, countPage: CalibreLibraryCountPages, isCompat: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Count Pages Info Corner")
+            HStack {
+                Text("Pages \(book.userMetadataNumberAsIntDescription(column: countPage.pageCountCN) ?? "not set")")
+                Text("/").padding([.leading, .trailing], 16)
+                Text("Words \(book.userMetadataNumberAsIntDescription(column: countPage.wordCountCN) ?? "not set")")
+                
+            }.font(.subheadline)
+            HStack {
+                Text("Readability \(book.userMetadataNumberAsFloatDescription(column: countPage.fleschReadingEaseCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.fleschKincaidGradeCN) ?? "not set") / \(book.userMetadataNumberAsFloatDescription(column: countPage.gunningFogIndexCN) ?? "not set")")
+            }.font(.subheadline)
+        }
     }
     
     @ViewBuilder
