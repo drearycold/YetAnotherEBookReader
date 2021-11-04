@@ -20,7 +20,10 @@ struct ActivityList: View {
                     row(obj: obj)
                 })
             }
-        }.navigationTitle("Recent Activities")
+        }.frame(maxWidth: 500)
+        .navigationTitle("Recent Activities")
+        .navigationBarTitleDisplayMode(.inline)
+
     }
     
     @ViewBuilder

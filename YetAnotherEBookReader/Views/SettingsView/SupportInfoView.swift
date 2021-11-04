@@ -48,6 +48,8 @@ struct SupportInfoView: View {
             }
         }.padding()
         .frame(maxWidth: 500)
+        .navigationTitle("Support")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     @ViewBuilder

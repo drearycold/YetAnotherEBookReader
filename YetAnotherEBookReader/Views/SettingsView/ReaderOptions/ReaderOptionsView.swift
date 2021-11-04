@@ -315,7 +315,9 @@ struct ReaderOptionsView: View {
             (customDictViewerEnabled, customDictViewerURLStored) = modelData.getCustomDictViewer()
             customDictViewerURL = customDictViewerURLStored?.absoluteString ?? ""
             customDictViewerURLMalformed = checkCustomDictViewerURL(value: customDictViewerURL)
-        }
+        }.frame(maxWidth: 500)
+        .navigationTitle("Reader Options")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     @ViewBuilder

@@ -514,7 +514,9 @@ struct ServerView: View {
             return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
                 item.action?()
             })
-        }
+        }.frame(maxWidth: 500)
+        .navigationTitle("Server & Library")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     private func canDeleteCurrentServer() -> Bool {

@@ -11,20 +11,32 @@ struct VersionHistoryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
+                VStack{}.frame(height: 16)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Version 0.2.0").font(.title2)
+                    header("Version 0.2.0")
                     textLine("Tighter Integration with Goodreads Sync Plugin's Custom Columns")
                     textLine("Navigate to BookInfo/Goodreads/Douban directly from RecentShelf's Book Context Menu")
                     textLine("Activity Logs Viewer to Help Troubleshooting Network Ralated Issues")
                     textLine("Reading Statistics and Position History Viewer to Track Your Time")
                 }
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Version 0.1.0").font(.title2)
+                    header("Version 0.1.0")
                     textLine("Initial Release")
                     textLine("Supports Reading EPUB/PDF/CBZ")
                     textLine("Supports Interaction with calibre Context Server")
                 }
             }
+        }
+        .frame(maxWidth: 500)
+        .navigationTitle("Version History")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    @ViewBuilder
+    private func header(_ header: String) -> some View {
+        HStack(spacing: 4) {
+            Text("★").hidden()
+            Text(header).font(.title2).padding([.top, .bottom], 4)
         }
     }
     

@@ -883,32 +883,12 @@ final class ModelData: ObservableObject {
                 book.title.localizedCaseInsensitiveContains(term) || book.authors.filter({ $0.localizedCaseInsensitiveContains(term) }).count > 0
             }).count == searchTerms.count
             else { return false }
-            if !(filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription)) {
-                return false
-            }
-            if !filterCriteriaFormat.isEmpty && filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty {
-                return false
-            }
-            if !filterCriteriaIdentifier.isEmpty && filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty {
-                return false
-            }
-            if !filterCriteriaSeries.isEmpty && filterCriteriaSeries.contains(book.seriesDescription) == false {
-                return false
-            }
-            switch filterCriteriaShelved {
-            case .shelvedOnly:
-                if book.inShelf == false {
-                    return false
-                }
-                break
-            case .notShelvedOnly:
-                if book.inShelf == true {
-                    return false
-                }
-                break
-            case .none:
-                break
-            }
+            guard filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription) else { return false }
+            guard filterCriteriaFormat.isEmpty || filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty == false else { return false }
+            guard filterCriteriaIdentifier.isEmpty || filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty == false else { return false }
+            guard filterCriteriaSeries.isEmpty || filterCriteriaSeries.contains(book.seriesDescription) else { return false }
+            guard filterCriteriaShelved == .none || (filterCriteriaShelved == .shelvedOnly && book.inShelf) || (filterCriteriaShelved == .notShelvedOnly && !book.inShelf) else { return false }
+            
             return true
         }.sorted { (lhs, rhs) -> Bool in
             lhs.title < rhs.title

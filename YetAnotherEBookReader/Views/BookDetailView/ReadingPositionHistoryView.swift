@@ -43,13 +43,14 @@ struct ReadingPositionHistoryView: View {
                         row(obj: obj)
                     })
                 }
-            }.navigationTitle("Reading Statistics")
-            .navigationBarTitleDisplayMode(.inline)
+            }
         }.onAppear {
             readingStatistics = modelData.getReadingStatistics(bookId: bookId, libraryId: libraryId)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
-        }
+        }.frame(maxWidth: 500)
+        .navigationTitle("Reading Statistics")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     @ViewBuilder

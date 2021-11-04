@@ -19,36 +19,37 @@ struct AppInfoView: View {
     private let ozzyURL = "https://github.com/cfhamlet"
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .center, spacing: 8) {
-                VStack(alignment: .center, spacing: 16) {
-                    Text("D.S.Reader").font(.title)
-                    
-                    Image("logo_1024")
-                        .resizable().frame(width: 256, height: 256, alignment: .center)
-                    Text("by Drearycold & Siyi")
-//                    HStack {
-//                        Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
-//                        Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
-//                    }
+        
+        VStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .center, spacing: 16) {
+                Text("D.S.Reader").font(.title)
+                
+                Image("logo_1024")
+                    .resizable().frame(width: 256, height: 256, alignment: .center)
+                Text("by Drearycold & Siyi")
+                //                    HStack {
+                //                        Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+                //                        Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+                //                    }
+            }
+            
+            VStack(spacing: 12) {
+                Text("Special Thanks to")
+                VStack(spacing: 8) {
+                    linkButtonBuilder(title: "calibre", url: calibreURL)
+                    linkButtonBuilder(title: "cfhamlet (Ozzy)", url: ozzyURL)
+                }
+                VStack(spacing: 8) {
+                    linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
+                    linkButtonBuilder(title: "Readium Project", url: readiumURL)
+                    linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
                 }
                 
-                VStack(spacing: 8) {
-                    Text("Special Thanks to")
-                    VStack(spacing: 4) {
-                        linkButtonBuilder(title: "calibre", url: calibreURL)
-                        linkButtonBuilder(title: "cfhamlet (Ozzy)", url: ozzyURL)
-                    }
-                    VStack(spacing: 4) {
-                        linkButtonBuilder(title: "FolioReaderKit Project", url: folioReaderKitURL)
-                        linkButtonBuilder(title: "Readium Project", url: readiumURL)
-                        linkButtonBuilder(title: "ShelfView (iOS) Project", url: shelfViewURL)
-                    }
-
-                }
-            }.padding()
-            .frame(maxWidth: 500)
-        }
+            }
+        }.padding()
+        .frame(maxWidth: 500)
+        .navigationTitle("About")
+        .navigationBarTitleDisplayMode(.inline)
     }
     
     @ViewBuilder
