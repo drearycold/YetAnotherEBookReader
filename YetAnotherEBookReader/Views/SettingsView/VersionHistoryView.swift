@@ -14,10 +14,12 @@ struct VersionHistoryView: View {
                 VStack{}.frame(height: 16)
                 VStack(alignment: .leading, spacing: 4) {
                     header("Version 0.2.0")
-                    textLine("Tighter Integration with Goodreads Sync Plugin's Custom Columns")
-                    textLine("Navigate to BookInfo/Goodreads/Douban directly from RecentShelf's Book Context Menu")
+                    textLine("Tighter Integration with Goodreads Sync Plugin's Custom Columns, and Will Record Current Reading Progress into Specified Column")
+                    textLine("Recognize Custom Columns Used by Count Pages Plugin")
+                    textLine("Ability to Navigate to BookInfo/Goodreads/Douban directly from RecentShelf's Book Context Menu")
                     textLine("Activity Logs Viewer to Help Troubleshooting Network Ralated Issues")
                     textLine("Reading Statistics and Position History Viewer to Track Your Time")
+                    textLine("And Lots of UI Tweaks")
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     header("Version 0.1.0")
