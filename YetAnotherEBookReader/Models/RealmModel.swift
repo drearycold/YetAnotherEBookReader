@@ -79,7 +79,7 @@ class CalibreLibraryRealm: Object {
     }
     
     var customColumns = List<CalibreCustomColumnRealm>()
-    
+    @objc dynamic var pluginDSReaderHelper:     CalibreLibraryDSReaderHelperRealm?
     @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
     @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
     @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
@@ -271,6 +271,7 @@ extension CalibreCustomColumnInfo: Persistable {
 class CalibreLibraryGoodreadsSyncRealm: Object {
     @objc dynamic var isEnabled = false
     @objc dynamic var isDefault = false
+    @objc dynamic var isOverride = false
     
     @objc dynamic var profileName: String?
     @objc dynamic var tagsColumnName: String?
@@ -284,6 +285,7 @@ extension CalibreLibraryGoodreadsSync: Persistable {
     public init(managedObject: CalibreLibraryGoodreadsSyncRealm) {
         _isEnabled = managedObject.isEnabled
         _isDefault = managedObject.isDefault
+        _isOverride = managedObject.isOverride
         profileName = managedObject.profileName ?? profileName
         tagsColumnName = managedObject.tagsColumnName ?? tagsColumnName
         ratingColumnName = managedObject.ratingColumnName ?? ratingColumnName
@@ -296,6 +298,7 @@ extension CalibreLibraryGoodreadsSync: Persistable {
         let obj = CalibreLibraryGoodreadsSyncRealm()
         obj.isEnabled = isEnabled()
         obj.isDefault = isDefault()
+        obj.isOverride = isOverride()
         obj.profileName = profileName
         obj.tagsColumnName = tagsColumnName
         obj.ratingColumnName = ratingColumnName
@@ -309,7 +312,8 @@ extension CalibreLibraryGoodreadsSync: Persistable {
 class CalibreLibraryCountPageRealm: Object {
     @objc dynamic var isEnabled = false
     @objc dynamic var isDefault = false
-    
+    @objc dynamic var isOverride = false
+
     @objc dynamic var pageCountCN: String?
     @objc dynamic var wordCountCN: String?
     @objc dynamic var fleschReadingEaseCN: String?
@@ -321,6 +325,7 @@ extension CalibreLibraryCountPages: Persistable {
     public init(managedObject: CalibreLibraryCountPageRealm) {
         _isEnabled = managedObject.isEnabled
         _isDefault = managedObject.isDefault
+        _isOverride = managedObject.isOverride
         pageCountCN = managedObject.pageCountCN ?? pageCountCN
         wordCountCN = managedObject.wordCountCN ?? wordCountCN
         fleschReadingEaseCN = managedObject.fleschReadingEaseCN ?? fleschReadingEaseCN
@@ -332,6 +337,7 @@ extension CalibreLibraryCountPages: Persistable {
         let obj = CalibreLibraryCountPageRealm()
         obj.isEnabled = isEnabled()
         obj.isDefault = isDefault()
+        obj.isOverride = isOverride()
         obj.pageCountCN = pageCountCN
         obj.wordCountCN = wordCountCN
         obj.fleschReadingEaseCN = fleschReadingEaseCN
@@ -344,7 +350,8 @@ extension CalibreLibraryCountPages: Persistable {
 class CalibreLibraryReadingPositionRealm: Object {
     @objc dynamic var isEnabled = false
     @objc dynamic var isDefault = false
-    
+    @objc dynamic var isOverride = false
+
     @objc dynamic var readingPositionCN: String?
 }
 
@@ -352,6 +359,7 @@ extension CalibreLibraryReadingPosition: Persistable {
     public init(managedObject: CalibreLibraryReadingPositionRealm) {
         _isEnabled = managedObject.isEnabled
         _isDefault = managedObject.isDefault
+        _isOverride = managedObject.isOverride
         readingPositionCN = managedObject.readingPositionCN ?? readingPositionCN
     }
     
@@ -359,6 +367,7 @@ extension CalibreLibraryReadingPosition: Persistable {
         let obj = CalibreLibraryReadingPositionRealm()
         obj.isEnabled = isEnabled()
         obj.isDefault = isDefault()
+        obj.isOverride = isOverride()
         obj.readingPositionCN = readingPositionCN
         return obj
     }
@@ -505,5 +514,67 @@ class BookDeviceReadingPositionHistoryRealm: Object {
         dateFormatter.timeStyle = .long
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: startDatetime)
+    }
+}
+
+class CalibreServerDSReaderHelperRealm: Object {
+    @objc dynamic var id: String?
+    @objc dynamic var port: Int = 0
+    @objc dynamic var data: Data?
+    
+    override static func primaryKey() -> String? {
+        return "id"
+    }
+}
+
+extension CalibreServerDSReaderHelper: Persistable {
+    public init(managedObject: CalibreServerDSReaderHelperRealm) {
+        self.id = managedObject.id ?? ""
+        self.port = managedObject.port
+        self.configurationData = managedObject.data
+        if let data = self.configurationData {
+            self.configuration = try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        }
+    }
+    
+    public func managedObject() -> CalibreServerDSReaderHelperRealm {
+        let obj = CalibreServerDSReaderHelperRealm()
+        obj.id = self.id
+        obj.port = self.port
+        obj.data = self.configurationData
+        
+        return obj
+    }
+}
+
+class CalibreLibraryDSReaderHelperRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    @objc dynamic var isOverride = false
+
+    @objc dynamic var port = Int()
+    
+    @objc dynamic var autoUpdateGoodreadsProgress = false
+    @objc dynamic var autoUpdateGoodreadsBookShelf = false
+}
+
+extension CalibreLibraryDSReaderHelper: Persistable {
+    public init(managedObject: CalibreLibraryDSReaderHelperRealm) {
+        self._isEnabled = managedObject.isEnabled
+        self._isDefault = managedObject.isDefault
+        self._isOverride = managedObject.isOverride
+        self.autoUpdateGoodreadsProgress = managedObject.autoUpdateGoodreadsProgress
+        self.autoUpdateGoodreadsBookShelf = managedObject.autoUpdateGoodreadsBookShelf
+    }
+    
+    public func managedObject() -> CalibreLibraryDSReaderHelperRealm {
+        let obj = CalibreLibraryDSReaderHelperRealm()
+        obj.isEnabled = isEnabled()
+        obj.isDefault = isDefault()
+        obj.isOverride = isOverride()
+        obj.autoUpdateGoodreadsProgress = self.autoUpdateGoodreadsProgress
+        obj.autoUpdateGoodreadsBookShelf = self.autoUpdateGoodreadsBookShelf
+        
+        return obj
     }
 }

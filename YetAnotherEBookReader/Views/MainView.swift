@@ -252,11 +252,11 @@ struct MainView: View {
                     buttons: [
                         .default(Text("As a new book"), action: {
                             let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookImportInfo.bookId)
-                            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+                            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
                         }),
                         .destructive(Text("Overwrite"), action: {
                             let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookImportInfo.bookId)
-                            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+                            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
                         }),
                         .cancel()
                     ]
@@ -277,7 +277,7 @@ struct MainView: View {
             print("onOpenURL \(url)")
             let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
             
-            NotificationCenter.default.post(name: Notification.Name("YABR.bookImported"), object: nil, userInfo: ["result": result])
+            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
         }.onAppear {
             let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
             if !termsAccepted {

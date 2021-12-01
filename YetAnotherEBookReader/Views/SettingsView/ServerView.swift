@@ -20,18 +20,8 @@ struct ServerView: View {
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
     
-    // selections for options
-    // @State private var selectedOption: String?
-    @State private var readingPositionSyncOptionPresenting = false
-    @State private var goodreadsSyncOptionPresenting = false
-    @State private var countPagesOptionPresenting = false
-
     @State private var activityListViewPresenting = false
     
-    // bindings for library options
-    @State private var readingPosition = CalibreLibraryReadingPosition()
-    @State private var goodreadsSync = CalibreLibraryGoodreadsSync()
-    @State private var countPages = CalibreLibraryCountPages()
     //
     @State private var calibreServerEditing = false
     
@@ -54,94 +44,13 @@ struct ServerView: View {
     var defaultLog = Logger()
     
     @State private var alertItem: AlertItem?
-    @State private var alertContent: String = ""
-    
-    
-    @ViewBuilder
-    private func goodreadsSyncStack(library: CalibreLibrary) -> some View {
-        
-    }
     
     @ViewBuilder
     private func advancedLibrarySettingsView(library: CalibreLibrary) -> some View {
         VStack(alignment:.leading, spacing: 8) {
             Divider()
             
-            Text("Life of Ease Options")
-            
-            Button(action: {
-                if let readingPosition = library.pluginReadingPosition {
-                    self.readingPosition = readingPosition
-                }
-                readingPositionSyncOptionPresenting = true
-            }) {
-                Text("Reading Postions Sync")
-            }
-            .sheet(isPresented: $readingPositionSyncOptionPresenting, onDismiss: {
-                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_READING_POSITION, columnInfo: readingPosition)
-            }, content: {
-                LibraryOptionsReadingPosition(library: library, readingPosition: $readingPosition)
-                        .padding()
-                        .frame(maxWidth: 600)
-            })
-            
-            Button(action: {
-                if let goodreadsSync = library.pluginGoodreadsSync {
-                    self.goodreadsSync = goodreadsSync
-                }
-                goodreadsSyncOptionPresenting = true
-            }) {
-                Text("Plugin Goodreads Sync")
-            }
-            .sheet(isPresented: $goodreadsSyncOptionPresenting, onDismiss: {
-                print("goodreadsSyncOption dismiss \(goodreadsSync)")
-                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_GOODREADS_SYNC, columnInfo: goodreadsSync)
-            }, content: {
-                LibraryOptionsGoodreadsSync(library: library, goodreadsSync: $goodreadsSync)
-                    .padding()
-                    .frame(maxWidth: 600)
-            })
-            
-            Button(action: {
-                if let countPages = library.pluginCountPage {
-                    self.countPages = countPages
-                }
-                countPagesOptionPresenting = true
-            }) {
-                Text("Plugin Count Pages")
-            }
-            .sheet(isPresented: $countPagesOptionPresenting, onDismiss: {
-                print("countPagesSyncOption dismiss \(countPages)")
-                modelData.updateLibraryPluginColumnInfo(type: CalibreLibrary.PLUGIN_COUNT_PAGES, columnInfo: countPages)
-            }, content: {
-                LibraryOptionsCountPages(library: library, countPages: $countPages)
-                    .padding()
-                    .frame(maxWidth: 600)
-            })
-            
-            
-            // not working, no idea
-//            List {
-//                NavigationLink(
-//                    destination: LibraryOptionsReadingPosition(library: library, enableStoreReadingPosition: $enableStoreReadingPosition, storeReadingPositionColumnName: $storeReadingPositionColumnName, isDefaultReadingPosition: $isDefaultReadingPosition)
-//
-//                        .padding()
-//                        .frame(maxWidth: 600),
-//                    tag: "ReadingPositionOption",
-//                    selection: $selectedOption
-//                ) {
-//                    Text("Reading Postions Sync").frame(minWidth: 300, minHeight: 100)
-//                }
-//                NavigationLink(
-//                    destination: goodreadsSyncStack(library: library)
-//                        .padding()
-//                        .frame(maxWidth: 600),
-//                    tag: "GoodreadsSyncOption",
-//                    selection: $selectedOption
-//                ) {
-//                    Text("Goodreads Sync").frame(minWidth: 300, minHeight: 100)
-//                }
-//            }
+            LibraryOptionsDSReaderHelper(library: library, updater: $updater)
             
             Divider()
             
@@ -167,7 +76,7 @@ struct ServerView: View {
                     Button(action:{
                         serverCalibreInfoPresenting = true
                     }) {
-                        Text("What's calibre server?")
+                        Text("What's a calibre server?")
                             .font(.caption)
                     }
                 }
@@ -341,6 +250,52 @@ struct ServerView: View {
                         }
                     }
                 }
+                .alert(item: $alertItem) { item in
+                    if item.id == "AddServer" {
+                        return Alert(title: Text("Add Server"),
+                                     message: Text(item.msg!),
+                                     primaryButton: .default(Text("Confirm")
+                                     ) {
+                                        addServerConfirmed()
+                                     },
+                                     secondaryButton: .cancel())
+                    }
+                    if item.id == "AddServerExists" {
+                        return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
+                    }
+                    if item.id == "DelServer" {
+                        return Alert(
+                            title: Text("Remove Server"),
+                            message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
+                            primaryButton: .destructive(Text("Confirm")) {
+                                delServerConfirmed()
+                            },
+                            secondaryButton: .cancel()
+                        )
+                    }
+                    if item.id == "DelLibrary" {
+                        return Alert(
+                            title: Text("Remove Library"),
+                            message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact. (OR in the case of Local Library, remove ALL imported books.)"),
+                            primaryButton: .destructive(Text("Confirm")) {
+                                delLibraryConfirmed()
+                            },
+                            secondaryButton: .cancel()
+                        )
+                    }
+                    if item.id == "ModServer" {
+                        return Alert(title: Text("Mod Server"),
+                                     message: { if let msg = item.msg {return Text(msg)} else {return nil} }(),
+                                     primaryButton: .default(Text("Confirm")
+                                     ) {
+                                        modServerConfirmed()
+                                     },
+                                     secondaryButton: .cancel())
+                    }
+                    return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
+                        item.action?()
+                    })
+                }
                 .onChange(of: calibreServerEditing) { newState in
                     if newState == false {
                         resetEditingFields()
@@ -453,6 +408,10 @@ struct ServerView: View {
                                 \(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal),
                                 please wait a moment...
                                 """)
+                        } else if modelData.calibreServerLibraryBooks.isEmpty && modelData.currentCalibreServer?.isLocal == false {
+                            Text("Empty, Refresh First \(Image(systemName: "arrow.right"))")
+                        } else if modelData.calibreServerLibraryBooks.isEmpty && modelData.currentCalibreServer?.isLocal == true {
+                            Text("Empty, Import First  \(Image(systemName: "arrow.up"))")
                         } else {
                             Text("\(modelData.calibreServerLibraryBooks.count) Book(s) in Library")
                         }
@@ -479,52 +438,7 @@ struct ServerView: View {
         }
         .navigationBarHidden(false)
         .statusBar(hidden: false)
-        .alert(item: $alertItem) { item in
-            if item.id == "AddServer" {
-                return Alert(title: Text("Add Server"),
-                             message: Text(item.msg!),
-                             primaryButton: .default(Text("Confirm")
-                             ) {
-                                addServerConfirmed()
-                             },
-                             secondaryButton: .cancel())
-            }
-            if item.id == "AddServerExists" {
-                return Alert(title: Text("Add Server"), message: Text("Duplicate"), dismissButton: .cancel())
-            }
-            if item.id == "DelServer" {
-                return Alert(
-                    title: Text("Remove Server"),
-                    message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
-                    primaryButton: .destructive(Text("Confirm")) {
-                        delServerConfirmed()
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-            if item.id == "DelLibrary" {
-                return Alert(
-                    title: Text("Remove Library"),
-                    message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact. (OR in the case of Local Library, remove ALL imported books.)"),
-                    primaryButton: .destructive(Text("Confirm")) {
-                        delLibraryConfirmed()
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-            if item.id == "ModServer" {
-                return Alert(title: Text("Mod Server"),
-                             message: Text(alertContent),
-                             primaryButton: .default(Text("Confirm")
-                             ) {
-                                modServerConfirmed()
-                             },
-                             secondaryButton: .cancel())
-            }
-            return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
-                item.action?()
-            })
-        }.frame(maxWidth: 720)
+        .frame(maxWidth: 720)
         .navigationTitle("Server & Library")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -537,6 +451,13 @@ struct ServerView: View {
     }
     
     private func addServerConfirmButtonAction() {
+        if calibreServerName.isEmpty {
+            if let url = URL(string: calibreServerUrl), let host = url.host {
+                calibreServerName = host
+            } else {
+                calibreServerName = "Unnamed"
+            }
+        }
         let calibreServer = CalibreServer(
             name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
         if modelData.calibreServers[calibreServer.id] != nil {
@@ -569,6 +490,10 @@ struct ServerView: View {
         modelData.probeServersReachability(with: [server.id])
         
         calibreServerEditing = false
+        
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(200))) {
+            NotificationCenter.default.post(Notification(name: .YABR_ServerAdded))
+        }
     }
     
     private func modServerConfirmButtonAction() {

@@ -14,7 +14,7 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
-    func getServerLibraries(server: CalibreServer){
+    func getServerLibraries(server: CalibreServer) {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
 
@@ -29,7 +29,7 @@ struct CalibreServerService {
         var urlComponents = URLComponents()
         urlComponents.path = "ajax/library-info"
         
-        guard let url = urlComponents.url(relativeTo: serverUrl) else {
+        guard let url = urlComponents.url(relativeTo: serverUrl), let host = url.host else {
             modelData.calibreServerInfo = serverInfo
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
             return
@@ -44,7 +44,7 @@ struct CalibreServerService {
             if url.scheme == "https" {
                 authMethod = NSURLAuthenticationMethodHTTPBasic
             }
-            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+            let protectionSpace = URLProtectionSpace.init(host: host,
                                                           port: url.port ?? 0,
                                                           protocol: url.scheme,
                                                           realm: "calibre",
@@ -485,8 +485,7 @@ struct CalibreServerService {
         }
         
         //Parse Reading Position
-        if let pluginReadingPosition = modelData.calibreLibraries[oldbook.library.id]?.pluginReadingPosition,
-           pluginReadingPosition.isEnabled(),
+        if let pluginReadingPosition = modelData.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
            let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
            let readPosData = Data(base64Encoded: readPosString),
            let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
@@ -781,13 +780,13 @@ struct CalibreServerService {
     }
 
     func setCredential(server: CalibreServer, task: URLSessionDataTask) {
-        if let protectionSpace = getProtectionSpace(server: server),
+        if let protectionSpace = getProtectionSpace(server: server, port: nil),
             let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {
             URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
         }
     }
     
-    func getProtectionSpace(server: CalibreServer) -> URLProtectionSpace? {
+    func getProtectionSpace(server: CalibreServer, port: Int?) -> URLProtectionSpace? {
         guard server.username.count > 0 && server.password.count > 0,
               let url = getServerUrlByReachability(server: server),
               let host = url.host
@@ -801,7 +800,7 @@ struct CalibreServerService {
             authMethod = NSURLAuthenticationMethodHTTPBasic
         }
         return URLProtectionSpace.init(host: host,
-                                       port: url.port ?? 0,
+                                       port: port ?? url.port ?? 0,
                                        protocol: url.scheme,
                                        realm: "calibre",
                                        authenticationMethod: authMethod)
@@ -826,7 +825,7 @@ struct CalibreServerService {
         serverInfo.errorMsg = "Unknown Error"
         serverInfo.probingTask?.cancel()
         
-        guard var url = URL(string: isPublic ? server.publicUrl : server.baseUrl) else {
+        guard var url = URL(string: isPublic ? server.publicUrl : server.baseUrl), let host = url.host else {
             modelData.calibreServerInfoStaging[infoId] = serverInfo
             return
         }
@@ -840,7 +839,7 @@ struct CalibreServerService {
             if url.scheme == "https" {
                 authMethod = NSURLAuthenticationMethodHTTPBasic
             }
-            let protectionSpace = URLProtectionSpace.init(host: url.host!,
+            let protectionSpace = URLProtectionSpace.init(host: host,
                                                           port: url.port ?? 0,
                                                           protocol: url.scheme,
                                                           realm: "calibre",

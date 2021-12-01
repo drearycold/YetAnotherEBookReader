@@ -137,7 +137,7 @@ struct BookDetailView: View {
                     bookFormatViewContent(book: book, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    if let countPage = book.library.pluginCountPage, countPage.isEnabled() {
+                    if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
                         countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     }
@@ -153,7 +153,7 @@ struct BookDetailView: View {
                         bookFormatViewContent(book: book, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        if let countPage = book.library.pluginCountPage, countPage.isEnabled() {
+                        if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
                             countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                                 .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         }

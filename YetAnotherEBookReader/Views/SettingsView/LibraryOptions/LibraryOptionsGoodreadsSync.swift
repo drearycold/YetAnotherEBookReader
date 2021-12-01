@@ -9,68 +9,73 @@ import SwiftUI
 
 struct LibraryOptionsGoodreadsSync: View {
     let library: CalibreLibrary
-
+    let configuration: CalibreDSReaderHelperConfiguration
+    
     @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
     
+    @State private var goodreadsSyncDefault: CalibreLibraryGoodreadsSync = .init()
+    @State private var goodreadsSyncState = CalibreLibraryGoodreadsSync()
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle("Enable", isOn: $goodreadsSync._isEnabled)
-                .font(.title2)
-            
-            Group {
-                Text("Synchronisable Custom Columns")
-                    .font(.title2)
-                    .padding(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
-                VStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Goodreads Sync Columns")
+                .font(.title3)
 
+            Toggle("Override Server Settings", isOn: $goodreadsSyncState._isOverride)
+            Group {
+                Toggle("Enabled", isOn: $goodreadsSyncState._isEnabled)
+                
+                VStack(spacing: 4) {
                     columnPickerRowView(
                         label: "Tags",
-                        selection: $goodreadsSync.tagsColumnName,
+                        selection: $goodreadsSyncState.tagsColumnName,
                         source: library.customColumnInfoMultiTextKeys)
                     columnPickerRowView(
                         label: "Rating",
-                        selection: $goodreadsSync.ratingColumnName,
+                        selection: $goodreadsSyncState.ratingColumnName,
                         source: library.customColumnInfoRatingKeys)
                     columnPickerRowView(
                         label: "Date read",
-                        selection: $goodreadsSync.dateReadColumnName,
+                        selection: $goodreadsSyncState.dateReadColumnName,
                         source: library.customColumnInfoDateKeys)
                     columnPickerRowView(
                         label: "Review text",
-                        selection: $goodreadsSync.reviewColumnName,
+                        selection: $goodreadsSyncState.reviewColumnName,
                         source: library.customColumnInfoTextKeys)
                     columnPickerRowView(
                         label: "Reading progress",
-                        selection: $goodreadsSync.readingProgressColumnName,
+                        selection: $goodreadsSyncState.readingProgressColumnName,
                         source: library.customColumnInfoNumberKeys)
                     
                 }.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Auto Syncing with Goodreads Account")
-                        .font(.title2)
-
-                    HStack {
-                        Text("Profile:").padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 0))
-                        TextField("Name", text: $goodreadsSync.profileName)
-                            .keyboardType(.alphabet)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .border(Color(UIColor.separator))
-                    }
-                    Text("We are working on the ability to update reading progress and shelf status to goodreads.com automatically. Please stay tuned.")
-                        .font(.caption)
-                        .padding(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                }   //ends profile
-                
-                Divider()
-                
-                Toggle("Set as Server-wide Default", isOn: $goodreadsSync._isDefault)
-                
-            }   //ends Group
-            .disabled(!goodreadsSync.isEnabled())
+                .disabled(!goodreadsSyncState.isEnabled())
+            }.disabled(!goodreadsSyncState.isOverride())
         }   //ends VStack
+        .onAppear {
+            goodreadsSyncDefault = .init(libraryId: library.id, configuration: configuration)
+            if goodreadsSync.isOverride() {
+                goodreadsSyncState._isOverride = true
+            } else {
+                goodreadsSyncState = goodreadsSyncDefault
+            }
+        }
+        .onChange(of: goodreadsSyncState._isOverride) { [goodreadsSyncState] newValue in
+            if newValue && goodreadsSyncState.isOverride() {
+                //let onDisappear handle changing
+            } else if newValue {   //changing to override, replace show user settings stored in goodreadsSync
+                goodreadsSync._isOverride = true
+                self.goodreadsSyncState = goodreadsSync
+            } else if goodreadsSyncState.isOverride() {     //changing to default, replace goodreadsSyncState with goodreadsSyncDefault
+                self.goodreadsSync = goodreadsSyncState
+                self.goodreadsSync._isOverride = false
+                self.goodreadsSyncState = goodreadsSyncDefault
+            }
+        }
+        .onDisappear {
+            if goodreadsSyncState.isOverride() {
+                goodreadsSync = goodreadsSyncState
+            }
+        }
     }   //ends body
     
     @ViewBuilder
@@ -95,8 +100,9 @@ struct LibraryOptionsGoodreadsSYnc_Previews: PreviewProvider {
     @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
 
     @State static private var goodreadsSync = CalibreLibraryGoodreadsSync()
+    static private var configuration = CalibreDSReaderHelperConfiguration()
     
     static var previews: some View {
-        LibraryOptionsGoodreadsSync(library: library, goodreadsSync: $goodreadsSync)
+        LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
     }
 }

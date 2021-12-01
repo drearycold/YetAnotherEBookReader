@@ -9,50 +9,73 @@ import SwiftUI
 
 struct LibraryOptionsCountPages: View {
     let library: CalibreLibrary
+    let configuration: CalibreDSReaderHelperConfiguration
 
     @Binding var countPages: CalibreLibraryCountPages
-
+    @State private var countPagesDefault: CalibreLibraryCountPages = .init()
+    @State private var countPagesState = CalibreLibraryCountPages()
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle("Enable", isOn: $countPages._isEnabled)
-                .font(.title2)
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Count Pages Columns")
+                .font(.title3)
+
+            Toggle("Override Server Settings", isOn: $countPagesState._isOverride)
             
             Group {
-                Text("Plugin Custom Columns")
-                    .font(.title2)
-                    .padding(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
-                VStack(spacing: 8) {
-
+                Toggle("Enabled", isOn: $countPagesState._isEnabled)
+                
+                VStack(spacing: 4) {
                     columnPickerRowView(
                         label: "Page Count",
-                        selection: $countPages.pageCountCN,
+                        selection: $countPagesState.pageCountCN,
                         source: library.customColumnInfoNumberKeys)
                     columnPickerRowView(
                         label: "Word Count",
-                        selection: $countPages.wordCountCN,
+                        selection: $countPagesState.wordCountCN,
                         source: library.customColumnInfoNumberKeys)
                     columnPickerRowView(
                         label: "Flesch Reading Ease",
-                        selection: $countPages.fleschReadingEaseCN,
+                        selection: $countPagesState.fleschReadingEaseCN,
                         source: library.customColumnInfoNumberKeys)
                     columnPickerRowView(
                         label: "Flesch-Kincaid Grade",
-                        selection: $countPages.fleschKincaidGradeCN,
+                        selection: $countPagesState.fleschKincaidGradeCN,
                         source: library.customColumnInfoNumberKeys)
                     columnPickerRowView(
                         label: "Gunning Fog Index",
-                        selection: $countPages.gunningFogIndexCN,
+                        selection: $countPagesState.gunningFogIndexCN,
                         source: library.customColumnInfoNumberKeys)
                     
                 }.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-                
-                Divider()
-                
-                Toggle("Set as Server-wide Default", isOn: $countPages._isDefault)
-                
-            }   //ends Group
-            .disabled(!countPages.isEnabled())
+                .disabled(!countPagesState.isEnabled())
+            }.disabled(!countPagesState.isOverride())
         }   //ends VStack
+        .onAppear {
+            countPagesDefault = .init(libraryId: library.id, configuration: configuration)
+            if countPages.isOverride() {
+                countPagesState._isOverride = true
+            } else {
+                countPagesState = countPagesDefault
+            }
+        }
+        .onChange(of: countPagesState._isOverride) { [countPagesState] newValue in
+            if newValue && countPagesState.isOverride() {
+                //let onDisappear handle changing
+            } else if newValue {   //changing to override, replace show user settings stored in countPages
+                countPages._isOverride = true
+                self.countPagesState = countPages
+            } else if countPagesState.isOverride() {     //changing to default, replace countPagesState with countPagesDefault
+                self.countPages = countPagesState
+                self.countPages._isOverride = false
+                self.countPagesState = countPagesDefault
+            }
+        }
+        .onDisappear {
+            if countPagesState.isOverride() {
+                countPages = countPagesState
+            }
+        }
     }
     
     
@@ -78,8 +101,9 @@ struct LibraryOptionsCountPages_Previews: PreviewProvider {
     @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
 
     @State static private var countPages = CalibreLibraryCountPages()
+    static private var configuration = CalibreDSReaderHelperConfiguration()
 
     static var previews: some View {
-        LibraryOptionsCountPages(library: library, countPages: $countPages)
+        LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
     }
 }
