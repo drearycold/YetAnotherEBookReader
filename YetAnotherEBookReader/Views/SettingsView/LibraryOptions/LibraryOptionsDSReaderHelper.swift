@@ -108,10 +108,10 @@ struct LibraryOptionsDSReaderHelper: View {
                 
                 VStack(alignment: .leading, spacing: 4) {
                     if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
-                        Picker("Custom Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
+                        Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
                             ForEach(library.customColumnInfoCommentsKeys
                                         .map{ ($0.name, "#" + $0.label) }, id: \.1) {
-                                Text("\($0) \($1)").tag($1)
+                                Text("\($1)\n\($0)").tag($1)
                             }
                         }.pickerStyle(MenuPickerStyle())
                         .disabled(!readingPosition.isEnabled())

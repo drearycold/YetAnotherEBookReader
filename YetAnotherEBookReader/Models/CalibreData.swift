@@ -862,14 +862,22 @@ struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, H
     
     init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
         guard let library = ModelData.shared?.calibreLibraries[libraryId] else { return }
-        let filtered = library.customColumnInfoCommentsKeys.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
-        guard filtered.count > 0 else { return }
-        if filtered.count == 1, let first = filtered.first {
-            readingPositionCN = "#" + first.label
+        
+        if let prefs = configuration?.reading_position_prefs,
+           let library_config = prefs.library_config[library.name],
+           let column_info = library_config[library.server.username],
+           column_info.exists {
+            readingPositionCN = "#" + column_info.label
         } else {
-            let filtered_username = filtered.filter { $0.label.localizedCaseInsensitiveContains(library.server.username) }
-            if filtered_username.count == 1, let first = filtered_username.first {
+            let filtered = library.customColumnInfoCommentsKeys.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
+            guard filtered.count > 0 else { return }
+            if filtered.count == 1, let first = filtered.first {
                 readingPositionCN = "#" + first.label
+            } else {
+                let filtered_username = filtered.filter { $0.label.localizedCaseInsensitiveContains(library.server.username) }
+                if filtered_username.count == 1, let first = filtered_username.first {
+                    readingPositionCN = "#" + first.label
+                }
             }
         }
         
@@ -999,7 +1007,6 @@ struct CalibreLibraryDSReaderHelper: CalibreLibraryPluginColumnInfo, Codable, Ha
 }
 
 struct CalibreDSReaderHelperPrefs: Codable, Hashable {
-    
     struct Options: Codable, Hashable {
         var servicePort = 0
         var goodreadsSyncEnabled = false
@@ -1050,8 +1057,20 @@ struct CalibreGoodreadsSyncPrefs: Codable, Hashable {
     var plugin_prefs: PluginPrefs
 }
 
+struct CalibreReadingPositionPrefs: Codable, Hashable {
+    struct ReadingPositionColumn: Codable, Hashable {
+        var exists: Bool = false
+        var label: String = ""
+        var name: String = ""
+    }
+    
+    // library name -> user name -> column info
+    var library_config: [String: [String: ReadingPositionColumn]] = [:]
+}
+
 struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var dsreader_helper_prefs: CalibreDSReaderHelperPrefs? = nil
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
+    var reading_position_prefs: CalibreReadingPositionPrefs? = nil
 }
