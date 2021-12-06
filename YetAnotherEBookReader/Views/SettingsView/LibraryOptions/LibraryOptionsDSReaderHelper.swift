@@ -124,7 +124,9 @@ struct LibraryOptionsDSReaderHelper: View {
             .onChange(of: readingPosition) { [readingPosition] value in
                 print("readingPosition change from \(readingPosition) to \(value)")
                 if modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault != value {
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: value)
+                    var newValue = value
+                    newValue._isOverride = true
+                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
                 }
             }
             

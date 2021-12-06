@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@available(*, deprecated)
 struct LibraryOptionsReadingPosition: View {
     let library: CalibreLibrary
     
