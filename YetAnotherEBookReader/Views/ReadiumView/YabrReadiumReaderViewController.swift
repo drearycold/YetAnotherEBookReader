@@ -27,7 +27,7 @@ import WebKit
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class YabrReadiumReaderViewController:
-    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate{
+    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate, YabrReadingPositionMaintainer{
     
     weak var moduleDelegate: ReaderFormatModuleDelegate?
     
@@ -349,4 +349,28 @@ class YabrReadiumReaderViewController:
     func outline(_ outlineTableViewController: OutlineTableViewController, goTo location: Locator) {
         navigator.go(to: location)
     }
+
+    //MARK: - YabrReadingPositionMaintainer
+    var readerType: ReaderType = .UNSUPPORTED
+    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+    func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition {
+        guard readerType != .UNSUPPORTED else { return position }
+        
+        var position = position
+        position.lastChapterProgress = updatedReadingPosition.0 * 100
+        position.lastProgress = updatedReadingPosition.1 * 100
+        
+        position.lastReadPage = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+        position.lastPosition[0] = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+        position.lastPosition[1] = updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
+        position.lastPosition[2] = updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
+        
+        position.lastReadChapter = updatedReadingPosition.3
+        position.readerName = readerType.rawValue
+
+        position.epoch = Date().timeIntervalSince1970
+        
+        return position
+    }
+
 }

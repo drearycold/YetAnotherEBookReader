@@ -25,8 +25,6 @@ import R2Streamer
 
 class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
 
-    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
-
     init(publication: Publication, book: Book) {
         let navigator = CBZNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
         

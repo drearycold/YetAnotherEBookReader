@@ -123,7 +123,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         if let dsreaderHelperUser = pluginDSReaderHelper {  //donot check override
             dsreaderHelper = dsreaderHelperUser
         } else if let modelData = ModelData.shared {
-            dsreaderHelper = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server, realm: modelData.realm)?.configuration)
+            dsreaderHelper = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
         }
         
         return dsreaderHelper
@@ -142,7 +142,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         if let readingPositionUser = pluginReadingPosition, readingPositionUser.isOverride() {
             readingPosition = readingPositionUser
         } else if let modelData = ModelData.shared {
-            readingPosition = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server, realm: modelData.realm)?.configuration)
+            readingPosition = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
         }
         
         return readingPosition
@@ -162,7 +162,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         if let goodreadsSyncUser = pluginGoodreadsSync, goodreadsSyncUser.isOverride() {
             goodreadsSync = goodreadsSyncUser
         } else if let modelData = ModelData.shared {
-            goodreadsSync = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server, realm: modelData.realm)?.configuration)
+            goodreadsSync = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
         }
         
         return goodreadsSync
@@ -181,7 +181,7 @@ struct CalibreLibrary: Hashable, Identifiable {
         if let countPagesUser = pluginCountPages, countPagesUser.isOverride() {
             countPages = countPagesUser
         } else if let modelData = ModelData.shared {
-            countPages = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server, realm: modelData.realm)?.configuration)
+            countPages = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
         }
         
         return countPages
@@ -526,9 +526,11 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     }
     
     func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
-        if lastReadPage == other.lastReadPage
-            && lastChapterProgress == other.lastChapterProgress
-            && lastProgress == other.lastProgress {
+        if id == other.id,
+            readerName == other.readerName,
+            lastReadPage == other.lastReadPage,
+            lastChapterProgress == other.lastChapterProgress,
+            lastProgress == other.lastProgress {
             return true
         }
         return false
@@ -865,7 +867,7 @@ struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, H
         
         if let prefs = configuration?.reading_position_prefs,
            let library_config = prefs.library_config[library.name],
-           let column_info = library_config[library.server.username],
+           let column_info = library_config.readingPositionColumns[library.server.username],
            column_info.exists {
             readingPositionCN = "#" + column_info.label
         } else {
@@ -1058,14 +1060,32 @@ struct CalibreGoodreadsSyncPrefs: Codable, Hashable {
 }
 
 struct CalibreReadingPositionPrefs: Codable, Hashable {
+    
     struct ReadingPositionColumn: Codable, Hashable {
         var exists: Bool = false
         var label: String = ""
         var name: String = ""
     }
     
+    struct ReadingPositionOptions: Codable, Hashable {
+        var name: String = ""
+        var prefix: String = ""
+        var isUserSeparated: Bool = false
+        
+        enum CodingKeys: String, CodingKey {
+            case name = "readingPositionColumnName"
+            case prefix = "readingPositionColumnPrefix"
+            case isUserSeparated = "readingPositionColumnUserSeparated"
+        }
+    }
+    
+    struct ReadingPositionLibraryConfig: Codable, Hashable {
+        var readingPositionColumns: [String: ReadingPositionColumn] = [:]
+        var readingPositionOptions: ReadingPositionOptions = .init()
+    }
+    
     // library name -> user name -> column info
-    var library_config: [String: [String: ReadingPositionColumn]] = [:]
+    var library_config: [String: ReadingPositionLibraryConfig] = [:]
 }
 
 struct CalibreDSReaderHelperConfiguration: Codable, Hashable {

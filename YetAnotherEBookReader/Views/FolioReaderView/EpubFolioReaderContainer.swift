@@ -42,12 +42,6 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         super.initialization()
     }
 
-    override func viewDidDisappear(_ animated: Bool) {
-        //updateReadingPosition(self.folioReader)
-        
-        super.viewDidDisappear(animated)
-    }
-    
     func folioReader(_ folioReader: FolioReader, didFinishedLoading book: FRBook) {
         folioReader.readerCenter?.delegate = MyFolioReaderCenterDelegate()
         folioReader.readerCenter?.pageDelegate = yabrFolioReaderPageDelegate

@@ -12,8 +12,6 @@ import R2Shared
 
 final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNavigatorDelegate {
     
-    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
-
     init(publication: Publication, book: Book) {
         let navigator = PDFNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
         

@@ -27,7 +27,6 @@ import R2Shared
 import R2Navigator
 
 class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
-    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
 
     var popoverUserconfigurationAnchor: UIBarButtonItem?
     var userSettingNavigationController: UserSettingsNavigationController

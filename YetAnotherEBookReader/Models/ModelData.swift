@@ -204,6 +204,13 @@ final class ModelData: ObservableObject {
     
     @Published var selectedPosition = ""
     @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "")
+    let bookReaderClosedPublisher = NotificationCenter.default.publisher(
+        for: .YABR_BookReaderClosed
+    ).eraseToAnyPublisher()
+    let bookReaderEnterBackgroundPublished = NotificationCenter.default.publisher(
+        for: .YABR_BookReaderEnterBackground
+    ).eraseToAnyPublisher()
+    var bookReaderEnterBackgroundCancellable: AnyCancellable? = nil
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -403,7 +410,7 @@ final class ModelData: ObservableObject {
         self.reloadCustomFonts()
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
-
+        
         if mock {
             let library = calibreLibraries.first!.value
             
@@ -1176,7 +1183,9 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func queryServerDSReaderHelper(server: CalibreServer, realm: Realm) -> CalibreServerDSReaderHelper? {
+    func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
+        guard let realm = Thread.isMainThread ? self.realm : try? Realm(configuration: self.realmConf) else { return nil }
+        
         let objs = realm.objects(CalibreServerDSReaderHelperRealm.self).filter(
             NSPredicate(format: "id = %@", server.id)
         )
@@ -1234,7 +1243,7 @@ final class ModelData: ObservableObject {
     
     func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreLibraryDSReaderHelper, CalibreLibraryGoodreadsSync)? {
         // must have dsreader helper info and enabled by server
-        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server, realm: self.realm), dsreaderHelperServer.port > 0 else { return nil }
+        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server), dsreaderHelperServer.port > 0 else { return nil }
         guard let configuration = dsreaderHelperServer.configuration, let dsreader_helper_prefs = configuration.dsreader_helper_prefs, dsreader_helper_prefs.plugin_prefs.Options.goodreadsSyncEnabled else { return nil }
         
         // check if user disabled auto update
@@ -1435,10 +1444,11 @@ final class ModelData: ObservableObject {
         guard let readerInfo = self.readerInfo else {
             return
         }
+        let updatedReadingPosition = self.updatedReadingPosition
         
-        defaultLog.info("pageNumber:  \(self.updatedReadingPosition.lastPosition[0])")
-        defaultLog.info("pageOffsetX: \(self.updatedReadingPosition.lastPosition[1])")
-        defaultLog.info("pageOffsetY: \(self.updatedReadingPosition.lastPosition[2])")
+        defaultLog.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
+        defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
+        defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
         
         readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
         readingBook.lastModified = Date()

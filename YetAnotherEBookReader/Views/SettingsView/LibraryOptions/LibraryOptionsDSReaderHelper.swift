@@ -251,7 +251,7 @@ struct LibraryOptionsDSReaderHelper: View {
     private func setStates(libraryId: String) {
         guard let library = modelData.calibreLibraries[libraryId] else { return }
         let server = library.server
-        let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server, realm: modelData.realm) ?? {
+        let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server) ?? {
             var dsreaderHelper = CalibreServerDSReaderHelper(id: server.id, port: 0)
             if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1

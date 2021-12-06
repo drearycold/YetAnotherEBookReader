@@ -9,10 +9,10 @@ import Foundation
 import UIKit
 import SwiftUI
 import FolioReaderKit
-#if canImport(R2Shared)
+//#if canImport(R2Shared)
 import R2Shared
 import R2Streamer
-#endif
+//#endif
 
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: UIViewControllerRepresentable {
@@ -41,10 +41,15 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        let nav = UINavigationController()
-        #if canImport(R2Shared)
-        if bookFormat == Format.EPUB && bookReader == ReaderType.ReadiumEPUB {
-            
+        let nav = YabrEBookReaderNavigationController()
+        nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
+        nav.navigationBar.isTranslucent = false
+        nav.setToolbarHidden(false, animated: true)
+
+//        #if canImport(R2Shared)
+        if bookFormat == Format.EPUB && bookReader == ReaderType.ReadiumEPUB
+            || bookFormat == Format.PDF && bookReader == ReaderType.ReadiumPDF
+            || bookFormat == Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
             guard let server = PublicationServer() else {
                 return nav
             }
@@ -58,11 +63,18 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     let publication = try result.get()
                     server.removeAll()
                     try server.add(publication)
-                    let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
+                    let book = Book(
+                        href: bookURL.lastPathComponent,
+                        title: publication.metadata.title,
+                        author: publication.metadata.authors.map{$0.name}.joined(separator: ", "),
+                        identifier: publication.metadata.identifier ?? bookURL.lastPathComponent,
+                        cover: publication.cover?.pngData()
+                    )
                     
+                    //readingOrder for EPUB & CBZ, metadata.numberOfPages for PDF
                     if bookPosition.lastReadPage > 0,
-                       bookPosition.lastReadPage - 1 < publication.readingOrder.count {
-                        let link = publication.readingOrder[bookPosition.lastReadPage - 1]
+                       bookReader == ReaderType.ReadiumPDF ? bookPosition.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0 : bookPosition.lastReadPage - 1 < publication.readingOrder.count,
+                       let link = bookReader == ReaderType.ReadiumPDF ? publication.readingOrder.first : publication.readingOrder[bookPosition.lastReadPage - 1] {
                         let locator = Locator(
                             href: link.href,
                             type: link.type ?? "",
@@ -71,36 +83,33 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                                 fragments: [],
                                 progression: bookPosition.lastChapterProgress / 100.0,
                                 totalProgression: bookPosition.lastProgress / 100.0,
-                                position: bookPosition.lastPosition[1],
+                                position: bookReader == ReaderType.ReadiumPDF ? bookPosition.lastPosition[0] : bookPosition.lastPosition[1],
                                 otherLocations: [:]),
                             text: Locator.Text())
                         book.progression = locator.jsonString
                     }
                     
-                    let readerVC = YabrReadiumEPUBViewController(publication: publication, book: book, resourcesServer: server)
+                    guard let readerVC = { () -> YabrReadiumReaderViewController? in
+                        switch(bookReader) {
+                        case .ReadiumEPUB:
+                            return YabrReadiumEPUBViewController(publication: publication, book: book, resourcesServer: server)
+                        case .ReadiumPDF:
+                            return YabrReadiumPDFViewController(publication: publication, book: book)
+                        case .ReadiumCBZ:
+                            return YabrReadiumCBZViewController(publication: publication, book: book)
+                        default:
+                            return nil      //shouldn't fall here
+                        }
+                    }() else { return }
                     
+                    readerVC.readerType = bookReader
                     readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
                         systemItem: .close,
                         primaryAction: UIAction(
                             handler: { [self] _ in
+                                modelData.updatedReadingPosition = readerVC.getUpdateReadingPosition(position: modelData.updatedReadingPosition)
+                                
                                 readerVC.dismiss(animated: true, completion: nil)
-                                
-                                var updatedReadingPosition = modelData.updatedReadingPosition
-                                
-                                updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
-                                updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
-                                
-                                updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                                updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                                updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
-                                updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
-                                
-                                
-                                updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
-                                updatedReadingPosition.readerName = ReaderType.ReadiumEPUB.rawValue
-                                updatedReadingPosition.epoch = Date().timeIntervalSince1970
-
-                                modelData.updatedReadingPosition = updatedReadingPosition
                             }
                         )
                     )
@@ -114,9 +123,19 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             return nav
         }
-        #endif
+//        #endif
         
-        if bookFormat == Format.EPUB && bookReader == ReaderType.YabrEPUB {
+        if bookFormat == Format.PDF {
+            let pdfViewController = YabrPDFViewController()
+            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
+            pdfViewController.modelData = modelData
+                        
+            nav.pushViewController(pdfViewController, animated: false)
+            
+            return nav
+        }
+        
+        if bookFormat == Format.EPUB {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
 
             readerConfiguration.enableMDictViewer = modelData.getCustomDictViewer().0
@@ -132,161 +151,15 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open(bookReadingPosition: bookPosition)
-            return epubReaderContainer
-        }
-        
-        #if canImport(R2Shared)
-        if bookFormat == Format.PDF && bookReader == ReaderType.ReadiumPDF {
-            let nav = UINavigationController()
             
-            guard let server = PublicationServer() else {
-                return nav
-            }
-            let streamer = Streamer()
-            
-            let asset = FileAsset(url: bookURL)
-            
-            streamer.open(asset: asset, allowUserInteraction: true) { result in
-                do {
-                    let publication = try result.get()
-                    server.removeAll()
-                    try server.add(publication)
-                    
-                    let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
-                    
-                    if bookPosition.lastReadPage > 0,
-                       bookPosition.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0,
-                       let link = publication.readingOrder.first {
-                        let locator = Locator(
-                            href: link.href,
-                            type: link.type ?? "",
-                            title: bookPosition.lastReadChapter,
-                            locations: Locator.Locations(
-                                fragments: [],
-                                progression: bookPosition.lastChapterProgress / 100.0,
-                                totalProgression: bookPosition.lastProgress / 100.0,
-                                position: bookPosition.lastPosition[0],
-                                otherLocations: [:]),
-                            text: Locator.Text())
-                        book.progression = locator.jsonString
-                    }
-                    
-                    let readerVC = YabrReadiumPDFViewController(publication: publication, book: book)
-                    readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
-                        readerVC.dismiss(animated: true, completion: nil)
-                        var updatedReadingPosition = modelData.updatedReadingPosition
-                        
-                        updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
-                        updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
-                        
-                        updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                        updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                        updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
-                        updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
-                        
-                        updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
-                        
-                        updatedReadingPosition.readerName = ReaderType.ReadiumPDF.rawValue
-                        updatedReadingPosition.epoch = Date().timeIntervalSince1970
-
-                        modelData.updatedReadingPosition = updatedReadingPosition
-                    }))
-                    
-                    readerVC.moduleDelegate = moduleDelegate
-                    
-                    nav.pushViewController(readerVC, animated: false)
-                } catch {
-                    print(error)
-                }
-            }
-            
-            return nav
-        }
-        #endif
-        
-        if bookFormat == Format.PDF && bookReader == ReaderType.YabrPDF {
-            let pdfViewController = YabrPDFViewController()
-            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
-            pdfViewController.modelData = modelData
-                        
-            let nav = UINavigationController(rootViewController: pdfViewController)
-            nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
-            nav.navigationBar.isTranslucent = false
-            nav.setToolbarHidden(false, animated: true)
+            nav.pushViewController(epubReaderContainer, animated: false)
+            nav.setToolbarHidden(true, animated: false)
+            nav.setNavigationBarHidden(true, animated: false)
             
             return nav
         }
         
-        #if canImport(R2Shared)
-        if bookFormat == Format.CBZ && bookReader == ReaderType.ReadiumCBZ {
-            let nav = UINavigationController()
-            
-            guard let server = PublicationServer() else {
-                return nav
-            }
-            
-            let streamer = Streamer()
-            
-            let asset = FileAsset(url: bookURL)
-            
-            streamer.open(asset: asset, allowUserInteraction: true) { result in
-                do {
-                    let publication = try result.get()
-                    server.removeAll()
-                    try server.add(publication)
-                    let book = Book(href: bookURL.lastPathComponent, title: publication.metadata.title, author: publication.metadata.authors.map{$0.name}.joined(separator: ", "), identifier: publication.metadata.identifier ?? bookURL.lastPathComponent, cover: publication.cover?.pngData())
-                    
-                    if bookPosition.lastReadPage > 0,
-                       bookPosition.lastReadPage - 1 < publication.readingOrder.count {
-                        let link = publication.readingOrder[bookPosition.lastReadPage - 1]
-                        let locator = Locator(
-                            href: link.href,
-                            type: link.type ?? "",
-                            title: bookPosition.lastReadChapter,
-                            locations: Locator.Locations(
-                                fragments: [],
-                                progression: bookPosition.lastChapterProgress / 100.0,
-                                totalProgression: bookPosition.lastProgress / 100.0,
-                                position: bookPosition.lastPosition[1],
-                                otherLocations: [:]),
-                            text: Locator.Text())
-                        book.progression = locator.jsonString
-                    }
-                    
-                    let readerVC = YabrReadiumCBZViewController(publication: publication, book: book)
-                    readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(systemItem: .close, primaryAction: UIAction(handler: { _ in
-                        readerVC.dismiss(animated: true, completion: nil)
-                        
-                        var updatedReadingPosition = modelData.updatedReadingPosition
-                        
-                        updatedReadingPosition.lastChapterProgress = readerVC.updatedReadingPosition.0 * 100
-                        updatedReadingPosition.lastProgress = readerVC.updatedReadingPosition.1 * 100
-                        
-                        updatedReadingPosition.lastReadPage = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                        updatedReadingPosition.lastPosition[0] = readerVC.updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-                        updatedReadingPosition.lastPosition[1] = readerVC.updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
-                        updatedReadingPosition.lastPosition[2] = readerVC.updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
-                        
-                        updatedReadingPosition.lastReadChapter = readerVC.updatedReadingPosition.3
-                        
-                        updatedReadingPosition.readerName = ReaderType.ReadiumCBZ.rawValue
-                        updatedReadingPosition.epoch = Date().timeIntervalSince1970
-
-                        modelData.updatedReadingPosition = updatedReadingPosition
-                    }))
-                    
-                    readerVC.moduleDelegate = moduleDelegate
-                    nav.pushViewController(readerVC, animated: false)
-                } catch {
-                    print(error)
-                }
-            }
-            
-            return nav
-        }
-        #endif
-        
-        return UIViewController()
+        return nav
     }
     
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
@@ -319,4 +192,8 @@ class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
     }
     
     
+}
+
+protocol YabrReadingPositionMaintainer {
+    func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition
 }

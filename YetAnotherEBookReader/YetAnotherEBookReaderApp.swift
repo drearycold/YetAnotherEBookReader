@@ -29,6 +29,7 @@ struct YetAnotherEBookReaderApp: App {
             case .inactive:
                 break
             case .background:
+                NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterBackground))
                 break
             @unknown default:
                 break
