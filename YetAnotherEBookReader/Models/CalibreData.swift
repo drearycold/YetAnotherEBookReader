@@ -62,6 +62,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     static let PLUGIN_DSREADER_HELPER = "DSReader Helper"
 
     static let PLUGIN_READING_POSITION = "Reading Position"
+    static let PLUGIN_DICTIONARY_VIEWER = "Dictionary Viewer"
+
     static let PLUGIN_GOODREADS_SYNC = "Goodreads Sync"
     static let PLUGIN_COUNT_PAGES = "Count Pages"
     
@@ -148,6 +150,24 @@ struct CalibreLibrary: Hashable, Identifiable {
         return readingPosition
     }
 
+    var pluginDictionaryViewer: CalibreLibraryDictionaryViewer? {
+        get {
+            pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] as? CalibreLibraryDictionaryViewer
+        }
+        set {
+            pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = newValue
+        }
+    }
+    var pluginDictionaryViewerWithDefault: CalibreLibraryDictionaryViewer? {
+        var dictionaryViewer: CalibreLibraryDictionaryViewer? = nil
+        if let dictionaryViewerUser = pluginDictionaryViewer, dictionaryViewerUser.isOverride() {
+            dictionaryViewer = dictionaryViewerUser
+        } else if let modelData = ModelData.shared {
+            dictionaryViewer = .init(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
+        }
+        
+        return dictionaryViewer
+    }
     
     var pluginGoodreadsSync: CalibreLibraryGoodreadsSync? {
         get {
@@ -895,6 +915,52 @@ struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, H
     }
 }
 
+struct CalibreLibraryDictionaryViewer: CalibreLibraryPluginColumnInfo, Codable, Hashable, Identifiable {
+    var id: String {
+        return CalibreLibrary.PLUGIN_DICTIONARY_VIEWER
+    }
+    
+    func getID() -> String {
+        return id
+    }
+    
+    func isEnabled() -> Bool {
+        return _isEnabled
+    }
+    
+    func isDefault() -> Bool {
+        return _isDefault
+    }
+    
+    func isOverride() -> Bool {
+        return _isOverride
+    }
+    
+    var _isEnabled = false
+    var _isDefault = false
+    var _isOverride = false
+    
+    init() {
+        //pass
+    }
+    
+    init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        if let prefs = configuration?.dsreader_helper_prefs?.plugin_prefs {
+            _isEnabled = prefs.Options.dictViewerEnabled
+        } else {
+            _isEnabled = false
+        }
+    }
+    
+    func hasValidColumn() -> Bool {
+        return mappedColumnsCount() > 0
+    }
+    
+    func mappedColumnsCount() -> Int {
+        return 0
+    }
+}
+
 struct CalibreLibraryCountPages: CalibreLibraryPluginColumnInfo, Codable, Hashable, Identifiable {
     var id: String {
         return CalibreLibrary.PLUGIN_COUNT_PAGES
@@ -1012,6 +1078,12 @@ struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     struct Options: Codable, Hashable {
         var servicePort = 0
         var goodreadsSyncEnabled = false
+        var dictViewerEnabled = false
+        var dictViewerLibraryName = ""
+        var readingPositionColumnAllLibrary = false
+        var readingPositionColumnName = ""
+        var readingPositionColumnPrefix = ""
+        var readingPositionColumnUserSeparated = false
     }
     
     struct PluginPrefs: Codable, Hashable {

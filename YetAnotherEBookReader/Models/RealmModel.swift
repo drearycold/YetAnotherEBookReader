@@ -81,6 +81,8 @@ class CalibreLibraryRealm: Object {
     var customColumns = List<CalibreCustomColumnRealm>()
     @objc dynamic var pluginDSReaderHelper:     CalibreLibraryDSReaderHelperRealm?
     @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
+    @objc dynamic var pluginDictionaryViewer:   CalibreLibraryDictionaryViewerRealm?
+
     @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
     @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
 }
@@ -369,6 +371,30 @@ extension CalibreLibraryReadingPosition: Persistable {
         obj.isDefault = isDefault()
         obj.isOverride = isOverride()
         obj.readingPositionCN = readingPositionCN
+        return obj
+    }
+}
+
+class CalibreLibraryDictionaryViewerRealm: Object {
+    @objc dynamic var isEnabled = false
+    @objc dynamic var isDefault = false
+    @objc dynamic var isOverride = false
+
+    @objc dynamic var readingPositionCN: String?
+}
+
+extension CalibreLibraryDictionaryViewer: Persistable {
+    public init(managedObject: CalibreLibraryDictionaryViewerRealm) {
+        _isEnabled = managedObject.isEnabled
+        _isDefault = managedObject.isDefault
+        _isOverride = managedObject.isOverride
+    }
+    
+    public func managedObject() -> CalibreLibraryDictionaryViewerRealm {
+        let obj = CalibreLibraryDictionaryViewerRealm()
+        obj.isEnabled = isEnabled()
+        obj.isDefault = isDefault()
+        obj.isOverride = isOverride()
         return obj
     }
 }

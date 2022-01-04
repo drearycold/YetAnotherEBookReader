@@ -15,8 +15,9 @@ struct LibraryOptionsDSReaderHelper: View {
     let library: CalibreLibrary     //should be identical with modelData.currentCalibreLibraryId
     
     @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
-    @State var readingPosition = CalibreLibraryReadingPosition()
     @State var dsreaderHelperLibrary = CalibreLibraryDSReaderHelper()
+    @State var readingPosition = CalibreLibraryReadingPosition()
+    @State var dictionaryViewer = CalibreLibraryDictionaryViewer()
     @State var goodreadsSync = CalibreLibraryGoodreadsSync()
     @State var countPages = CalibreLibraryCountPages()
 
@@ -175,6 +176,19 @@ struct LibraryOptionsDSReaderHelper: View {
             
             Divider()
             
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
+            }
+            .onChange(of: dictionaryViewer) { [dictionaryViewer] value in
+                print("dictionaryViewer change from \(dictionaryViewer) to \(value)")
+                if modelData.calibreLibraries[library.id]?.pluginDictionaryViewerWithDefault != value {
+                    var newValue = value
+                    newValue._isOverride = true
+                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
+                }
+            }
+            
+            Divider()
             
             Button(action: {
                 overrideMappingPresenting = true
@@ -265,6 +279,7 @@ struct LibraryOptionsDSReaderHelper: View {
         configuration = dsreaderHelperServer.configuration
         
         readingPosition = library.pluginReadingPositionWithDefault ?? .init()
+        dictionaryViewer = library.pluginDictionaryViewerWithDefault ?? .init()
         dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault ?? .init()
         countPages = library.pluginCountPagesWithDefault ?? .init()
         goodreadsSync = library.pluginGoodreadsSyncWithDefault ?? .init()
@@ -293,8 +308,13 @@ struct LibraryOptionsDSReaderHelper: View {
                 }
             }, receiveValue: { data in
                 let decoder = JSONDecoder()
-                if let config = try? decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data),
-                   config.dsreader_helper_prefs != nil {
+                var config: CalibreDSReaderHelperConfiguration? = nil
+                do {
+                    config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data)
+                } catch {
+                    print(error)
+                }
+                if let config = config, config.dsreader_helper_prefs != nil {
                     configuration = config
                     configurationData = data
                     helperStatus = "Connected"

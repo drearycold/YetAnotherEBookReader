@@ -17,6 +17,7 @@ import R2Streamer
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: UIViewControllerRepresentable {
     
+    let book: CalibreBook
     let bookURL : URL
     let bookFormat: Format
     let bookReader: ReaderType
@@ -26,14 +27,16 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
     @EnvironmentObject var modelData: ModelData
     
-    init(readerInfo: ReaderInfo) {
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.book = book
         bookURL = readerInfo.url
         bookFormat = readerInfo.format
         bookReader = readerInfo.readerType
         bookPosition = readerInfo.position
     }
     
-    init(url: URL, format: Format, reader: ReaderType, position: BookDeviceReadingPosition) {
+    init(book: CalibreBook, url: URL, format: Format, reader: ReaderType, position: BookDeviceReadingPosition) {
+        self.book = book
         self.bookURL = url
         self.bookFormat = format
         self.bookReader = reader
@@ -126,19 +129,25 @@ struct YabrEBookReader: UIViewControllerRepresentable {
 //        #endif
         
         if bookFormat == Format.PDF {
-            let pdfViewController = YabrPDFViewController()
-            pdfViewController.open(pdfURL: bookURL, position: bookPosition)
-            pdfViewController.modelData = modelData
-                        
-            nav.pushViewController(pdfViewController, animated: false)
+            let dictViewer = modelData.getCustomDictViewerNew(library: book.library)
+            _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
-            return nav
+            let pdfViewController = YabrPDFViewController()
+            pdfViewController.modelData = modelData
+            let ret = pdfViewController.open(pdfURL: bookURL, position: bookPosition)
+            if ret == 0 {
+                nav.pushViewController(pdfViewController, animated: false)
+                return nav
+            }
         }
         
         if bookFormat == Format.EPUB {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: bookURL)
 
-            readerConfiguration.enableMDictViewer = modelData.getCustomDictViewer().0
+            let dictViewer = modelData.getCustomDictViewerNew(library: book.library)
+            _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
+            
+            readerConfiguration.enableMDictViewer = dictViewer.0
             readerConfiguration.userFontDescriptors = modelData.userFontInfos.mapValues { $0.descriptor }
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true

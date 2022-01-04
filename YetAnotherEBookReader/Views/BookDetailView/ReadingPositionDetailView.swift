@@ -173,8 +173,8 @@ struct ReadingPositionDetailView: View {
                     updatePosition()
                 }
             } ) {
-            if let readerInfo = _VM.modelData.readerInfo {
-                YabrEBookReader(readerInfo: readerInfo)
+            if let book = _VM.modelData.readingBook, let readerInfo = _VM.modelData.readerInfo {
+                YabrEBookReader(book: book, readerInfo: readerInfo)
                     .environmentObject(_VM.modelData)
             } else {
                 Text("Nil Book")

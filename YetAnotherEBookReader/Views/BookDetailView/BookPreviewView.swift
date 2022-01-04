@@ -30,6 +30,7 @@ struct BookPreviewView: View {
             
             VStack {
                 YabrEBookReader(
+                    book: _VM.book,
                     url: _VM.url,
                     format: _VM.format,
                     reader: _VM.reader,

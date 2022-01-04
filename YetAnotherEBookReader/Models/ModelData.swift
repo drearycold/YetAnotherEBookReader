@@ -566,6 +566,9 @@ final class ModelData: ObservableObject {
                     if let plugin = libraryRealm.pluginDSReaderHelper {
                         result[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(managedObject: plugin)
                     }
+                    if let plugin = libraryRealm.pluginDictionaryViewer {
+                        result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(managedObject: plugin)
+                    }
                     if let plugin = libraryRealm.pluginReadingPosition {
                         result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
                     }
@@ -993,6 +996,20 @@ final class ModelData: ObservableObject {
         return (UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED),
             UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
         )
+    }
+    
+    func getCustomDictViewerNew(library: CalibreLibrary) -> (Bool, URL?) {
+        var result: (Bool, URL?) = (false, nil)
+        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server),
+              let pluginDictionaryViewer = library.pluginDictionaryViewerWithDefault,
+              pluginDictionaryViewer.isEnabled() else { return result }
+
+        let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: CalibreLibraryGoodreadsSync())
+        guard let endpoint = connector.endpointDictLookup() else { return result }
+        result.1 = endpoint.url
+        result.0 = result.1 != nil
+        
+        return result
     }
     
     func updateCustomDictViewer(enabled: Bool, value: String?) -> URL? {
@@ -1729,6 +1746,9 @@ final class ModelData: ObservableObject {
                         }
                         if let plugin = libraryRealm.pluginReadingPosition {
                             result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
+                        }
+                        if let plugin = libraryRealm.pluginDictionaryViewer {
+                            result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(managedObject: plugin)
                         }
                         if let plugin = libraryRealm.pluginGoodreadsSync {
                             result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(managedObject: plugin)

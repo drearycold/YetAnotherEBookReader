@@ -135,8 +135,8 @@ struct MainView: View {
                 modelData.updateCurrentPosition(alertDelegate: self)
             }
         }) {
-            if let readerInfo = modelData.readerInfo {
-                YabrEBookReader(readerInfo: readerInfo)
+            if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
+                YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {
                 Text("No Suitable Format/Reader/Position Combo")
             }

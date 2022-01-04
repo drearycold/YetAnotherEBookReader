@@ -51,6 +51,15 @@ struct DSReaderHelperConnector {
         return urlComponents
     }
     
+    func endpointDictLookup() -> URLComponents? {
+        guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
+              var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
+        urlComponents.port = dsreaderHelperServer.port
+        urlComponents.path.append("/dshelper/dict_viewer/lookup")
+        
+        return urlComponents
+    }
+    
     func endpointBaseUrlPrecent(goodreads_id: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
         urlComponents.port = dsreaderHelperServer.port
