@@ -185,23 +185,44 @@ struct BookDetailView: View {
                 .resizable()
                 .scaledToFit()
             Button(action: {
-                if _viewModel.listVM == nil {
-                    _viewModel.listVM = ReadingPositionListViewModel(
-                        modelData: modelData, book: book, positions: book.readPos.getDevices()
-                    )
+                if (book.inShelf) {
+                    if _viewModel.listVM == nil {
+                        _viewModel.listVM = ReadingPositionListViewModel(
+                            modelData: modelData, book: book, positions: book.readPos.getDevices()
+                        )
+                    } else {
+                        _viewModel.listVM.book = book
+                        _viewModel.listVM.positions = book.readPos.getDevices()
+                    }
+                    presentingReadPositionList = true
                 } else {
-                    _viewModel.listVM.book = book
-                    _viewModel.listVM.positions = book.readPos.getDevices()
+                    if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
+                        //TODO prompt for formats
+                        if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
+                            downloadStatus = .DOWNLOADING
+                        } else {
+                            alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
+                        }
+                    }
                 }
-                presentingReadPositionList = true
             }) {
-                Image(systemName: "book")
-                    .resizable()
-                    .frame(width: 150, height: 150)
-                    .foregroundColor(.gray)
+                if (book.inShelf) {
+                    Image(systemName: "book")
+                        .resizable()
+                        .frame(width: 160, height: 160)
+                        .foregroundColor(.gray)
+                } else if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                    ProgressView(value: download.progress)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                        .scaleEffect(6, anchor: .center)
+                } else {
+                    Image(systemName: "tray.and.arrow.down")
+                        .resizable()
+                        .frame(width: 160, height: 160)
+                        .foregroundColor(.gray)
+                }
                 
-            }.disabled(book.inShelf == false)
-            .opacity(book.inShelf ? 0.6 : 0.0)
+            }.opacity(0.8)
         }
         .frame(width: 300, height: 400)
     }
