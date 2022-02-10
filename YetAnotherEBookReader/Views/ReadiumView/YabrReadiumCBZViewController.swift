@@ -37,6 +37,8 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         super.viewDidLoad()
         
         view.backgroundColor = .black
+
+        navigationController?.setToolbarHidden(true, animated: false)
     }
     
     override var currentBookmark: Bookmark? {
@@ -59,11 +61,14 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         
         updatedReadingPosition.2["pageNumber"] = locator.locations.position
         
-        
         updatedReadingPosition.2["pageOffsetX"] = 0
         
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0
         updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
+        
+        if 1.0 / Double(locator.locations.position ?? Int.max) + updatedReadingPosition.1 > 0.999 {
+            updatedReadingPosition.1 = 1.0
+        }
         
         updatedReadingPosition.3 = locator.title ?? ""
     }
