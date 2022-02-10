@@ -116,6 +116,7 @@ class CalibreBookRealm: Object {
     @objc dynamic var comments = ""
     @objc dynamic var publisher = ""
     @objc dynamic var series = ""
+    @objc dynamic var seriesIndex = 0.0
     @objc dynamic var rating = 0
     @objc dynamic var size = 0
     @objc dynamic var pubDate = Date()

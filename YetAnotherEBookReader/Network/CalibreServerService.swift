@@ -144,7 +144,7 @@ struct CalibreServerService {
             return
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "identifiers"], "", "", "", -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers"], "", "", "", -1]
         
         let data = try! JSONSerialization.data(withJSONObject: json, options: [])
         
@@ -307,6 +307,11 @@ struct CalibreServerService {
             } else {
                 calibreServerLibraryBooks[id]!.series = ""
             }
+        }
+        
+        (dataElement["series_index"] as? NSDictionary)?.forEach { (key, value) in
+            guard let id = (key as? NSString)?.intValue else { return }
+            calibreServerLibraryBooks[id]?.seriesIndex = value as? Double ?? 0.0
         }
         
         return calibreServerLibraryBooks

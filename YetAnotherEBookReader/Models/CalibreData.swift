@@ -253,7 +253,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         if series.isEmpty {
             return "Not in a Series"
         }
-        return series
+        
+        return "\(series) (\(String(format: "%.1f", seriesIndex)))"
     }
     var seriesIndex = 0.0
     var rating = 0

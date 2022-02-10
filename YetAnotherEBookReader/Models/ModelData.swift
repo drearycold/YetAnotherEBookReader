@@ -924,7 +924,15 @@ final class ModelData: ObservableObject {
             
             return true
         }.sorted { (lhs, rhs) -> Bool in
-            lhs.title < rhs.title
+            if filterCriteriaSeries.isEmpty == false {
+                if lhs.series != rhs.series {
+                    return lhs.series < rhs.series
+                }
+                if lhs.seriesIndex != rhs.seriesIndex {
+                    return lhs.seriesIndex < rhs.seriesIndex
+                }
+            }
+            return lhs.title < rhs.title
         }.map({ $0.id })
         if !Thread.isMainThread {
             DispatchQueue.main.sync {
@@ -956,6 +964,7 @@ final class ModelData: ObservableObject {
             comments: bookRealm.comments,
             publisher: bookRealm.publisher,
             series: bookRealm.series,
+            seriesIndex: bookRealm.seriesIndex,
             rating: bookRealm.rating,
             size: bookRealm.size,
             pubDate: bookRealm.pubDate,
@@ -1155,6 +1164,7 @@ final class ModelData: ObservableObject {
         bookRealm.comments = book.comments
         bookRealm.publisher = book.publisher
         bookRealm.series = book.series
+        bookRealm.seriesIndex = book.seriesIndex
         bookRealm.rating = book.rating
         bookRealm.size = book.size
         bookRealm.pubDate = book.pubDate
