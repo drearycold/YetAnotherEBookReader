@@ -43,8 +43,8 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
         super.navigator(navigator, locationDidChange: locator)
         
         updatedReadingPosition.2["pageNumber"] = locator.locations.position
-        
-        
+        updatedReadingPosition.2["maxPage"] = self.publication.positionsByReadingOrder.first?.count ?? 1
+
         updatedReadingPosition.2["pageOffsetX"] = 0
         
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0

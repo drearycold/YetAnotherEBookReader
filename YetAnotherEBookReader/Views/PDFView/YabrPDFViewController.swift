@@ -843,15 +843,20 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             }
         }
         
-        modelData?.updatedReadingPosition.lastPosition[0] = pageNum
-        modelData?.updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
-        modelData?.updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
-        modelData?.updatedReadingPosition.lastReadPage = pageNum
-        modelData?.updatedReadingPosition.lastChapterProgress = chapterProgress
-        modelData?.updatedReadingPosition.lastProgress = bookProgress
-        modelData?.updatedReadingPosition.lastReadChapter = chapterName
-        modelData?.updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
-        modelData?.updatedReadingPosition.epoch = Date().timeIntervalSince1970
+        if var updatedReadingPosition = modelData?.updatedReadingPosition {
+            updatedReadingPosition.lastPosition[0] = pageNum
+            updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
+            updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
+            updatedReadingPosition.maxPage = self.pdfView.document?.pageCount ?? 1
+            updatedReadingPosition.lastReadPage = pageNum
+            updatedReadingPosition.lastChapterProgress = chapterProgress
+            updatedReadingPosition.lastProgress = bookProgress
+            updatedReadingPosition.lastReadChapter = chapterName
+            updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
+            updatedReadingPosition.epoch = Date().timeIntervalSince1970
+            
+            modelData?.updatedReadingPosition = updatedReadingPosition
+        }
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         

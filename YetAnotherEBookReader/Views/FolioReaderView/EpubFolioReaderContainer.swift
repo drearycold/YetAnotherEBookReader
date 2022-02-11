@@ -81,6 +81,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         updatedReadingPosition.lastPosition[1] = Int(pageOffsetX.rounded())
         updatedReadingPosition.lastPosition[2] = Int(pageOffsetY.rounded())
         updatedReadingPosition.lastReadPage = pageNumber
+        updatedReadingPosition.maxPage = savedPosition["maxPage"] as? Int ?? 1
         
         if let cfi = savedPosition["cfi"] as? String {
             updatedReadingPosition.cfi = cfi

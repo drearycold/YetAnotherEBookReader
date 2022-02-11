@@ -353,6 +353,7 @@ class YabrReadiumReaderViewController:
     //MARK: - YabrReadingPositionMaintainer
     var readerType: ReaderType = .UNSUPPORTED
     var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+    
     func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition {
         guard readerType != .UNSUPPORTED else { return position }
         
@@ -361,6 +362,7 @@ class YabrReadiumReaderViewController:
         position.lastProgress = updatedReadingPosition.1 * 100
         
         position.lastReadPage = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
+        position.maxPage = updatedReadingPosition.2["maxPage"] as? Int ?? 1
         position.lastPosition[0] = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
         position.lastPosition[1] = updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
         position.lastPosition[2] = updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0

@@ -60,9 +60,8 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         super.navigator(navigator, locationDidChange: locator)
         
         updatedReadingPosition.2["pageNumber"] = locator.locations.position
-        
+        updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
         updatedReadingPosition.2["pageOffsetX"] = 0
-        
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0
         updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
         

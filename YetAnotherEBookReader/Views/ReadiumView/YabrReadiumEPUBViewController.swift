@@ -130,7 +130,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         } else {
             updatedReadingPosition.2["pageNumber"] = 1
         }
-        
+        updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
         updatedReadingPosition.2["pageOffsetX"] = locator.locations.position
         
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0

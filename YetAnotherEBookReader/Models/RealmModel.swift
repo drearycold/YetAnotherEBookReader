@@ -174,13 +174,13 @@ class CalibreBookRealm: Object {
             
             var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: readerName)
             
-            deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-            deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
+            deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as? Int ?? 0
+            deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as? String ?? ""
             deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
             deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-            deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-            deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-            deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
+            deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as? Int ?? deviceReadingPosition.lastReadPage
+            deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as? String ?? deviceReadingPosition.lastReadChapter
+            deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as? Int ?? 1
             if let lastPosition = deviceReadingPositionDict["lastPosition"] {
                 deviceReadingPosition.lastPosition = lastPosition as! [Int]
             }
