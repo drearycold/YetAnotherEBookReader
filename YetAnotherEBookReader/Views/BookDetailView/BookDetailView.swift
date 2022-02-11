@@ -257,7 +257,7 @@ struct BookDetailView: View {
             }
             HStack {
                 metadataIcon(systemName: "tray.2")
-                Text(book.seriesDescription)
+                Text("\(book.seriesDescription) (\(book.seriesIndexDescription))")
             }
             
             HStack {

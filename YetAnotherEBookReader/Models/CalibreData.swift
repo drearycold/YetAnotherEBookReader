@@ -254,9 +254,12 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
             return "Not in a Series"
         }
         
-        return "\(series) (\(String(format: "%.1f", seriesIndex)))"
+        return series
     }
     var seriesIndex = 0.0
+    var seriesIndexDescription: String {
+        return String(format: "%.1f", seriesIndex)
+    }
     var rating = 0
     var ratingDescription: String {
         if rating > 9 {
