@@ -12,7 +12,7 @@ struct DSReaderHelperConnector {
     let calibreServerService: CalibreServerService
     let server: CalibreServer
     let dsreaderHelperServer: CalibreServerDSReaderHelper
-    let goodreadsSync: CalibreLibraryGoodreadsSync
+    let goodreadsSync: CalibreLibraryGoodreadsSync?
     
     var urlSession: URLSession {
         if let space = calibreServerService.getProtectionSpace(server: server, port: dsreaderHelperServer.port) {
@@ -23,7 +23,7 @@ struct DSReaderHelperConnector {
         }
         
         let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 10
+        urlSessionConfiguration.timeoutIntervalForRequest = 60
         let urlSessionDelegate = CalibreServerTaskDelegate(server.username)
         
         return URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
@@ -40,11 +40,12 @@ struct DSReaderHelperConnector {
     
     func endpointBaseUrlAddRemove(goodreads_id: String, shelfName: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
+        guard let profileName = goodreadsSync?.profileName else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/grsync/add_remove_book_to_shelf")
         urlComponents.queryItems = [
             URLQueryItem(name: "goodreads_id", value: goodreads_id.description),
-            URLQueryItem(name: "profile_name", value: goodreadsSync.profileName),
+            URLQueryItem(name: "profile_name", value: profileName),
             URLQueryItem(name: "shelf_name", value: shelfName)
         ]
         
@@ -62,11 +63,12 @@ struct DSReaderHelperConnector {
     
     func endpointBaseUrlPrecent(goodreads_id: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
+        guard let profileName = goodreadsSync?.profileName else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/grsync/update_reading_progress")
         urlComponents.queryItems = [
             URLQueryItem(name: "goodreads_id", value: goodreads_id.description),
-            URLQueryItem(name: "profile_name", value: goodreadsSync.profileName)
+            URLQueryItem(name: "profile_name", value: profileName)
         ]
         
         return urlComponents

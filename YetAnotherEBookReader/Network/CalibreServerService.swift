@@ -224,6 +224,74 @@ struct CalibreServerService {
         task.resume()
     }
     
+    func syncLibraryPublisher(resultPrev: CalibreCustomColumnInfoResult) -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server) else {
+            var result = resultPrev
+            result.errmsg = "Server not Reachable"
+            return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        guard var urlComponents = URLComponents(string: serverUrl.absoluteString) else {
+            var result = resultPrev
+            result.errmsg = "Internal Error"
+            return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        urlComponents.path = "/cdb/cmd/list/0"
+        urlComponents.queryItems = [URLQueryItem(name: "library_id", value: resultPrev.library.key)]
+        
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
+            var result = resultPrev
+            result.errmsg = "Internal Error"
+            return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers"], "", "", "", -1]
+        
+        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
+            var result = resultPrev
+            result.errmsg = "Query Error"
+            return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(resultPrev.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = data
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+        urlRequest.addValue("gzip", forHTTPHeaderField: "Accept-Encoding")
+        
+        let startDatetime = Date()
+        modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.library.id)
+
+        let a = urlSession.dataTaskPublisher(for: urlRequest)
+            .tryMap { output in
+                // print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    print("\(#function) error \(resultPrev.library.id)")
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: CalibreCdbCmdListResult].self, decoder: JSONDecoder())
+            .replaceError(with: ["result": CalibreCdbCmdListResult(book_ids: [-1])])
+            .map { listResult -> CalibreCustomColumnInfoResult in
+                var result = resultPrev
+                if let list = listResult["result"] {
+                    result.list = list
+                }
+                return result
+            }
+            .eraseToAnyPublisher()
+        
+        return a
+    }
+    
     /**
      run on background threads, call completionHandler on main thread
      */
@@ -1248,6 +1316,53 @@ struct CalibreServerService {
             )
         
         return 0
+    }
+    
+    func getCustomColumnsPublisher(library: CalibreLibrary) -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
+        let error: [String: [String:CalibreCustomColumnInfo]] = ["error":[:]]
+
+        guard let serverURL = getServerUrlByReachability(server: library.server),
+              var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
+            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        endpointURLComponent.path.append("/cdb/cmd/custom_columns/0")
+        endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: library.key)]
+
+        guard let endpointUrl = endpointURLComponent.url else {
+            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        guard let postData = "[]".data(using: .utf8) else {
+            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = postData
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+
+        let a = urlSession.dataTaskPublisher(for: urlRequest)
+            .tryMap { output in
+                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
+                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
+                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+                }
+                
+                return output.data
+            }
+            .decode(type: [String: [String:CalibreCustomColumnInfo]].self, decoder: JSONDecoder())
+            .replaceError(with: error)
+            .map {
+                CalibreCustomColumnInfoResult(library: library, result: $0)
+            }
+            .eraseToAnyPublisher()
+        
+        return a
     }
     
     func getCustomColumns(library: CalibreLibrary, completion: (([String: CalibreCustomColumnInfo]) -> Void)? = nil) -> Int {

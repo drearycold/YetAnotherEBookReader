@@ -12,15 +12,9 @@ struct LibraryOptionsDSReaderHelper: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.openURL) var openURL
 
-    let library: CalibreLibrary     //should be identical with modelData.currentCalibreLibraryId
-    
+    @Binding var server: CalibreServer
     @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
-    @State var dsreaderHelperLibrary = CalibreLibraryDSReaderHelper()
-    @State var readingPosition = CalibreLibraryReadingPosition()
-    @State var dictionaryViewer = CalibreLibraryDictionaryViewer()
-    @State var goodreadsSync = CalibreLibraryGoodreadsSync()
-    @State var countPages = CalibreLibraryCountPages()
-
+    
     @State private var portStr = ""
     @State private var configurationData: Data? = nil
     @State private var configuration: CalibreDSReaderHelperConfiguration? = nil
@@ -31,26 +25,22 @@ struct LibraryOptionsDSReaderHelper: View {
     
     @State private var configAlertItem: AlertItem?
 
+    @State private var readingPositionDetails = false
+    @State private var dictionaryViewerDetails = false
+    @State private var countPagesDetails = false
+    @State private var goodreadsSyncDetails = false
+    
     @State private var dsreaderHelperInstructionPresenting = false
-    @State private var overrideMappingPresenting = false
 
     @Binding var updater: Int
     
     @State private var serverAddedCancellable: AnyCancellable?
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("DSReader Helper").font(.title3)
-                Spacer()
-                Button(action:{dsreaderHelperInstructionPresenting = true}) {
-                    Image(systemName: "questionmark.circle")
-                }
-            }
-            
-            VStack(spacing: 4) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Plugin Service Port")
                 HStack {
-                    Text("Plugin Service Port")
                     Spacer()
                     TextField("Plugin Service Port", text: $portStr)
                         .frame(idealWidth: 80, maxWidth: 80)
@@ -88,138 +78,168 @@ struct LibraryOptionsDSReaderHelper: View {
                     }
                 }.padding([.leading, .trailing], 8)
                 
-                HStack {
-                    Text(helperStatus)
+                Text(helperStatus)
+                
+                Divider()
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Helper configurations")
                         
-                    Spacer()
-                    
-                    Button(action: {
-                        connect()
-                    }) {
-                        Text("Connect & Update Config")
-                    }
-                }
-                .padding([.leading, .trailing], 8)
-            }
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Store Reading Positions in Custom Column", isOn: $readingPosition._isEnabled)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
-                        Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
-                            ForEach(library.customColumnInfoCommentsKeys
-                                        .map{ ($0.name, "#" + $0.label) }, id: \.1) {
-                                Text("\($1)\n\($0)").tag($1)
+                    Group {
+                        HStack {
+                            Text("Reading Positions")
+                            Spacer()
+                            if configuration?.reading_position_prefs?.library_config.count ?? 0 > 0 {
+                                Text("enabled")
+                            } else {
+                                Text("missing")
                             }
-                        }.pickerStyle(MenuPickerStyle())
-                        .disabled(!readingPosition.isEnabled())
-                    } else {
-                        Text("no available column, please refresh library after adding column to calibre").font(.caption).foregroundColor(.red)
-                    }
-                }
-                .padding([.leading, .trailing], 8)
-            }
-            .onChange(of: readingPosition) { [readingPosition] value in
-                print("readingPosition change from \(readingPosition) to \(value)")
-                if modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault != value {
-                    var newValue = value
-                    newValue._isOverride = true
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
-                }
-            }
-            
-            Divider()
-
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Goodreads Sync Automation", isOn: $dsreaderHelperLibrary._isEnabled)
-                
-                Group {
-                    HStack {
-                        if let names = dsreaderHelperServer.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
-                            Picker("Profile Name:     \(goodreadsSync.profileName)", selection: $goodreadsSync.profileName) {
-                                ForEach(names, id: \.self) { name in
-                                    Text(name)
+                            Button(action: {
+                                readingPositionDetails.toggle()
+                            }) {
+                                Image(systemName: readingPositionDetails ? "chevron.up.circle" : "chevron.down.circle")
+                            }
+                        }
+                        
+                        if readingPositionDetails {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Details for troubleshooting")
+                                    .font(.callout)
+                                ForEach (
+                                    configuration?.reading_position_prefs?.library_config.map {
+                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                                ) { library_entry in
+                                    Text(library_entry.key)
+                                        .font(.caption)
+                                    readingPositionDetailsUser(library_entry: library_entry)
+                                        .font(.caption2)
                                 }
                             }
-                            .pickerStyle(MenuPickerStyle())
-                        } else {
-                            Text("Empty Profile List")
                         }
-                    }
-                    
-                    Toggle("Auto Update Reading Progress", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsProgress)
-                    
-                    Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
+                        
+                        HStack {
+                            Text("Dictionary Viewer")
+                            Spacer()
+                            if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
+                               options.dictViewerEnabled,
+                               options.dictViewerLibraryName.count > 0 {
+                                Text("enabled")
+                            } else {
+                                Text("missing")
+                            }
+                            Button(action: {
+                                dictionaryViewerDetails.toggle()
+                            }) {
+                                Image(systemName: dictionaryViewerDetails ? "chevron.up.circle" : "chevron.down.circle")
+                            }
+                        }
+                        
+                        if dictionaryViewerDetails {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Details for troubleshooting")
+                                    .font(.callout)
+                                Text("Dictionary Library: \(configuration?.dsreader_helper_prefs?.plugin_prefs.Options.dictViewerLibraryName ?? "")")
+                                    .font(.caption2)
+                            }
+                        }
+                        
+                        
+                    }.padding([.leading, .trailing], 8)
                 }
-                .padding([.leading, .trailing], 8)
-                .disabled( !dsreaderHelperLibrary.isEnabled() )
+                .font(.callout)
                 
-                if !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false) {
-                    HStack {
-                        Spacer()
-                        Text("Plugin not available").font(.caption).foregroundColor(.red)
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Supported server plugins")
+                        
+                    Group {
+                        HStack {
+                            Text("Count Pages")
+                            Spacer()
+                            if configuration?.count_pages_prefs?.library_config.count ?? 0 > 0 {
+                                Text("detected")
+                            } else {
+                                Text("missing")
+                            }
+                            Button(action: {
+                                countPagesDetails.toggle()
+                            }) {
+                                Image(systemName: countPagesDetails ? "chevron.up.circle" : "chevron.down.circle")
+                            }
+                        }
+                        
+                        if countPagesDetails {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Details for troubleshooting")
+                                    .font(.callout)
+                                ForEach (
+                                    configuration?.count_pages_prefs?.library_config.map {
+                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                                ) { library_entry in
+                                    Text(library_entry.key)
+                                        .font(.caption)
+                                    Text("\(library_entry.value.customColumnPages) / \(library_entry.value.customColumnWords) / \(library_entry.value.customColumnFleschReading) / \(library_entry.value.customColumnFleschGrade) / \(library_entry.value.customColumnGunningFog)")
+                                        .font(.caption2)
+                                }
+                            }
+                        }
+                        
+                        HStack {
+                            Text("Goodreads Sync")
+                            Spacer()
+                            if configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
+                                Text("detected")
+                            } else {
+                                Text("missing")
+                            }
+                            Button(action: {
+                                goodreadsSyncDetails.toggle()
+                            }) {
+                                Image(systemName: goodreadsSyncDetails ? "chevron.up.circle" : "chevron.down.circle")
+                            }
+                        }
+                        
+                        if goodreadsSyncDetails {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Details for troubleshooting")
+                                    .font(.callout)
+                                ForEach (
+                                    configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
+                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                                ) { user_entry in
+                                    Text(user_entry.key)
+                                        .font(.caption)
+                                    goodreadsSyncDetailsShelf(user_entry: user_entry)
+                                        .font(.caption2)
+                                }
+                            }
+                        }
+                        
+                    }.padding([.leading, .trailing], 8)
+                }
+                .font(.callout)
+                .padding([.top], 8)
+            }
+        }
+        .padding()
+        .navigationTitle("DSReader Helper")
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action:{
+                    connect()
+                }) {
+                    Image(systemName: "square.and.arrow.down")
                 }
             }
-            .onChange(of: dsreaderHelperLibrary) { [dsreaderHelperLibrary] value in
-                print("dsreaderHelperLibrary change from \(dsreaderHelperLibrary) to \(value)")
-                if modelData.calibreLibraries[library.id]?.pluginDSReaderHelperWithDefault != value {
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: value)
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action:{
+                    dsreaderHelperInstructionPresenting = true
+                }) {
+                    Image(systemName: "questionmark.circle")
                 }
             }
-            .disabled(
-                !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false)
-            )
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
-            }
-            .onChange(of: dictionaryViewer) { [dictionaryViewer] value in
-                print("dictionaryViewer change from \(dictionaryViewer) to \(value)")
-                if modelData.calibreLibraries[library.id]?.pluginDictionaryViewerWithDefault != value {
-                    var newValue = value
-                    newValue._isOverride = true
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
-                }
-            }
-            
-            Divider()
-            
-            Button(action: {
-                overrideMappingPresenting = true
-            }) {
-                Text("Override Custom Column Mappings")
-            }
-            .sheet(isPresented: $overrideMappingPresenting, onDismiss: {
-                if countPages != modelData.calibreLibraries[library.id]?.pluginCountPagesWithDefault {
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: countPages)
-                }
-                
-                if goodreadsSync != modelData.calibreLibraries[library.id]?.pluginGoodreadsSyncWithDefault {
-                    let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: goodreadsSync)
-                }
-                
-            }) {
-                if let configuration = configuration {
-                    LibraryOptionsOverrideCustomColumnMappings(
-                        library: library, configuration: configuration, goodreadsSync: $goodreadsSync, countPages: $countPages)
-                        .padding()
-                        .frame(maxWidth: 600)
-                } else {
-                    Text("Unexpected error\nConfiguration not found")
-                        .multilineTextAlignment(.center)
-                }
-            }
-            .disabled(configuration == nil || modelData.calibreLibraries[library.id]?.customColumnInfos.isEmpty ?? true)
-            
         }
         .onAppear() {
-            setStates(libraryId: modelData.currentCalibreLibraryId)
+            setStates()
             
             serverAddedCancellable = modelData.serverAddedPublisher.sink { notification in
                 //Suppose setStates() has been called by "onChange(of: modelData.currentCalibreLibraryId)"
@@ -228,10 +248,10 @@ struct LibraryOptionsDSReaderHelper: View {
             }
         }
         .onChange(of: modelData.currentCalibreLibraryId) { value in
-            setStates(libraryId: value)
+            setStates()
         }
         .onChange(of: updater) { _ in
-            setStates(libraryId: modelData.currentCalibreLibraryId)
+            setStates()
         }
         .alert(item: $configAlertItem) { item in
             if item.id == "updateConfigAlert" {
@@ -264,9 +284,7 @@ struct LibraryOptionsDSReaderHelper: View {
         })
     }
     
-    private func setStates(libraryId: String) {
-        guard let library = modelData.calibreLibraries[libraryId] else { return }
-        let server = library.server
+    private func setStates() {
         let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server) ?? {
             var dsreaderHelper = CalibreServerDSReaderHelper(id: server.id, port: 0)
             if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
@@ -278,11 +296,6 @@ struct LibraryOptionsDSReaderHelper: View {
         configurationData = dsreaderHelperServer.configurationData
         configuration = dsreaderHelperServer.configuration
         
-        readingPosition = library.pluginReadingPositionWithDefault ?? .init()
-        dictionaryViewer = library.pluginDictionaryViewerWithDefault ?? .init()
-        dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault ?? .init()
-        countPages = library.pluginCountPagesWithDefault ?? .init()
-        goodreadsSync = library.pluginGoodreadsSyncWithDefault ?? .init()
         self.dsreaderHelperServer = dsreaderHelperServer
     }
     
@@ -292,9 +305,7 @@ struct LibraryOptionsDSReaderHelper: View {
         configuration = nil
         helperStatus = "Connecting"
 
-        guard let library = modelData.currentCalibreLibrary else { return }
-        
-        let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+        let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
         refreshCancellable = connector.refreshConfiguration()?
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { complete in
@@ -334,6 +345,35 @@ struct LibraryOptionsDSReaderHelper: View {
         dsreaderHelperServer.configurationData = configurationData
         
         modelData.updateServerDSReaderHelper(dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
+    }
+    
+    @ViewBuilder
+    private func readingPositionDetailsUser(library_entry: (key: String, value: CalibreReadingPositionPrefs.ReadingPositionLibraryConfig)) -> some View {
+        ForEach (
+            library_entry.value.readingPositionColumns.map { (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } , id: \.key
+        ) { user_entry in
+            HStack {
+                Spacer()
+                Text(user_entry.key)
+                Text(": ")
+                Text(user_entry.value.label)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func goodreadsSyncDetailsShelf(user_entry: (key: String, value: CalibreGoodreadsSyncPrefs.Shelves)) -> some View {
+        ForEach (
+            user_entry.value.shelves, id: \.self
+        ) { shelf in
+            HStack {
+                Spacer()
+                Text(shelf.name)
+                Text(": ")
+                Text("\(shelf.book_count)")
+                    .frame(minWidth: 80, alignment: .trailing)
+            }
+        }
     }
     
     @ViewBuilder
@@ -390,7 +430,7 @@ struct LibraryOptionsDSReaderHelper: View {
                         Text("Defaults to #read_pos[_username].")
                     }    .font(.callout)
                     
-                    if library.server.username.isEmpty {
+                    if server.username.isEmpty {
                         Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
                             .font(.caption)
                     }
@@ -405,14 +445,14 @@ struct LibraryOptionsDSReaderHelper: View {
 struct LibraryOptionsDSReaderHelper_Previews: PreviewProvider {
     static private var modelData = ModelData()
 
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
+    @State static private var server = CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
 
-    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: library.server.id, port: 1234)
+    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: server.id, port: 1234)
     @State static private var updater = 0
     static var previews: some View {
-        LibraryOptionsDSReaderHelper(library: library, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
-            .environmentObject(modelData)
-        
-        
+        NavigationView {
+            LibraryOptionsDSReaderHelper(server: $server, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
+                .environmentObject(modelData)
+        }
     }
 }

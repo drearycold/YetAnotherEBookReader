@@ -15,24 +15,30 @@ struct LibraryOptionsOverrideCustomColumnMappings: View {
     @Binding var countPages: CalibreLibraryCountPages
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
-            
-            Divider()
-            
-            LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
+                
+                Divider()
+                
+                LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
+            }
         }
+        .padding()
+
     }
 }
 
 struct LibraryOptionsOverrideCustomColumnMappings_Previews: PreviewProvider {
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
+    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
 
     @State static private var goodreadsSync = CalibreLibraryGoodreadsSync()
     @State static private var countPages = CalibreLibraryCountPages()
     static private var configuration = CalibreDSReaderHelperConfiguration()
 
     static var previews: some View {
-        LibraryOptionsOverrideCustomColumnMappings(library: library, configuration: configuration, goodreadsSync: $goodreadsSync, countPages: $countPages)
+        NavigationView {
+            LibraryOptionsOverrideCustomColumnMappings(library: library, configuration: configuration, goodreadsSync: $goodreadsSync, countPages: $countPages)
+        }
     }
 }

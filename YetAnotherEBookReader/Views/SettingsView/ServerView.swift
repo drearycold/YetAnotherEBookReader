@@ -20,8 +20,6 @@ struct ServerView: View {
     @State private var calibreUsername = ""
     @State private var calibrePassword = ""
     
-    @State private var activityListViewPresenting = false
-    
     //
     @State private var calibreServerEditing = false
     
@@ -44,29 +42,6 @@ struct ServerView: View {
     var defaultLog = Logger()
     
     @State private var alertItem: AlertItem?
-    
-    @ViewBuilder
-    private func advancedLibrarySettingsView(library: CalibreLibrary) -> some View {
-        VStack(alignment:.leading, spacing: 8) {
-            Divider()
-            
-            LibraryOptionsDSReaderHelper(library: library, updater: $updater)
-            
-            Divider()
-            
-            Button(action: {
-                activityListViewPresenting = true
-            }) {
-                Text("Activity Logs")
-            }.sheet(isPresented: $activityListViewPresenting, onDismiss: {
-                
-            }, content: {
-                NavigationView {
-                    ActivityList(libraryId: modelData.currentCalibreLibraryId, bookId: nil)
-                }
-            })
-        }
-    }
     
     var body: some View {
         ScrollView {
@@ -426,10 +401,6 @@ struct ServerView: View {
                     }
                 }
                 
-                if modelData.currentCalibreServer?.isLocal == false, let library = modelData.currentCalibreLibrary {
-                    
-                    advancedLibrarySettingsView(library: library)
-                }
             }
             .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
             .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating || dataLoading)
@@ -459,7 +430,7 @@ struct ServerView: View {
             }
         }
         let calibreServer = CalibreServer(
-            name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
+            name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
         if modelData.calibreServers[calibreServer.id] != nil {
             alertItem = AlertItem(id: "AddServerExists")
             return
@@ -498,7 +469,7 @@ struct ServerView: View {
     
     private func modServerConfirmButtonAction() {
         let newServer = CalibreServer(
-            name: calibreServerName, baseUrl: calibreServerUrl, publicUrl: calibreServerUrlPublic, username: calibreUsername, password: calibrePassword)
+            name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
         guard let oldServer = modelData.currentCalibreServer else {
             alertItem = AlertItem(id: "ModServerNotExist")  //shouldn't reach here
             return
@@ -506,7 +477,8 @@ struct ServerView: View {
         
         if newServer.id == oldServer.id {
             //minor changes
-            modelData.updateServer(oldServer: oldServer, newServer: newServer)
+//            modelData.updateServer(oldServer: oldServer, newServer: newServer)
+            //Deprecated
         } else {
             dataLoading = true
             modelData.calibreServerService.getServerLibraries(server: newServer)
@@ -525,7 +497,8 @@ struct ServerView: View {
         newServer.defaultLibrary = serverInfo.defaultLibrary
         newServer.lastLibrary = oldServer.lastLibrary
         
-        modelData.updateServer(oldServer: oldServer, newServer: newServer)
+//        modelData.updateServer(oldServer: oldServer, newServer: newServer)
+        //Deprecated
         
         modelData.probeServersReachability(with: [newServer.id])
 

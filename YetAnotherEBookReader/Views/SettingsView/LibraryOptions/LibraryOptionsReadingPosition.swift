@@ -7,27 +7,27 @@
 
 import SwiftUI
 
-@available(*, deprecated)
 struct LibraryOptionsReadingPosition: View {
     let library: CalibreLibrary
     
+    @Binding var dsreaderHelperServer: CalibreServerDSReaderHelper
     @Binding var readingPosition: CalibreLibraryReadingPosition
+    @Binding var dsreaderHelperLibrary: CalibreLibraryDSReaderHelper
+    @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
 
+    @State private var instructionPresenting = false
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Store Reading Positions in Server and Sync between Devices").font(.title2)
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Enabled", isOn: $readingPosition._isEnabled)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle("Store Reading Positions in Custom Column", isOn: $readingPosition._isEnabled)
                 
-                Text("Custom Column Name: \(readingPosition.readingPositionCN)")
-                
-                HStack {
-                    Spacer()
+                VStack(alignment: .leading, spacing: 4) {
                     if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
-                        Picker("Pick another Column", selection: $readingPosition.readingPositionCN) {
-                            ForEach(library.customColumnInfos.filter{ $1.datatype == "comments" }.keys.map{"#" + $0}.sorted{$0 < $1}, id: \.self) {
-                                Text($0)
+                        Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
+                            ForEach(library.customColumnInfoCommentsKeys
+                                        .map{ ($0.name, "#" + $0.label) }, id: \.1) {
+                                Text("\($1)\n\($0)").tag($1)
                             }
                         }.pickerStyle(MenuPickerStyle())
                         .disabled(!readingPosition.isEnabled())
@@ -35,45 +35,133 @@ struct LibraryOptionsReadingPosition: View {
                         Text("no available column, please refresh library after adding column to calibre").font(.caption).foregroundColor(.red)
                     }
                 }
-                
             }
             
             Divider()
             
-            VStack(alignment: .leading, spacing: 8) {
-                
-                Text("Instructions").font(.title3)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Please add a custom column of type \"Long text, like comments\" on calibre server.")
-                    
-                    Text("If there are multiple users, it's better to add a unique column for each user.")
-                    
-                    Text("Defaults to #read_pos(_username).")
-                }    .font(.callout)
-                
-                if library.server.username.isEmpty {
-                    Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Goodreads Sync Automation", isOn: $dsreaderHelperLibrary._isEnabled)
+                if !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false) {
+                    HStack {
+                        Spacer()
+                        Text("Plugin not available").font(.caption).foregroundColor(.red)
+                    }
                 }
+                Group {
+                    HStack {
+                        if let names = dsreaderHelperServer.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
+                            Picker("Profile Name:     \(goodreadsSync.profileName)", selection: $goodreadsSync.profileName) {
+                                ForEach(names, id: \.self) { name in
+                                    Text(name)
+                                }
+                            }
+                            .pickerStyle(MenuPickerStyle())
+                        } else {
+                            Text("Empty Profile List")
+                        }
+                    }
+                    
+                    Toggle("Auto Update Reading Progress", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsProgress)
+                    
+                    Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
+                }
+                .padding([.leading, .trailing], 8)
+                .disabled( !dsreaderHelperLibrary.isEnabled() )
                 
-                Divider()
-                
-                Toggle("Set as Server-wide Default", isOn: $readingPosition._isDefault)
-                    .font(.title3).hidden()
                 
             }
-            .disabled(!readingPosition.isEnabled())
+            .disabled(
+                !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false)
+            )
+            
+//            Divider()
+//
+//            VStack(alignment: .leading, spacing: 8) {
+//
+//                Text("Instructions").font(.title3)
+//
+//                VStack(alignment: .leading, spacing: 4) {
+//                    Text("Please add a custom column of type \"Long text, like comments\" on calibre server.")
+//
+//                    Text("If there are multiple users, it's better to add a unique column for each user.")
+//
+//                    Text("Defaults to #read_pos(_username).")
+//                }    .font(.callout)
+//
+//                if library.server.username.isEmpty {
+//                    Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
+//                        .font(.caption)
+//                }
+//
+//                Divider()
+//
+//                Toggle("Set as Server-wide Default", isOn: $readingPosition._isDefault)
+//                    .font(.title3).hidden()
+//
+//            }
+//            .disabled(!readingPosition.isEnabled())
+        }
+        .padding()
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(action:{
+                    instructionPresenting = true
+                }) {
+                    Image(systemName: "questionmark.circle")
+                }
+            }
+        }
+        .sheet(isPresented: $instructionPresenting) {
+            NavigationView {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        
+                        Text("Custom Column Requirements for Storing Reading Position").font(.title3)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Please add a custom column of type \"Long text, like comments\" on calibre server.")
+                            
+                            Text("If there are multiple users, it's better to add a unique column for each user.")
+                            
+                            Text("Defaults to #read_pos(_username).")
+                        }
+                        .lineLimit(3)
+                        .font(.callout)
+                        
+                        if library.server.username.isEmpty {
+                            Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
+                                .font(.caption)
+                        }
+                    }
+                }
+                .padding()
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(action:{
+                            instructionPresenting.toggle()
+                        }) {
+                            Image(systemName: "xmark")
+                        }
+                    }
+                }
+            }
+            
         }
     }
 }
 
 struct LibraryOptionsReadingPosition_Previews: PreviewProvider {
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", publicUrl: "", username: "", password: ""), key: "Default", name: "Default")
+    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
     
+    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
+
     @State static private var readingPosition = CalibreLibraryReadingPosition()
+    @State static private var dsreaderHelperLibrary = CalibreLibraryDSReaderHelper()
+    @State static private var goodreadsSync = CalibreLibraryGoodreadsSync()
     
     static var previews: some View {
-        LibraryOptionsReadingPosition(library: library, readingPosition: $readingPosition)
+        NavigationView {
+            LibraryOptionsReadingPosition(library: library, dsreaderHelperServer: $dsreaderHelperServer, readingPosition: $readingPosition, dsreaderHelperLibrary: $dsreaderHelperLibrary, goodreadsSync: $goodreadsSync)
+        }
     }
 }

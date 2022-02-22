@@ -37,20 +37,22 @@ struct CalibreServer: Hashable, Identifiable {
     
     var name: String
     var baseUrl: String
+    var hasPublicUrl: Bool
     var publicUrl: String
     var serverUrl: String {
-        if usePublic && publicUrl.isEmpty == false {
+        if hasPublicUrl && usePublic && publicUrl.isEmpty == false {
             return publicUrl
         } else {
             return baseUrl
         }
     }
+    var hasAuth: Bool
     var username: String
     var password: String
     var defaultLibrary = ""
     var lastLibrary = ""
     
-    var usePublic: Bool = false
+    var usePublic: Bool = false     //runtime only
     
     static func == (lhs: CalibreServer, rhs: CalibreServer) -> Bool {
         lhs.baseUrl == rhs.baseUrl && lhs.username == rhs.username
@@ -82,24 +84,66 @@ struct CalibreLibrary: Hashable, Identifiable {
     var key: String
     var name: String
     
+    var autoUpdate = true
+    var discoverable = true
+    
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
+    var customColumnInfosUnmatched: [CalibreCustomColumnInfo] {
+        var result = customColumnInfos
+        // print("customColumnInfosUnmatched \(customColumnInfos) \(pluginReadingPositionWithDefault) \(pluginGoodreadsSyncWithDefault) \(pluginCountPagesWithDefault)")
+        result.removeValue(forKey: pluginReadingPositionWithDefault?.readingPositionCN.removingPrefix("#") ?? "_")
+
+        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.tagsColumnName.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.ratingColumnName.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.readingProgressColumnName.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.dateReadColumnName.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.reviewColumnName.removingPrefix("#") ?? "_")
+
+        result.removeValue(forKey: pluginCountPagesWithDefault?.pageCountCN.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginCountPagesWithDefault?.wordCountCN.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginCountPagesWithDefault?.fleschKincaidGradeCN.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginCountPagesWithDefault?.fleschReadingEaseCN.removingPrefix("#") ?? "_")
+        result.removeValue(forKey: pluginCountPagesWithDefault?.gunningFogIndexCN.removingPrefix("#") ?? "_")
+
+        return result.map { $0.value }
+    }
+    
+    var customColumnInfoNumberKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "int" || $0.datatype == "float" }
+    }
+    var customColumnInfoTextKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "comments" || $0.datatype == "text" }
+    }
+    var customColumnInfoDateKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "datetime" }
+    }
+    var customColumnInfoRatingKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "rating" }
+    }
+    var customColumnInfoMultiTextKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "text" && $0.isMultiple }
+    }
+    var customColumnInfoCommentsKeysFull: [CalibreCustomColumnInfo] {
+        customColumnInfos.values.filter{ $0.datatype == "comments" }
+    }
+    
     var customColumnInfoNumberKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "int" || $1.datatype == "float" }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "int" || $0.datatype == "float" }
     }
     var customColumnInfoTextKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "comments" || $1.datatype == "text" }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "comments" || $0.datatype == "text" }
     }
     var customColumnInfoDateKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "datetime" }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "datetime" }
     }
     var customColumnInfoRatingKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "rating" }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "rating" }
     }
     var customColumnInfoMultiTextKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "text" && $1.isMultiple }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "text" && $0.isMultiple }
     }
     var customColumnInfoCommentsKeys: [CalibreCustomColumnInfo] {
-        customColumnInfos.filter{ $1.datatype == "comments" }.values.sorted{$0.name < $1.name}
+        customColumnInfosUnmatched.filter{ $0.datatype == "comments" }
     }
     
     var readPosColumnNameDefault: String {
@@ -763,6 +807,27 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     }
 }
 
+struct CalibreCustomColumnInfoResult {
+    var library: CalibreLibrary
+    var result: [String: [String:CalibreCustomColumnInfo]]
+    var errmsg = ""
+    var list = CalibreCdbCmdListResult()
+}
+
+struct CalibreCdbCmdListResult: Codable, Hashable {
+    struct Data: Codable, Hashable {
+        var title: [String: String] = [:]
+        var authors: [String: [String]] = [:]
+        var formats: [String: Set<String>] = [:]
+        var series: [String: String?] = [:]
+        var series_index: [String: Double] = [:]
+        var identifiers: [String: [String: String]] = [:]
+    }
+    
+    var book_ids = Set<Int32>()
+    var data = Data()
+}
+
 struct CalibreServerDSReaderHelper: Codable, Hashable, Identifiable {
     /**
      corresponding server id
@@ -895,7 +960,7 @@ struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, H
            column_info.exists {
             readingPositionCN = "#" + column_info.label
         } else {
-            let filtered = library.customColumnInfoCommentsKeys.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
+            let filtered = library.customColumnInfoCommentsKeysFull.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
             guard filtered.count > 0 else { return }
             if filtered.count == 1, let first = filtered.first {
                 readingPositionCN = "#" + first.label

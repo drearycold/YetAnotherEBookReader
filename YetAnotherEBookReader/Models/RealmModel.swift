@@ -24,7 +24,12 @@ class CalibreServerRealm: Object {
             updatePrimaryKey()
         }
     }
+    
+    @objc dynamic var hasPublicUrl = false
+    
     @objc dynamic var publicUrl: String?
+    
+    @objc dynamic var hasAuth = false
     
     @objc dynamic var username: String? {
         didSet {
@@ -152,11 +157,11 @@ class CalibreBookRealm: Object {
     func readPos() -> BookReadingPosition {
         var readPos = BookReadingPosition()
         
-        let readPosObject = try! JSONSerialization.jsonObject(with: readPosData! as Data, options: [])
-        let readPosDict = readPosObject as! NSDictionary
+        let readPosObject = try? JSONSerialization.jsonObject(with: readPosData as Data? ?? Data(), options: [])
+        let readPosDict = readPosObject as! NSDictionary? ?? NSDictionary()
         
         let deviceMapObject = readPosDict["deviceMap"]
-        let deviceMapDict = deviceMapObject as! NSDictionary
+        let deviceMapDict = deviceMapObject as! NSDictionary? ?? NSDictionary()
         deviceMapDict.forEach { key, value in
             guard let deviceName = key as? String,
                   let deviceReadingPositionDict = value as? [String: Any],
