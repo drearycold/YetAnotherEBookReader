@@ -321,13 +321,13 @@ struct LibraryOptionsDSReaderHelper: View {
                 let decoder = JSONDecoder()
                 var config: CalibreDSReaderHelperConfiguration? = nil
                 do {
-                    config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data)
+                    config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data.data)
                 } catch {
                     print(error)
                 }
                 if let config = config, config.dsreader_helper_prefs != nil {
                     configuration = config
-                    configurationData = data
+                    configurationData = data.data	
                     helperStatus = "Connected"
 
                     configAlertItem = AlertItem(id: "updateConfigAlert")

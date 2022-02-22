@@ -815,6 +815,9 @@ struct CalibreCustomColumnInfoResult {
 }
 
 struct CalibreCdbCmdListResult: Codable, Hashable {
+    struct LastModified: Codable, Hashable {
+        var v: String
+    }
     struct Data: Codable, Hashable {
         var title: [String: String] = [:]
         var authors: [String: [String]] = [:]
@@ -822,6 +825,7 @@ struct CalibreCdbCmdListResult: Codable, Hashable {
         var series: [String: String?] = [:]
         var series_index: [String: Double] = [:]
         var identifiers: [String: [String: String]] = [:]
+        var last_modified: [String: LastModified] = [:]
     }
     
     var book_ids = Set<Int32>()

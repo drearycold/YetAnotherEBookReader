@@ -285,6 +285,8 @@ final class ModelData: ObservableObject {
     
     var calibreServiceCancellable: AnyCancellable?
     var shelfRefreshCancellable: AnyCancellable?
+    var dshelperRefreshCancellable: AnyCancellable?
+    var syncLibrariesIncrementalCancellable: AnyCancellable?
     
     @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String)]()
 
@@ -1809,9 +1811,19 @@ final class ModelData: ObservableObject {
                 self.calibreServerInfoStaging[id] = serverInfo
             }
             
-            self.shelfRefreshCancellable?.cancel()
-            
             self.refreshShelfMetadata(with: serverIds)
+            
+            self.refreshServerDSHelperConfiguration(
+                with: self.calibreServers.filter {
+                    $0.value.isLocal == false
+                }.map{ $0.key }
+            )
+            
+            self.syncLibrariesIncremental(
+                with: self.calibreServers.filter {
+                    $0.value.isLocal == false
+                }.map{ $0.key }
+            )
         }
     }
     
@@ -1867,6 +1879,190 @@ final class ModelData: ObservableObject {
                 NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
             }
     }
+    
+    func refreshServerDSHelperConfiguration(with serverIds: [String]) {
+        dshelperRefreshCancellable?.cancel()
+        
+        dshelperRefreshCancellable = serverIds.publisher.flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
+            guard let server = self.calibreServers[serverId],
+                  let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
+                  let publisher = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil).refreshConfiguration()
+            else {
+                return Just((id: serverId, port: 0, data: Data())).setFailureType(to: URLError.self).eraseToAnyPublisher()
+            }
+            
+            return publisher
+        }
+        .sink(receiveCompletion: { completion in
+            
+        }, receiveValue: { task in
+            let decoder = JSONDecoder()
+            var config: CalibreDSReaderHelperConfiguration? = nil
+            do {
+                config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: task.data)
+            } catch {
+                print(error)
+            }
+            print("\(#function) \(task.id) \(task.port)")
+            if let config = config, config.dsreader_helper_prefs != nil, let realm = try? Realm(configuration: self.realmConf) {
+                let dsreaderHelperServer = CalibreServerDSReaderHelper(id: task.id, port: task.port, configurationData: task.data, configuration: config)
+                
+                self.updateServerDSReaderHelper(dsreaderHelper: dsreaderHelperServer, realm: realm)
+            }
+        })
+    }
+    
+    func syncLibrariesIncremental(with serverIds: [String]) {
+        syncLibrariesIncrementalCancellable?.cancel()
+        
+        syncLibrariesIncrementalCancellable = calibreLibraries.filter {
+            serverIds.contains( $0.value.server.id )
+        }.map { $0.value }.publisher.flatMap { library -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+            guard (self.librarySyncStatus[library.id]?.isSync ?? false) == false else {
+                print("\(#function) isSync \(library.id)")
+                return Just(CalibreCustomColumnInfoResult(library: library, result: ["just_syncing":[:]]))
+                    .setFailureType(to: Never.self).eraseToAnyPublisher()
+            }
+            DispatchQueue.main.sync {
+                self.librarySyncStatus[library.id] = (true, false, "")
+            }
+            print("\(#function) startSync \(library.id)")
+
+            return self.calibreServerService.getCustomColumnsPublisher(library: library)
+        }
+        .flatMap { customColumnResult -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+            var filter = ""     //  "last_modified:>2022-02-20T00:00:00.000000+00:00"
+            if let realm = try? Realm(configuration: self.realmConf),
+               let latest = realm.objects(CalibreBookRealm.self).filter(
+                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                            customColumnResult.library.server.baseUrl,
+                            customColumnResult.library.server.username,
+                            customColumnResult.library.name
+                )).sorted(byKeyPath: "lastModified", ascending: false).first {
+                let formatter = ISO8601DateFormatter()
+                let lastModifiedStr = formatter.string(from: latest.lastModified)
+                filter = "last_modified:>\(lastModifiedStr)"
+            }
+            print("\(#function) syncLibraryPublisher \(customColumnResult.library.id) \(filter)")
+            return self.calibreServerService.syncLibraryPublisher(resultPrev: customColumnResult, filter: filter)
+        }
+        .subscribe(on: DispatchQueue.global())
+        .sink { complete in
+            
+        } receiveValue: { results in
+            var library = results.library
+            print("\(#function) receiveValue \(library.id) \(results.list)")
+            
+
+            guard results.result["just_syncing"] == nil else { return }
+            var isError = false
+            
+            defer {
+                DispatchQueue.main.async {
+                    self.librarySyncStatus[library.id]?.isSync = false
+                    self.librarySyncStatus[library.id]?.isError = isError
+                    print("\(#function) finishSync \(library.id)")
+                }
+            }
+            
+            guard results.result["error"] == nil else {
+                isError = true
+                return
+            }
+            
+            if let result = results.result["result"] {
+                library.customColumnInfos = result
+                
+                DispatchQueue.main.async {
+                    try? self.updateLibraryRealm(library: library)
+                    self.calibreLibraries[library.id] = library
+                    self.librarySyncStatus[library.id]?.msg = "Success"
+                }
+            }
+            
+            guard results.list.book_ids.contains(-1) == false else {
+                isError = true
+                return
+            }
+            
+            guard let realm = try? Realm(configuration: self.realmConf) else {
+                isError = true
+                return
+            }
+            
+            let dateFormatter = ISO8601DateFormatter()
+            let dateFormatter2 = ISO8601DateFormatter()
+            dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+            results.list.book_ids.forEach { id in
+                let idStr = id.description
+                
+                try? realm.write {
+                    let obj = realm.objects(CalibreBookRealm.self).filter(
+                        NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
+                                    results.library.server.baseUrl,
+                                    results.library.server.username,
+                                    results.library.name,
+                                    NSNumber(value: id)
+                        )
+                    ).first ?? CalibreBookRealm()
+                    
+                    if obj.id == 0 {
+                        obj.serverUrl = results.library.server.baseUrl
+                        obj.serverUsername = results.library.server.username
+                        obj.libraryName = results.library.name
+                        obj.id = id
+                    }
+                    
+                    obj.title = results.list.data.title[idStr] ?? "Untitled"
+                    obj.authors.removeAll()
+                    obj.authors.append(objectsIn: results.list.data.authors[idStr] ?? ["Unknown"])
+                    
+                    obj.series = (results.list.data.series[idStr] ?? "") ?? ""
+                    obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
+                    obj.identifiersData = try? JSONEncoder().encode(results.list.data.identifiers[idStr]) as NSData?
+                    
+                    if let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
+                       let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
+                        obj.lastModified = lastModified
+                    } else {
+                        print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
+                    }
+                    
+                    if let formatsResult = results.list.data.formats[idStr] {
+                        var formats = (
+                            try? JSONDecoder().decode(
+                                [String:FormatInfo].self,
+                                from: obj.formatsData as Data? ?? Data()
+                            )
+                        ) ?? [:]
+                        formats = formatsResult.reduce(into: formats) { result, newFormat in
+                            if result[newFormat] == nil {
+                                result[newFormat] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+                            }
+                        }
+                        formats
+                            .map { $0.key }
+                            .filter { formatsResult.contains($0) == false }
+                            .forEach {
+                                formats.removeValue(forKey: $0)
+                            }
+                        
+                        obj.formatsData = try? JSONEncoder().encode(formats) as NSData?
+                    }
+                    
+                    realm.add(obj, update: .modified)
+                }
+            }
+            
+            if self.currentCalibreLibraryId == library.id {
+                DispatchQueue.main.async {
+                    self.currentCalibreLibraryId = ""
+                    self.currentCalibreLibraryId = library.id
+                }
+            }
+        }
+    }
+    
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
         activityDispatchQueue.async {

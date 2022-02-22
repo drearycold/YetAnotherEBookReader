@@ -224,7 +224,7 @@ struct CalibreServerService {
         task.resume()
     }
     
-    func syncLibraryPublisher(resultPrev: CalibreCustomColumnInfoResult) -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
+    func syncLibraryPublisher(resultPrev: CalibreCustomColumnInfoResult, filter: String = "") -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server) else {
             var result = resultPrev
             result.errmsg = "Server not Reachable"
@@ -246,7 +246,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers"], "", "", "", -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified"], "", "", filter, -1]
         
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             var result = resultPrev

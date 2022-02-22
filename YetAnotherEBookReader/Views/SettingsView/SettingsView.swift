@@ -127,31 +127,35 @@ struct SettingsView: View {
     @ViewBuilder
     private func serverRowBuilder(server: CalibreServer) -> some View {
         VStack(alignment: .leading) {
-            Text("\(server.name)")
+            HStack {
+                Text("\(server.name)")
+                Spacer()
+                if modelData.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0 > 0 {
+                    Image("logo_1024")
+                        .resizable()
+                        .frame(width: 16, height: 16, alignment: .center)
+                }
+                if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
+                    Image(
+                        systemName: reachable ? "flag.circle" : "flag.slash.circle"
+                    ).foregroundColor(reachable ? .green : .red)
+                }
+                
+                if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
+                    Image(
+                        systemName: reachable ? "flag" : "flag.slash"
+                    ).foregroundColor(reachable ? .green : .red)
+                }
+            }
             HStack(spacing: 8) {
                 if server.isLocal == false {
-                    Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries").font(.callout)
-                    Spacer()
-                    if modelData.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0 > 0 {
-                        Image("logo_1024")
-                            .resizable()
-                            .frame(width: 16, height: 16, alignment: .center)
-                    }
-                    if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
-                        Image(
-                            systemName: reachable ? "flag.circle" : "flag.slash.circle"
-                        ).foregroundColor(reachable ? .green : .red)
-                    }
+                    Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries")
                     
-                    if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
-                        Image(
-                            systemName: reachable ? "flag" : "flag.slash"
-                        ).foregroundColor(reachable ? .green : .red)
-                    }
                 } else {
                     
                 }
             }
+            .font(.caption)
             HStack(spacing: 4) {
                 Text("Location:")
                 if server.isLocal == false {

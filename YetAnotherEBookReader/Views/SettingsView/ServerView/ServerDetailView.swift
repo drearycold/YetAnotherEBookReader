@@ -228,6 +228,11 @@ struct ServerDetailView: View {
                     isError = true
                     return
                 }
+                
+                let dateFormatter = ISO8601DateFormatter()
+                let dateFormatter2 = ISO8601DateFormatter()
+                dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+                
                 results.list.book_ids.forEach { id in
                     let idStr = id.description
                     
@@ -256,6 +261,12 @@ struct ServerDetailView: View {
                         obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
                         obj.identifiersData = try? JSONEncoder().encode(results.list.data.identifiers[idStr]) as NSData?
                         
+                        if let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
+                           let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
+                            obj.lastModified = lastModified
+                        } else {
+                            print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
+                        }
                         
                         if let formatsResult = results.list.data.formats[idStr] {
                             var formats = (
