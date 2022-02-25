@@ -691,7 +691,7 @@ final class ModelData: ObservableObject {
             calibreLibraries[tmpLibrary.id] = tmpLibrary
             localLibrary = calibreLibraries[tmpLibrary.id]
             do {
-                try updateLibraryRealm(library: localLibrary!)
+                try updateLibraryRealm(library: localLibrary!, realm: self.realm)
             } catch {
                 
             }
@@ -1019,7 +1019,7 @@ final class ModelData: ObservableObject {
         calibreLibraries[libraryId]?.pluginColumns[columnInfo.getID()] = columnInfo
         
         guard let library = calibreLibraries[libraryId] else { return nil }
-        try? updateLibraryRealm(library: library)
+        try? updateLibraryRealm(library: library, realm: self.realm)
         return library
     }
     
@@ -1090,7 +1090,7 @@ final class ModelData: ObservableObject {
         libraries.forEach { (library) in
             calibreLibraries[library.id] = library
             do {
-                try updateLibraryRealm(library: library)
+                try updateLibraryRealm(library: library, realm: self.realm)
             } catch {
             
             }
@@ -1113,7 +1113,7 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func updateLibraryRealm(library: CalibreLibrary) throws {
+    func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
         let libraryRealm = CalibreLibraryRealm()
         libraryRealm.key = library.key
         libraryRealm.name = library.name
@@ -1289,7 +1289,7 @@ final class ModelData: ObservableObject {
                 calibreLibraries[libraryId] = library
             }
             do {
-                try updateLibraryRealm(library: calibreLibraries[libraryId]!)
+                try updateLibraryRealm(library: calibreLibraries[libraryId]!, realm: self.realm)
             } catch {
                 
             }
@@ -1758,7 +1758,7 @@ final class ModelData: ObservableObject {
                 var library = library
                 library.customColumnInfos = columnInfos
                 self.calibreLibraries[library.id] = library
-                try? self.updateLibraryRealm(library: library)
+                try? self.updateLibraryRealm(library: library, realm: self.realm)
                 
                 self.calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
             }
@@ -1968,7 +1968,7 @@ final class ModelData: ObservableObject {
             defer {
                 DispatchQueue.main.async {
                     self.calibreLibraries[library.id] = library
-                    try? self.updateLibraryRealm(library: library)
+                    try? self.updateLibraryRealm(library: library, realm: self.realm)
 
                     self.librarySyncStatus[library.id]?.isSync = false
                     self.librarySyncStatus[library.id]?.isError = isError
@@ -2027,7 +2027,6 @@ final class ModelData: ObservableObject {
                 
                 try? realm.write {
                     obj.lastModified = lastModified
-                    library.lastModified = lastModified
                     
                     obj.serverUrl = results.library.server.baseUrl
                     obj.serverUsername = results.library.server.username
@@ -2069,9 +2068,12 @@ final class ModelData: ObservableObject {
                     }
                 }
                 
-                DispatchQueue.main.async {
-                    self.calibreLibraries[library.id] = library
-                    try? self.updateLibraryRealm(library: library)
+                if library.lastModified < lastModified {
+                    library.lastModified = lastModified
+                    try? self.updateLibraryRealm(library: library, realm: realm)
+                    DispatchQueue.main.async {
+                        self.calibreLibraries[library.id] = library
+                    }
                 }
             }
             

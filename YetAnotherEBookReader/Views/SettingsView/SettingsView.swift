@@ -280,7 +280,7 @@ struct SettingsView: View {
                 }
                 
                 DispatchQueue.main.sync {
-                    try? modelData.updateLibraryRealm(library: newLibrary)
+                    try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
                     modelData.calibreLibraries.removeValue(forKey: oldLibrary.id)
                     modelData.calibreLibraries[newLibrary.id] = newLibrary
                 }

@@ -199,7 +199,7 @@ struct ServerDetailView: View {
                 defer {
                     DispatchQueue.main.async {
                         modelData.calibreLibraries[library.id] = library
-                        try? modelData.updateLibraryRealm(library: library)
+                        try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
                         
                         modelData.librarySyncStatus[library.id]?.isSync = false
                         modelData.librarySyncStatus[library.id]?.isError = isError
@@ -297,9 +297,12 @@ struct ServerDetailView: View {
                         }
                     }
                     
-                    DispatchQueue.main.async {
-                        modelData.calibreLibraries[library.id] = library
-                        try? modelData.updateLibraryRealm(library: library)
+                    if library.lastModified < lastModified {
+                        library.lastModified = lastModified
+                        try? modelData.updateLibraryRealm(library: library, realm: realm)
+                        DispatchQueue.main.async {
+                            modelData.calibreLibraries[library.id] = library
+                        }
                     }
                 }
                 
