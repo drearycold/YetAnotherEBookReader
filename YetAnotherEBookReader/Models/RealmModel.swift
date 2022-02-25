@@ -90,6 +90,10 @@ class CalibreLibraryRealm: Object {
 
     @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
     @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
+    
+    @objc dynamic var autoUpdate = true
+    @objc dynamic var discoverable = true
+    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
 }
 
 class CalibreBookRealm: Object {

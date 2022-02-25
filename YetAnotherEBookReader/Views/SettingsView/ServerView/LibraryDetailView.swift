@@ -30,7 +30,7 @@ struct LibraryDetailView: View {
         List {
             Toggle("Include in Discover", isOn: $library.discoverable)
             
-            Toggle("Auto Update with Server", isOn: $library.discoverable)
+            Toggle("Auto Update with Server", isOn: $library.autoUpdate)
             
             Group {
                 Text("More Customizations")

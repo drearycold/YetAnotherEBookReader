@@ -233,6 +233,9 @@ struct SettingsView: View {
                     server: oldServer,
                     key: libraryRealm.key!,
                     name: libraryRealm.name!,
+                    autoUpdate: libraryRealm.autoUpdate,
+                    discoverable: libraryRealm.discoverable,
+                    lastModified: libraryRealm.lastModified,
                     customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                         $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                     },
@@ -262,6 +265,9 @@ struct SettingsView: View {
                     server: newServer,
                     key: oldLibrary.key,
                     name: oldLibrary.name,
+                    autoUpdate: oldLibrary.autoUpdate,
+                    discoverable: oldLibrary.discoverable,
+                    lastModified: oldLibrary.lastModified,
                     customColumnInfos: oldLibrary.customColumnInfos,
                     pluginColumns: oldLibrary.pluginColumns)
                 
@@ -274,9 +280,7 @@ struct SettingsView: View {
                 }
                 
                 DispatchQueue.main.sync {
-                    do {
-                       try modelData.updateLibraryRealm(library: newLibrary)
-                    } catch {}
+                    try? modelData.updateLibraryRealm(library: newLibrary)
                     modelData.calibreLibraries.removeValue(forKey: oldLibrary.id)
                     modelData.calibreLibraries[newLibrary.id] = newLibrary
                 }

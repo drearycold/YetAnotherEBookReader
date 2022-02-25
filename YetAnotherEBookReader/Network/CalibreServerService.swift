@@ -246,7 +246,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified"], "", "", filter, -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified"], "last_modified", "ascending", filter, -1]
         
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             var result = resultPrev

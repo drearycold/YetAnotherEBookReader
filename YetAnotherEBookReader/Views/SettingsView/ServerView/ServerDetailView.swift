@@ -198,6 +198,9 @@ struct ServerDetailView: View {
                 
                 defer {
                     DispatchQueue.main.async {
+                        modelData.calibreLibraries[library.id] = library
+                        try? modelData.updateLibraryRealm(library: library)
+                        
                         modelData.librarySyncStatus[library.id]?.isSync = false
                         modelData.librarySyncStatus[library.id]?.isError = isError
                         print("\(#function) finishSync \(library.id)")
@@ -213,13 +216,11 @@ struct ServerDetailView: View {
                     library.customColumnInfos = result
                     
                     DispatchQueue.main.async {
-                        try? modelData.updateLibraryRealm(library: library)
-                        modelData.calibreLibraries[library.id] = library
                         modelData.librarySyncStatus[library.id]?.msg = "Success"
                     }
                 }
                 
-                guard results.list.book_ids.contains(-1) == false else {
+                guard results.list.book_ids.first != -1 else {
                     isError = true
                     return
                 }
@@ -236,22 +237,29 @@ struct ServerDetailView: View {
                 results.list.book_ids.forEach { id in
                     let idStr = id.description
                     
+                    let obj = realm.objects(CalibreBookRealm.self).filter(
+                        NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                                    NSNumber(value: id),
+                                    results.library.server.baseUrl,
+                                    results.library.server.username,
+                                    results.library.name
+                        )
+                    ).first ?? CalibreBookRealm()
+                    
+                    guard let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
+                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr),
+                          obj.lastModified < lastModified else {
+                        // print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
+                        return
+                    }
+                    
                     try? realm.write {
-                        let obj = realm.objects(CalibreBookRealm.self).filter(
-                            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
-                                        results.library.server.baseUrl,
-                                        results.library.server.username,
-                                        results.library.name,
-                                        NSNumber(value: id)
-                            )
-                        ).first ?? CalibreBookRealm()
+                        obj.lastModified = lastModified
+                        library.lastModified = lastModified
                         
-                        if obj.id == 0 {
-                            obj.serverUrl = results.library.server.baseUrl
-                            obj.serverUsername = results.library.server.username
-                            obj.libraryName = results.library.name
-                            obj.id = id
-                        }
+                        obj.serverUrl = results.library.server.baseUrl
+                        obj.serverUsername = results.library.server.username
+                        obj.libraryName = results.library.name
                         
                         obj.title = results.list.data.title[idStr] ?? "Untitled"
                         obj.authors.removeAll()
@@ -260,13 +268,6 @@ struct ServerDetailView: View {
                         obj.series = (results.list.data.series[idStr] ?? "") ?? ""
                         obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
                         obj.identifiersData = try? JSONEncoder().encode(results.list.data.identifiers[idStr]) as NSData?
-                        
-                        if let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
-                           let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
-                            obj.lastModified = lastModified
-                        } else {
-                            print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
-                        }
                         
                         if let formatsResult = results.list.data.formats[idStr] {
                             var formats = (
@@ -290,11 +291,20 @@ struct ServerDetailView: View {
                             obj.formatsData = try? JSONEncoder().encode(formats) as NSData?
                         }
                         
-                        realm.add(obj, update: .modified)
+                        if obj.id == 0 {
+                            obj.id = id
+                            realm.add(obj, update: .modified)
+                        }
+                    }
+                    
+                    DispatchQueue.main.async {
+                        modelData.calibreLibraries[library.id] = library
+                        try? modelData.updateLibraryRealm(library: library)
                     }
                 }
                 
-                if modelData.currentCalibreLibraryId == library.id {
+                if modelData.currentCalibreLibraryId == library.id,
+                   results.list.book_ids.isEmpty == false {
                     DispatchQueue.main.async {
                         modelData.currentCalibreLibraryId = ""
                         modelData.currentCalibreLibraryId = library.id

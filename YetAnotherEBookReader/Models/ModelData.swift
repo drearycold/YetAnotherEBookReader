@@ -577,6 +577,9 @@ final class ModelData: ObservableObject {
                 server: calibreServer,
                 key: libraryRealm.key ?? libraryRealm.name!,
                 name: libraryRealm.name!,
+                autoUpdate: libraryRealm.autoUpdate,
+                discoverable: libraryRealm.discoverable,
+                lastModified: libraryRealm.lastModified,
                 customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                     $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
                 },
@@ -1116,6 +1119,9 @@ final class ModelData: ObservableObject {
         libraryRealm.name = library.name
         libraryRealm.serverUrl = library.server.baseUrl
         libraryRealm.serverUsername = library.server.username
+        libraryRealm.autoUpdate = library.autoUpdate
+        libraryRealm.discoverable = library.discoverable
+        libraryRealm.lastModified = library.lastModified
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
                 libraryRealm.pluginDSReaderHelper = plugin.managedObject()
@@ -1165,11 +1171,11 @@ final class ModelData: ObservableObject {
     
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
         return realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
+            NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                        NSNumber(value: book.id),
                         book.library.server.baseUrl,
                         book.library.server.username,
-                        book.library.name,
-                        NSNumber(value: book.id)
+                        book.library.name
             )
         ).first
     }
@@ -1933,15 +1939,17 @@ final class ModelData: ObservableObject {
         .flatMap { customColumnResult -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
             var filter = ""     //  "last_modified:>2022-02-20T00:00:00.000000+00:00"
             if let realm = try? Realm(configuration: self.realmConf),
-               let latest = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+               let libraryRealm = realm.objects(CalibreLibraryRealm.self).filter(
+                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND name = %@",
                             customColumnResult.library.server.baseUrl,
                             customColumnResult.library.server.username,
                             customColumnResult.library.name
-                )).sorted(byKeyPath: "lastModified", ascending: false).first {
+                )).first {
                 let formatter = ISO8601DateFormatter()
-                let lastModifiedStr = formatter.string(from: latest.lastModified)
-                filter = "last_modified:>\(lastModifiedStr)"
+                formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
+                formatter.timeZone = .current
+                let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
+                filter = "last_modified:>=\(lastModifiedStr)"
             }
             print("\(#function) syncLibraryPublisher \(customColumnResult.library.id) \(filter)")
             return self.calibreServerService.syncLibraryPublisher(resultPrev: customColumnResult, filter: filter)
@@ -1951,14 +1959,17 @@ final class ModelData: ObservableObject {
             
         } receiveValue: { results in
             var library = results.library
-            print("\(#function) receiveValue \(library.id) \(results.list)")
-            
+            print("\(#function) receiveValue \(library.id) \(results.list.book_ids.count) from \(results.list.data.last_modified[results.list.book_ids.first?.description ?? ""]?.v ?? "empty") to \(results.list.data.last_modified[results.list.book_ids.last?.description ?? ""]?.v ?? "empty")")
+            // print("\(#function) receiveValue \(library.id) \(results.list)")
 
             guard results.result["just_syncing"] == nil else { return }
             var isError = false
             
             defer {
                 DispatchQueue.main.async {
+                    self.calibreLibraries[library.id] = library
+                    try? self.updateLibraryRealm(library: library)
+
                     self.librarySyncStatus[library.id]?.isSync = false
                     self.librarySyncStatus[library.id]?.isError = isError
                     print("\(#function) finishSync \(library.id)")
@@ -1974,13 +1985,11 @@ final class ModelData: ObservableObject {
                 library.customColumnInfos = result
                 
                 DispatchQueue.main.async {
-                    try? self.updateLibraryRealm(library: library)
-                    self.calibreLibraries[library.id] = library
                     self.librarySyncStatus[library.id]?.msg = "Success"
                 }
             }
             
-            guard results.list.book_ids.contains(-1) == false else {
+            guard results.list.book_ids.first != -1 else {
                 isError = true
                 return
             }
@@ -1993,26 +2002,37 @@ final class ModelData: ObservableObject {
             let dateFormatter = ISO8601DateFormatter()
             let dateFormatter2 = ISO8601DateFormatter()
             dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+            
             results.list.book_ids.forEach { id in
                 let idStr = id.description
+
+                let obj = realm.objects(CalibreBookRealm.self).filter(
+                    NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+                                NSNumber(value: id),
+                                results.library.server.baseUrl,
+                                results.library.server.username,
+                                results.library.name
+                    )
+                ).first ?? CalibreBookRealm()
+                
+                guard let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
+                      let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr),
+                      obj.lastModified < lastModified else {
+                    // print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
+                    if library.lastModified < obj.lastModified {
+                        library.lastModified = obj.lastModified
+                    }
+                    return
+                }
                 
                 try? realm.write {
-                    let obj = realm.objects(CalibreBookRealm.self).filter(
-                        NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@ AND id = %@",
-                                    results.library.server.baseUrl,
-                                    results.library.server.username,
-                                    results.library.name,
-                                    NSNumber(value: id)
-                        )
-                    ).first ?? CalibreBookRealm()
+                    obj.lastModified = lastModified
+                    library.lastModified = lastModified
                     
-                    if obj.id == 0 {
-                        obj.serverUrl = results.library.server.baseUrl
-                        obj.serverUsername = results.library.server.username
-                        obj.libraryName = results.library.name
-                        obj.id = id
-                    }
-                    
+                    obj.serverUrl = results.library.server.baseUrl
+                    obj.serverUsername = results.library.server.username
+                    obj.libraryName = results.library.name
+
                     obj.title = results.list.data.title[idStr] ?? "Untitled"
                     obj.authors.removeAll()
                     obj.authors.append(objectsIn: results.list.data.authors[idStr] ?? ["Unknown"])
@@ -2020,13 +2040,6 @@ final class ModelData: ObservableObject {
                     obj.series = (results.list.data.series[idStr] ?? "") ?? ""
                     obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
                     obj.identifiersData = try? JSONEncoder().encode(results.list.data.identifiers[idStr]) as NSData?
-                    
-                    if let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
-                       let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
-                        obj.lastModified = lastModified
-                    } else {
-                        print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
-                    }
                     
                     if let formatsResult = results.list.data.formats[idStr] {
                         var formats = (
@@ -2050,11 +2063,20 @@ final class ModelData: ObservableObject {
                         obj.formatsData = try? JSONEncoder().encode(formats) as NSData?
                     }
                     
-                    realm.add(obj, update: .modified)
+                    if obj.id == 0 {
+                        obj.id = id
+                        realm.add(obj, update: .modified)
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self.calibreLibraries[library.id] = library
+                    try? self.updateLibraryRealm(library: library)
                 }
             }
             
-            if self.currentCalibreLibraryId == library.id {
+            if self.currentCalibreLibraryId == library.id,
+               results.list.book_ids.isEmpty == false {
                 DispatchQueue.main.async {
                     self.currentCalibreLibraryId = ""
                     self.currentCalibreLibraryId = library.id

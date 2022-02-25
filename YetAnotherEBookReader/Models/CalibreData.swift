@@ -86,6 +86,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     
     var autoUpdate = true
     var discoverable = true
+    var lastModified = Date(timeIntervalSince1970: 0)
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
     var customColumnInfosUnmatched: [CalibreCustomColumnInfo] {
@@ -828,7 +829,7 @@ struct CalibreCdbCmdListResult: Codable, Hashable {
         var last_modified: [String: LastModified] = [:]
     }
     
-    var book_ids = Set<Int32>()
+    var book_ids = [Int32]()
     var data = Data()
 }
 
