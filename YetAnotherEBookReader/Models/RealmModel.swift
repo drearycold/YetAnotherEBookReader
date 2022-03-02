@@ -210,11 +210,15 @@ class CalibreBookRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(libraryName ?? "-") ^ \(id)"
+        primaryKey = CalibreBookRealm.PrimaryKey(serverUsername: serverUsername, serverUrl: serverUrl, libraryName: libraryName, id: id.description)
+    }
+    
+    static func PrimaryKey(serverUsername: String?, serverUrl: String?, libraryName: String?, id: String) -> String {
+        return "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(libraryName ?? "-") ^ \(id)"
     }
     
     override static func indexedProperties() -> [String] {
-        return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf"]
+        return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf", "series", "authorFirst", "tagFirst"]
     }
 }
 

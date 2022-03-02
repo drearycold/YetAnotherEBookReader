@@ -479,8 +479,8 @@ final class ModelData: ObservableObject {
                 let entries = try decoder.decode([String:CalibreBookEntry?].self, from: data)
                 let json = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
                 
-                result.books.forEach { id, primaryKey in
-                    guard let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+                result.books.forEach { id in
+                    guard let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)),
                           let entryOptional = entries[id],
                           let entry = entryOptional,
                           let root = json?[id] as? NSDictionary else {

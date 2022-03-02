@@ -585,6 +585,12 @@ struct CalibreServerService {
         bookRealm.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .distantPast
         bookRealm.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .distantPast
         
+        var authors = entry.authors
+        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
+        bookRealm.authorSecond = authors.popFirst()
+        bookRealm.authorThird = authors.popFirst()
+        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
+        
         var tags = entry.tags
         bookRealm.tagFirst = tags.popFirst()
         bookRealm.tagSecond = tags.popFirst()
@@ -608,12 +614,6 @@ struct CalibreServerService {
         bookRealm.size = 0   //parse later
         
         bookRealm.rating = Int(entry.rating * 2)
-        
-        var authors = entry.authors
-        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
-        bookRealm.authorSecond = authors.popFirst()
-        bookRealm.authorThird = authors.popFirst()
-        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
         
         bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers) as NSData
         bookRealm.comments = entry.comments ?? ""
@@ -1096,14 +1096,14 @@ struct CalibreServerService {
             url: endpointUrl, username: book.library.server.username)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [String: String]) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [String]) -> CalibreBooksTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
         var urlComponents = URLComponents()
         urlComponents.path = "/ajax/books/\(library.key)"
         urlComponents.queryItems = [
-            URLQueryItem(name: "ids", value: books.map{$0.key}.joined(separator: ","))
+            URLQueryItem(name: "ids", value: books.joined(separator: ","))
         ]
         guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
             return nil

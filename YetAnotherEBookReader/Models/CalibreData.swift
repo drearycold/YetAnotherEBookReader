@@ -638,7 +638,7 @@ struct CalibreBookTask {
 
 struct CalibreBooksTask {
     var library: CalibreLibrary
-    var books: [String: String]         //id to primaryKey
+    var books: [String]
     var url: URL
     var data: Data? = nil
     var response: URLResponse? = nil
@@ -1249,4 +1249,12 @@ struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
     var reading_position_prefs: CalibreReadingPositionPrefs? = nil
+}
+
+extension Array {
+    func chunks(size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
+        }
+    }
 }
