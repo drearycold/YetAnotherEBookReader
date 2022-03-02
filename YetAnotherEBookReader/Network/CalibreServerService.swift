@@ -246,7 +246,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified"], "last_modified", "ascending", filter, -1]
+        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified", "timestamp", "pubdate", "tags"], "last_modified", "ascending", filter, -1]
         
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             var result = resultPrev
@@ -255,6 +255,7 @@ struct CalibreServerService {
         }
         
         let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.timeoutIntervalForRequest = 600
         let urlSessionDelegate = CalibreServerTaskDelegate(resultPrev.library.server.username)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
 
@@ -504,30 +505,6 @@ struct CalibreServerService {
         
         book.tags = entry.tags
         
-        
-//        if let v = root["format_metadata"] as? NSDictionary {
-//            book.formats = v.reduce(
-//                into: book.formats
-//            ) { result, format in
-//                if let fKey = format.key as? String,
-//                   let fVal = format.value as? NSDictionary,
-//                   let sizeVal = fVal["size"] as? NSNumber,
-//                   let mtimeVal = fVal["mtime"] as? String {
-//                    var formatInfo = result[fKey.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-//
-//                    formatInfo.serverSize = sizeVal.uint64Value
-//
-//                    let dateFormatter = ISO8601DateFormatter()
-//                    dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-//                    if let mtime = dateFormatter.date(from: mtimeVal) {
-//                        formatInfo.serverMTime = mtime
-//                    }
-//
-//                    result[fKey.uppercased()] = formatInfo
-//                }
-//            }
-//        }
-        
         book.formats = entry.format_metadata.reduce(into: book.formats) {
             var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
             
@@ -542,7 +519,7 @@ struct CalibreServerService {
         
         book.size = 0   //parse later
         
-        book.rating = entry.rating * 2
+        book.rating = Int(entry.rating * 2)
         book.authors = entry.authors
         book.identifiers = entry.identifiers
         book.comments = entry.comments ?? ""
@@ -574,22 +551,6 @@ struct CalibreServerService {
                     return
                 }
                 
-//                let deviceReadingPositionDict = value as! [String: Any]
-//                //TODO merge
-//
-//                var deviceReadingPosition = BookDeviceReadingPosition(id: deviceName, readerName: deviceReadingPositionDict["readerName"] as! String)
-//
-//                deviceReadingPosition.lastReadPage = deviceReadingPositionDict["lastReadPage"] as! Int
-//                deviceReadingPosition.lastReadChapter = deviceReadingPositionDict["lastReadChapter"] as! String
-//                deviceReadingPosition.lastChapterProgress = deviceReadingPositionDict["lastChapterProgress"] as? Double ?? 0.0
-//                deviceReadingPosition.lastProgress = deviceReadingPositionDict["lastProgress"] as? Double ?? 0.0
-//                deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as! Int
-//                deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as! String
-//                deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as! Int
-//                if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-//                    deviceReadingPosition.lastPosition = lastPosition as! [Int]
-//                }
-                
                 var deviceReadingPosition = value
                 deviceReadingPosition.id = deviceName
                 
@@ -598,9 +559,106 @@ struct CalibreServerService {
                 defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
             }
         }
-                
+
         return book
     }
+    
+    func handleLibraryBookOne(library: CalibreLibrary, bookRealm: CalibreBookRealm, entry: CalibreBookEntry, root: NSDictionary) {
+        let decoder = JSONDecoder()
+//
+//        guard let entry = try? decoder.decode(CalibreBookEntry.self, from: json),
+//              let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
+//            print("\(#function) decode error \(String(describing: bookRealm.primaryKey))")
+//            return
+//        }
+        
+        bookRealm.title = entry.title
+        bookRealm.publisher = entry.publisher ?? ""
+        bookRealm.series = entry.series ?? ""
+        bookRealm.seriesIndex = entry.series_index ?? 0.0
+        
+        let parserOne = ISO8601DateFormatter()
+        parserOne.formatOptions = .withInternetDateTime
+        let parserTwo = ISO8601DateFormatter()
+        parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        bookRealm.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
+        bookRealm.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .distantPast
+        bookRealm.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .distantPast
+        
+        var tags = entry.tags
+        bookRealm.tagFirst = tags.popFirst()
+        bookRealm.tagSecond = tags.popFirst()
+        bookRealm.tagThird = tags.popFirst()
+        bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
+        
+        var formats: [String : FormatInfo] = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData as Data? ?? .init())) ?? [:]
+
+        formats = entry.format_metadata.reduce(into: formats) {
+            var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+            
+            formatInfo.serverSize = $1.value.size
+            
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+            formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
+            
+            $0[$1.key.uppercased()] = formatInfo
+        }
+        
+        bookRealm.size = 0   //parse later
+        
+        bookRealm.rating = Int(entry.rating * 2)
+        
+        var authors = entry.authors
+        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
+        bookRealm.authorSecond = authors.popFirst()
+        bookRealm.authorThird = authors.popFirst()
+        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
+        
+        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers) as NSData
+        bookRealm.comments = entry.comments ?? ""
+        
+        var userMetadatas = bookRealm.userMetadatas()
+        if let userMetadata = root["user_metadata"] as? NSDictionary {
+            userMetadatas = userMetadata.reduce(into: userMetadatas) {
+                guard let dict = $1.value as? NSDictionary,
+                    let label = dict["label"] as? String,
+                    let value = dict["#value#"]
+                else { return }
+                $0[label] = value
+            }
+        }
+        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
+        var readPos = bookRealm.readPos()
+        //Parse Reading Position
+        if let pluginReadingPosition = modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
+           let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
+           let readPosData = Data(base64Encoded: readPosString),
+           let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
+           //let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+           //let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
+           let deviceMapDict = readPosDictNew["deviceMap"] {
+            
+            deviceMapDict.forEach { key, value in
+                let deviceName = key// as! String
+                
+                if deviceName == modelData.deviceName && readPos.getPosition(deviceName) != nil {
+                    //ignore server, trust local record
+                    return
+                }
+                
+                var deviceReadingPosition = value
+                deviceReadingPosition.id = deviceName
+                
+                readPos.updatePosition(deviceName, deviceReadingPosition)
+            }
+            
+            if let deviceMapSerialize = try? deviceMapDict.compactMapValues({ try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) }) {
+                bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
+            }
+        }
+    }
+        
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
         let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
@@ -1006,6 +1064,22 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
+    func buildMetadataTask(library: CalibreLibrary, bookId: Int32) -> CalibreBookTask? {
+        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
+            return nil
+        }
+        var urlComponents = URLComponents()
+        urlComponents.path = "/get/json/\(bookId)/\(library.key)"
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
+        return CalibreBookTask(
+            bookId: bookId,
+            inShelfId: "",
+            url: endpointUrl, username: library.server.username)
+    }
+    
     func buildMetadataTask(book: CalibreBook) -> CalibreBookTask? {
         guard let serverUrl = getServerUrlByReachability(server: book.library.server) else {
             return nil
@@ -1020,6 +1094,26 @@ struct CalibreServerService {
             bookId: book.id,
             inShelfId: book.inShelfId,
             url: endpointUrl, username: book.library.server.username)
+    }
+    
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [String: String]) -> CalibreBooksTask? {
+        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
+            return nil
+        }
+        var urlComponents = URLComponents()
+        urlComponents.path = "/ajax/books/\(library.key)"
+        urlComponents.queryItems = [
+            URLQueryItem(name: "ids", value: books.map{$0.key}.joined(separator: ","))
+        ]
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
+        return CalibreBooksTask(
+            library: library,
+            books: books,
+            url: endpointUrl
+        )
     }
     
     func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
@@ -1038,10 +1132,27 @@ struct CalibreServerService {
     func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         let a = urlSession.dataTaskPublisher(for: task.url)
             .map { (task, $0.data, $0.response) }
+            .eraseToAnyPublisher()
+        return a
+    }
+    
+    func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.timeoutIntervalForRequest = 600
+        let urlSessionDelegate = CalibreServerTaskDelegate(task.library.server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
+        
+        let a = urlSession.dataTaskPublisher(for: task.url)
+            .map { result -> CalibreBooksTask in
+                var task = task
+                task.data = result.data
+                task.response = result.response
+                return task
+            }
             .eraseToAnyPublisher()
         return a
     }

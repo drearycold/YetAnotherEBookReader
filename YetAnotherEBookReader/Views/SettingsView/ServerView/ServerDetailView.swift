@@ -72,10 +72,8 @@ struct ServerDetailView: View {
                                 libraryList.removeAll(where: {$0.id == newLibrary.id})
                                 libraryList.append(newLibrary)
                                 sortLibraryList()
-                                print("library set \(newLibrary)")
-                                libraryList.forEach {
-                                    print("libraryList setter \($0)")
-                                }
+                                modelData.calibreLibraries[newLibrary.id] = newLibrary
+                                try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
                             }
                         )
                     ),
@@ -192,11 +190,20 @@ struct ServerDetailView: View {
             } receiveValue: { results in
                 var library = results.library
                 print("\(#function) receiveValue \(library.id)")
-
+                
                 guard results.result["just_syncing"] == nil else { return }
                 var isError = false
                 
+                var objs = [String: String]()
+                objs.reserveCapacity(1024)
+                
                 defer {
+                    if objs.count > 0 {
+                        if let task =  modelData.calibreServerService.buildBooksMetadataTask(library: library, books: objs) {
+                            modelData.getBooksMetadataSubject.send(task)
+                        }
+                    }
+                    
                     DispatchQueue.main.async {
                         modelData.calibreLibraries[library.id] = library
                         try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
@@ -247,27 +254,62 @@ struct ServerDetailView: View {
                     ).first ?? CalibreBookRealm()
                     
                     guard let lastModifiedStr = results.list.data.last_modified[idStr]?.v,
-                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr),
-                          obj.lastModified < lastModified else {
+                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else {
+                        //  obj.lastModified < lastModified else {
                         // print("\(#function) lastModifiedError \(library.id) \(idStr) \(String(describing: results.list.data.last_modified[idStr]?.v))")
                         return
                     }
                     
                     try? realm.write {
                         obj.lastModified = lastModified
-                        library.lastModified = lastModified
                         
                         obj.serverUrl = results.library.server.baseUrl
                         obj.serverUsername = results.library.server.username
                         obj.libraryName = results.library.name
                         
                         obj.title = results.list.data.title[idStr] ?? "Untitled"
-                        obj.authors.removeAll()
-                        obj.authors.append(objectsIn: results.list.data.authors[idStr] ?? ["Unknown"])
+                        
+                        obj.authorsMore.removeAll()
+                        if let authors = results.list.data.authors[idStr] {
+                            if authors.count > 3 {
+                                obj.authorsMore.append(objectsIn: authors[3..<authors.count])
+                            }
+                            if authors.count > 2 {
+                                obj.authorThird = authors[2]
+                            } else {
+                                obj.authorThird = nil
+                            }
+                            if authors.count > 1 {
+                                obj.authorSecond = authors[1]
+                            } else {
+                                obj.authorSecond = nil
+                            }
+                            if authors.count > 0 {
+                                obj.authorFirst = authors[0]
+                            } else {
+                                obj.authorFirst = "Unknown"
+                            }
+                        } else {
+                            obj.authorFirst = "Unknown"
+                            obj.authorSecond = nil
+                            obj.authorThird = nil
+                        }
                         
                         obj.series = (results.list.data.series[idStr] ?? "") ?? ""
                         obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
                         obj.identifiersData = try? JSONEncoder().encode(results.list.data.identifiers[idStr]) as NSData?
+                        
+                        if let dateStr = results.list.data.timestamp[idStr]?.v,
+                           let date = dateFormatter.date(from: dateStr) ?? dateFormatter2.date(from: dateStr) {
+                            obj.timestamp = date
+                        }
+                        
+                        if let dateStr = results.list.data.pubdate[idStr]?.v,
+                           let date = dateFormatter.date(from: dateStr) ?? dateFormatter2.date(from: dateStr) {
+                            obj.pubDate = date
+                        } else {
+                            obj.pubDate = Date(timeIntervalSince1970: .zero)
+                        }
                         
                         if let formatsResult = results.list.data.formats[idStr] {
                             var formats = (
@@ -295,6 +337,15 @@ struct ServerDetailView: View {
                             obj.id = id
                             realm.add(obj, update: .modified)
                         }
+                    }
+                    
+                    objs[idStr] = obj.primaryKey
+                    if objs.count == 1024 {
+                        if let task =  modelData.calibreServerService.buildBooksMetadataTask(library: library, books: objs) {
+                            modelData.getBooksMetadataSubject.send(task)
+                        }
+                        
+                        objs.removeAll()
                     }
                     
                     if library.lastModified < lastModified {

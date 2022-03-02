@@ -288,6 +288,15 @@ final class ModelData: ObservableObject {
     var dshelperRefreshCancellable: AnyCancellable?
     var syncLibrariesIncrementalCancellable: AnyCancellable?
     
+    lazy var metadataQueue: OperationQueue = {
+        var queue = OperationQueue()
+        queue.name = "Book Metadata queue"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+    var getBooksMetadataSubject = PassthroughSubject<CalibreBooksTask, Never>()
+    var getBooksMetadataCancellable: AnyCancellable?
+    
     @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String)]()
 
     @Published var userFontInfos = [String: FontInfo]()
@@ -308,13 +317,33 @@ final class ModelData: ObservableObject {
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
-                        print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")
+                        //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")
                         if let publicUrl = oldObject!["publicUrl"] as? String {
                             newObject!["hasPublicUrl"] = publicUrl.count > 0
                         }
                         if let username = oldObject!["username"] as? String, let password = oldObject!["password"] as? String {
                             newObject!["hasAuth"] = username.count > 0 && password.count > 0
                         }
+                    }
+                }
+                if oldSchemaVersion < 44 {  //authos to first/second/more, tags to first/second/third/more
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
+                        if let authors = oldObject?.dynamicList("authors") {
+                            ["First", "Second", "Third"].forEach {
+                                newObject?.setValue(authors.first, forKey: "author\($0)")
+                                authors.removeFirst()
+                            }
+                            newObject?.dynamicList("authorsMore").append(objectsIn: authors)
+                        }
+                        
+                        if let authors = oldObject?.dynamicList("tags") {
+                            ["First", "Second", "Third"].forEach {
+                                newObject?.setValue(authors.first, forKey: "tag\($0)")
+                                authors.removeFirst()
+                            }
+                            newObject?.dynamicList("tagsMore").append(objectsIn: authors)
+                        }
+                        
                     }
                 }
             }
@@ -429,6 +458,45 @@ final class ModelData: ObservableObject {
         self.reloadCustomFonts()
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+        
+        getBooksMetadataCancellable = getBooksMetadataSubject.flatMap { task in
+            self.calibreServerService.getBooksMetadata(task: task)
+        }
+        .subscribe(on: DispatchQueue.global())
+        .sink(receiveCompletion: { completion in
+            print("getBookMetadataCancellable error \(completion)")
+        }, receiveValue: { result in
+            print("getBookMetadataCancellable response \(result.response)")
+            
+            let decoder = JSONDecoder()
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+
+            do {
+                guard let data = result.data else {
+                    print("getBookMetadataCancellable nildata \(result.library.name)")
+                    return
+                }
+                let entries = try decoder.decode([String:CalibreBookEntry?].self, from: data)
+                let json = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+                
+                result.books.forEach { id, primaryKey in
+                    guard let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+                          let entryOptional = entries[id],
+                          let entry = entryOptional,
+                          let root = json?[id] as? NSDictionary else {
+                        return
+                    }
+                    
+                    try? realm.write {
+                        self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
+                    }
+                }
+                
+                print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
+            } catch {
+                print("getBookMetadataCancellable decode \(result.library.name) \(error)")
+            }
+        })
         
         if mock {
             let library = calibreLibraries.first!.value
@@ -966,6 +1034,23 @@ final class ModelData: ObservableObject {
         print("updateFilteredBookList finished count=\(self.filteredBookList.count)")
     }
     
+    func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
+        let serverId = { () -> String in
+            let serverUrl = bookRealm.serverUrl ?? "."
+            if let username = bookRealm.serverUsername,
+               username.isEmpty == false {
+                return "\(username) @ \(serverUrl)"
+            } else {
+                return serverUrl
+            }
+        }()
+        guard let libraryName = bookRealm.libraryName else { return nil }
+        let libraryId = "\(serverId) - \(libraryName)"
+        guard let library = calibreLibraries[libraryId] else { return nil }
+        
+        return convert(library: library, bookRealm: bookRealm)
+    }
+    
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
         let formatsVer1 = bookRealm.formats().reduce(
             into: [String: FormatInfo]()
@@ -1002,8 +1087,27 @@ final class ModelData: ObservableObject {
         if bookRealm.userMetaData != nil {
             calibreBook.userMetadatas = bookRealm.userMetadatas()
         }
-        calibreBook.authors.append(contentsOf: bookRealm.authors)
-        calibreBook.tags.append(contentsOf: bookRealm.tags)
+        if let authorFirst = bookRealm.authorFirst {
+            calibreBook.authors.append(authorFirst)
+        }
+        if let authorSecond = bookRealm.authorSecond {
+            calibreBook.authors.append(authorSecond)
+        }
+        if let authorThird = bookRealm.authorThird {
+            calibreBook.authors.append(authorThird)
+        }
+        calibreBook.authors.append(contentsOf: bookRealm.authorsMore)
+        
+        if let tagFirst = bookRealm.tagFirst {
+            calibreBook.tags.append(tagFirst)
+        }
+        if let tagSecond = bookRealm.tagSecond {
+            calibreBook.tags.append(tagSecond)
+        }
+        if let tagThird = bookRealm.tagThird {
+            calibreBook.tags.append(tagThird)
+        }
+        calibreBook.tags.append(contentsOf: bookRealm.tagsMore)
         
         if calibreBook.readPos.getDevices().count > 1 {
             if let pos = calibreBook.readPos.getPosition(deviceName), pos.lastReadPage == 0 {
@@ -1197,7 +1301,13 @@ final class ModelData: ObservableObject {
         bookRealm.serverUsername = book.library.server.username
         bookRealm.libraryName = book.library.name
         bookRealm.title = book.title
-        bookRealm.authors.append(objectsIn: book.authors)
+
+        var authors = book.authors
+        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
+        bookRealm.authorSecond = authors.popFirst()
+        bookRealm.authorThird = authors.popFirst()
+        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
+
         bookRealm.comments = book.comments
         bookRealm.publisher = book.publisher
         bookRealm.series = book.series
@@ -1207,7 +1317,13 @@ final class ModelData: ObservableObject {
         bookRealm.pubDate = book.pubDate
         bookRealm.timestamp = book.timestamp
         bookRealm.lastModified = book.lastModified
-        bookRealm.tags.append(objectsIn: book.tags)
+
+        var tags = book.tags
+        bookRealm.tagFirst = tags.popFirst()
+        bookRealm.tagSecond = tags.popFirst()
+        bookRealm.tagThird = tags.popFirst()
+        bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
+
         bookRealm.inShelf = book.inShelf
         bookRealm.inShelfName = book.inShelfName
         
@@ -1965,7 +2081,16 @@ final class ModelData: ObservableObject {
             guard results.result["just_syncing"] == nil else { return }
             var isError = false
             
+            var idsAjax = [Int32]()
+            idsAjax.reserveCapacity(1024)
+            
             defer {
+                if idsAjax.count > 0 {
+//                    if let task =  self.calibreServerService.buildBooksMetadataTask(library: library, ids: idsAjax) {
+//                        self.getBooksMetadataSubject.send(task)
+//                    }
+                }
+                
                 DispatchQueue.main.async {
                     self.calibreLibraries[library.id] = library
                     try? self.updateLibraryRealm(library: library, realm: self.realm)
@@ -2033,8 +2158,12 @@ final class ModelData: ObservableObject {
                     obj.libraryName = results.library.name
 
                     obj.title = results.list.data.title[idStr] ?? "Untitled"
-                    obj.authors.removeAll()
-                    obj.authors.append(objectsIn: results.list.data.authors[idStr] ?? ["Unknown"])
+                    
+                    var authors = results.list.data.authors[idStr]
+                    obj.authorFirst = authors?.popFirst() ?? "Unknown"
+                    obj.authorSecond = authors?.popFirst()
+                    obj.authorThird = authors?.popFirst()
+                    obj.authorsMore.replaceSubrange(obj.authorsMore.indices, with: authors ?? [])
                     
                     obj.series = (results.list.data.series[idStr] ?? "") ?? ""
                     obj.seriesIndex = results.list.data.series_index[idStr] ?? 0
@@ -2066,6 +2195,15 @@ final class ModelData: ObservableObject {
                         obj.id = id
                         realm.add(obj, update: .modified)
                     }
+                }
+                
+                idsAjax.append(id)
+                if idsAjax.count == 1024 {
+//                    if let task = self.calibreServerService.buildBooksMetadataTask(library: library, ids: idsAjax) {
+//                        self.getBooksMetadataSubject.send(task)
+//                    }
+                    
+                    idsAjax.removeAll()
                 }
                 
                 if library.lastModified < lastModified {

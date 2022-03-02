@@ -121,17 +121,23 @@ class CalibreBookRealm: Object {
         }
     }
     @objc dynamic var title = ""
-    let authors = List<String>()
+    @objc dynamic var authorFirst: String?
+    @objc dynamic var authorSecond: String?
+    @objc dynamic var authorThird: String?
+    let authorsMore = List<String>()
     @objc dynamic var comments = ""
     @objc dynamic var publisher = ""
     @objc dynamic var series = ""
     @objc dynamic var seriesIndex = 0.0
     @objc dynamic var rating = 0
     @objc dynamic var size = 0
-    @objc dynamic var pubDate = Date()
-    @objc dynamic var timestamp = Date()
-    @objc dynamic var lastModified = Date()
-    let tags = List<String>()
+    @objc dynamic var pubDate = Date(timeIntervalSince1970: 0)
+    @objc dynamic var timestamp = Date(timeIntervalSince1970: 0)
+    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
+    @objc dynamic var tagFirst: String?
+    @objc dynamic var tagSecond: String?
+    @objc dynamic var tagThird: String?
+    let tagsMore = List<String>()
     @objc dynamic var formatsData: NSData?
     @objc dynamic var readPosData: NSData?
     @objc dynamic var identifiersData: NSData?

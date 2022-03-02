@@ -636,6 +636,14 @@ struct CalibreBookTask {
     var username: String
 }
 
+struct CalibreBooksTask {
+    var library: CalibreLibrary
+    var books: [String: String]         //id to primaryKey
+    var url: URL
+    var data: Data? = nil
+    var response: URLResponse? = nil
+}
+
 struct CalibreBookFormatMetadataEntry: Codable {
     var path: String = ""
     var size: UInt64 = 0
@@ -691,12 +699,12 @@ struct CalibreBookEntry: Codable {
     var publisher: String? = nil
     var series: String? = nil
     var pubdate: String = ""
-    var rating: Int = 0
+    var rating: Double = 0.0
     var authors: [String] = []
     var format_metadata: [String: CalibreBookFormatMetadataEntry] = [:]
     var formats: [String] = []
-    var main_format: [String: String] = [:]
-    var other_formats: [String: String] = [:]
+    var main_format: [String: String]? = [:]
+    var other_formats: [String: String]? = [:]
     var category_urls: [String: [String: String]] = [:]
 }
 
@@ -816,7 +824,7 @@ struct CalibreCustomColumnInfoResult {
 }
 
 struct CalibreCdbCmdListResult: Codable, Hashable {
-    struct LastModified: Codable, Hashable {
+    struct DateValue: Codable, Hashable {
         var v: String
     }
     struct Data: Codable, Hashable {
@@ -826,7 +834,9 @@ struct CalibreCdbCmdListResult: Codable, Hashable {
         var series: [String: String?] = [:]
         var series_index: [String: Double] = [:]
         var identifiers: [String: [String: String]] = [:]
-        var last_modified: [String: LastModified] = [:]
+        var last_modified: [String: DateValue] = [:]
+        var timestamp: [String: DateValue] = [:]
+        var pubdate: [String: DateValue] = [:]
     }
     
     var book_ids = [Int32]()

@@ -9,22 +9,23 @@
 import ShelfView
 import SwiftUI
 import Combine
+import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
 #endif
 
-class SectionShelfController: UIViewController, SectionShelfViewDelegate {
+class SectionShelfController: UIViewController, SectionShelfCompositionalViewDelegate {
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var tabBarHeight = CGFloat(0)
     
     var bookModel = [String: [BookModel]]()
-    var bookModelSectionsArray = [BookModelSection]()
-    var shelfView: SectionShelfView!
+    var bookModelSection = [BookModelSection]()
+    var shelfView: SectionShelfCompositionalView!
     var shelfBookSink: AnyCancellable?
 
     #if canImport(GoogleMobileAds)
-    var bannerSize = kGADAdSizeBanner
+    var bannerSize = GADAdSizeBanner
     var bannerView: GADBannerView!
     var gadRequestInitialized = false
     #else
@@ -41,91 +42,146 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
     }
     
     func updateBookModel() {
-        bookModel = modelData.booksInShelf
-            .sorted {
-                if $0.value.lastModified == $1.value.lastModified {
-                    return $0.value.title < $1.value.title
-                } else {
-                    return $0.value.lastModified > $1.value.lastModified
-                }
-            }
-            .reduce(into: [String: [BookModel]]()) { shelfList, entry in
-                let (inShelfId, book) = entry
-                print("updateBookModel \(book.title) \(book.lastModified)")
-                guard let coverUrl = book.coverURL else { return }
-                guard let readerInfo = modelData.prepareBookReading(book: book) else { return }
+        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
+        bookModelSection.removeAll()
+        
+        for sectionInfo in [("lastModified", "Modified", "last_modified"),
+                            ("timestamp", "New in Library", "last_added"),
+                            ("pubDate", "Last Published", "last_published")] {
+            let results = realm.objects(CalibreBookRealm.self)
+                .sorted(byKeyPath: sectionInfo.0, ascending: false)
                 
-                let bookHasUpdate = book.formats.values.reduce(false) { hasUpdate, formatInfo in
-                    guard formatInfo.cached else { return hasUpdate }
-                    if formatInfo.cacheUptoDate {
-                        return hasUpdate
-                    } else {
-                        return true
-                    }
+            var bookModel = [BookModel]()
+            for i in 0 ..< results.count {
+                if bookModel.count > 20 {
+                    break
                 }
-                var bookStatus = BookModel.BookStatus.READY
-                if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-                    bookStatus = .NOCONNECT
-                }
-                if bookHasUpdate {
-                    bookStatus = .HASUPDATE
-                }
-                if modelData.activeDownloads.contains(where: { (url, download) in
-                    download.isDownloading && download.book.inShelfId == inShelfId
-                }) {
-                    bookStatus = .DOWNLOADING
-                }
-                if book.library.server.isLocal {
-                    bookStatus = .LOCAL
-                }
-                
-                let newBook = BookModel(
-                    bookCoverSource: coverUrl.absoluteString,
-                    bookId: inShelfId,
-                    bookTitle: book.title,
-                    bookProgress: Int(floor(readerInfo.position.lastProgress)),
-                    bookStatus: bookStatus
-                )
-                let shelfName = { () -> String in
-                    if book.inShelfName.isEmpty == false {
-                        return book.inShelfName
-                    }
-
-                    if book.library.server.isLocal {
-                        return "Local"
-                    }
-                    return book.tags.first ?? "Untagged"
-                }()
-                if shelfList[shelfName] != nil {
-                    shelfList[shelfName]!.append(newBook)
-                } else {
-                    shelfList[shelfName] = [newBook]
+                if let book = modelData.convert(bookRealm: results[i]),
+                   book.library.discoverable,
+                   let coverURL = book.coverURL {
+                    bookModel.append(BookModel(bookCoverSource: coverURL.absoluteString, bookId: book.id.description, bookTitle: book.title, bookProgress: Int(modelData.getLatestReadingPosition(book: book)?.lastProgress ?? 0.0), bookStatus: .READY))
+                    
+                    // print("updateBookModel \(sectionInfo.0) \(book)")
                 }
             }
-        bookModelSectionsArray = bookModel.sorted {
-            if $0.key == "Local" {
-                return true
-            }
-            if $1.key == "Local" {
-                return false
-            }
-            if $0.key == "Untagged" {
-                return true
-            }
-            if $1.key == "Untagged" {
-                return false
-            }
-            return $0.key < $1.key
-        }.map {
-            BookModelSection(sectionName: $0.key, sectionId: $0.key, sectionBooks: $0.value)
+            
+            let section = BookModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionBooks: bookModel)
+            bookModelSection.append(section)
         }
-        if bookModelSectionsArray.isEmpty {
-            bookModelSectionsArray.append(BookModelSection(sectionName: "Default", sectionId: "Default", sectionBooks: []))
+        
+        let emptyBook = CalibreBook(id: 0, library: modelData.currentCalibreLibrary!)
+        
+        guard let deviceMapSerialize = try? emptyBook.readPos.getCopy().compactMapValues( { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ),
+              let readPosDataEmpty = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData else {
+            return
+        }
+        
+
+        let resultsWithReadPos = realm.objects(CalibreBookRealm.self)
+            .filter(NSPredicate(format: "readPosData != nil AND readPosData != %@", readPosDataEmpty))
+            .compactMap {
+                self.modelData.convert(bookRealm: $0)
+            }
+            .filter { book in
+                let lastProgress =
+                book.readPos.getDevices().max { lhs, rhs in
+                    lhs.lastProgress < rhs.lastProgress
+                }?.lastProgress ?? 0.0
+                return lastProgress > 5.0 && lastProgress < 99.0
+            }
+            .sorted { lb, rb in
+                lb.readPos.getDevices().max { lhs, rhs in
+                    lhs.lastProgress < rhs.lastProgress
+                }?.lastProgress ?? 0.0 > rb.readPos.getDevices().max { lhs, rhs in
+                    lhs.lastProgress < rhs.lastProgress
+                }?.lastProgress ?? 0.0
+            }
+        print("resultsWithReadPos count=\(resultsWithReadPos.count)")
+        
+        var authorSet = Set<String>()
+        var seriesSet = Set<String>()
+        var tagSet = Set<String>()
+        
+        resultsWithReadPos.forEach { book in
+            print("resultsWithReadPos \(book.title)")
+//            print("resultsWithReadPos \(String(describing: bookRealm.readPosData))")
+//            guard let book = modelData.convert(bookRealm: bookRealm) else { return }
+//            print("resultsWithReadPos pos=\(book)")
+            if let author = book.authors.first {
+                authorSet.insert(author)
+            }
+            if book.series.count > 0 {
+                seriesSet.insert(book.series)
+            }
+            if let tag = book.tags.first {
+                tagSet.insert(tag)
+            }
+            
+            //guard let book = modelData.convert(bookRealm: bookRealm) else { return }
+        }
+        print("resultsWithReadPos \(authorSet) \(seriesSet) \(tagSet)")
+        
+        let readingSection = BookModelSection(
+            sectionName: "Reading",
+            sectionId: "reading",
+            sectionBooks: resultsWithReadPos
+                .filter {
+                    self.modelData.booksInShelf[$0.inShelfId] == nil
+                }
+                .map { book in
+                    BookModel(
+                        bookCoverSource: book.coverURL?.absoluteString ?? ".",
+                        bookId: book.inShelfId,
+                        bookTitle: book.title,
+                        bookProgress: Int(
+                            book.readPos.getDevices().max { lhs, rhs in
+                                lhs.lastProgress < rhs.lastProgress
+                            }?.lastProgress ?? 0.0),
+                        bookStatus: .READY
+                    )
+                }
+        )
+        bookModelSection.append(readingSection)
+        
+        [
+            (seriesSet, "series", "seriesIndex", true),
+            (authorSet, "authorFirst", "pubDate", false),
+            (tagSet, "tagFirst", "pubDate", false)
+        ].forEach { def in
+            def.0.sorted().forEach { member in
+                let books: [BookModel] = realm.objects(CalibreBookRealm.self)
+                    .filter(NSPredicate(format: "%K == %@", def.1, member))
+                    .sorted(byKeyPath: def.2, ascending: def.3)
+                    .compactMap {
+                        self.modelData.convert(bookRealm: $0)
+                    }
+                    .map { book in
+                        BookModel(
+                            bookCoverSource: book.coverURL?.absoluteString ?? ".",
+                            bookId: book.inShelfId,
+                            bookTitle: book.title,
+                            bookProgress: Int(
+                                book.readPos.getDevices().max { lhs, rhs in
+                                    lhs.lastProgress < rhs.lastProgress
+                                }?.lastProgress ?? 0.0),
+                            bookStatus: .READY
+                        )
+                    }
+                
+                guard books.count > 1 else { return }
+                
+                let readingSection = BookModelSection(
+                    sectionName: member,
+                    sectionId: member,
+                    sectionBooks: books)
+
+                bookModelSection.append(readingSection)
+            }
         }
     }
 
     func reloadBookModel() {
-        self.shelfView.reloadBooks(bookModelSection: bookModelSectionsArray)
+        self.shelfView.reloadBooks(bookModelSection: bookModelSection)
     }
     
 //    @objc func updateAndReload() {
@@ -169,14 +225,14 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         updateBookModel()
         
         #if canImport(GoogleMobileAds)
-        shelfView = SectionShelfView(
+        shelfView = SectionShelfCompositionalView(
             frame: CGRect(
                 x: 0,
                 y: 0,
                 width: view.frame.width,
                 height: view.frame.height - kGADAdSizeBanner.size.height
             ),
-            bookModelSection: bookModelSectionsArray,
+            bookModelSection: bookModelSection,
             bookSource: SectionShelfView.BOOK_SOURCE_URL)
         shelfView.translatesAutoresizingMaskIntoConstraints = false
         
@@ -300,7 +356,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         
     }
     
-    func onBookClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
+    func onBookClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         modelData.readingBookInShelfId = bookId
@@ -322,7 +378,7 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
     }
 
-    func onBookLongClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+    func onBookLongClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
         print("I just clicked longer \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
 
         modelData.readingBookInShelfId = bookId
@@ -347,11 +403,11 @@ class SectionShelfController: UIViewController, SectionShelfViewDelegate {
         self.present(nav, animated: true, completion: nil)
     }
     
-    func onBookOptionsClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+    func onBookOptionsClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
 
     }
     
-    func onBookRefreshClicked(_ shelfView: SectionShelfView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+    func onBookRefreshClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
         print("I just clicked refresh \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
         
         guard let book = modelData.booksInShelf[bookId] else { return }

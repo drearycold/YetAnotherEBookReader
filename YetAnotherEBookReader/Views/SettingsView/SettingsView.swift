@@ -284,7 +284,6 @@ struct SettingsView: View {
                     modelData.calibreLibraries.removeValue(forKey: oldLibrary.id)
                     modelData.calibreLibraries[newLibrary.id] = newLibrary
                 }
-                
             }
             
             //update books
