@@ -502,6 +502,7 @@ struct CalibreServerService {
         book.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
         book.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .init()
         book.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .init()
+        book.lastSynced = book.lastModified
         
         book.tags = entry.tags
         
@@ -584,6 +585,7 @@ struct CalibreServerService {
         bookRealm.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
         bookRealm.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .distantPast
         bookRealm.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .distantPast
+        bookRealm.lastSynced = bookRealm.lastModified
         
         var authors = entry.authors
         bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
@@ -657,6 +659,10 @@ struct CalibreServerService {
                 bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
             }
         }
+        
+        bookRealm.lastProgress = readPos.getDevices().max(by: { lbdrp, rbdrp in
+            lbdrp.lastProgress < rbdrp.lastProgress
+        })?.lastProgress ?? 0.0
     }
         
     
@@ -1459,7 +1465,7 @@ struct CalibreServerService {
 
         let a = urlSession.dataTaskPublisher(for: urlRequest)
             .tryMap { output in
-                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
+//                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
                     throw NSError(domain: "HTTP", code: 0, userInfo: nil)
                 }
@@ -1504,7 +1510,7 @@ struct CalibreServerService {
 
         modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
             .tryMap { output in
-                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
+//                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
                     throw NSError(domain: "HTTP", code: 0, userInfo: nil)
                 }

@@ -134,6 +134,9 @@ class CalibreBookRealm: Object {
     @objc dynamic var pubDate = Date(timeIntervalSince1970: 0)
     @objc dynamic var timestamp = Date(timeIntervalSince1970: 0)
     @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
+    @objc dynamic var lastSynced = Date(timeIntervalSince1970: 0)
+    @objc dynamic var lastProgress = 0.0
+    
     @objc dynamic var tagFirst: String?
     @objc dynamic var tagSecond: String?
     @objc dynamic var tagThird: String?
@@ -218,7 +221,7 @@ class CalibreBookRealm: Object {
     }
     
     override static func indexedProperties() -> [String] {
-        return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf", "series", "authorFirst", "tagFirst"]
+        return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
     }
 }
 

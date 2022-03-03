@@ -19,8 +19,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var tabBarHeight = CGFloat(0)
     
-    var bookModel = [String: [BookModel]]()
-    var bookModelSection = [BookModelSection]()
     var shelfView: SectionShelfCompositionalView!
     var shelfBookSink: AnyCancellable?
 
@@ -41,160 +39,27 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         true
     }
     
-    func updateBookModel() {
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        bookModelSection.removeAll()
-        
-        for sectionInfo in [("lastModified", "Modified", "last_modified"),
-                            ("timestamp", "New in Library", "last_added"),
-                            ("pubDate", "Last Published", "last_published")] {
-            let results = realm.objects(CalibreBookRealm.self)
-                .sorted(byKeyPath: sectionInfo.0, ascending: false)
-                
-            var bookModel = [BookModel]()
-            for i in 0 ..< results.count {
-                if bookModel.count > 20 {
-                    break
+    func updateBookModel(reload: Bool = false) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let bookModelSection = self.modelData.updateBookModel()
+            DispatchQueue.main.async {
+                self.modelData.bookModelSection = bookModelSection
+                if reload {
+                    self.reloadBookModel()
                 }
-                if let book = modelData.convert(bookRealm: results[i]),
-                   book.library.discoverable,
-                   let coverURL = book.coverURL {
-                    bookModel.append(BookModel(bookCoverSource: coverURL.absoluteString, bookId: book.id.description, bookTitle: book.title, bookProgress: Int(modelData.getLatestReadingPosition(book: book)?.lastProgress ?? 0.0), bookStatus: .READY))
-                    
-                    // print("updateBookModel \(sectionInfo.0) \(book)")
-                }
-            }
-            
-            let section = BookModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionBooks: bookModel)
-            bookModelSection.append(section)
-        }
-        
-        let emptyBook = CalibreBook(id: 0, library: modelData.currentCalibreLibrary!)
-        
-        guard let deviceMapSerialize = try? emptyBook.readPos.getCopy().compactMapValues( { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ),
-              let readPosDataEmpty = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData else {
-            return
-        }
-        
-
-        let resultsWithReadPos = realm.objects(CalibreBookRealm.self)
-            .filter(NSPredicate(format: "readPosData != nil AND readPosData != %@", readPosDataEmpty))
-            .compactMap {
-                self.modelData.convert(bookRealm: $0)
-            }
-            .filter { book in
-                let lastProgress =
-                book.readPos.getDevices().max { lhs, rhs in
-                    lhs.lastProgress < rhs.lastProgress
-                }?.lastProgress ?? 0.0
-                return lastProgress > 5.0 && lastProgress < 99.0
-            }
-            .sorted { lb, rb in
-                lb.readPos.getDevices().max { lhs, rhs in
-                    lhs.lastProgress < rhs.lastProgress
-                }?.lastProgress ?? 0.0 > rb.readPos.getDevices().max { lhs, rhs in
-                    lhs.lastProgress < rhs.lastProgress
-                }?.lastProgress ?? 0.0
-            }
-        print("resultsWithReadPos count=\(resultsWithReadPos.count)")
-        
-        var authorSet = Set<String>()
-        var seriesSet = Set<String>()
-        var tagSet = Set<String>()
-        
-        resultsWithReadPos.forEach { book in
-            print("resultsWithReadPos \(book.title)")
-//            print("resultsWithReadPos \(String(describing: bookRealm.readPosData))")
-//            guard let book = modelData.convert(bookRealm: bookRealm) else { return }
-//            print("resultsWithReadPos pos=\(book)")
-            if let author = book.authors.first {
-                authorSet.insert(author)
-            }
-            if book.series.count > 0 {
-                seriesSet.insert(book.series)
-            }
-            if let tag = book.tags.first {
-                tagSet.insert(tag)
-            }
-            
-            //guard let book = modelData.convert(bookRealm: bookRealm) else { return }
-        }
-        print("resultsWithReadPos \(authorSet) \(seriesSet) \(tagSet)")
-        
-        let readingSection = BookModelSection(
-            sectionName: "Reading",
-            sectionId: "reading",
-            sectionBooks: resultsWithReadPos
-                .filter {
-                    self.modelData.booksInShelf[$0.inShelfId] == nil
-                }
-                .map { book in
-                    BookModel(
-                        bookCoverSource: book.coverURL?.absoluteString ?? ".",
-                        bookId: book.inShelfId,
-                        bookTitle: book.title,
-                        bookProgress: Int(
-                            book.readPos.getDevices().max { lhs, rhs in
-                                lhs.lastProgress < rhs.lastProgress
-                            }?.lastProgress ?? 0.0),
-                        bookStatus: .READY
-                    )
-                }
-        )
-        bookModelSection.append(readingSection)
-        
-        [
-            (seriesSet, "series", "seriesIndex", true),
-            (authorSet, "authorFirst", "pubDate", false),
-            (tagSet, "tagFirst", "pubDate", false)
-        ].forEach { def in
-            def.0.sorted().forEach { member in
-                let books: [BookModel] = realm.objects(CalibreBookRealm.self)
-                    .filter(NSPredicate(format: "%K == %@", def.1, member))
-                    .sorted(byKeyPath: def.2, ascending: def.3)
-                    .compactMap {
-                        self.modelData.convert(bookRealm: $0)
-                    }
-                    .map { book in
-                        BookModel(
-                            bookCoverSource: book.coverURL?.absoluteString ?? ".",
-                            bookId: book.inShelfId,
-                            bookTitle: book.title,
-                            bookProgress: Int(
-                                book.readPos.getDevices().max { lhs, rhs in
-                                    lhs.lastProgress < rhs.lastProgress
-                                }?.lastProgress ?? 0.0),
-                            bookStatus: .READY
-                        )
-                    }
-                
-                guard books.count > 1 else { return }
-                
-                let readingSection = BookModelSection(
-                    sectionName: member,
-                    sectionId: member,
-                    sectionBooks: books)
-
-                bookModelSection.append(readingSection)
             }
         }
     }
 
     func reloadBookModel() {
-        self.shelfView.reloadBooks(bookModelSection: bookModelSection)
+        self.shelfView.reloadBooks(bookModelSection: modelData.bookModelSection)
     }
-    
-//    @objc func updateAndReload() {
-//        updateBookModel()
-//        reloadBookModel()
-//    }
     
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
         resizeSubviews(to: view.frame.size, to: traitCollection)
         
-        //self.updateBookModel()
         #if canImport(GoogleMobileAds)
         guard gadRequestInitialized == false else { return }
         gadRequestInitialized = true
@@ -205,9 +70,9 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         updateAndReloadCancellable?.cancel()
         updateAndReloadCancellable = modelData.booksRefreshedPublisher
+            .collect(Publishers.TimeGroupingStrategy.byTime(RunLoop.main, .seconds(10)))
             .sink { _ in
-                self.updateBookModel()
-                self.reloadBookModel()
+                self.updateBookModel(reload: true)
             }
         
         dismissControllerCancellable?.cancel()
@@ -232,7 +97,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 width: view.frame.width,
                 height: view.frame.height - kGADAdSizeBanner.size.height
             ),
-            bookModelSection: bookModelSection,
+            bookModelSection: modelData.bookModelSection,
             bookSource: SectionShelfView.BOOK_SOURCE_URL)
         shelfView.translatesAutoresizingMaskIntoConstraints = false
         
@@ -357,25 +222,48 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     }
     
     func onBookClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
-        print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
+//        print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
+//
+//        modelData.readingBookInShelfId = bookId
+//
+//        guard modelData.readingBook != nil else {
+//            let alert = UIAlertController(title: "Missing Book File", message: "Re-download from Server?", preferredStyle: .alert)
+//            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+//                alert.dismiss(animated: true, completion: nil)
+//            })
+//            alert.addAction(UIAlertAction(title: "Download", style: .default) { _ in
+//                alert.dismiss(animated: true, completion: nil)
+//            })
+//            self.present(alert, animated: true, completion: nil)
+//            return
+//        }
+//        modelData.presentingEBookReaderFromShelf = true
+//
+//        guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+//        modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
         
+        print("I just clicked longer \"\(bookTitle)\" with bookId \(bookId), at index \(index). Section details --> section \(section), sectionId \(sectionId), sectionTitle \(sectionTitle)")
+
         modelData.readingBookInShelfId = bookId
+//        let detailMenuItem = UIMenuItem(title: "Details", action: #selector(onBookLongClickedDetailMenuItem(_:)))
+//        UIMenuController.shared.menuItems = [detailMenuItem]
+//        becomeFirstResponder()
+//        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        guard modelData.readingBook != nil else {
-            let alert = UIAlertController(title: "Missing Book File", message: "Re-download from Server?", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                alert.dismiss(animated: true, completion: nil)
-            })
-            alert.addAction(UIAlertAction(title: "Download", style: .default) { _ in
-                alert.dismiss(animated: true, completion: nil)
-            })
-            self.present(alert, animated: true, completion: nil)
-            return
-        }
-        modelData.presentingEBookReaderFromShelf = true
+        let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
+        let detailView = UIHostingController(
+            rootView: bookDetailView
+        )
         
-        guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
-        modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
+        let nav = UINavigationController(rootViewController: detailView)
+        nav.modalPresentationStyle = .fullScreen
+        nav.navigationBar.isTranslucent = true
+        nav.navigationBar.prefersLargeTitles = true
+        //nav.setToolbarHidden(false, animated: true)
+        
+        detailView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
+        
+        self.present(nav, animated: true, completion: nil)
     }
 
     func onBookLongClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
@@ -404,7 +292,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     }
     
     func onBookOptionsClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
-
+        
     }
     
     func onBookRefreshClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String, frame inShelfView: CGRect) {

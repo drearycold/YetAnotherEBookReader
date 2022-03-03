@@ -370,6 +370,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: lastModified)
     }
+    var lastSynced = Date(timeIntervalSince1970: .zero)
+    
     var readDateGRByLocale: String? {
         guard let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault, pluginGoodreadsSync.isEnabled(),
               let dateReadString = userMetadatas[pluginGoodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
@@ -446,7 +448,8 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     
     var inShelfId : String {
-        return "\(id)^\(library.id)"
+//        return "\(id)^\(library.id)"
+        return CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.description)
     }
     
     var inShelf = false

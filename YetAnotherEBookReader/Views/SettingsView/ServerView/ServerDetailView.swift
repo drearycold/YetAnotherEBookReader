@@ -188,54 +188,7 @@ struct ServerDetailView: View {
                     }
                 }
             } receiveValue: { results in
-                var library = results.library
-                print("\(#function) receiveValue \(library.id)")
-                
-                guard results.result["just_syncing"] == nil else { return }
-                var isError = false
-                
-                defer {
-                    DispatchQueue.main.async {
-                        modelData.calibreLibraries[library.id] = library
-                        try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
-                        
-                        modelData.librarySyncStatus[library.id]?.isSync = false
-                        modelData.librarySyncStatus[library.id]?.isError = isError
-                        print("\(#function) finishSync \(library.id)")
-                    }
-                }
-                
-                guard results.result["error"] == nil else {
-                    isError = true
-                    return
-                }
-                
-                if let result = results.result["result"] {
-                    library.customColumnInfos = result
-                    
-                    DispatchQueue.main.async {
-                        modelData.librarySyncStatus[library.id]?.msg = "Success"
-                    }
-                }
-                
-                guard results.list.book_ids.first != -1 else {
-                    isError = true
-                    return
-                }
-                
-                results.list.book_ids.chunks(size: 1024).forEach {
-                    if let task = modelData.calibreServerService.buildBooksMetadataTask(library: library, books: $0.map{ $0.description }) {
-                        modelData.getBooksMetadataSubject.send(task)
-                    }
-                }
-                
-                if modelData.currentCalibreLibraryId == library.id,
-                   results.list.book_ids.isEmpty == false {
-                    DispatchQueue.main.async {
-                        modelData.currentCalibreLibraryId = ""
-                        modelData.currentCalibreLibraryId = library.id
-                    }
-                }
+                self.modelData.syncLibrariesSinkValue(results: results)
                 
                 updater += 1
             }
