@@ -370,8 +370,9 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: lastModified)
     }
-    var lastSynced = Date(timeIntervalSince1970: .zero)
-    
+    var lastSynced  = Date(timeIntervalSince1970: .zero)
+    var lastUpdated = Date(timeIntervalSince1970: .zero)
+
     var readDateGRByLocale: String? {
         guard let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault, pluginGoodreadsSync.isEnabled(),
               let dateReadString = userMetadatas[pluginGoodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
@@ -1205,8 +1206,11 @@ struct CalibreGoodreadsSyncPrefs: Codable, Hashable {
         var shelves: [Shelf]
     }
     struct Shelf: Codable, Hashable {
+        var active: Bool
         var name: String
+        var exclusive: Bool
         var book_count: String
+        var tagMappings: [String]
     }
     
     struct PluginPrefs: Codable, Hashable {

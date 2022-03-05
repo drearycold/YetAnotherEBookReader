@@ -96,7 +96,7 @@ struct BookDetailView: View {
         }
         .onChange(of: downloadStatus) { value in
             if downloadStatus == .DOWNLOADED {
-                modelData.addToShelf(modelData.readingBook!.id, shelfName: shelfName)
+                modelData.addToShelf(modelData.readingBook!.inShelfId, shelfName: shelfName)
             }
         }
         .alert(item: $alertItem) { item in

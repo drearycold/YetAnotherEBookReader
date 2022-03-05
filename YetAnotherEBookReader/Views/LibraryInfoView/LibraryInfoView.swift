@@ -8,16 +8,25 @@
 import SwiftUI
 import OSLog
 import Combine
+import RealmSwift
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
 
+    @State private var booksList = [CalibreBook]()
+    @State private var seriesList = [String]()
+    @State private var ratingList = ["Not Rated", "★★★★★", "★★★★", "★★★", "★★", "★"]
+    @State private var formatList = [String]()
+    @State private var identifierList = [String]()
+    
+    @State private var booksListRefreshing = false
     @State private var searchString = ""
-    @State private var selectedBookIds = Set<Int32>()
+    @State private var selectedBookIds = Set<String>()
     @State private var editMode: EditMode = .inactive
     @State private var pageNo = 0
     @State private var pageSize = 100
+    @State private var pageCount = 0
     @State private var updater = 0
     
     @State private var alertItem: AlertItem?
@@ -25,6 +34,7 @@ struct LibraryInfoView: View {
     @State private var batchDownloadSheetPresenting = false
     @State private var librarySwitcherPresenting = false
     
+    @State private var booksListCancellable: AnyCancellable?
     @State private var dismissAllCancellable: AnyCancellable?
 
     private var defaultLog = Logger()
@@ -35,7 +45,9 @@ struct LibraryInfoView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     HStack {
                         Button(action: {
-                            modelData.syncLibrary(alertDelegate: self)
+//                            modelData.syncLibrary(alertDelegate: self)
+                            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+
                         }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                         }
@@ -59,37 +71,73 @@ struct LibraryInfoView: View {
                         updater += 1
                     }
                     
-                    TextField("Search Title & Authors", text: $searchString, onCommit: {
-                        modelData.searchString = searchString
-                        pageNo = 0
-                    })
+                    ZStack {
+                        TextField("Search Title & Authors", text: $searchString, onCommit: {
+                            modelData.searchString = searchString
+                            if pageNo > 0 {
+                                pageNo = 0
+                            } else {
+                                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                            }
+                            
+                        })
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                modelData.searchString = ""
+                                searchString = ""
+                                if pageNo > 0 {
+                                    pageNo = 0
+                                } else {
+                                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                                }
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
                     
                     Divider()
                 }.padding(4)    //top bar
                 
-                List(selection: $selectedBookIds) {
-                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
-                        NavigationLink (
-                            destination: BookDetailView(viewMode: .LIBRARY),
-                            tag: bookId,
-                            selection: $modelData.selectedBookId
-                        ) {
-                            LibraryInfoBookRow(bookId: bookId)
-                        }
-                        .isDetailLink(true)
-                        .contextMenu {
-                            if let book = modelData.calibreServerLibraryBooks[bookId] {
+                ZStack {
+                    List(selection: $selectedBookIds) {
+    //                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
+                        ForEach(booksList, id: \.self) { book in
+                            NavigationLink (
+                                destination: BookDetailView(viewMode: .LIBRARY)
+                                    .onAppear {
+                                        modelData.readingBookInShelfId = book.inShelfId
+                                    },
+                                tag: book.inShelfId,
+                                selection: $modelData.selectedBookId
+                            ) {
+                                LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
+                                    book
+                                }, set: { newBook in
+                                    //dummy
+                                }))
+                            }
+                            .isDetailLink(true)
+                            .contextMenu {
                                 bookRowContextMenuView(book: book)
                             }
-                        }
-                    }   //ForEach
-                    //                        .onDelete(perform: deleteFromList)
-                }
-                .popover(isPresented: $batchDownloadSheetPresenting,
-                         attachmentAnchor: .rect(.bounds),
-                         arrowEdge: .top
-                ) {
-                    LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
+                        }   //ForEach
+                        //                        .onDelete(perform: deleteFromList)
+                    }
+                    .popover(isPresented: $batchDownloadSheetPresenting,
+                             attachmentAnchor: .rect(.bounds),
+                             arrowEdge: .top
+                    ) {
+    //                    LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
+                    }
+                    
+                    if booksListRefreshing {
+                        ProgressView()
+                            .scaleEffect(4, anchor: .center)
+                            .progressViewStyle(CircularProgressViewStyle())
+                    }
                 }
                 
                 VStack(alignment: .trailing, spacing: 4) {
@@ -117,6 +165,7 @@ struct LibraryInfoView: View {
                             } else {
                                 pageNo = 0
                             }
+                            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                         }) {
                             Image(systemName: "chevron.backward.2")
                         }
@@ -127,20 +176,20 @@ struct LibraryInfoView: View {
                         }) {
                             Image(systemName: "chevron.backward")
                         }
-                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
+//                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
+                        Text("\(pageNo+1) / \(pageCount)")
                         Button(action:{
-                            if ((pageNo + 1) * pageSize) < modelData.filteredBookList.count {
+                            if pageNo + 1 < pageCount {
                                 pageNo += 1
                             }
                         }) {
                             Image(systemName: "chevron.forward")
                         }
                         Button(action:{
-                            for i in stride(from:10, to:1, by:-1) {
-                                if ((pageNo + i) * pageSize) < modelData.filteredBookList.count {
-                                    pageNo += i
-                                    break
-                                }
+                            if pageNo + 10 < pageCount {
+                                pageNo += 10
+                            } else {
+                                pageNo = pageCount - 1
                             }
                         }) {
                             Image(systemName: "chevron.forward.2")
@@ -160,12 +209,24 @@ struct LibraryInfoView: View {
         .navigationViewStyle(DefaultNavigationViewStyle())
         .listStyle(PlainListStyle())
         .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
+        .onChange(of: pageNo, perform: { value in
+            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+        })
         .onAppear {
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 librarySwitcherPresenting = false
                 batchDownloadSheetPresenting = false
             }
+            
+            booksListCancellable?.cancel()
+            booksListCancellable = modelData.libraryBookListNeedUpdate
+                .receive(on: DispatchQueue.global(qos: .userInitiated))
+                .sink { _ in
+                updateBooksList()
+            }
+            
+            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         }
         //Body
     }   //View
@@ -192,6 +253,102 @@ struct LibraryInfoView: View {
         }
     }
 
+    func updateBooksList() {
+        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
+        
+        booksListRefreshing = true
+        var booksList = [CalibreBook]()
+        var seriesList = [String]()
+        var pageCount = 1
+        defer {
+            DispatchQueue.main.async {
+                self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
+                self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
+                self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
+                self.pageCount = pageCount
+                booksListRefreshing = false
+            }
+        }
+        
+        var predicates = [String]()
+        let searchTerms = searchString.trimmingCharacters(in: .whitespacesAndNewlines).split { $0.isWhitespace }
+        if searchTerms.isEmpty == false {
+            predicates.append(contentsOf:
+                searchTerms.map {
+                    "title CONTAINS[c] '\($0)' OR authorFirst CONTAINS[c] '\($0)'"
+                }
+            )
+        }
+
+        if modelData.filterCriteriaSeries.isEmpty == false {
+            predicates.append(" ( " + modelData.filterCriteriaSeries.map { "series == '\($0)'" }.joined(separator: " || ")  + " ) ")
+        }
+        
+        if modelData.filterCriteriaRating.isEmpty == false {
+            predicates.append(
+                " ( " +
+                    modelData.filterCriteriaRating.map {
+                        if $0.count <= 5 {
+                            return "rating == \($0.count * 2)"
+                        } else {
+                            return "rating == 0"
+                        }
+                    }.joined(separator: " || ")
+                    + " ) ")
+        }
+        
+        if modelData.filterCriteriaShelved != .none {
+            predicates.append("inShelf == \(modelData.filterCriteriaShelved == .shelvedOnly ? true : false)")
+        }
+//        guard filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription) else { return false }
+//        guard filterCriteriaFormat.isEmpty || filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty == false else { return false }
+//        guard filterCriteriaIdentifier.isEmpty || filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty == false else { return false }
+//        guard filterCriteriaSeries.isEmpty || filterCriteriaSeries.contains(book.seriesDescription) else { return false }
+//        guard filterCriteriaShelved == .none || (filterCriteriaShelved == .shelvedOnly && book.inShelf) || (filterCriteriaShelved == .notShelvedOnly && !book.inShelf) else { return false }
+        
+        let predicateFormat = predicates.isEmpty
+            ? ""
+            : (
+                predicates.count == 1
+                    ? predicates[0]
+                    : "( " + predicates.joined(separator: " ) AND ( ") + " )"
+            )
+        let predicateArgs = [Any]()
+        
+        print("\(#function) predicateFormat=\(predicateFormat) \(predicateArgs)")
+        
+        let allbooks = realm.objects(CalibreBookRealm.self)
+        
+        var seriesSet = Set<String>(allbooks.map{ $0.series })
+        seriesSet.insert("Not in a Series")
+        seriesSet.remove("")
+        seriesList = seriesSet.sorted { lhs, rhs in
+            if lhs == "Not in a Series" {
+                return false
+            }
+            if rhs == "Not in a Series" {
+                return true
+            }
+            return lhs < rhs
+        }
+        
+        var objects = allbooks
+        if predicateFormat.isEmpty == false {
+            objects = objects.filter(predicateFormat, predicateArgs)
+        }
+        let count = objects.count
+        
+        pageCount = Int((Double(count) / Double(pageSize)).rounded(.up))
+        
+        guard pageNo*pageSize < count else { return }
+        
+        booksList = objects.sorted(byKeyPath: "title")[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
+            .compactMap {
+                modelData.convert(bookRealm: $0)
+            }
+        
+    }
+    
     @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         Menu("Download ...") {
@@ -227,6 +384,7 @@ struct LibraryInfoView: View {
                 modelData.filterCriteriaIdentifier.removeAll()
                 modelData.filterCriteriaShelved = .none
                 modelData.filterCriteriaSeries.removeAll()
+                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
             }) {
                 Text("Reset")
             }
@@ -238,6 +396,8 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .shelvedOnly
                     }
+                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+
                 }, label: {
                     Text("Yes" + (modelData.filterCriteriaShelved == .shelvedOnly ? "✓" : ""))
                 })
@@ -247,38 +407,22 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .notShelvedOnly
                     }
+                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+
                 }, label: {
                     Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
                 })
             }
             
             Menu("Series ...") {
-                ForEach(
-                    modelData.calibreServerLibraryBooks.values.reduce(
-                        into: [String: Int]()) { result, value in
-                        if value.series.isEmpty == false {
-                            result[value.series] = 1
-                        } else {
-                            result["Not in a Series"] = 1
-                        }
-                    }
-                    .compactMap { $0.key }
-                    .sorted {
-                        if $0 == "Not in a Series" {
-                            return true
-                        }
-                        if $1 == "Not in a Series" {
-                            return false
-                        }
-                        return $0 < $1
-                    },
-                    id: \.self) { id in
+                ForEach(seriesList, id: \.self) { id in
                     Button(action: {
                         if modelData.filterCriteriaSeries.contains(id) {
                             modelData.filterCriteriaSeries.remove(id)
                         } else {
                             modelData.filterCriteriaSeries.insert(id)
                         }
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                     }, label: {
                         Text(id + (modelData.filterCriteriaSeries.contains(id) ? "✓" : ""))
                     })
@@ -286,49 +430,50 @@ struct LibraryInfoView: View {
             }
             
             Menu("Rating ...") {
-                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                    result[value.ratingDescription] = 1
-                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                ForEach(ratingList, id: \.self) { id in
                     Button(action: {
                         if modelData.filterCriteriaRating.contains(id) {
                             modelData.filterCriteriaRating.remove(id)
                         } else {
                             modelData.filterCriteriaRating.insert(id)
                         }
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                     }, label: {
                         Text(id + (modelData.filterCriteriaRating.contains(id) ? "✓" : ""))
                     })
                 }
             }
+            if false {  //MARK: TODO
             Menu("Format ...") {
-                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                    value.formats.forEach { result[$0.key] = 1 }
-                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                ForEach(formatList, id: \.self) { id in
                     Button(action: {
                         if modelData.filterCriteriaFormat.contains(id) {
                             modelData.filterCriteriaFormat.remove(id)
                         } else {
                             modelData.filterCriteriaFormat.insert(id)
                         }
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+
                     }, label: {
                         Text(id + (modelData.filterCriteriaFormat.contains(id) ? "✓" : ""))
                     })
                 }
             }
             Menu("Linked with ...") {
-                ForEach(modelData.calibreServerLibraryBooks.values.reduce(into: [String: Int](), { result, value in
-                    value.identifiers.forEach { result[$0.key] = 1 }
-                }).compactMap { $0.key }.sorted(), id: \.self) { id in
+                ForEach(identifierList, id: \.self) { id in
                     Button(action: {
                         if modelData.filterCriteriaIdentifier.contains(id) {
                             modelData.filterCriteriaIdentifier.remove(id)
                         } else {
                             modelData.filterCriteriaIdentifier.insert(id)
                         }
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+
                     }, label: {
                         Text(id + (modelData.filterCriteriaIdentifier.contains(id) ? "✓" : ""))
                     })
                 }
+            }
             }
         } label: {
             Image(systemName: "line.horizontal.3.decrease.circle")
@@ -355,7 +500,7 @@ struct LibraryInfoView: View {
                     Button(action: {
                         defaultLog.info("selected \(selectedBookIds.description)")
                         selectedBookIds.forEach { bookId in
-                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
+//                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
                         }
                         selectedBookIds.removeAll()
                     }) {

@@ -135,6 +135,7 @@ class CalibreBookRealm: Object {
     @objc dynamic var timestamp = Date(timeIntervalSince1970: 0)
     @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
     @objc dynamic var lastSynced = Date(timeIntervalSince1970: 0)
+    @objc dynamic var lastUpdated = Date(timeIntervalSince1970: 0)  //local only
     @objc dynamic var lastProgress = 0.0
     
     @objc dynamic var tagFirst: String?
@@ -149,9 +150,9 @@ class CalibreBookRealm: Object {
     @objc dynamic var inShelf = false
     @objc dynamic var inShelfName = ""
     
-    func formats() -> [String: String] {
+    func formats() -> [String: FormatInfo] {
         guard let formatsData = formatsData as Data? else { return [:] }
-        return (try? JSONDecoder().decode([String:String].self, from: formatsData)) ?? [:]
+        return (try? JSONDecoder().decode([String:FormatInfo].self, from: formatsData)) ?? [:]
         //return (try? JSONSerialization.jsonObject(with: formatsData as Data, options: []) as? [String: String]) ?? [:]
     }
     

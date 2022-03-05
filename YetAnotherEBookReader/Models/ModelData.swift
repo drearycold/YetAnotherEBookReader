@@ -34,7 +34,7 @@ final class ModelData: ObservableObject {
             
             UserDefaults.standard.set(currentCalibreServerId, forKey: Constants.KEY_DEFAULTS_SELECTED_SERVER_ID)
             
-            currentBookId = 0
+            //currentBookId = 0
             filteredBookList.removeAll()
             calibreServerLibraryBooks.removeAll()
             
@@ -79,7 +79,7 @@ final class ModelData: ObservableObject {
             UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
             
             calibreServerLibraryUpdating = true
-            currentBookId = 0
+//            currentBookId = 0
             filteredBookList.removeAll()
             calibreServerLibraryBooks.removeAll()
             DispatchQueue.global(qos: .utility).async { [self] in
@@ -188,20 +188,24 @@ final class ModelData: ObservableObject {
         for: .YABR_ServerAdded
     ).eraseToAnyPublisher()
     
+    let libraryBookListNeedUpdate = NotificationCenter.default.publisher(
+        for: .YABR_LibraryBookListNeedUpdate
+    ).eraseToAnyPublisher()
+    
     var presentingStack = [Binding<Bool>]()
     
-    var currentBookId: Int32 = -1 {
+    var currentBookId: String = "" {
         didSet {
-            self.selectedBookId = currentBookId
+//            self.selectedBookId = currentBookId
         }
     }
 
-    @Published var selectedBookId: Int32? = nil {
+    @Published var selectedBookId: String? = nil {
         didSet {
-            guard let selectedBookId = selectedBookId,
-                  let book = self.calibreServerLibraryBooks[selectedBookId]
-                  else { return }
-            self.readingBook = book
+//            guard let selectedBookId = selectedBookId,
+//                  let book = self.calibreServerLibraryBooks[selectedBookId]
+//                  else { return }
+//            self.readingBook = book
         }
     }
     
@@ -353,6 +357,13 @@ final class ModelData: ObservableObject {
                             newObject?.dynamicList("tagsMore").append(objectsIn: authors)
                         }
                         
+                    }
+                }
+                if oldSchemaVersion < 46 {
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
+                        if let lastModified = oldObject?.value(forKey: "lastModified") {
+                            newObject?.setValue(lastModified, forKey: "lastModified")
+                        }
                     }
                 }
             }
@@ -539,6 +550,7 @@ final class ModelData: ObservableObject {
                 timestamp: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
                 lastModified: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
                 lastSynced: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+                lastUpdated: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
                 tags: ["Mock"],
                 formats: ["EPUB" : FormatInfo(
                             filename: "file:///mock",
@@ -1101,6 +1113,7 @@ final class ModelData: ObservableObject {
             timestamp: bookRealm.timestamp,
             lastModified: bookRealm.lastModified,
             lastSynced: bookRealm.lastSynced,
+            lastUpdated: bookRealm.lastUpdated,
             formats: formatsVer2,
             readPos: bookRealm.readPos(),
             inShelf: bookRealm.inShelf,
@@ -1342,6 +1355,7 @@ final class ModelData: ObservableObject {
         bookRealm.timestamp = book.timestamp
         bookRealm.lastModified = book.lastModified
         bookRealm.lastSynced = book.lastSynced
+        bookRealm.lastUpdated = book.lastUpdated
         
         var tags = book.tags
         bookRealm.tagFirst = tags.popFirst()
@@ -1461,22 +1475,25 @@ final class ModelData: ObservableObject {
         return (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync)
     }
     
-    func addToShelf(_ bookId: Int32, shelfName: String) {
-        guard var book = calibreServerLibraryBooks[bookId] else {
-            return
+    func addToShelf(_ inShelfId: String, shelfName: String) {
+        guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: inShelfId) else { return }
+        
+        try? realm.write {
+            bookRealm.inShelfName = shelfName
+            bookRealm.inShelf = true
+            bookRealm.lastUpdated = Date()
         }
         
-        book.inShelfName = shelfName
-        book.inShelf = true
-        book.timestamp = Date()
+        guard let book = convert(bookRealm: bookRealm) else { return }
         
-        calibreServerLibraryBooks[bookId] = book
+        if currentCalibreLibraryId == book.library.id {
+            calibreServerLibraryBooks[book.id] = book
+        }
         
-        if readingBook?.id == bookId {
+        if readingBook?.inShelfId == inShelfId {
             readingBook = book
         }
         
-        updateBookRealm(book: book, realm: self.realm)
         booksInShelf[book.inShelfId] = book
         
         if let library = calibreLibraries[book.library.id],
@@ -1486,6 +1503,8 @@ final class ModelData: ObservableObject {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
         }
+        
+        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
     }
     
     func removeFromShelf(inShelfId: String) {
@@ -1516,6 +1535,8 @@ final class ModelData: ObservableObject {
                 connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
             }
         }
+        
+        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
     }
     
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
@@ -1574,7 +1595,7 @@ final class ModelData: ObservableObject {
         updateBook(book: newBook)
 
         if newBook.inShelf == false {
-            addToShelf(newBook.id, shelfName: newBook.tags.first ?? "Untagged")
+            addToShelf(newBook.inShelfId, shelfName: newBook.tags.first ?? "Untagged")
         }
         
         if format == Format.EPUB {
@@ -1718,15 +1739,17 @@ final class ModelData: ObservableObject {
     
     
     func goToPreviousBook() {
-        if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
-            currentBookId = filteredBookList[curIndex-1]
-        }
+        //MARK: FIXME
+//        if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
+//            currentBookId = filteredBookList[curIndex-1]
+//        }
     }
     
     func goToNextBook() {
-        if let curIndex = filteredBookList.firstIndex(of: selectedBookId ?? currentBookId), curIndex < filteredBookList.count - 1 {
-            currentBookId = filteredBookList[curIndex + 1]
-        }
+        //MARK: FIXME
+//        if let curIndex = filteredBookList.firstIndex(of: selectedBookId ?? currentBookId), curIndex < filteredBookList.count - 1 {
+//            currentBookId = filteredBookList[curIndex + 1]
+//        }
     }
     
     func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
@@ -2372,6 +2395,7 @@ final class ModelData: ObservableObject {
                             ("timestamp", "New in Library", "last_added"),
                             ("pubDate", "Last Published", "last_published")] {
             let results = realm.objects(CalibreBookRealm.self)
+                .filter(NSPredicate(format: "inShelf == false"))
                 .sorted(byKeyPath: sectionInfo.0, ascending: false)
                 
             var bookModel = [BookModel]()

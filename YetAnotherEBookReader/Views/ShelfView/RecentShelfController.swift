@@ -100,7 +100,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         updateAndReloadCancellable?.cancel()
         updateAndReloadCancellable = modelData.booksRefreshedPublisher
-            .subscribe(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.main)
             .sink { _ in
                 self.updateBookModel()
             }
