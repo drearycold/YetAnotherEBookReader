@@ -165,6 +165,8 @@ final class ModelData: ObservableObject {
         }
     }
     
+    @Published var filterCriteriaLibraries = Set<String>()
+    
     @Published var filteredBookList = [Int32]()
     
     @Published var booksInShelf = [String: CalibreBook]()
