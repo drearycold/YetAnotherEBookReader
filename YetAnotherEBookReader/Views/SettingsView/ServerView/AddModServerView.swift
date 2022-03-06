@@ -173,26 +173,6 @@ struct AddModServerView: View {
             if item.id == "ModServerExists" {
                 return Alert(title: Text("Modify Server Errer"), message: Text("A server with the same address and username already exists"), dismissButton: .cancel())
             }
-            if item.id == "DelServer" {
-                return Alert(
-                    title: Text("Remove Server"),
-                    message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
-                    primaryButton: .destructive(Text("Confirm")) {
-                        delServerConfirmed()
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
-            if item.id == "DelLibrary" {
-                return Alert(
-                    title: Text("Remove Library"),
-                    message: Text("Will Remove Cached Book List and Book Files from Reader, Everything on Server will Stay Intact. (OR in the case of Local Library, remove ALL imported books.)"),
-                    primaryButton: .destructive(Text("Confirm")) {
-                        delLibraryConfirmed()
-                    },
-                    secondaryButton: .cancel()
-                )
-            }
             if item.id == "ModServer" {
                 return Alert(title: Text("Mod Server"),
                              message: { if let msg = item.msg {return Text(msg)} else {return nil} }(),
@@ -300,7 +280,7 @@ struct AddModServerView: View {
             }
         }.frame(maxWidth: 720)
         .padding(.all, 8)
-        .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating || dataLoading)
+        .disabled(dataLoading)
         
     }
     
@@ -427,12 +407,7 @@ struct AddModServerView: View {
             .map { CalibreLibrary(server: serverInfo.server, key: $0, name: $1) }
         
         modelData.addServer(server: newServer, libraries: libraries)
-        modelData.currentCalibreServerId = newServer.id
-        if let defaultLibraryId = libraries.filter({
-            $0.name == $0.server.defaultLibrary
-        }).first?.id {
-            modelData.currentCalibreLibraryId = defaultLibraryId
-        }
+        
         modelData.probeServersReachability(with: [newServer.id])
         
         server = newServer
@@ -488,26 +463,6 @@ struct AddModServerView: View {
         dataLoading = true
         modelData.calibreServerService.getServerLibraries(server: newServer)
     }
-    
-    private func delServerConfirmed() {
-        let isSuccess = modelData.removeServer(serverId: server.id)
-        if !isSuccess {
-            alertItem = AlertItem(id: "DelServerFailed")
-        } else {
-            isActive = false
-        }
-    }
-    
-    private func delLibraryConfirmed() {
-        let isSuccess = modelData.removeLibrary(libraryId: modelData.currentCalibreLibraryId)
-        modelData.filteredBookList.removeAll()
-        modelData.calibreServerLibraryBooks.removeAll()
-        
-        if !isSuccess {
-            alertItem = AlertItem(id: "DelLibraryFailed")
-        }
-    }
-    
 }
 
 extension AddModServerView : AlertDelegate {

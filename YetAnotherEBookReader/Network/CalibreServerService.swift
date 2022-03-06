@@ -122,108 +122,6 @@ struct CalibreServerService {
         task.resume()
     }
     
-    func syncLibrary(server: CalibreServer, library: CalibreLibrary, alertDelegate: AlertDelegate) {
-        guard let serverUrl = getServerUrlByReachability(server: server) else {
-            modelData.calibreServerUpdatingStatus = "Server not Reachable"
-            return
-        }
-        
-        var urlComponents = URLComponents()
-        
-        urlComponents.path = "cdb/cmd/list/0"
-        urlComponents.query = "library_id=\(library.key)"
-        
-//        guard let libraryKeyEncoded = library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-//              let endpointUrl = URL(string: server.serverUrl + "/cdb/cmd/list/0?library_id=" + libraryKeyEncoded)
-//              else {
-//            return
-//        }
-        
-        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
-            modelData.calibreServerUpdatingStatus = "Internal Error"
-            return
-        }
-        
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers"], "", "", "", -1]
-        
-        let data = try! JSONSerialization.data(withJSONObject: json, options: [])
-        
-        var request = URLRequest(url: endpointUrl)
-        request.httpMethod = "POST"
-        request.httpBody = data
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, bookId: nil, libraryId: library.id)
-
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            defer {
-                modelData.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingStatus)
-            }
-            var updatingStatus = "Failed"
-            
-            if let error = error {
-                self.defaultLog.warning("error: \(error.localizedDescription)")
-
-                let alertItem = AlertItem(id: error.localizedDescription, action: {
-                    modelData.calibreServerUpdating = false
-                    modelData.calibreServerUpdatingStatus = "Failed"
-                })
-                alertDelegate.alert(alertItem: alertItem)
-
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                
-                let alertItem = AlertItem(id: response?.description ?? "nil reponse", action: {
-                    modelData.calibreServerUpdating = false
-                    modelData.calibreServerUpdatingStatus = "Failed"
-                })
-                alertDelegate.alert(alertItem: alertItem)
-                
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data {
-                defer {
-                    DispatchQueue.main.async {
-                        modelData.calibreServerUpdating = false
-                        modelData.calibreServerUpdatingStatus = updatingStatus
-
-                        modelData.calibreServerLibraryUpdating = false
-                    }
-                }
-                guard let resultBooks = self.handleLibraryBooks(library: library, json: data) else {
-                    let alertItem = AlertItem(id: "Failed to parse calibre server response.")
-                    alertDelegate.alert(alertItem: alertItem)
-                    return
-                }
-            
-                print("syncLibrary count=\(resultBooks.count)")
-                
-                modelData.updateBooks(books: resultBooks.map{$1})
-                
-                updatingStatus = "Refreshed"
-            
-                DispatchQueue.main.async {
-                    modelData.calibreServerLibraryBooks = resultBooks
-                    modelData.updateFilteredBookList()
-                }
-                
-            }
-        }
-        
-        modelData.calibreServerUpdating = true
-        modelData.calibreServerUpdatingStatus = "Refreshing"
-        
-        setCredential(server: server, task: task)
-        task.resume()
-    }
-    
     func syncLibraryPublisher(resultPrev: CalibreCustomColumnInfoResult, filter: String = "") -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server) else {
             var result = resultPrev
@@ -291,99 +189,6 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
         
         return a
-    }
-    
-    /**
-     run on background threads, call completionHandler on main thread
-     */
-    func handleLibraryBooks(library: CalibreLibrary, json: Data) -> [Int32:CalibreBook]? {
-        DispatchQueue.main.async {
-            modelData.calibreServerLibraryUpdating = true
-            modelData.calibreServerLibraryUpdatingTotal = 0
-            modelData.calibreServerLibraryUpdatingProgress = 0
-        }
-        
-        guard let root = try? JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
-            return nil
-        }
-        
-        var calibreServerLibraryBooks = modelData.calibreServerLibraryBooks
-        
-        let resultElement = root["result"] as! NSDictionary
-        let bookIds = resultElement["book_ids"] as! NSArray
-        
-        bookIds.forEach { idNum in
-            let id = (idNum as! NSNumber).int32Value
-            if calibreServerLibraryBooks[id] == nil {
-                calibreServerLibraryBooks[id] = CalibreBook(id: id, library: library)
-            }
-        }
-        
-        let bookCount = calibreServerLibraryBooks.count
-        DispatchQueue.main.async {
-            modelData.calibreServerLibraryUpdatingTotal = bookCount
-        }
-        
-        let dataElement = resultElement["data"] as! NSDictionary
-        
-        let titles = dataElement["title"] as! NSDictionary
-        titles.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let title = value as! String
-            calibreServerLibraryBooks[id]!.title = title
-        }
-        
-        let authors = dataElement["authors"] as! NSDictionary
-        authors.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let authors = value as! NSArray
-            calibreServerLibraryBooks[id]!.authors = authors.compactMap({ (author) -> String? in
-                author as? String
-            })
-        }
-        
-        let formats = dataElement["formats"] as! NSDictionary
-        formats.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            let formats = value as! NSArray
-            formats.forEach { format in
-                calibreServerLibraryBooks[id]!.formats[(format as! String)] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-            }
-        }
-        
-        if let identifiers = dataElement["identifiers"] as? NSDictionary {
-            identifiers.forEach { (key, value) in
-                let id = (key as! NSString).intValue
-                if let idDict = value as? NSDictionary {
-                    calibreServerLibraryBooks[id]!.identifiers = idDict as! [String: String]
-                }
-            }
-        }
-        
-        let ratings = dataElement["rating"] as! NSDictionary
-        ratings.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            if let rating = value as? NSNumber {
-                calibreServerLibraryBooks[id]!.rating = rating.intValue
-            }
-        }
-        
-        let series = dataElement["series"] as! NSDictionary
-        series.forEach { (key, value) in
-            let id = (key as! NSString).intValue
-            if let series = value as? String {
-                calibreServerLibraryBooks[id]!.series = series
-            } else {
-                calibreServerLibraryBooks[id]!.series = ""
-            }
-        }
-        
-        (dataElement["series_index"] as? NSDictionary)?.forEach { (key, value) in
-            guard let id = (key as? NSString)?.intValue else { return }
-            calibreServerLibraryBooks[id]?.seriesIndex = value as? Double ?? 0.0
-        }
-        
-        return calibreServerLibraryBooks
     }
     
     func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
@@ -572,6 +377,10 @@ struct CalibreServerService {
 //            print("\(#function) decode error \(String(describing: bookRealm.primaryKey))")
 //            return
 //        }
+        
+        bookRealm.serverUrl = library.server.baseUrl
+        bookRealm.serverUsername = library.server.username
+        bookRealm.libraryName = library.name
         
         bookRealm.title = entry.title
         bookRealm.publisher = entry.publisher ?? ""

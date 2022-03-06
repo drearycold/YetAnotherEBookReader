@@ -240,15 +240,6 @@ struct LibraryOptionsDSReaderHelper: View {
         }
         .onAppear() {
             setStates()
-            
-            serverAddedCancellable = modelData.serverAddedPublisher.sink { notification in
-                //Suppose setStates() has been called by "onChange(of: modelData.currentCalibreLibraryId)"
-                print("serverAddedPublisher connect")
-                connect()
-            }
-        }
-        .onChange(of: modelData.currentCalibreLibraryId) { value in
-            setStates()
         }
         .onChange(of: updater) { _ in
             setStates()

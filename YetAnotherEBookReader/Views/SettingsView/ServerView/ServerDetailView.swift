@@ -198,7 +198,7 @@ struct ServerDetailView: View {
 struct ServerDetailView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
 
-    @State static private var server = modelData.currentCalibreServer ?? .init(name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default")
+    @State static private var server = modelData.calibreServers.values.first ?? .init(name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default")
     
     static var previews: some View {
         ServerDetailView(server: $server)

@@ -28,89 +28,11 @@ final class ModelData: ObservableObject {
     @Published var calibreServerInfo: CalibreServerInfo?
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
     
-    @Published var currentCalibreServerId = "" {
-        didSet {
-            guard oldValue != currentCalibreServerId else { return }
-            
-            UserDefaults.standard.set(currentCalibreServerId, forKey: Constants.KEY_DEFAULTS_SELECTED_SERVER_ID)
-            
-            //currentBookId = 0
-            filteredBookList.removeAll()
-            calibreServerLibraryBooks.removeAll()
-            
-            guard let server = calibreServers[currentCalibreServerId] else { return }
-            
-            let tmpLastLibrary = CalibreLibrary(server: server, key: server.lastLibrary, name: server.lastLibrary)
-            if let library = calibreLibraries[tmpLastLibrary.id] {
-                currentCalibreLibraryId = library.id
-                return
-            }
-            
-            let tmpDefaultLibrary = CalibreLibrary(server: server, key: server.defaultLibrary, name: server.defaultLibrary)
-            
-            if let library = calibreLibraries[tmpDefaultLibrary.id] {
-                currentCalibreLibraryId = library.id
-                return
-            }
-            
-            let serverLibraryIDs = calibreLibraries.compactMap {
-                guard $0.value.server.id == server.id else { return nil }
-                return $0.key
-            } as [String]
-            currentCalibreLibraryId = serverLibraryIDs.first ?? "Empty Server"
-            
-        }
-    }
-    var currentCalibreServer: CalibreServer? {
-        calibreServers[currentCalibreServerId]
-    }
-    
     @Published var calibreLibraries = [String: CalibreLibrary]()
-    @Published var currentCalibreLibraryId = "" {
-        didSet {
-            guard oldValue != currentCalibreLibraryId else { return }
-            
-            guard let library = calibreLibraries[currentCalibreLibraryId] else { return }
-            guard var server = calibreServers[currentCalibreServerId] else { return }
-            
-            server.lastLibrary = library.name
-            try? updateServerRealm(server: server)
-            
-            UserDefaults.standard.set(currentCalibreLibraryId, forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID)
-            
-            calibreServerLibraryUpdating = true
-//            currentBookId = 0
-            filteredBookList.removeAll()
-            calibreServerLibraryBooks.removeAll()
-            DispatchQueue.global(qos: .utility).async { [self] in
-                let realm = try! Realm(configuration: realmConf)
-                populateServerLibraryBooks(realm: realm)
-                updateFilteredBookList()
-                
-                DispatchQueue.main.sync {
-                    calibreServerLibraryUpdating = false
-                    //currentBookId = self.filteredBookList.first ?? 0
-                }
-            }
-        }
-    }
-    var currentCalibreLibrary: CalibreLibrary? {
-        calibreLibraries[currentCalibreLibraryId]
-    }
-    var currentCalibreServerLibraries: [CalibreLibrary] {
-        calibreLibraries.values.filter { $0.server.id == currentCalibreServerId }
-    }
     
     /// Used for server level activities
     @Published var calibreServerUpdating = false
     @Published var calibreServerUpdatingStatus: String? = nil
-    
-    /// Used for library level activities
-    @Published var calibreServerLibraryUpdating = false
-    @Published var calibreServerLibraryUpdatingProgress = 0
-    @Published var calibreServerLibraryUpdatingTotal = 0
-    
-    @Published var calibreServerLibraryBooks = [Int32: CalibreBook]()
     
     @Published var activeTab = 0
     var documentServer: CalibreServer?
@@ -121,49 +43,12 @@ final class ModelData: ObservableObject {
     var formatReaderMap = [Format: [ReaderType]]()
     var formatList = [Format]()
     
-    @Published var searchString = "" {
-        didSet {
-            if searchString != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
-    @Published var filterCriteriaRating = Set<String>() {
-        didSet {
-            if filterCriteriaRating != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
-    
-    @Published var filterCriteriaFormat = Set<String>() {
-        didSet {
-            if filterCriteriaFormat != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
-    @Published var filterCriteriaIdentifier = Set<String>() {
-        didSet {
-            if filterCriteriaIdentifier != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
-    @Published var filterCriteriaShelved = FilterCriteriaShelved.none {
-        didSet {
-            if filterCriteriaShelved != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
-    @Published var filterCriteriaSeries = Set<String>() {
-        didSet {
-            if filterCriteriaSeries != oldValue {
-                updateFilteredBookList()
-            }
-        }
-    }
+    @Published var searchString = ""
+    @Published var filterCriteriaRating = Set<String>()
+    @Published var filterCriteriaFormat = Set<String>()
+    @Published var filterCriteriaIdentifier = Set<String>()
+    @Published var filterCriteriaShelved = FilterCriteriaShelved.none
+    @Published var filterCriteriaSeries = Set<String>()
     
     @Published var filterCriteriaLibraries = Set<String>()
     
@@ -446,18 +331,7 @@ final class ModelData: ObservableObject {
             }
         }
         
-        if let lastServerId = UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_SELECTED_SERVER_ID), calibreServers[lastServerId] != nil {
-            currentCalibreServerId = lastServerId
-        }
-        
         populateLibraries()
-        
-        if currentCalibreLibraryId.isEmpty == false {
-            DispatchQueue(label: "data").async {
-                let realm = try! Realm(configuration: self.realmConf)
-                self.populateServerLibraryBooks(realm: realm)
-            }
-        }
         
         populateBookShelf()
         
@@ -525,7 +399,7 @@ final class ModelData: ObservableObject {
                 }
                 
                 NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
-
+                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
             } catch {
                 print("getBookMetadataCancellable decode \(result.library.name) \(error)")
@@ -667,9 +541,6 @@ final class ModelData: ObservableObject {
     }
     
     func populateLibraries() {
-        guard let currentCalibreServer = calibreServers[currentCalibreServerId]
-                else { return }
-        
         let librariesCached = realm.objects(CalibreLibraryRealm.self)
 
         librariesCached.forEach { libraryRealm in
@@ -711,49 +582,7 @@ final class ModelData: ObservableObject {
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
         
-        if let lastCalibreLibrary = UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_SELECTED_LIBRARY_ID), calibreLibraries[lastCalibreLibrary] != nil {
-            currentCalibreLibraryId = lastCalibreLibrary
-        } else {
-            let defaultLibrary = CalibreLibrary(server: currentCalibreServer, key: currentCalibreServer.defaultLibrary, name: currentCalibreServer.defaultLibrary)
-            currentCalibreLibraryId = defaultLibrary.id
-        }
-        
         print("populateLibraries \(calibreLibraries)")
-    }
-    
-    /**
-            Must not run on main thread
-     */
-    func populateServerLibraryBooks(realm: Realm) {
-        guard let currentCalibreLibrary = currentCalibreLibrary else {
-            return
-        }
-        
-        let booksCached = realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-                        currentCalibreLibrary.server.baseUrl,
-                        currentCalibreLibrary.server.username,
-                        currentCalibreLibrary.name
-            )
-        )
-        let booksCount = booksCached.count
-        DispatchQueue.main.sync {
-            self.calibreServerLibraryUpdatingTotal = booksCount
-            self.calibreServerLibraryUpdatingProgress = 0
-        }
-        
-        var calibreServerLibraryBooks = [Int32: CalibreBook]()
-        booksCached.forEach { bookRealm in
-            calibreServerLibraryBooks[bookRealm.id] = self.convert(library: currentCalibreLibrary, bookRealm: bookRealm)
-            DispatchQueue.main.async {
-                self.calibreServerLibraryUpdatingProgress += 1
-            }
-        }
-        
-        DispatchQueue.main.sync {
-            self.calibreServerLibraryBooks = calibreServerLibraryBooks
-            postProcessForLocalLibrary()
-        }
     }
     
     func populateLocalLibraryBooks() {
@@ -770,9 +599,6 @@ final class ModelData: ObservableObject {
                 try updateServerRealm(server: documentServer!)
             } catch {
                 
-            }
-            if calibreServers.count == 1 {
-                currentCalibreServerId = documentServer!.id
             }
         }
         
@@ -798,10 +624,6 @@ final class ModelData: ObservableObject {
                 try updateLibraryRealm(library: localLibrary!, realm: self.realm)
             } catch {
                 
-            }
-            if calibreLibraries.count == 1 {
-                currentCalibreLibraryId = localLibrary!
-                    .id
             }
         }
         
@@ -855,8 +677,6 @@ final class ModelData: ObservableObject {
             // self.removeFromRealm(book: $0)
             print("populateLocalLibraryBooks removeFromShelf \($0)")
         }
-        
-        postProcessForLocalLibrary()
     }
     
     // only move file when triggered by in-app importer, DO NOT MOVE FROM OTHER PLACES
@@ -1018,59 +838,6 @@ final class ModelData: ObservableObject {
         return bookId
     }
     
-    //remove non existing books from library list
-    func postProcessForLocalLibrary() {
-        guard currentCalibreLibrary?.server.isLocal == true else { return }
-        
-        calibreServerLibraryUpdating = true
-        calibreServerLibraryUpdatingProgress = 0
-        calibreServerLibraryUpdatingTotal = calibreServerLibraryBooks.count
-        
-        calibreServerLibraryBooks = calibreServerLibraryBooks.filter {
-            $0.value.inShelf
-        }
-        updateFilteredBookList()
-
-        calibreServerLibraryUpdatingProgress = calibreServerLibraryBooks.count
-        calibreServerLibraryUpdatingTotal = calibreServerLibraryBooks.count
-        calibreServerLibraryUpdating = false
-    }
-    
-    func updateFilteredBookList() {
-        let searchTerms = searchString.trimmingCharacters(in: .whitespacesAndNewlines).split { $0.isWhitespace }
-        let filteredBookList = calibreServerLibraryBooks.values.filter { [self] (book) -> Bool in
-            guard searchTerms.isEmpty || searchTerms.filter({ term in
-                book.title.localizedCaseInsensitiveContains(term) || book.authors.filter({ $0.localizedCaseInsensitiveContains(term) }).count > 0
-            }).count == searchTerms.count
-            else { return false }
-            guard filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription) else { return false }
-            guard filterCriteriaFormat.isEmpty || filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty == false else { return false }
-            guard filterCriteriaIdentifier.isEmpty || filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty == false else { return false }
-            guard filterCriteriaSeries.isEmpty || filterCriteriaSeries.contains(book.seriesDescription) else { return false }
-            guard filterCriteriaShelved == .none || (filterCriteriaShelved == .shelvedOnly && book.inShelf) || (filterCriteriaShelved == .notShelvedOnly && !book.inShelf) else { return false }
-            
-            return true
-        }.sorted { (lhs, rhs) -> Bool in
-            if filterCriteriaSeries.isEmpty == false {
-                if lhs.series != rhs.series {
-                    return lhs.series < rhs.series
-                }
-                if lhs.seriesIndex != rhs.seriesIndex {
-                    return lhs.seriesIndex < rhs.seriesIndex
-                }
-            }
-            return lhs.title < rhs.title
-        }.map({ $0.id })
-        if !Thread.isMainThread {
-            DispatchQueue.main.sync {
-                self.filteredBookList = filteredBookList
-            }
-        } else {
-            self.filteredBookList = filteredBookList
-        }
-        print("updateFilteredBookList finished count=\(self.filteredBookList.count)")
-    }
-    
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
         let serverId = { () -> String in
             let serverUrl = bookRealm.serverUrl ?? "."
@@ -1096,7 +863,7 @@ final class ModelData: ObservableObject {
         }
 //        let formatsVer2 = try? JSONSerialization.jsonObject(with: bookRealm.formatsData! as Data, options: []) as? [String: FormatInfo]
         let decoder = JSONDecoder()
-        let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData! as Data))
+        let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData as Data? ?? .init()))
                 ?? formatsVer1
         
         //print("CONVERT \(bookRealm.title) \(formatsVer1) \(formatsVer2)")
@@ -1287,29 +1054,13 @@ final class ModelData: ObservableObject {
     
     func updateBook(book: CalibreBook) {
         updateBookRealm(book: book, realm: realm)
-        if currentCalibreLibraryId == book.library.id {
-            calibreServerLibraryBooks[book.id] = book
-        }
+        
         if readingBook?.inShelfId == book.inShelfId {
             readingBook = book
         }
         if book.inShelf {
             booksInShelf[book.inShelfId] = book
         }
-    }
-    
-    /**
-        should run on non-main thread
-     */
-    func updateBooks(books: [CalibreBook]) {
-        let realm = try! Realm(configuration: self.realmConf)
-        books.forEach { (book) in
-            self.updateBookRealm(book: book, realm: realm)
-            DispatchQueue.main.async {
-                self.calibreServerLibraryUpdatingProgress += 1
-            }
-        }
-        
     }
     
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
@@ -1488,10 +1239,6 @@ final class ModelData: ObservableObject {
         
         guard let book = convert(bookRealm: bookRealm) else { return }
         
-        if currentCalibreLibraryId == book.library.id {
-            calibreServerLibraryBooks[book.id] = book
-        }
-        
         if readingBook?.inShelfId == inShelfId {
             readingBook = book
         }
@@ -1519,12 +1266,8 @@ final class ModelData: ObservableObject {
         book.inShelf = false
 
         updateBookRealm(book: book, realm: self.realm)
-        if book.library.id == currentCalibreLibraryId {
-            calibreServerLibraryBooks[book.id]?.inShelf = false
-        }
-        booksInShelf.removeValue(forKey: inShelfId)
         
-        postProcessForLocalLibrary()
+        booksInShelf.removeValue(forKey: inShelfId)
         
         if let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
@@ -1561,7 +1304,7 @@ final class ModelData: ObservableObject {
         return result
     }
     
-    func startBatchDownload(bookIds: [Int32], formats: [String]) {
+    func startBatchDownload(bookIds: [String], formats: [String]) {
         
     }
     
@@ -1902,33 +1645,7 @@ final class ModelData: ObservableObject {
             return false
         }
         
-        //reset current server id
-        currentCalibreServerId = calibreServers.keys.first!
-        
         return true
-    }
-    
-    
-    
-    func syncLibrary(alertDelegate: AlertDelegate) {
-        guard let server = currentCalibreServer,
-              let library = currentCalibreLibrary
-              else {
-            return
-        }
-        if server.isLocal {
-            populateLocalLibraryBooks()
-            calibreServerUpdatingStatus = ""
-        } else {
-            calibreServerService.getCustomColumns(library: library) { columnInfos in
-                var library = library
-                library.customColumnInfos = columnInfos
-                self.calibreLibraries[library.id] = library
-                try? self.updateLibraryRealm(library: library, realm: self.realm)
-                
-                self.calibreServerService.syncLibrary(server: server, library: library, alertDelegate: alertDelegate)
-            }
-        }
     }
     
     func probeServersReachability(with serverIds: [String]) {
@@ -2175,12 +1892,13 @@ final class ModelData: ObservableObject {
         
         results.list.book_ids.chunks(size: 256).forEach { chunk in
             try? realm.write {
-                chunk.map {$0.description}.forEach { id in
-                    guard let lastModifiedStr = results.list.data.last_modified[id]?.v,
+                chunk.map {(i:$0, s:$0.description)}.forEach { id in
+                    guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
                           let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return }
                     realm.create(CalibreBookRealm.self, value: [
-                        "primaryKey": CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id),
-                        "lastModified": lastModified
+                        "primaryKey": CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.s),
+                        "lastModified": lastModified,
+                        "id": id.i
                     ], update: .modified)
                 }
             }
@@ -2189,21 +1907,13 @@ final class ModelData: ObservableObject {
         let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         
         try? realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "lastSynced < lastModified AND primaryKey BEGINSWITH %@", partialPrimaryKey)
+            NSPredicate(format: "serverUrl == nil OR lastSynced < lastModified AND primaryKey BEGINSWITH %@", partialPrimaryKey)
         ).map { result throws -> Int32 in
             result.id
         }.chunks(size: 256).forEach { chunk in
-            print("\(#function) \(library.name) \(chunk)")
+            print("\(#function) prepareGetBooksMetadata \(library.name) \(chunk.count) \(chunk)")
             if let task = calibreServerService.buildBooksMetadataTask(library: library, books: chunk.map{ $0.description }) {
                 getBooksMetadataSubject.send(task)
-            }
-        }
-        
-        if currentCalibreLibraryId == library.id,
-           results.list.book_ids.isEmpty == false {
-            DispatchQueue.main.async {
-                self.currentCalibreLibraryId = ""
-                self.currentCalibreLibraryId = library.id
             }
         }
     }
@@ -2388,6 +2098,10 @@ final class ModelData: ObservableObject {
         return result
     }
     
+    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
+        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
+    }
+    
     func updateBookModel() -> [BookModelSection] {
         var bookModelSection = [BookModelSection]()
 
@@ -2418,7 +2132,7 @@ final class ModelData: ObservableObject {
             bookModelSection.append(section)
         }
         
-        let emptyBook = CalibreBook(id: 0, library: self.currentCalibreLibrary!)
+        let emptyBook = CalibreBook(id: 0, library: .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: ""))
         
         guard let deviceMapSerialize = try? emptyBook.readPos.getCopy().compactMapValues( { try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) } ),
               let readPosDataEmpty = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData else {

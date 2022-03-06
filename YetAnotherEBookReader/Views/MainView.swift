@@ -69,10 +69,6 @@ struct MainView: View {
                     }
                     .tag(3)
             }
-            if modelData.activeTab < 2 && modelData.calibreServerLibraryUpdating {
-                ProgressView("Initializing Library...")
-                    .background(Color.gray.opacity(0.4).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
-            }
             if modelData.activeTab < 2 && modelData.booksInShelf.isEmpty {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {

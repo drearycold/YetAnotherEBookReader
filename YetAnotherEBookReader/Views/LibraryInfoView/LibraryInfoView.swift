@@ -45,65 +45,35 @@ struct LibraryInfoView: View {
     var body: some View {
         NavigationView {
             VStack(alignment: .leading) {
-                VStack(alignment: .trailing, spacing: 4) {
-//                    HStack {
-//                        Button(action: {
-////                            modelData.syncLibrary(alertDelegate: self)
-//                            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
-//
-//                        }) {
-//                            Image(systemName: "arrow.triangle.2.circlepath")
-//                        }
-//                        if modelData.calibreServerLibraryUpdating {
-//                            Text("\(modelData.calibreServerLibraryUpdatingProgress)/\(modelData.calibreServerLibraryUpdatingTotal)")
-//                        } else {
-//                            if modelData.calibreServerLibraryBooks.count > 1 {
-//                                Text("\(modelData.calibreServerLibraryBooks.count) Books")
-//                            } else {
-//                                Text("\(modelData.calibreServerLibraryBooks.count) Book")
-//                            }
-//                        }
-//
-//                        Spacer()
-//
-//                        Text(modelData.calibreServerUpdatingStatus ?? "")
-//                        filterMenuView()
-//                    }.onChange(of: modelData.calibreServerLibraryUpdating) { value in
-//                        //                            guard value == false else { return }
-//                        pageNo = 0
-//                        updater += 1
-//                    }
-                    
-                    ZStack {
-                        TextField("Search Title & Authors", text: $searchString, onCommit: {
-                            modelData.searchString = searchString
+                ZStack {
+                    TextField("Search Title & Authors", text: $searchString, onCommit: {
+                        modelData.searchString = searchString
+                        if pageNo > 0 {
+                            pageNo = 0
+                        } else {
+                            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                        }
+                        
+                    })
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            guard modelData.searchString.count > 0 || searchString.count > 0 else { return }
+                            modelData.searchString = ""
+                            searchString = ""
                             if pageNo > 0 {
                                 pageNo = 0
                             } else {
                                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                             }
-                            
-                        })
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                guard modelData.searchString.count > 0 || searchString.count > 0 else { return }
-                                modelData.searchString = ""
-                                searchString = ""
-                                if pageNo > 0 {
-                                    pageNo = 0
-                                } else {
-                                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
-                                }
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                            }
-                        }
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }.disabled(searchString.isEmpty)
                     }
-                    
-                    Divider()
-                }.padding(4)    //top bar
+                }
+                
+                Divider()
                 
                 ZStack {
                     List(selection: $selectedBookIds) {
@@ -153,65 +123,50 @@ struct LibraryInfoView: View {
                     }
                 }
                 
-                VStack(alignment: .trailing, spacing: 4) {
-                    Divider()
+                Divider()
+                
+                HStack {
+                    Spacer()
                     
-                    HStack {
-                        Button(action:{
-                            librarySwitcherPresenting = true
-                        }) {
-                            Image(systemName: "arrow.left.arrow.right.circle")
+                    Button(action:{
+                        if pageNo > 10 {
+                            pageNo -= 10
+                        } else {
+                            pageNo = 0
                         }
-                        .popover(isPresented: $librarySwitcherPresenting,
-                                 attachmentAnchor: .rect(.bounds),
-                                 arrowEdge: .top
-                        ) {
-                            LibraryInfoLibrarySwitcher(presenting: $librarySwitcherPresenting)
-                                .environmentObject(modelData)
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                    }) {
+                        Image(systemName: "chevron.backward.2")
+                    }
+                    Button(action:{
+                        if pageNo > 0 {
+                            pageNo -= 1
                         }
-                        
-                        Spacer()
-                        
-                        Button(action:{
-                            if pageNo > 10 {
-                                pageNo -= 10
-                            } else {
-                                pageNo = 0
-                            }
-                            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
-                        }) {
-                            Image(systemName: "chevron.backward.2")
+                    }) {
+                        Image(systemName: "chevron.backward")
+                    }
+                    //                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
+                    Text("\(pageNo+1) / \(pageCount)")
+                    Button(action:{
+                        if pageNo + 1 < pageCount {
+                            pageNo += 1
                         }
-                        Button(action:{
-                            if pageNo > 0 {
-                                pageNo -= 1
-                            }
-                        }) {
-                            Image(systemName: "chevron.backward")
+                    }) {
+                        Image(systemName: "chevron.forward")
+                    }
+                    Button(action:{
+                        if pageNo + 10 < pageCount {
+                            pageNo += 10
+                        } else {
+                            pageNo = pageCount - 1
                         }
-//                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
-                        Text("\(pageNo+1) / \(pageCount)")
-                        Button(action:{
-                            if pageNo + 1 < pageCount {
-                                pageNo += 1
-                            }
-                        }) {
-                            Image(systemName: "chevron.forward")
-                        }
-                        Button(action:{
-                            if pageNo + 10 < pageCount {
-                                pageNo += 10
-                            } else {
-                                pageNo = pageCount - 1
-                            }
-                        }) {
-                            Image(systemName: "chevron.forward.2")
-                        }
+                    }) {
+                        Image(systemName: "chevron.forward.2")
                     }
                 }.padding(4)    //bottom bar
             }
             .padding(4)
-            .navigationTitle(modelData.calibreLibraries[modelData.currentCalibreLibraryId]?.name ?? "Please Select a Library")
+            .navigationTitle("By \(sortCriteria.by.rawValue)")
             .navigationBarTitleDisplayMode(.automatic)
             .statusBar(hidden: false)
             //                .toolbar {
@@ -221,7 +176,6 @@ struct LibraryInfoView: View {
         }   //NavigationView
         .navigationViewStyle(DefaultNavigationViewStyle())
         .listStyle(PlainListStyle())
-        .disabled(modelData.calibreServerUpdating || modelData.calibreServerLibraryUpdating)
         .onChange(of: pageNo, perform: { value in
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         })
@@ -593,7 +547,7 @@ struct LibraryInfoView: View {
                     Button(action: {
                         defaultLog.info("selected \(selectedBookIds.description)")
                         selectedBookIds.forEach { bookId in
-//                            modelData.clearCache(inShelfId: modelData.calibreServerLibraryBooks[bookId]!.inShelfId)
+                            modelData.clearCache(inShelfId: bookId)
                         }
                         selectedBookIds.removeAll()
                     }) {

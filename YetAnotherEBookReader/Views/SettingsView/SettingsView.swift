@@ -314,8 +314,6 @@ struct SettingsView: View {
                 //reload book list
                 modelData.calibreServerUpdating = false
                 modelData.calibreServerUpdatingStatus = "Finished"
-                
-                modelData.currentCalibreServerId = newServer.id
             }
         }
     }

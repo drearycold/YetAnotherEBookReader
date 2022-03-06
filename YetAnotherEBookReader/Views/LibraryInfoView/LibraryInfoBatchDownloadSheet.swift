@@ -11,11 +11,11 @@ struct LibraryInfoBatchDownloadSheet: View {
     @EnvironmentObject var modelData: ModelData
     
     @Binding var presenting: Bool
-    @Binding var selectedBookIds: Set<Int32>
+    @Binding var selectedBookIds: Set<String>
     
     @State private var formats = [String]()
     @State private var selectedFormat = [String: Int]()
-    @State private var selectedFormatBookIds = [Int32]()
+    @State private var selectedFormatBookIds = [String]()
     
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
@@ -44,9 +44,10 @@ struct LibraryInfoBatchDownloadSheet: View {
                                 return true
                             }
                         }
-                        selectedFormatBookIds = selectedBookIds.reduce(into: [Int32](), { result, bookId in
-                            guard let book = modelData.calibreServerLibraryBooks[bookId] else { return }
-                            guard book.formats.keys.filter(selectedFormat.keys.contains).isEmpty == false else { return }
+                        
+                        selectedFormatBookIds = selectedBookIds.reduce(into: [String](), { result, bookId in
+                            guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
+                            guard book.formats().keys.filter(selectedFormat.keys.contains).isEmpty == false else { return }
                             result.append(bookId)
                         })
                     }) {
@@ -64,8 +65,8 @@ struct LibraryInfoBatchDownloadSheet: View {
             }
             .onAppear() {
                 formats = selectedBookIds.reduce(into: Set<String>()) { result, bookId in
-                    guard let book = modelData.calibreServerLibraryBooks[bookId] else { return }
-                    result.formUnion(book.formats.keys)
+                    guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
+                    result.formUnion(book.formats().keys)
                 }.sorted()
                 if formats.count == 1 {
                     selectedFormat[formats.first!] = 1
