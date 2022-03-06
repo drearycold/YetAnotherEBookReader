@@ -21,7 +21,7 @@ struct LibraryInfoView: View {
     @State private var formatList = [String]()
     @State private var identifierList = [String]()
     
-    @State private var sortCriteria = (by: SortCriteria.Title, ascending: true)
+    @State private var sortCriteria = (by: SortCriteria.Added, ascending: false)
     
     @State private var booksListRefreshing = false
     @State private var searchString = ""

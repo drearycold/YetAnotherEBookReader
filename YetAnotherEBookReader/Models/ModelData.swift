@@ -195,7 +195,7 @@ final class ModelData: ObservableObject {
     var getBooksMetadataSubject = PassthroughSubject<CalibreBooksTask, Never>()
     var getBooksMetadataCancellable: AnyCancellable?
     
-    @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String)]()
+    @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String, cnt: Int?)]()
 
     @Published var userFontInfos = [String: FontInfo]()
 
@@ -228,20 +228,21 @@ final class ModelData: ObservableObject {
                 }
                 if oldSchemaVersion < 44 {  //authos to first/second/more, tags to first/second/third/more
                     migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
-                        if let authors = oldObject?.dynamicList("authors") {
+                        if let authorsOld = oldObject?.dynamicList("authors") {
+                            var authors = Array<DynamicObject>(authorsOld)
                             ["First", "Second", "Third"].forEach {
-                                newObject?.setValue(authors.first, forKey: "author\($0)")
-                                authors.removeFirst()
+                                newObject?.setValue(authors.popFirst(), forKey: "author\($0)")
+                                
                             }
                             newObject?.dynamicList("authorsMore").append(objectsIn: authors)
                         }
                         
-                        if let authors = oldObject?.dynamicList("tags") {
+                        if let tagsOld = oldObject?.dynamicList("tags") {
+                            var tags = Array<DynamicObject>(tagsOld)
                             ["First", "Second", "Third"].forEach {
-                                newObject?.setValue(authors.first, forKey: "tag\($0)")
-                                authors.removeFirst()
+                                newObject?.setValue(tags.popFirst(), forKey: "tag\($0)")
                             }
-                            newObject?.dynamicList("tagsMore").append(objectsIn: authors)
+                            newObject?.dynamicList("tagsMore").append(objectsIn: tags)
                         }
                         
                     }
@@ -1696,8 +1697,19 @@ final class ModelData: ObservableObject {
                     if let defaultLibrary = libraryInfo.defaultLibrary {
                         serverInfo.defaultLibrary = defaultLibrary
                     }
+                    
                 }
                 self.calibreServerInfoStaging[id] = serverInfo
+                
+                guard serverIds.isEmpty else { return }
+                //only auto adding new libraries upon self refreshing
+                serverInfo.libraryMap.forEach { key, name in
+                    let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
+                    if self.calibreLibraries[newLibrary.id] == nil {
+                        self.calibreLibraries[newLibrary.id] = newLibrary
+                        try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
+                    }
+                }
             }
             
             self.refreshShelfMetadata(with: serverIds)
@@ -1813,7 +1825,10 @@ final class ModelData: ObservableObject {
                     .setFailureType(to: Never.self).eraseToAnyPublisher()
             }
             DispatchQueue.main.sync {
-                self.librarySyncStatus[library.id] = (true, false, "")
+                if self.librarySyncStatus[library.id] == nil {
+                    self.librarySyncStatus[library.id] = (false, false, "", nil)
+                }
+                self.librarySyncStatus[library.id]?.isSync = true
             }
             print("\(#function) startSync \(library.id)")
 
@@ -1851,14 +1866,27 @@ final class ModelData: ObservableObject {
         
         guard results.result["just_syncing"] == nil else { return }
         var isError = false
+        var bookCount = 0
+        
+        guard let realm = try? Realm(configuration: self.realmConf) else {
+            isError = true
+            return
+        }
+        
+        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         
         defer {
+            bookCount = realm.objects(CalibreBookRealm.self).filter(
+                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
+            ).count
+            
             DispatchQueue.main.async {
                 self.calibreLibraries[library.id] = library
                 try? self.updateLibraryRealm(library: library, realm: self.realm)
                 
                 self.librarySyncStatus[library.id]?.isSync = false
                 self.librarySyncStatus[library.id]?.isError = isError
+                self.librarySyncStatus[library.id]?.cnt = bookCount
                 print("\(#function) finishSync \(library.id)")
             }
         }
@@ -1881,11 +1909,6 @@ final class ModelData: ObservableObject {
             return
         }
         
-        guard let realm = try? Realm(configuration: self.realmConf) else {
-            isError = true
-            return
-        }
-        
         let dateFormatter = ISO8601DateFormatter()
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
@@ -1904,7 +1927,6 @@ final class ModelData: ObservableObject {
             }
         }
         
-        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         
         try? realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "serverUrl == nil OR lastSynced < lastModified AND primaryKey BEGINSWITH %@", partialPrimaryKey)
@@ -2103,6 +2125,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateBookModel() -> [BookModelSection] {
+        let limit = 25
         var bookModelSection = [BookModelSection]()
 
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
@@ -2116,7 +2139,7 @@ final class ModelData: ObservableObject {
                 
             var bookModel = [BookModel]()
             for i in 0 ..< results.count {
-                if bookModel.count > 20 {
+                if bookModel.count > limit {
                     break
                 }
                 if let book = self.convert(bookRealm: results[i]),
@@ -2215,7 +2238,7 @@ final class ModelData: ObservableObject {
                 let books: [BookModel] = realm.objects(CalibreBookRealm.self)
                     .filter(NSPredicate(format: "%K == %@", def.1, member))
                     .sorted(byKeyPath: def.2, ascending: def.3)
-                    .prefix(10)
+                    .prefix(limit)
                     .compactMap {
                         self.convert(bookRealm: $0)
                     }

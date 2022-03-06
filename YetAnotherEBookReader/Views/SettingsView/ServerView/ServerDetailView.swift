@@ -119,8 +119,12 @@ struct ServerDetailView: View {
             Text(library.name)
             Spacer()
             VStack(alignment: .trailing) {
-                Text("\(modelData.queryLibraryBookRealmCount(library: library, realm: modelData.realm)) books")
-                Text("PLACEHOLDER")
+                if let cnt = modelData.librarySyncStatus[library.id]?.cnt {
+                    Text("\(cnt) books")
+                } else {
+                    Text("processing")
+                }
+                Text("PLACEHOLDER").hidden()
             }.font(.caption2)
             ZStack {
                 if modelData.librarySyncStatus[library.id]?.isSync ?? false {
@@ -132,7 +136,10 @@ struct ServerDetailView: View {
                         .hidden()
                 }
                 
-                if modelData.librarySyncStatus[library.id] ?? (false, false, "") == (false, false, "Success") {
+                if let status = modelData.librarySyncStatus[library.id],
+                   status.isSync == false,
+                   status.isError == false,
+                   status.msg == "Success" {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundColor(.green)
                 } else {
@@ -167,7 +174,11 @@ struct ServerDetailView: View {
                         .setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
                 DispatchQueue.main.sync {
-                    modelData.librarySyncStatus[library.id] = (true, false, "")
+                    if modelData.librarySyncStatus[library.id] == nil {
+                        modelData.librarySyncStatus[library.id] = (false, false, "", nil)
+                    }
+                    modelData.librarySyncStatus[library.id]?.isSync = true
+                    modelData.librarySyncStatus[library.id]?.cnt = nil
                 }
                 print("\(#function) startSync \(library.id)")
 
