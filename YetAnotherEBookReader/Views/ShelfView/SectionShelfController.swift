@@ -96,9 +96,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 y: 0,
                 width: view.frame.width,
                 height: view.frame.height - kGADAdSizeBanner.size.height
-            ),
-            bookModelSection: modelData.bookModelSection,
-            bookSource: SectionShelfView.BOOK_SOURCE_URL)
+            )
+        )
         shelfView.translatesAutoresizingMaskIntoConstraints = false
         
         print("SECTIONFRAME \(view.frame) \(kGADAdSizeBanner.size) \(tabBarHeight)")
@@ -153,9 +152,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         #endif
-        
-//        NotificationCenter.default.addObserver(modelData.booksInShelf, selector: #selector(updateAndReload), name: nil, object: nil)
-        
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
