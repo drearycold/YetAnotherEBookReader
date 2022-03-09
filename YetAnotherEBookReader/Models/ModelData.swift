@@ -199,7 +199,7 @@ final class ModelData: ObservableObject {
 
     @Published var userFontInfos = [String: FontInfo]()
 
-    @Published var bookModelSection = [BookModelSection]()
+    @Published var bookModelSection = [ShelfModelSection]()
 
     var resourceFileDictionary: NSDictionary?
 
@@ -403,7 +403,7 @@ final class ModelData: ObservableObject {
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
             } catch {
-                print("getBookMetadataCancellable decode \(result.library.name) \(error)")
+                print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
             }
         })
         
@@ -1913,7 +1913,7 @@ final class ModelData: ObservableObject {
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
         
-        results.list.book_ids.chunks(size: 256).forEach { chunk in
+        results.list.book_ids.chunks(size: 1024).forEach { chunk in
             try? realm.write {
                 chunk.map {(i:$0, s:$0.description)}.forEach { id in
                     guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
@@ -1927,9 +1927,8 @@ final class ModelData: ObservableObject {
             }
         }
         
-        
         try? realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUrl == nil OR lastSynced < lastModified AND primaryKey BEGINSWITH %@", partialPrimaryKey)
+            NSPredicate(format: "( serverUrl == nil OR lastSynced < lastModified ) AND primaryKey BEGINSWITH %@", partialPrimaryKey)
         ).map { result throws -> Int32 in
             result.id
         }.chunks(size: 256).forEach { chunk in
@@ -2124,9 +2123,9 @@ final class ModelData: ObservableObject {
         return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
     }
     
-    func updateBookModel() -> [BookModelSection] {
+    func updateBookModel() -> [ShelfModelSection] {
         let limit = 25
-        var bookModelSection = [BookModelSection]()
+        var shelfModelSection = [ShelfModelSection]()
 
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
@@ -2137,22 +2136,32 @@ final class ModelData: ObservableObject {
                 .filter(NSPredicate(format: "inShelf == false"))
                 .sorted(byKeyPath: sectionInfo.0, ascending: false)
                 
-            var bookModel = [BookModel]()
+            var shelfModel = [ShelfModel]()
             for i in 0 ..< results.count {
-                if bookModel.count > limit {
+                if shelfModel.count > limit {
                     break
                 }
                 if let book = self.convert(bookRealm: results[i]),
                    book.library.discoverable,
                    let coverURL = book.coverURL {
-                    bookModel.append(BookModel(bookCoverSource: coverURL.absoluteString, bookId: book.inShelfId, bookTitle: book.title, bookProgress: Int(self.getLatestReadingPosition(book: book)?.lastProgress ?? 0.0), bookStatus: .READY))
-                    
+                    shelfModel.append(
+                        ShelfModel(
+                            bookCoverSource: coverURL.absoluteString,
+                            bookId: book.inShelfId,
+                            bookTitle: book.title,
+                            bookProgress: Int(self.getLatestReadingPosition(book: book)?.lastProgress ?? 0.0),
+                            bookStatus: .READY,
+                            sectionId: sectionInfo.2,
+                            show: true,
+                            type: ""
+                        )
+                    )
                     // print("updateBookModel \(sectionInfo.0) \(book)")
                 }
             }
             
-            let section = BookModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionBooks: bookModel)
-            bookModelSection.append(section)
+            let section = ShelfModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionShelf: shelfModel)
+            shelfModelSection.append(section)
         }
         
         let emptyBook = CalibreBook(id: 0, library: .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: ""))
@@ -2207,15 +2216,15 @@ final class ModelData: ObservableObject {
         }
 //        print("resultsWithReadPos \(authorSet) \(seriesSet) \(tagSet)")
         
-        let readingSection = BookModelSection(
+        let readingSection = ShelfModelSection(
             sectionName: "Reading",
             sectionId: "reading",
-            sectionBooks: resultsWithReadPos
+            sectionShelf: resultsWithReadPos
                 .filter {
                     $0.inShelf == false
                 }
                 .map { book in
-                    BookModel(
+                    ShelfModel(
                         bookCoverSource: book.coverURL?.absoluteString ?? ".",
                         bookId: book.inShelfId,
                         bookTitle: book.title,
@@ -2223,27 +2232,31 @@ final class ModelData: ObservableObject {
                             book.readPos.getDevices().max { lhs, rhs in
                                 lhs.lastProgress < rhs.lastProgress
                             }?.lastProgress ?? 0.0),
-                        bookStatus: .READY
+                        bookStatus: .READY,
+                        sectionId: "reading",
+                        show: true,
+                        type: ""
                     )
                 }
         )
-        bookModelSection.append(readingSection)
+        shelfModelSection.append(readingSection)
         
         [
-            (seriesSet, "series", "seriesIndex", true),
-            (authorSet, "authorFirst", "pubDate", false),
-            (tagSet, "tagFirst", "pubDate", false)
+            (seriesSet, "series", "seriesIndex", "More in Series", true),
+            (authorSet, "authorFirst", "pubDate", "More by Author", false),
+            (tagSet, "tagFirst", "pubDate", "More of Tag", false)
         ].forEach { def in
             def.0.sorted().forEach { member in
-                let books: [BookModel] = realm.objects(CalibreBookRealm.self)
+                let sectionId = "\(def.1)-\(member)"
+                let books: [ShelfModel] = realm.objects(CalibreBookRealm.self)
                     .filter(NSPredicate(format: "%K == %@", def.1, member))
-                    .sorted(byKeyPath: def.2, ascending: def.3)
+                    .sorted(byKeyPath: def.2, ascending: def.4)
                     .prefix(limit)
                     .compactMap {
                         self.convert(bookRealm: $0)
                     }
                     .map { book in
-                        BookModel(
+                        ShelfModel(
                             bookCoverSource: book.coverURL?.absoluteString ?? ".",
                             bookId: book.inShelfId,
                             bookTitle: book.title,
@@ -2251,22 +2264,25 @@ final class ModelData: ObservableObject {
                                 book.readPos.getDevices().max { lhs, rhs in
                                     lhs.lastProgress < rhs.lastProgress
                                 }?.lastProgress ?? 0.0),
-                            bookStatus: .READY
+                            bookStatus: .READY,
+                            sectionId: sectionId,
+                            show: true,
+                            type: ""
                         )
                     }
                 
                 guard books.count > 1 else { return }
                 
-                let readingSection = BookModelSection(
-                    sectionName: member,
-                    sectionId: member,
-                    sectionBooks: books)
+                let readingSection = ShelfModelSection(
+                    sectionName: "\(def.3): \(member)",
+                    sectionId: sectionId,
+                    sectionShelf: books)
 
-                bookModelSection.append(readingSection)
+                shelfModelSection.append(readingSection)
             }
         }
 
-        return bookModelSection
+        return shelfModelSection
     }
     
 }

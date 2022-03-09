@@ -155,7 +155,7 @@ struct CalibreServerService {
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.timeoutIntervalForRequest = 600
         let urlSessionDelegate = CalibreServerTaskDelegate(resultPrev.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
 
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
@@ -869,7 +869,7 @@ struct CalibreServerService {
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.timeoutIntervalForRequest = 10
         let urlSessionDelegate = CalibreServerTaskDelegate(serverInfo.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         return urlSession.dataTaskPublisher(for: url)
             .map { $0.data }
@@ -934,7 +934,7 @@ struct CalibreServerService {
     func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         return urlSession.dataTaskPublisher(for: task.url)
             .map { $0.data }
@@ -958,6 +958,7 @@ struct CalibreServerService {
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.timeoutIntervalForRequest = 600
+        urlSessionConfiguration.timeoutIntervalForResource = 600
         let urlSessionDelegate = CalibreServerTaskDelegate(task.library.server.username)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
@@ -989,7 +990,7 @@ struct CalibreServerService {
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
@@ -1045,7 +1046,7 @@ struct CalibreServerService {
         
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
             .tryMap { output in
@@ -1097,7 +1098,7 @@ struct CalibreServerService {
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
 
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
@@ -1202,7 +1203,7 @@ struct CalibreServerService {
         
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
             .tryMap { output in
@@ -1264,7 +1265,7 @@ struct CalibreServerService {
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
 
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
@@ -1309,7 +1310,7 @@ struct CalibreServerService {
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
 
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"

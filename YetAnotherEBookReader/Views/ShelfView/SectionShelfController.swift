@@ -194,25 +194,25 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         #if canImport(GoogleMobileAds)
         print("SECTIONFRAME \(view.frame) \(shelfView.frame) \(bannerView.frame) \(tabBarHeight) \(bannerSize.size)")
         #endif
-    }
-    
-    override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
-        coordinator.animate { _ in
-            
-        } completion: { _ in
-            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
-        }
-
         
+        shelfView.resize(to: size)
     }
     
+//    override func willTransition(to newCollection: UITraitCollection, with coordinator: UIViewControllerTransitionCoordinator) {
+//        coordinator.animate { _ in
+//            self.resizeSubviews(to: self.view.frame.size, to: newCollection)
+//        } completion: { _ in
+//
+//        }
+//
+//    }
+//    
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
         super.viewWillTransition(to: size, with: coordinator)
         
         coordinator.animate { _ in
-            
+            self.resizeSubviews(to: size, to: self.traitCollection)
         } completion: { _ in
-            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
         }
         
     }
