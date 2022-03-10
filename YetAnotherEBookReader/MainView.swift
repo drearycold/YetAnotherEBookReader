@@ -51,7 +51,7 @@ struct MainView: View {
                 SectionShelfUI()
                     .tabItem {
                         Image(systemName: "books.vertical.fill")
-                        Text("Shelf")
+                        Text("Discover")
                     }
                     .tag(1)
                 

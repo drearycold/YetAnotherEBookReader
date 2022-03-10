@@ -24,11 +24,6 @@ struct SettingsView: View {
         VStack {
             NavigationView {
                 List {
-                    Button(action:{
-                        updater += 1
-                    }) {
-                        Text("Refresh")
-                    }
                     NavigationLink(
                         destination: AddModServerView(
                             server: Binding<CalibreServer>(get: {
@@ -53,7 +48,8 @@ struct SettingsView: View {
                     }
                     
                     Group {
-                        Text("Servers").font(.headline)
+                        Text("Servers")
+                            .font(.caption)
                             .padding([.top], 8)
                         ForEach(serverList) { server in
                             NavigationLink (
@@ -92,7 +88,8 @@ struct SettingsView: View {
                     }
                     
                     Group {
-                        Text("Options").font(.headline)
+                        Text("Options")
+                            .font(.caption)
                             .padding([.top], 8)
                         NavigationLink("Formats & Readers", destination: ReaderOptionsView())
                         NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(libraryId: nil, bookId: nil))
@@ -105,7 +102,16 @@ struct SettingsView: View {
                         NavigationLink("About calibre Server", destination: ServerCalibreIntroView().frame(maxWidth: 600))
                         NavigationLink("About DSReader", destination: AppInfoView())
                     }
-                }.environment(\.defaultMinListRowHeight, 8)
+                }
+                .toolbar {
+                    ToolbarItem {
+                        Button(action:{
+                            modelData.probeServersReachability(with: [])
+                        }) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                    }
+                }
             }
             .navigationViewStyle(StackNavigationViewStyle())
             

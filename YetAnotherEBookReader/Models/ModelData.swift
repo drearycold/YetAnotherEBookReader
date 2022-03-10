@@ -180,7 +180,8 @@ final class ModelData: ObservableObject {
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
 
     lazy var calibreServerService = CalibreServerService(modelData: self)
-    
+    @Published var metadataSessions = [String: URLSession]()
+
     var calibreServiceCancellable: AnyCancellable?
     var shelfRefreshCancellable: AnyCancellable?
     var dshelperRefreshCancellable: AnyCancellable?
@@ -195,7 +196,7 @@ final class ModelData: ObservableObject {
     var getBooksMetadataSubject = PassthroughSubject<CalibreBooksTask, Never>()
     var getBooksMetadataCancellable: AnyCancellable?
     
-    @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String, cnt: Int?)]()
+    @Published var librarySyncStatus = [String: (isSync: Bool, isError: Bool, msg: String, cnt: Int?, upd: Int?)]()
 
     @Published var userFontInfos = [String: FontInfo]()
 
@@ -363,49 +364,6 @@ final class ModelData: ObservableObject {
         }
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
-        
-        getBooksMetadataCancellable = getBooksMetadataSubject.flatMap { task in
-            self.calibreServerService.getBooksMetadata(task: task)
-        }
-        .subscribe(on: DispatchQueue.global())
-        .sink(receiveCompletion: { completion in
-            print("getBookMetadataCancellable error \(completion)")
-        }, receiveValue: { result in
-//            print("getBookMetadataCancellable response \(result.response)")
-            
-            let decoder = JSONDecoder()
-            guard let realm = try? Realm(configuration: self.realmConf) else { return }
-
-            do {
-                guard let data = result.data else {
-                    print("getBookMetadataCancellable nildata \(result.library.name)")
-                    return
-                }
-                let entries = try decoder.decode([String:CalibreBookEntry?].self, from: data)
-                let json = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
-                
-                try realm.write {
-                    result.books.forEach { id in
-                        guard let obj = realm.object(
-                                ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)),
-                              let entryOptional = entries[id],
-                              let entry = entryOptional,
-                              let root = json?[id] as? NSDictionary else {
-                            return
-                        }
-                        
-                        self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
-                    }
-                }
-                
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
-                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
-                print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
-            } catch {
-                print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
-            }
-        })
         
         if mock {
             let library = calibreLibraries.first!.value
@@ -1734,6 +1692,15 @@ final class ModelData: ObservableObject {
         }.first?.value.reachable
     }
     
+    func getServerInfo(server: CalibreServer) -> CalibreServerInfo? {
+        let serverInfos = calibreServerInfoStaging.filter { $1.server.id == server.id }
+        if let reachable = serverInfos.filter({ $1.reachable }).first {
+            return reachable.value
+        } else {
+            return serverInfos.first?.value
+        }
+    }
+    
     func refreshShelfMetadata(with serverIds: [String]) {
         shelfRefreshCancellable?.cancel()
         
@@ -1818,7 +1785,10 @@ final class ModelData: ObservableObject {
         
         syncLibrariesIncrementalCancellable = calibreLibraries.filter {
             serverIds.contains( $0.value.server.id )
-        }.map { $0.value }.publisher.flatMap { library -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+        }
+        .map { $0.value }
+        .publisher
+        .flatMap { library -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
             guard (self.librarySyncStatus[library.id]?.isSync ?? false) == false else {
                 print("\(#function) isSync \(library.id)")
                 return Just(CalibreCustomColumnInfoResult(library: library, result: ["just_syncing":[:]]))
@@ -1826,9 +1796,14 @@ final class ModelData: ObservableObject {
             }
             DispatchQueue.main.sync {
                 if self.librarySyncStatus[library.id] == nil {
-                    self.librarySyncStatus[library.id] = (false, false, "", nil)
+                    self.librarySyncStatus[library.id] = (true, false, "", nil, nil)
+                } else {
+                    self.librarySyncStatus[library.id]?.isSync = true
+                    self.librarySyncStatus[library.id]?.isError = false
+                    self.librarySyncStatus[library.id]?.msg = ""
+                    self.librarySyncStatus[library.id]?.cnt = nil
+                    self.librarySyncStatus[library.id]?.upd = nil
                 }
-                self.librarySyncStatus[library.id]?.isSync = true
             }
             print("\(#function) startSync \(library.id)")
 
@@ -1867,6 +1842,7 @@ final class ModelData: ObservableObject {
         guard results.result["just_syncing"] == nil else { return }
         var isError = false
         var bookCount = 0
+        var bookNeedUpdateCount = 0
         
         guard let realm = try? Realm(configuration: self.realmConf) else {
             isError = true
@@ -1876,9 +1852,13 @@ final class ModelData: ObservableObject {
         let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         
         defer {
-            bookCount = realm.objects(CalibreBookRealm.self).filter(
+            let objects = realm.objects(CalibreBookRealm.self).filter(
                 NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
-            ).count
+            )
+            bookCount = objects.count
+            
+            let objectsNeedUpdate = objects.filter("serverUrl == nil OR lastSynced < lastModified")
+            bookNeedUpdateCount = objectsNeedUpdate.count
             
             DispatchQueue.main.async {
                 self.calibreLibraries[library.id] = library
@@ -1887,6 +1867,7 @@ final class ModelData: ObservableObject {
                 self.librarySyncStatus[library.id]?.isSync = false
                 self.librarySyncStatus[library.id]?.isError = isError
                 self.librarySyncStatus[library.id]?.cnt = bookCount
+                self.librarySyncStatus[library.id]?.upd = bookNeedUpdateCount
                 print("\(#function) finishSync \(library.id)")
             }
         }
@@ -1913,32 +1894,111 @@ final class ModelData: ObservableObject {
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
         
+        var writeSucc = true
         results.list.book_ids.chunks(size: 1024).forEach { chunk in
-            try? realm.write {
-                chunk.map {(i:$0, s:$0.description)}.forEach { id in
-                    guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
-                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return }
-                    realm.create(CalibreBookRealm.self, value: [
-                        "primaryKey": CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.s),
-                        "lastModified": lastModified,
-                        "id": id.i
-                    ], update: .modified)
+            do {
+                try realm.write {
+                    chunk.map {(i:$0, s:$0.description)}.forEach { id in
+                        guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
+                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return }
+                        realm.create(CalibreBookRealm.self, value: [
+                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.s),
+                            "lastModified": lastModified,
+                            "id": id.i
+                        ], update: .modified)
+                    }
                 }
+            } catch {
+                writeSucc = false
             }
         }
         
-        try? realm.objects(CalibreBookRealm.self).filter(
+        if writeSucc,
+           let lastId = results.list.book_ids.last,
+           lastId > 0,
+           let lastModifiedStr = results.list.data.last_modified[lastId.description]?.v,
+           let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
+            print("\(#function) updateLibraryLastModified \(library.name) \(library.lastModified) -> \(lastModified)")
+            library.lastModified = lastModified
+        }
+        
+        self.trySendGetBooksMetadataTask(library: library)
+    }
+    
+    func trySendGetBooksMetadataTask(library: CalibreLibrary) {
+        guard let realm = try? Realm(configuration: self.realmConf) else {
+            return
+        }
+        
+        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
+        
+        let chunk = realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "( serverUrl == nil OR lastSynced < lastModified ) AND primaryKey BEGINSWITH %@", partialPrimaryKey)
-        ).map { result throws -> Int32 in
-            result.id
-        }.chunks(size: 256).forEach { chunk in
-            print("\(#function) prepareGetBooksMetadata \(library.name) \(chunk.count) \(chunk)")
-            if let task = calibreServerService.buildBooksMetadataTask(library: library, books: chunk.map{ $0.description }) {
-                getBooksMetadataSubject.send(task)
-            }
+        )
+        .sorted(byKeyPath: "lastModified", ascending: true)
+        .map { $0.id }
+        .prefix(256)
+        
+        guard chunk.isEmpty == false else { return }
+        print("\(#function) prepareGetBooksMetadata \(library.name) \(chunk.count)")
+        if let task = calibreServerService.buildBooksMetadataTask(library: library, books: chunk.map{ $0.description }) {
+            getBooksMetadataSubject.send(task)
         }
     }
     
+    func registerGetBooksMetadataCancellable() {
+        getBooksMetadataCancellable?.cancel()
+        getBooksMetadataCancellable = getBooksMetadataSubject.flatMap { task in
+            self.calibreServerService.getBooksMetadata(task: task)
+        }
+        .subscribe(on: DispatchQueue.global())
+        .sink(receiveCompletion: { completion in
+            
+            print("getBookMetadataCancellable error \(completion)")
+        }, receiveValue: { result in
+//            print("getBookMetadataCancellable response \(result.response)")
+            
+            let decoder = JSONDecoder()
+            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+
+            do {
+                guard let data = result.data else {
+                    print("getBookMetadataCancellable nildata \(result.library.name)")
+                    return
+                }
+                let entries = try decoder.decode([String:CalibreBookEntry?].self, from: data)
+                let json = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+                
+                try realm.write {
+                    result.books.forEach { id in
+                        guard let obj = realm.object(
+                                ofType: CalibreBookRealm.self,
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)),
+                              let entryOptional = entries[id],
+                              let entry = entryOptional,
+                              let root = json?[id] as? NSDictionary else {
+                            return
+                        }
+                        
+                        self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
+                    }
+                }
+                DispatchQueue.main.async {
+                    if let upd = self.librarySyncStatus[result.library.id]?.upd {
+                        self.librarySyncStatus[result.library.id]?.upd = upd - result.books.count
+                    }
+                }
+                
+                self.trySendGetBooksMetadataTask(library: result.library)
+                
+                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
+            } catch {
+                print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
+            }
+        })
+    }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
         activityDispatchQueue.async {
@@ -2124,7 +2184,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateBookModel() -> [ShelfModelSection] {
-        let limit = 25
+        let limit = 100
         var shelfModelSection = [ShelfModelSection]()
 
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
@@ -2160,8 +2220,10 @@ final class ModelData: ObservableObject {
                 }
             }
             
-            let section = ShelfModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionShelf: shelfModel)
-            shelfModelSection.append(section)
+            if shelfModel.count > 1 {
+                let section = ShelfModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionShelf: shelfModel)
+                shelfModelSection.append(section)
+            }
         }
         
         let emptyBook = CalibreBook(id: 0, library: .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: ""))

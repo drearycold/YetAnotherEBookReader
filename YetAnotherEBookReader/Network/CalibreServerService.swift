@@ -14,6 +14,21 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
+    func urlSession(server: CalibreServer) -> URLSession {
+        if let session = modelData.metadataSessions[server.id] {
+            return session
+        }
+        let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.timeoutIntervalForRequest = 600
+        let urlSessionDelegate = CalibreServerTaskDelegate(server.username)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
+        
+        DispatchQueue.main.sync {
+            modelData.metadataSessions[server.id] = urlSession
+        }
+        return urlSession
+    }
+    
     func getServerLibraries(server: CalibreServer) {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
@@ -262,18 +277,18 @@ struct CalibreServerService {
             }
             
                 
-            guard var newbook = handleLibraryBookOne(oldbook: oldbook, json: data) else {
+            guard let newbook = handleLibraryBookOne(oldbook: oldbook, json: data) else {
                 updatingMetadataStatus = "Failed to Parse Calibre Server Response."
                 return
             }
             
-            if( newbook.readPos.getDevices().isEmpty) {
-                let pair = modelData.defaultReaderForDefaultFormat(book: newbook)
-                newbook.readPos.addInitialPosition(
-                    modelData.deviceName,
-                    pair.1.rawValue
-                )
-            }
+//            if( newbook.readPos.getDevices().isEmpty) {
+//                let pair = modelData.defaultReaderForDefaultFormat(book: newbook)
+//                newbook.readPos.addInitialPosition(
+//                    modelData.deviceName,
+//                    pair.1.rawValue
+//                )
+//            }
                 
             updatingMetadataStatus = "Success"
                 
@@ -473,7 +488,6 @@ struct CalibreServerService {
             lbdrp.lastProgress < rbdrp.lastProgress
         })?.lastProgress ?? 0.0
     }
-        
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
         let endpointUrl = URL(string: book.library.server.serverUrl + "/book-manifest/\(book.id)/\(format.id)?library_id=" + book.library.key.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)!)!
@@ -956,13 +970,7 @@ struct CalibreServerService {
     }
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 600
-        urlSessionConfiguration.timeoutIntervalForResource = 600
-        let urlSessionDelegate = CalibreServerTaskDelegate(task.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-        
-        let a = urlSession.dataTaskPublisher(for: task.url)
+        let a = self.urlSession(server: task.library.server).dataTaskPublisher(for: task.url)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.data = result.data

@@ -11,6 +11,8 @@ struct LibraryDetailView: View {
     @EnvironmentObject var modelData: ModelData
 
     @Binding var library: CalibreLibrary
+    @Binding var discoverable: Bool
+    @Binding var autoUpdate: Bool
 
     @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
 //    @State var dsreaderHelperLibrary = CalibreLibraryDSReaderHelper()
@@ -28,9 +30,9 @@ struct LibraryDetailView: View {
     
     var body: some View {
         List {
-            Toggle("Include in Discover", isOn: $library.discoverable)
+            Toggle("Include in Discover", isOn: $discoverable)
             
-            Toggle("Auto Update with Server", isOn: $library.autoUpdate)
+            Toggle("Auto Update with Server", isOn: $autoUpdate)
             
             Group {
                 Text("More Customizations")
@@ -248,10 +250,12 @@ struct LibraryDetailView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
 
     @State static private var library = modelData.calibreLibraries.values.first ?? .init(server: .init(name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default"), key: "Default", name: "Default")
-    
+
+    @State static private var discoverable = false
+    @State static private var autoUpdate = false
     static var previews: some View {
         NavigationView {
-            LibraryDetailView(library: $library)
+            LibraryDetailView(library: $library, discoverable: $discoverable, autoUpdate: $autoUpdate)
                 .environmentObject(modelData)
         }
     }

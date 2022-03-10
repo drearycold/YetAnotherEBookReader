@@ -20,7 +20,7 @@ struct ServerDetailView: View {
     
     @State private var dictionaryViewer = CalibreLibraryDictionaryViewer()
     
-    @State private var libraryList = [CalibreLibrary]()
+    @State private var libraryList = [String]()
 
     @State private var syncingLibrary = false
     @State private var syncLibraryColumnsCancellable: AnyCancellable? = nil
@@ -30,9 +30,15 @@ struct ServerDetailView: View {
     var body: some View {
 //        ScrollView {
         List {
-            Text("Server Options")
-                .font(.caption)
-                .padding([.top], 16)
+            HStack {
+                Text("Options")
+                Spacer()
+                if let serverInfo = modelData.getServerInfo(server: server) {
+                    Text("\(serverInfo.isPublic.description) \(serverInfo.reachable.description) \(serverInfo.errorMsg)")
+                }
+            }
+            .font(.caption)
+            .padding([.top], 16)
             
             NavigationLink(
                 destination: AddModServerView(server: $server, isActive: $modServerActive)
@@ -61,25 +67,34 @@ struct ServerDetailView: View {
                     Spacer()
                     
             }
-            ForEach(libraryList, id: \.self) { library in
+            ForEach(libraryList, id: \.self) { id in
                 NavigationLink(
                     destination: LibraryDetailView(
                         library: Binding<CalibreLibrary>(
                             get: {
-                                library
+                                modelData.calibreLibraries[id]!
                             },
                             set: { newLibrary in
-                                libraryList.removeAll(where: {$0.id == newLibrary.id})
-                                libraryList.append(newLibrary)
-                                sortLibraryList()
-                                modelData.calibreLibraries[newLibrary.id] = newLibrary
+                                modelData.calibreLibraries[id] = newLibrary
                                 try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
                             }
-                        )
+                        ),
+                        discoverable: Binding<Bool>(get: {
+                            modelData.calibreLibraries[id]!.discoverable
+                        }, set: { newValue in
+                            modelData.calibreLibraries[id]!.discoverable = newValue
+                            try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
+                            NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                        }),
+                        autoUpdate: Binding<Bool>(get: {
+                            modelData.calibreLibraries[id]!.autoUpdate
+                        }, set: { newValue in
+                            modelData.calibreLibraries[id]!.autoUpdate = newValue
+                            try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)                        })
                     ),
-                    tag: library.id,
+                    tag: id,
                     selection: $selectedLibrary) {
-                    libraryRowBuilder(library: library)
+                    libraryRowBuilder(library: modelData.calibreLibraries[id]!)
                 }
             }
             
@@ -89,7 +104,9 @@ struct ServerDetailView: View {
             libraryList = modelData.calibreLibraries.values.filter{ library in
                 library.server.id == server.id
             }
-            sortLibraryList()
+            .sorted{ $0.name < $1.name }
+            .map { $0.id }
+            
         }
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -105,14 +122,6 @@ struct ServerDetailView: View {
         }
     }
 
-    private func sortLibraryList() {
-        libraryList.sort { $0.name < $1.name }
-    }
-    
-    private func setStates() {
-        // dictionaryViewer = library.pluginDictionaryViewerWithDefault ?? .init()
-    }
-    
     @ViewBuilder
     private func libraryRowBuilder(library: CalibreLibrary) -> some View {
         HStack(spacing: 8) {
@@ -124,7 +133,20 @@ struct ServerDetailView: View {
                 } else {
                     Text("processing")
                 }
-                Text("PLACEHOLDER").hidden()
+                if modelData.librarySyncStatus[library.id]?.isError == true {
+                    Text("Status Unknown")
+                } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt, let upd = modelData.librarySyncStatus[library.id]?.upd {
+                    if cnt == 0 {
+                        Text("Empty")
+                    }
+                    else if upd == 0 {
+                        Text("Up to date")
+                    } else {
+                        Text("\(upd) entries lagging")
+                    }
+                } else if modelData.librarySyncStatus[library.id]?.isSync == false {
+                    Text("Insufficient data \(modelData.librarySyncStatus[library.id]?.cnt ?? -1) \(modelData.librarySyncStatus[library.id]?.upd ?? -1)")
+                }
             }.font(.caption2)
             ZStack {
                 if modelData.librarySyncStatus[library.id]?.isSync ?? false {
@@ -167,22 +189,26 @@ struct ServerDetailView: View {
 
         let list = libraryList  //.filter { $0.name == "AAA-Test" }
         syncLibraryColumnsCancellable = list.publisher
-            .flatMap { library -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
-                guard (modelData.librarySyncStatus[library.id]?.isSync ?? false) == false else {
-                    print("\(#function) isSync \(library.id)")
-                    return Just(CalibreCustomColumnInfoResult(library: library, result: ["just_syncing":[:]]))
+            .flatMap { id -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+                guard (modelData.librarySyncStatus[id]!.isSync) == false else {
+                    print("\(#function) isSync \(id)")
+                    return Just(CalibreCustomColumnInfoResult(library: modelData.calibreLibraries[id]!, result: ["just_syncing":[:]]))
                         .setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
                 DispatchQueue.main.sync {
-                    if modelData.librarySyncStatus[library.id] == nil {
-                        modelData.librarySyncStatus[library.id] = (false, false, "", nil)
+                    if modelData.librarySyncStatus[id] == nil {
+                        modelData.librarySyncStatus[id] = (true, false, "", nil, nil)
+                    } else {
+                        modelData.librarySyncStatus[id]?.isSync = true
+                        modelData.librarySyncStatus[id]?.isError = false
+                        modelData.librarySyncStatus[id]?.msg = ""
+                        modelData.librarySyncStatus[id]?.cnt = nil
+                        modelData.librarySyncStatus[id]?.upd = nil
                     }
-                    modelData.librarySyncStatus[library.id]?.isSync = true
-                    modelData.librarySyncStatus[library.id]?.cnt = nil
                 }
-                print("\(#function) startSync \(library.id)")
+                print("\(#function) startSync \(id)")
 
-                return modelData.calibreServerService.getCustomColumnsPublisher(library: library)
+                return modelData.calibreServerService.getCustomColumnsPublisher(library: modelData.calibreLibraries[id]!)
             }
             .flatMap { customColumnResult -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
                 print("\(#function) syncLibraryPublisher \(customColumnResult.library.id)")
@@ -193,7 +219,7 @@ struct ServerDetailView: View {
                 if complete == .finished {
                     DispatchQueue.main.async {
                         list.forEach {
-                            modelData.librarySyncStatus[$0.id]?.isSync = false
+                            modelData.librarySyncStatus[$0]?.isSync = false
                         }
                         syncingLibrary = false
                     }
