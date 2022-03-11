@@ -106,7 +106,7 @@ struct SettingsView: View {
                 .toolbar {
                     ToolbarItem {
                         Button(action:{
-                            modelData.probeServersReachability(with: [])
+                            modelData.probeServersReachability(with: [], updateLibrary: true)
                         }) {
                             Image(systemName: "arrow.triangle.2.circlepath")
                         }
@@ -156,9 +156,19 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 if server.isLocal == false {
                     Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries")
-                    
                 } else {
                     
+                }
+                Spacer()
+                if modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count > 0 {
+                    Text("\(modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count) processing")
+                } else if let serverInfo = modelData.getServerInfo(server: server) {
+                    if serverInfo.reachable {
+                        Text("Server has \(serverInfo.libraryMap.count) libraries")
+                    } else {
+                        Text("\(serverInfo.errorMsg)")
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .font(.caption)

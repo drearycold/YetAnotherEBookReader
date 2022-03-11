@@ -14,17 +14,22 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
-    func urlSession(server: CalibreServer) -> URLSession {
-        if let session = modelData.metadataSessions[server.id] {
+    func urlSession(serverId: String, username: String) -> URLSession {
+        if let session = modelData.metadataSessions[serverId] {
             return session
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.timeoutIntervalForRequest = 600
-        let urlSessionDelegate = CalibreServerTaskDelegate(server.username)
+        urlSessionConfiguration.httpMaximumConnectionsPerHost = 2
+        let urlSessionDelegate = CalibreServerTaskDelegate(username)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
-        DispatchQueue.main.sync {
-            modelData.metadataSessions[server.id] = urlSession
+        if Thread.isMainThread {
+            modelData.metadataSessions[serverId] = urlSession
+        } else {
+            DispatchQueue.main.sync {
+                modelData.metadataSessions[serverId] = urlSession
+            }
         }
         return urlSession
     }
@@ -126,7 +131,6 @@ struct CalibreServerService {
             serverInfo.defaultLibrary = defaultLibrary
             serverInfo.libraryMap = libraryMap
             serverInfo.reachable = true
-
             serverInfo.errorMsg = "Success"
         }
 
@@ -167,11 +171,6 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 600
-        let urlSessionDelegate = CalibreServerTaskDelegate(resultPrev.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = data
@@ -182,7 +181,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.library.id)
 
-        let a = urlSession.dataTaskPublisher(for: urlRequest)
+        let a = urlSession(serverId: resultPrev.library.server.id, username: resultPrev.library.server.username).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 // print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -436,6 +435,7 @@ struct CalibreServerService {
             
             $0[$1.key.uppercased()] = formatInfo
         }
+        bookRealm.formatsData = try? JSONEncoder().encode(formats) as NSData?
         
         bookRealm.size = 0   //parse later
         
@@ -777,105 +777,13 @@ struct CalibreServerService {
         }
     }
     
-    func probeServerReachability(server: CalibreServer, isPublic: Bool) {
-        let infoId = server.id + " " + isPublic.description
-        guard var serverInfo = modelData.calibreServerInfoStaging[infoId] else { return }
-
-        serverInfo.reachable = false
-        serverInfo.errorMsg = "Unknown Error"
-        serverInfo.probingTask?.cancel()
-        
-        guard var url = URL(string: isPublic ? server.publicUrl : server.baseUrl), let host = url.host else {
-            modelData.calibreServerInfoStaging[infoId] = serverInfo
-            return
-        }
-        url.appendPathComponent("/ajax/library-info", isDirectory: false)
-        
-        if server.username.count > 0 && server.password.count > 0 {
-            var authMethod = NSURLAuthenticationMethodDefault
-            if url.scheme == "http" {
-                authMethod = NSURLAuthenticationMethodHTTPDigest
-            }
-            if url.scheme == "https" {
-                authMethod = NSURLAuthenticationMethodHTTPBasic
-            }
-            let protectionSpace = URLProtectionSpace.init(host: host,
-                                                          port: url.port ?? 0,
-                                                          protocol: url.scheme,
-                                                          realm: "calibre",
-                                                          authenticationMethod: authMethod)
-            let userCredential = URLCredential(user: server.username,
-                                               password: server.password,
-                                               persistence: .permanent)
-            URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-        }
-
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
-            defer {
-                print("probeServerReachability \(serverInfo)")
-                DispatchQueue.main.async {
-                    modelData.calibreServerInfoStaging[serverInfo.id] = serverInfo
-                }
-            }
-            if let error = error {
-                serverInfo.errorMsg = error.localizedDescription
-                return
-            }
-            var dataAsString = ""
-            if let data = data, let s = String(data: data, encoding: .utf8) {
-                dataAsString = s
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                serverInfo.errorMsg = dataAsString + response.debugDescription
-                return
-            }
-            guard httpResponse.statusCode != 401 else {
-                serverInfo.errorMsg = httpResponse.statusCode.description
-                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                    + " " + dataAsString
-                return
-            }
-            guard (200...299).contains(httpResponse.statusCode) else {
-                serverInfo.errorMsg = httpResponse.statusCode.description
-                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                    + " " + dataAsString
-                return
-            }
-            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                  let data = data,
-                  let libraryInfo = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
-                serverInfo.errorMsg = "Failed to parse server response"
-                return
-            }
-
-            guard let libraryMap = libraryInfo["library_map"] as? [String: String] else {
-                serverInfo.errorMsg = "No library info found in server response"
-                return
-            }
-            defaultLog.info("libraryInfo: \(libraryInfo)")
-
-
-            let defaultLibrary = libraryInfo["default_library"] as? String ?? ""
-
-            serverInfo.defaultLibrary = defaultLibrary
-            serverInfo.libraryMap = libraryMap
-            serverInfo.reachable = true
-            serverInfo.errorMsg = "Success"
-        }
-
-        setCredential(server: server, task: task)
-
-        serverInfo.probingTask = task
-        task.resume()
-    }
-    
     // MARK: - Combine style below
     
-    func probeServerReachabilityNew(serverInfo: CalibreServerInfo) -> AnyPublisher<(String, CalibreServerLibraryInfo), Never> {
+    func probeServerReachabilityNew(serverInfo: CalibreServerInfo) -> AnyPublisher<CalibreServerInfo, Never> {
         var serverInfo = serverInfo
         
         serverInfo.reachable = false
-        serverInfo.errorMsg = "Unknown Error"
+        serverInfo.errorMsg = "Cannot connect to server"
         serverInfo.probingTask?.cancel()
         
         var url = serverInfo.url
@@ -886,10 +794,32 @@ struct CalibreServerService {
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         return urlSession.dataTaskPublisher(for: url)
-            .map { $0.data }
-            .decode(type: CalibreServerLibraryInfo.self, decoder: JSONDecoder())
-            .replaceError(with: CalibreServerLibraryInfo(defaultLibrary: nil, libraryMap: [:]))
-            .map { (serverInfo.id, $0) }
+            .tryMap { data, response in
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    serverInfo.errorMsg = "Cannot get HTTP response"
+                    return serverInfo
+                }
+                guard (200...299).contains(httpResponse.statusCode) else {
+                    serverInfo.errorMsg = httpResponse.description
+                    return serverInfo
+                }
+                guard let libraryInfo = try? JSONDecoder().decode(CalibreServerLibraryInfo.self, from: data) else {
+                    serverInfo.errorMsg = "Cannot parse library list"
+                    return serverInfo
+                }
+                guard let defaultLibrary = libraryInfo.defaultLibrary,
+                      libraryInfo.libraryMap.count > 0 else {
+                    serverInfo.errorMsg = "Server has no library"
+                    return serverInfo
+                }
+          
+                serverInfo.defaultLibrary = defaultLibrary
+                serverInfo.libraryMap = libraryInfo.libraryMap
+                serverInfo.errorMsg = "Success"
+
+                return serverInfo
+            }
+            .replaceError(with: serverInfo)
             .eraseToAnyPublisher()
     }
     
@@ -904,9 +834,11 @@ struct CalibreServerService {
         }
         
         return CalibreBookTask(
+            serverId: library.server.id,
             bookId: bookId,
             inShelfId: "",
-            url: endpointUrl, username: library.server.username)
+            url: endpointUrl,
+            username: library.server.username)
     }
     
     func buildMetadataTask(book: CalibreBook) -> CalibreBookTask? {
@@ -920,9 +852,11 @@ struct CalibreServerService {
         }
         
         return CalibreBookTask(
+            serverId: book.library.server.id,
             bookId: book.id,
             inShelfId: book.inShelfId,
-            url: endpointUrl, username: book.library.server.username)
+            url: endpointUrl,
+            username: book.library.server.username)
     }
     
     func buildBooksMetadataTask(library: CalibreLibrary, books: [String]) -> CalibreBooksTask? {
@@ -946,11 +880,7 @@ struct CalibreServerService {
     }
     
     func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-        
-        return urlSession.dataTaskPublisher(for: task.url)
+        return urlSession(serverId: task.serverId, username: task.username).dataTaskPublisher(for: task.url)
             .map { $0.data }
             .decode(type: CalibreBookEntry.self, decoder: JSONDecoder())
             .replaceError(with: CalibreBookEntry())
@@ -959,18 +889,15 @@ struct CalibreServerService {
     }
     
     func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(task.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-        
-        let a = urlSession.dataTaskPublisher(for: task.url)
+        return urlSession(serverId: task.serverId, username: task.username)
+            .dataTaskPublisher(for: task.url)
             .map { (task, $0.data, $0.response) }
             .eraseToAnyPublisher()
-        return a
     }
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        let a = self.urlSession(server: task.library.server).dataTaskPublisher(for: task.url)
+        return urlSession(serverId: task.library.server.id, username: task.library.server.username)
+            .dataTaskPublisher(for: task.url)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.data = result.data
@@ -978,11 +905,9 @@ struct CalibreServerService {
                 return task
             }
             .eraseToAnyPublisher()
-        return a
     }
     
     func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
-        
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
             return -1
         }
@@ -1271,17 +1196,15 @@ struct CalibreServerService {
         guard let postData = "[]".data(using: .utf8) else {
             return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-
+        
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = postData
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let a = urlSession.dataTaskPublisher(for: urlRequest)
+        let a = urlSession(serverId: library.server.id, username: library.server.username)
+            .dataTaskPublisher(for: urlRequest)
             .tryMap { output in
 //                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -1298,53 +1221,6 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
         
         return a
-    }
-    
-    func getCustomColumns(library: CalibreLibrary, completion: (([String: CalibreCustomColumnInfo]) -> Void)? = nil) -> Int {
-        guard let serverURL = getServerUrlByReachability(server: library.server),
-              var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
-            return -1
-        }
-        
-        endpointURLComponent.path.append("/cdb/cmd/custom_columns/0")
-        endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: library.key)]
-
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
-        
-        guard let postData = "[]".data(using: .utf8) else {
-            return -2
-        }
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-
-        var urlRequest = URLRequest(url: endpointUrl)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = postData
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
-            .tryMap { output in
-//                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
-                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
-                }
-                
-                return output.data
-            }
-            .decode(type: [String: [String:CalibreCustomColumnInfo]].self, decoder: JSONDecoder())
-            .replaceError(with: [:])
-            .eraseToAnyPublisher()
-            .receive(on: DispatchQueue.main)
-            .sink { results in
-                print("\(#function) count=\(results.count) result=\(results)")
-                completion?(results["result"] ?? [:])
-            }
-        
-        return 0
     }
 }
 

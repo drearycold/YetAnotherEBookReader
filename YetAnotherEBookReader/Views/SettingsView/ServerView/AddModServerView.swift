@@ -451,7 +451,7 @@ struct AddModServerView: View {
         // modelData.updateServer(oldServer: server, newServer: newServer)
         server = newServer
         
-        modelData.probeServersReachability(with: [newServer.id])
+        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true)
 
         isActive = false
     }

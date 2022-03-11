@@ -14,6 +14,13 @@ struct DSReaderHelperConnector {
     let dsreaderHelperServer: CalibreServerDSReaderHelper
     let goodreadsSync: CalibreLibraryGoodreadsSync?
     
+    let metadataQueue: OperationQueue = {
+        var queue = OperationQueue()
+        queue.name = "Book Metadata queue"
+        queue.maxConcurrentOperationCount = 1
+        return queue
+    }()
+    
     var urlSession: URLSession {
         if let space = calibreServerService.getProtectionSpace(server: server, port: dsreaderHelperServer.port) {
             let userCredential = URLCredential(user: server.username,
@@ -22,11 +29,7 @@ struct DSReaderHelperConnector {
             URLCredentialStorage.shared.set(userCredential, for: space)
         }
         
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 60
-        let urlSessionDelegate = CalibreServerTaskDelegate(server.username)
-        
-        return URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: nil)
+        return calibreServerService.urlSession(serverId: server.id, username: server.username)
     }
     
     func endpointConfiguration() -> URLComponents? {

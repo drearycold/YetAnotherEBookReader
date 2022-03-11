@@ -35,7 +35,11 @@ struct LibraryInfoBookRow: View {
                     .font(.headline)
                     .lineLimit(3)
                 
-                Text("\(book.authorsDescriptionShort)").font(.subheadline)
+                HStack {
+                    Text("\(book.authorsDescriptionShort)")
+                    Spacer()
+                    Text(book.library.name)
+                }.font(.subheadline)
                 
                 Spacer()
                 
@@ -113,8 +117,16 @@ struct LibraryInfoBookRow: View {
     }
 }
 
-//struct LibraryInfoBookRow_Previews: PreviewProvider {
-//    static var previews: some View {
-//        LibraryInfoBookRow(bookId: 1)
-//    }
-//}
+struct LibraryInfoBookRow_Previews: PreviewProvider {
+    static private var modelData = ModelData(mock: true)
+    
+    static var previews: some View {
+        List{
+            LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
+                modelData.booksInShelf.first!.value
+            }, set: { _ in
+                
+            }))
+        }.environmentObject(modelData)
+    }
+}

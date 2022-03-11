@@ -458,6 +458,13 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     
 }
 
+struct CalibreSyncStatus {
+    var isSync = false
+    var isError = false
+    var msg: String? = nil
+    var cnt: Int? = nil
+    var upd: Int? = nil
+}
 
 struct BookReadingPosition {
     private var deviceMap = [String: BookDeviceReadingPosition]()
@@ -634,6 +641,7 @@ struct CalibreBookLastReadPositionEntry: Codable {
 }
 
 struct CalibreBookTask {
+    var serverId: String
     var bookId: Int32
     var inShelfId: String
     var url: URL

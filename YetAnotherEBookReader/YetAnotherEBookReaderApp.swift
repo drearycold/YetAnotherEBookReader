@@ -25,7 +25,7 @@ struct YetAnotherEBookReaderApp: App {
             switch(newScenePhase) {
             case .active:
                 modelData.registerGetBooksMetadataCancellable()
-                modelData.probeServersReachability(with: [])
+                modelData.probeServersReachability(with: [], updateLibrary: true)
                 break
             case .inactive:
                 break

@@ -34,7 +34,12 @@ struct ServerDetailView: View {
                 Text("Options")
                 Spacer()
                 if let serverInfo = modelData.getServerInfo(server: server) {
-                    Text("\(serverInfo.isPublic.description) \(serverInfo.reachable.description) \(serverInfo.errorMsg)")
+                    if serverInfo.reachable {
+                        Text("Server has \(serverInfo.libraryMap.count) libraries")
+                    } else {
+                        Text("\(serverInfo.errorMsg)")
+                            .foregroundColor(.red)
+                    }
                 }
             }
             .font(.caption)
@@ -90,7 +95,8 @@ struct ServerDetailView: View {
                             modelData.calibreLibraries[id]!.autoUpdate
                         }, set: { newValue in
                             modelData.calibreLibraries[id]!.autoUpdate = newValue
-                            try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)                        })
+                            try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
+                        })
                     ),
                     tag: id,
                     selection: $selectedLibrary) {
@@ -111,7 +117,7 @@ struct ServerDetailView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action: {
-                    syncLibraries()
+                    modelData.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: false)
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }.disabled(syncingLibrary)
@@ -125,7 +131,23 @@ struct ServerDetailView: View {
     @ViewBuilder
     private func libraryRowBuilder(library: CalibreLibrary) -> some View {
         HStack(spacing: 8) {
+            if library.autoUpdate {
+                Image(systemName: "play.fill")
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "play.slash.fill")
+                    .foregroundColor(.red)
+            }
+            if library.discoverable {
+                Image(systemName: "eye.fill")
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "eye.slash.fill")
+                    .foregroundColor(.red)
+            }
+                
             Text(library.name)
+            
             Spacer()
             VStack(alignment: .trailing) {
                 if let cnt = modelData.librarySyncStatus[library.id]?.cnt {
@@ -136,16 +158,11 @@ struct ServerDetailView: View {
                 if modelData.librarySyncStatus[library.id]?.isError == true {
                     Text("Status Unknown")
                 } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt, let upd = modelData.librarySyncStatus[library.id]?.upd {
-                    if cnt == 0 {
-                        Text("Empty")
-                    }
-                    else if upd == 0 {
-                        Text("Up to date")
-                    } else {
+                    if upd > 0, cnt > upd {
                         Text("\(upd) entries lagging")
                     }
                 } else if modelData.librarySyncStatus[library.id]?.isSync == false {
-                    Text("Insufficient data \(modelData.librarySyncStatus[library.id]?.cnt ?? -1) \(modelData.librarySyncStatus[library.id]?.upd ?? -1)")
+                    Text("Insufficient Info")
                 }
             }.font(.caption2)
             ZStack {
@@ -182,54 +199,7 @@ struct ServerDetailView: View {
             }
         }
     }
-    
-    //MARK: model functionalities
-    private func syncLibraries() {
-        syncingLibrary = true
 
-        let list = libraryList  //.filter { $0.name == "AAA-Test" }
-        syncLibraryColumnsCancellable = list.publisher
-            .flatMap { id -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
-                guard (modelData.librarySyncStatus[id]!.isSync) == false else {
-                    print("\(#function) isSync \(id)")
-                    return Just(CalibreCustomColumnInfoResult(library: modelData.calibreLibraries[id]!, result: ["just_syncing":[:]]))
-                        .setFailureType(to: Never.self).eraseToAnyPublisher()
-                }
-                DispatchQueue.main.sync {
-                    if modelData.librarySyncStatus[id] == nil {
-                        modelData.librarySyncStatus[id] = (true, false, "", nil, nil)
-                    } else {
-                        modelData.librarySyncStatus[id]?.isSync = true
-                        modelData.librarySyncStatus[id]?.isError = false
-                        modelData.librarySyncStatus[id]?.msg = ""
-                        modelData.librarySyncStatus[id]?.cnt = nil
-                        modelData.librarySyncStatus[id]?.upd = nil
-                    }
-                }
-                print("\(#function) startSync \(id)")
-
-                return modelData.calibreServerService.getCustomColumnsPublisher(library: modelData.calibreLibraries[id]!)
-            }
-            .flatMap { customColumnResult -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
-                print("\(#function) syncLibraryPublisher \(customColumnResult.library.id)")
-                return modelData.calibreServerService.syncLibraryPublisher(resultPrev: customColumnResult)
-            }
-            .subscribe(on: DispatchQueue.global())
-            .sink { complete in
-                if complete == .finished {
-                    DispatchQueue.main.async {
-                        list.forEach {
-                            modelData.librarySyncStatus[$0]?.isSync = false
-                        }
-                        syncingLibrary = false
-                    }
-                }
-            } receiveValue: { results in
-                self.modelData.syncLibrariesSinkValue(results: results)
-                
-                updater += 1
-            }
-    }
 }
 
 struct ServerDetailView_Previews: PreviewProvider {
