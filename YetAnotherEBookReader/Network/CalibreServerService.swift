@@ -141,7 +141,7 @@ struct CalibreServerService {
         task.resume()
     }
     
-    func syncLibraryPublisher(resultPrev: CalibreCustomColumnInfoResult, filter: String = "") -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
+    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, filter: String = "") -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server) else {
             var result = resultPrev
             result.errmsg = "Server not Reachable"
@@ -163,7 +163,8 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified", "timestamp", "pubdate", "tags"], "last_modified", "ascending", filter, -1]
+//        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified", "timestamp", "pubdate", "tags"], "last_modified", "ascending", filter, -1]
+        let json:[Any] = [["last_modified"], "last_modified", "ascending", filter, -1]
         
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             var result = resultPrev
@@ -193,7 +194,7 @@ struct CalibreServerService {
             }
             .decode(type: [String: CalibreCdbCmdListResult].self, decoder: JSONDecoder())
             .replaceError(with: ["result": CalibreCdbCmdListResult(book_ids: [-1])])
-            .map { listResult -> CalibreCustomColumnInfoResult in
+            .map { listResult -> CalibreSyncLibraryResult in
                 var result = resultPrev
                 if let list = listResult["result"] {
                     result.list = list
@@ -1178,23 +1179,23 @@ struct CalibreServerService {
         return 0
     }
     
-    func getCustomColumnsPublisher(library: CalibreLibrary) -> AnyPublisher<CalibreCustomColumnInfoResult, Never> {
+    func getCustomColumnsPublisher(library: CalibreLibrary) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         let error: [String: [String:CalibreCustomColumnInfo]] = ["error":[:]]
 
         guard let serverURL = getServerUrlByReachability(server: library.server),
               var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
-            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         endpointURLComponent.path.append("/cdb/cmd/custom_columns/0")
         endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: library.key)]
 
         guard let endpointUrl = endpointURLComponent.url else {
-            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         guard let postData = "[]".data(using: .utf8) else {
-            return Just(CalibreCustomColumnInfoResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         var urlRequest = URLRequest(url: endpointUrl)
@@ -1216,7 +1217,7 @@ struct CalibreServerService {
             .decode(type: [String: [String:CalibreCustomColumnInfo]].self, decoder: JSONDecoder())
             .replaceError(with: error)
             .map {
-                CalibreCustomColumnInfoResult(library: library, result: $0)
+                CalibreSyncLibraryResult(library: library, result: $0)
             }
             .eraseToAnyPublisher()
         

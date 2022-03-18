@@ -9,12 +9,15 @@ import SwiftUI
 import OSLog
 import Combine
 import RealmSwift
+import struct Kingfisher.KFImage
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
 
-    @State private var booksList = [CalibreBook]()
+    //@State private var booksList = [CalibreBook]()
+    @State private var booksList = [String]()
+    
     @State private var libraryList = [CalibreLibrary]()
     @State private var seriesList = [String]()
     @State private var ratingList = ["Not Rated", "★★★★★", "★★★★", "★★★", "★★", "★"]
@@ -35,11 +38,16 @@ struct LibraryInfoView: View {
     @State private var alertItem: AlertItem?
     
     @State private var batchDownloadSheetPresenting = false
-    @State private var librarySwitcherPresenting = false
     
+    @State private var bookUpdateCancellable: AnyCancellable?
     @State private var booksListCancellable: AnyCancellable?
     @State private var dismissAllCancellable: AnyCancellable?
 
+    @State private var booksListChangesetCancellable: AnyCancellable?
+    
+    @State private var realm: Realm!
+    private var errBook = CalibreBook(id: -1, library: CalibreLibrary(server: CalibreServer(name: "Error", baseUrl: "Error", hasPublicUrl: false, publicUrl: "Error", hasAuth: false, username: "Error", password: "Error"), key: "Error", name: "Error"))
+    
     private var defaultLog = Logger()
     
     var body: some View {
@@ -77,25 +85,22 @@ struct LibraryInfoView: View {
                 
                 ZStack {
                     List(selection: $selectedBookIds) {
-    //                    ForEach(modelData.filteredBookList.forPage(pageNo: pageNo, pageSize: pageSize), id: \.self) { bookId in
-                        ForEach(booksList, id: \.self) { book in
+                        ForEach(booksList, id: \.self) { bookInShelfId in
                             NavigationLink (
-                                destination: BookDetailView(viewMode: .LIBRARY)
-                                    .onAppear {
-                                        modelData.readingBookInShelfId = book.inShelfId
-                                    },
-                                tag: book.inShelfId,
+                                destination: BookDetailView(viewMode: .LIBRARY),
+                                tag: bookInShelfId,
                                 selection: $modelData.selectedBookId
                             ) {
-                                LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
-                                    book
-                                }, set: { newBook in
-                                    //dummy
-                                }))
+//                                LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
+//                                    book
+//                                }, set: { newBook in
+//                                    //dummy
+//                                }))
+                                bookRowView(book: getBook(for: bookInShelfId) ?? errBook)
                             }
                             .isDetailLink(true)
                             .contextMenu {
-                                bookRowContextMenuView(book: book)
+                                bookRowContextMenuView(book: getBook(for: bookInShelfId) ?? errBook)
                             }
                         }   //ForEach
                         //                        .onDelete(perform: deleteFromList)
@@ -105,7 +110,7 @@ struct LibraryInfoView: View {
                              attachmentAnchor: .rect(.bounds),
                              arrowEdge: .top
                     ) {
-    //                    LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
+                        LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
                     }
                     
                     if booksListRefreshing {
@@ -116,10 +121,39 @@ struct LibraryInfoView: View {
                 }
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        sortMenuView()
+                        if editMode == .inactive {
+                            sortMenuView()
+                        } else {
+                            Button(action: {
+                                defaultLog.info("selected \(selectedBookIds.description)")
+                                selectedBookIds.forEach { bookId in
+                                    modelData.clearCache(inShelfId: bookId)
+                                }
+                                selectedBookIds.removeAll()
+                            }) {
+                                Image(systemName: "star.slash")
+                            }.disabled(selectedBookIds.isEmpty)
+                        }
                     }
                     ToolbarItem(placement: .confirmationAction) {
-                        filterMenuView()
+                        if editMode == .inactive {
+                            filterMenuView()
+                        } else {
+                            Button(action: {
+                                guard selectedBookIds.isEmpty == false else { return }
+                                
+                                defaultLog.info("selected \(selectedBookIds.description)")
+                                batchDownloadSheetPresenting = true
+                                //selectedBookIds.removeAll()
+                            }
+                            ) {
+                                Image(systemName: "star")
+                            }.disabled(selectedBookIds.isEmpty)
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        editButton
+                        //editButtonView()
                     }
                 }
                 
@@ -172,7 +206,7 @@ struct LibraryInfoView: View {
             //                .toolbar {
             //                    toolbarContent()
             //                }   //List.toolbar
-            //.environment(\.editMode, self.$editMode)  //TODO
+            .environment(\.editMode, self.$editMode)  //TODO
         }   //NavigationView
         .navigationViewStyle(DefaultNavigationViewStyle())
         .listStyle(PlainListStyle())
@@ -180,9 +214,10 @@ struct LibraryInfoView: View {
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         })
         .onAppear {
+            self.realm = try! Realm(configuration: modelData.realmConf)
+            
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
-                librarySwitcherPresenting = false
                 batchDownloadSheetPresenting = false
             }
             
@@ -190,8 +225,17 @@ struct LibraryInfoView: View {
             booksListCancellable = modelData.libraryBookListNeedUpdate
                 .receive(on: DispatchQueue.global(qos: .userInitiated))
                 .sink { _ in
-                updateBooksList()
-            }
+                    updateBooksList()
+                }
+            
+            bookUpdateCancellable?.cancel()
+            bookUpdateCancellable = modelData.bookUpdatedSubject
+                .subscribe(on: DispatchQueue.main)
+                .sink(receiveValue: { book in
+//                    guard let index = booksList.firstIndex(where: { $0.inShelf == book.inShelf }) else { return }
+//                    booksList[index] = book
+                    updater += 1
+                })
             
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         }
@@ -221,10 +265,12 @@ struct LibraryInfoView: View {
     }
 
     func updateBooksList() {
+        booksListChangesetCancellable?.cancel()
+
         guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
         
         booksListRefreshing = true
-        var booksList = [CalibreBook]()
+        var booksList = [String]()
         var libraryList = [CalibreLibrary]()
         var seriesList = [String]()
         var pageCount = 1
@@ -336,10 +382,132 @@ struct LibraryInfoView: View {
         }()
         booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
             .compactMap {
-                modelData.convert(bookRealm: $0)
+                $0.primaryKey
             }
         
         libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
+    }
+    
+    private func getBook(for primaryKey: String) -> CalibreBook? {
+        guard let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+              let book = modelData.convert(bookRealm: obj) else { return nil }
+        return book
+    }
+    
+    @ViewBuilder
+    private func bookRowView(book: CalibreBook) -> some View {
+        HStack(alignment: .bottom) {
+            ZStack {
+                KFImage(book.coverURL)
+                    .placeholder {
+                        ProgressView().progressViewStyle(CircularProgressViewStyle())
+                    }
+                    .resizable()
+                    .frame(width: 72, height: 96, alignment: .center)
+                
+                if book.inShelf {
+                    Image(systemName: "books.vertical")
+                        .frame(width: 64 - 8, height: 96 - 8, alignment: .bottomTrailing)
+                        .foregroundColor(.red)
+                        .opacity(0.8)
+                }
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(book.title)")
+                    .font(.callout)
+                    .lineLimit(3)
+                
+                Group {
+                    HStack {
+                        Text("\(book.authorsDescriptionShort)")
+                        Spacer()
+                    }
+                    
+                    HStack {
+                        Text(book.tags.first ?? "")
+                        Spacer()
+                        Text(book.library.name)
+                    }
+                }
+                .font(.caption)
+                .lineLimit(1)
+                
+                Spacer()
+                
+                HStack {
+                    if book.identifiers["goodreads"] != nil {
+                        Image("icon-goodreads")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                    } else {
+                        Image("icon-goodreads")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                            .hidden()
+                    }
+                    if book.identifiers["amazon"] != nil {
+                        Image("icon-amazon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                    } else {
+                        Image("icon-amazon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                            .hidden()
+                    }
+                    Spacer()
+                    
+                    Text(book.ratingDescription).font(.caption)
+                    
+                    Spacer()
+                    if book.formats["PDF"] != nil {
+                        Image("PDF")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                    } else {
+                        Image("PDF")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                            .hidden()
+                    }
+                    
+                    if book.formats["EPUB"] != nil {
+                        Image("EPUB")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                    } else {
+                        Image("EPUB")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                            .hidden()
+                    }
+                    
+                    if book.formats["CBZ"] != nil {
+                        Image("CBZ")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                    } else {
+                        Image("CBZ")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 12, height: 16, alignment: .center)
+                            .hidden()
+                    }
+                }
+            }
+        }
     }
     
     @ViewBuilder
@@ -525,39 +693,6 @@ struct LibraryInfoView: View {
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
-    }
-    
-    @ToolbarContentBuilder
-    private func toolbarContent() -> some ToolbarContent {
-        ToolbarItem(placement: .navigationBarLeading) {
-            HStack {
-                //editButton
-                if editMode == .active {
-                    Button(action: {
-                        guard selectedBookIds.isEmpty == false else { return }
-                        
-                        defaultLog.info("selected \(selectedBookIds.description)")
-                        batchDownloadSheetPresenting = true
-                        //selectedBookIds.removeAll()
-                    }
-                    ) {
-                        Image(systemName: "star")
-                    }
-                    
-                    Button(action: {
-                        defaultLog.info("selected \(selectedBookIds.description)")
-                        selectedBookIds.forEach { bookId in
-                            modelData.clearCache(inShelfId: bookId)
-                        }
-                        selectedBookIds.removeAll()
-                    }) {
-                        Image(systemName: "trash")
-                    }
-                }
-                
-            }
-            
-        }   //ToolbarItem
     }
     
     func deleteFromList(at offsets: IndexSet) {

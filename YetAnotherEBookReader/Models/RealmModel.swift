@@ -93,6 +93,7 @@ class CalibreLibraryRealm: Object {
     
     @objc dynamic var autoUpdate = true
     @objc dynamic var discoverable = true
+    @objc dynamic var hidden = false
     @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
 }
 

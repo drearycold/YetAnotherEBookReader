@@ -14,14 +14,14 @@ struct LibraryInfoBookRow: View {
     @Binding var book: CalibreBook
     
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom) {
             ZStack {
                 KFImage(book.coverURL)
                     .placeholder {
                         ProgressView().progressViewStyle(CircularProgressViewStyle())
                     }
                     .resizable()
-                    .frame(width: 64, height: 96, alignment: .center)
+                    .frame(width: 72, height: 96, alignment: .center)
                 
                 if book.inShelf {
                     Image(systemName: "books.vertical")
@@ -30,16 +30,28 @@ struct LibraryInfoBookRow: View {
                         .opacity(0.8)
                 }
             }
-            VStack(alignment: .leading, spacing: 4) {
+            
+            Spacer()
+            
+            VStack(alignment: .leading, spacing: 2) {
                 Text("\(book.title)")
-                    .font(.headline)
+                    .font(.callout)
                     .lineLimit(3)
                 
-                HStack {
-                    Text("\(book.authorsDescriptionShort)")
-                    Spacer()
-                    Text(book.library.name)
-                }.font(.subheadline)
+                Group {
+                    HStack {
+                        Text("\(book.authorsDescriptionShort)")
+                        Spacer()
+                    }
+                    
+                    HStack {
+                        Text(book.tags.first ?? "")
+                        Spacer()
+                        Text(book.library.name)
+                    }
+                }
+                .font(.caption)
+                .lineLimit(1)
                 
                 Spacer()
                 

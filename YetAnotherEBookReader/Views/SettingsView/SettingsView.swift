@@ -251,6 +251,7 @@ struct SettingsView: View {
                     name: libraryRealm.name!,
                     autoUpdate: libraryRealm.autoUpdate,
                     discoverable: libraryRealm.discoverable,
+                    hidden: libraryRealm.hidden,
                     lastModified: libraryRealm.lastModified,
                     customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                         $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
@@ -283,6 +284,7 @@ struct SettingsView: View {
                     name: oldLibrary.name,
                     autoUpdate: oldLibrary.autoUpdate,
                     discoverable: oldLibrary.discoverable,
+                    hidden: oldLibrary.hidden,
                     lastModified: oldLibrary.lastModified,
                     customColumnInfos: oldLibrary.customColumnInfos,
                     pluginColumns: oldLibrary.pluginColumns)
@@ -336,7 +338,8 @@ struct SettingsView: View {
     
     private func deleteServer() {
         let server = serverList.remove(at: serverListDeleteIndex)
-        let isSuccess = modelData.removeServer(serverId: server.id)
+        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
+        let isSuccess = modelData.removeServer(serverId: server.id, realm: realm)
         if !isSuccess {
             alertItem = AlertItem(id: "DelServerFailed")
         }

@@ -86,6 +86,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     
     var autoUpdate = true
     var discoverable = true
+    var hidden = true
     var lastModified = Date(timeIntervalSince1970: 0)
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
@@ -263,15 +264,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     }
 }
 
-struct CalibreBook: Hashable, Identifiable, Equatable {
-    static func == (lhs: CalibreBook, rhs: CalibreBook) -> Bool {
-        lhs.id == rhs.id && lhs.library.name == rhs.library.name
-    }
-    func hash(into hasher: inout Hasher) {
-        library.hash(into: &hasher)
-        hasher.combine(id)
-    }
-    
+struct CalibreBook {
     let id: Int32
     let library: CalibreLibrary
     var title = "No Title"
@@ -398,18 +391,9 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     var tags = [String]()
     var tagsDescription: String {
         if tags.count == 0 {
-            return ""
+            return "No Tag"
         }
-        if tags.count == 1 {
-            return tags[0]
-        }
-        return tags.reduce("") { (desc, tag) -> String in
-            if desc.count == 0 {
-                return tag
-            } else {
-                return desc + ", " + tag
-            }
-        }
+        return tags.joined(separator: ", ")
     }
     var formats = [String: FormatInfo]()
     var readPos = BookReadingPosition()
@@ -449,7 +433,6 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
     }
     
     var inShelfId : String {
-//        return "\(id)^\(library.id)"
         return CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.description)
     }
     
@@ -459,11 +442,13 @@ struct CalibreBook: Hashable, Identifiable, Equatable {
 }
 
 struct CalibreSyncStatus {
+    var library: CalibreLibrary
     var isSync = false
     var isError = false
     var msg: String? = nil
     var cnt: Int? = nil
     var upd: Int? = nil
+    var del = Set<Int32>()
 }
 
 struct BookReadingPosition {
@@ -828,8 +813,9 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     }
 }
 
-struct CalibreCustomColumnInfoResult {
+struct CalibreSyncLibraryResult {
     var library: CalibreLibrary
+    var isIncremental: Bool = true
     var result: [String: [String:CalibreCustomColumnInfo]]
     var errmsg = ""
     var list = CalibreCdbCmdListResult()
@@ -840,15 +826,15 @@ struct CalibreCdbCmdListResult: Codable, Hashable {
         var v: String
     }
     struct Data: Codable, Hashable {
-        var title: [String: String] = [:]
-        var authors: [String: [String]] = [:]
-        var formats: [String: Set<String>] = [:]
-        var series: [String: String?] = [:]
-        var series_index: [String: Double] = [:]
-        var identifiers: [String: [String: String]] = [:]
         var last_modified: [String: DateValue] = [:]
-        var timestamp: [String: DateValue] = [:]
-        var pubdate: [String: DateValue] = [:]
+//        var title: [String: String] = [:]
+//        var authors: [String: [String]] = [:]
+//        var formats: [String: Set<String>] = [:]
+//        var series: [String: String?] = [:]
+//        var series_index: [String: Double] = [:]
+//        var identifiers: [String: [String: String]] = [:]
+//        var timestamp: [String: DateValue] = [:]
+//        var pubdate: [String: DateValue] = [:]
     }
     
     var book_ids = [Int32]()

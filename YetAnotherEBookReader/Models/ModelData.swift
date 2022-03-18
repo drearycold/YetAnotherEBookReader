@@ -83,16 +83,16 @@ final class ModelData: ObservableObject {
     
     var currentBookId: String = "" {
         didSet {
-//            self.selectedBookId = currentBookId
+            self.selectedBookId = currentBookId
         }
     }
 
     @Published var selectedBookId: String? = nil {
         didSet {
-//            guard let selectedBookId = selectedBookId,
-//                  let book = self.calibreServerLibraryBooks[selectedBookId]
-//                  else { return }
-//            self.readingBook = book
+            if let selectedBookId = selectedBookId,
+               readingBookInShelfId != selectedBookId {
+                readingBookInShelfId = selectedBookId
+            }
         }
     }
     
@@ -119,8 +119,11 @@ final class ModelData: ObservableObject {
                let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
                 readingBook = convert(bookRealm: bookRealm)
             }
-            if readingBook != nil {
-                readerInfo = prepareBookReading(book: readingBook!)
+            if let readingBook = readingBook {
+                calibreServerService.getMetadata(oldbook: readingBook, completion: { newBook in
+                    self.readingBook = newBook
+                    self.bookUpdatedSubject.send(newBook)
+                })
             }
         }
     }
@@ -139,6 +142,8 @@ final class ModelData: ObservableObject {
                 let pair = defaultReaderForDefaultFormat(book: readingBook)
                 self.selectedPosition = getInitialReadingPosition(book: readingBook, format: pair.0, reader: pair.1).id
             }
+            
+            readerInfo = prepareBookReading(book: readingBook)
         }
     }
     
@@ -193,6 +198,9 @@ final class ModelData: ObservableObject {
         queue.maxConcurrentOperationCount = 2
         return queue
     }()
+    
+    var bookUpdatedSubject = PassthroughSubject<CalibreBook, Never>()
+
     var getBooksMetadataSubject = PassthroughSubject<CalibreBooksTask, Never>()
     var getBooksMetadataCancellable: AnyCancellable?
     
@@ -513,6 +521,7 @@ final class ModelData: ObservableObject {
                 name: libraryRealm.name!,
                 autoUpdate: libraryRealm.autoUpdate,
                 discoverable: libraryRealm.discoverable,
+                hidden: libraryRealm.hidden,
                 lastModified: libraryRealm.lastModified,
                 customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
                     $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
@@ -990,6 +999,7 @@ final class ModelData: ObservableObject {
         libraryRealm.serverUsername = library.server.username
         libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
+        libraryRealm.hidden = library.hidden
         libraryRealm.lastModified = library.lastModified
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
@@ -1008,6 +1018,21 @@ final class ModelData: ObservableObject {
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         try realm.write {
             realm.add(libraryRealm, update: .all)
+        }
+    }
+    
+    func hideLibrary(libraryId: String) {
+        calibreLibraries[libraryId]?.hidden = true
+        if let library = calibreLibraries[libraryId] {
+            try? updateLibraryRealm(library: library, realm: realm)
+        }
+    }
+    
+    func restoreLibrary(libraryId: String) {
+        calibreLibraries[libraryId]?.hidden = false
+        calibreLibraries[libraryId]?.lastModified = Date(timeIntervalSince1970: 0)
+        if let library = calibreLibraries[libraryId] {
+            try? updateLibraryRealm(library: library, realm: realm)
         }
     }
     
@@ -1111,6 +1136,14 @@ final class ModelData: ObservableObject {
         
         try? realm.write {
             realm.delete(objects)
+        }
+    }
+    
+    func removeFromRealm(for primaryKey: String) {
+        guard let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) else { return }
+        
+        try? realm.write {
+            realm.delete(object)
         }
     }
     
@@ -1524,7 +1557,7 @@ final class ModelData: ObservableObject {
         self.readerInfo = readerInfo
     }
     
-    func removeLibrary(libraryId: String) -> Bool {
+    func removeLibrary(libraryId: String, realm: Realm) -> Bool {
         guard let library = calibreLibraries[libraryId] else { return false }
         
         //remove cached book files
@@ -1555,7 +1588,7 @@ final class ModelData: ObservableObject {
         return true
     }
     
-    func removeServer(serverId: String) -> Bool {
+    func removeServer(serverId: String, realm: Realm) -> Bool {
         guard let server = calibreServers[serverId] else { return false }
         
         let libraries = calibreLibraries.filter {
@@ -1564,7 +1597,7 @@ final class ModelData: ObservableObject {
         
         var isSuccess = true
         libraries.forEach {
-            let result = removeLibrary(libraryId: $0.key)
+            let result = removeLibrary(libraryId: $0.key, realm: realm)
             isSuccess = isSuccess && result
         }
         if !isSuccess {
@@ -1607,7 +1640,7 @@ final class ModelData: ObservableObject {
         return true
     }
     
-    func probeServersReachability(with serverIds: [String], updateLibrary: Bool = false, autoUpdateOnly: Bool = true) {
+    func probeServersReachability(with serverIds: [String], updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
         calibreServers.filter {
             $0.value.isLocal == false
         }.forEach { serverId, server in
@@ -1617,7 +1650,7 @@ final class ModelData: ObservableObject {
                 if calibreServerInfoStaging[infoId] == nil,
                    let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
                     calibreServerInfoStaging[infoId] =
-                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "INITIAL", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "Connecting", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
                 }
             }
         }
@@ -1682,11 +1715,12 @@ final class ModelData: ObservableObject {
                 }.map{ $0.key }
             )
             
-            self.syncLibrariesIncremental(
+            self.syncLibraries(
                 with: self.calibreServers.filter {
                     $0.value.isLocal == false
                 }.map{ $0.key },
-                autoUpdateOnly: autoUpdateOnly
+                autoUpdateOnly: autoUpdateOnly,
+                incremental: incremental
             )
         })
     }
@@ -1785,7 +1819,7 @@ final class ModelData: ObservableObject {
         })
     }
     
-    func syncLibrariesIncremental(with serverIds: [String], autoUpdateOnly: Bool = true) {
+    func syncLibraries(with serverIds: [String], autoUpdateOnly: Bool, incremental: Bool) {
         syncLibrariesIncrementalCancellable?.cancel()
         
         syncLibrariesIncrementalCancellable = calibreLibraries.filter {
@@ -1793,28 +1827,30 @@ final class ModelData: ObservableObject {
         }
         .map { $0.value }
         .publisher
-        .flatMap { library -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+        .flatMap { library -> AnyPublisher<CalibreSyncLibraryResult, Never> in
             guard (self.librarySyncStatus[library.id]?.isSync ?? false) == false else {
                 print("\(#function) isSync \(library.id)")
-                return Just(CalibreCustomColumnInfoResult(library: library, result: ["just_syncing":[:]]))
+                return Just(CalibreSyncLibraryResult(library: library, result: ["just_syncing":[:]]))
                     .setFailureType(to: Never.self).eraseToAnyPublisher()
             }
             
             DispatchQueue.main.sync {
                 if self.librarySyncStatus[library.id] == nil {
-                    self.librarySyncStatus[library.id] = .init(isSync: true)
+                    self.librarySyncStatus[library.id] = .init(library: library, isSync: true)
                 } else {
                     self.librarySyncStatus[library.id]?.isSync = true
                     self.librarySyncStatus[library.id]?.isError = false
                     self.librarySyncStatus[library.id]?.msg = ""
                     self.librarySyncStatus[library.id]?.cnt = nil
                     self.librarySyncStatus[library.id]?.upd = nil
+                    self.librarySyncStatus[library.id]?.del.removeAll()
                 }
             }
             
-            guard autoUpdateOnly == false || library.autoUpdate else {
+            guard library.hidden == false,
+                  autoUpdateOnly == false || library.autoUpdate else {
                 print("\(#function) autoUpdate \(library.id)")
-                return Just(CalibreCustomColumnInfoResult(library: library, result: ["auto_update":[:]]))
+                return Just(CalibreSyncLibraryResult(library: library, result: ["auto_update":[:]]))
                     .setFailureType(to: Never.self).eraseToAnyPublisher()
             }
             
@@ -1822,13 +1858,14 @@ final class ModelData: ObservableObject {
 
             return self.calibreServerService.getCustomColumnsPublisher(library: library)
         }
-        .flatMap { customColumnResult -> AnyPublisher<CalibreCustomColumnInfoResult, Never> in
+        .flatMap { customColumnResult -> AnyPublisher<CalibreSyncLibraryResult, Never> in
             guard customColumnResult.result["just_syncing"] == nil,
                   customColumnResult.result["auto_update"] == nil else {
                 return Just(customColumnResult).setFailureType(to: Never.self).eraseToAnyPublisher()
             }
             var filter = ""     //  "last_modified:>2022-02-20T00:00:00.000000+00:00"
-            if let realm = try? Realm(configuration: self.realmConf),
+            if incremental,
+               let realm = try? Realm(configuration: self.realmConf),
                let libraryRealm = realm.objects(CalibreLibraryRealm.self).filter(
                 NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND name = %@",
                             customColumnResult.library.server.baseUrl,
@@ -1842,6 +1879,9 @@ final class ModelData: ObservableObject {
                 filter = "last_modified:>=\(lastModifiedStr)"
             }
             print("\(#function) syncLibraryPublisher \(customColumnResult.library.id) \(filter)")
+            
+            var customColumnResult = customColumnResult
+            customColumnResult.isIncremental = incremental
             return self.calibreServerService.syncLibraryPublisher(resultPrev: customColumnResult, filter: filter)
         }
         .subscribe(on: DispatchQueue.global())
@@ -1852,13 +1892,14 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func syncLibrariesSinkValue(results: CalibreCustomColumnInfoResult) {
+    func syncLibrariesSinkValue(results: CalibreSyncLibraryResult) {
         var library = results.library
-        print("\(#function) receiveValue \(library.id)")
+        print("\(#function) receiveValue \(library.id) count=\(results.list.book_ids.count)")
         
         var isError = false
         var bookCount = 0
         var bookNeedUpdateCount = 0
+        var bookDeleted = [Int32]()
         
         defer {
             DispatchQueue.main.async {
@@ -1866,15 +1907,12 @@ final class ModelData: ObservableObject {
                 self.librarySyncStatus[library.id]?.isError = isError
                 self.librarySyncStatus[library.id]?.cnt = bookCount
                 self.librarySyncStatus[library.id]?.upd = bookNeedUpdateCount
+                self.librarySyncStatus[library.id]?.del.formUnion(bookDeleted)
                 
                 print("\(#function) finishSync \(library.id) \(self.librarySyncStatus[library.id].debugDescription)")
             }
         }
         
-        guard results.result["error"] == nil else {
-            isError = true
-            return
-        }
         guard let realm = try? Realm(configuration: self.realmConf) else {
             isError = true
             return
@@ -1891,10 +1929,19 @@ final class ModelData: ObservableObject {
             let objectsNeedUpdate = objects.filter("serverUrl == nil OR lastSynced < lastModified")
             bookNeedUpdateCount = objectsNeedUpdate.count
             
+            if results.isIncremental == false {
+                bookDeleted = objects.filter({ results.list.data.last_modified[$0.id.description] == nil }).map { $0.id }
+            }
+            
             DispatchQueue.main.async {
                 self.calibreLibraries[library.id] = library
                 try? self.updateLibraryRealm(library: library, realm: self.realm)
             }
+        }
+        
+        guard results.result["error"] == nil else {
+            isError = true
+            return
         }
         
         guard results.result["just_syncing"] == nil else { return }
@@ -2369,7 +2416,7 @@ final class ModelData: ObservableObject {
         }
         
         self.calibreLibraries
-            .filter { $0.value.discoverable }
+            .filter { $0.value.discoverable && $0.value.hidden == false }
             .sorted { $0.value.name < $1.value.name }
             .forEach { id, library in
             let sectionId = "\(library)-\(id)"

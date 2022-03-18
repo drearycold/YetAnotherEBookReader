@@ -44,8 +44,13 @@ struct BookDetailView: View {
 
     @State private var updater = 0
     
-    @State private var presentingReadSheet = false {
-        willSet { if newValue { modelData.presentingStack.append($presentingReadSheet) } }
+    @State private var presentingReadingSheet = false {
+        willSet { if newValue { modelData.presentingStack.append($presentingReadingSheet) } }
+        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+    }
+    
+    @State private var presentingPreviewSheet = false {
+        willSet { if newValue { modelData.presentingStack.append($presentingPreviewSheet) } }
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
@@ -79,20 +84,13 @@ struct BookDetailView: View {
                 }
                 .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                 .navigationTitle(Text(book.title))
-                .sheet(isPresented: $presentingReadSheet, onDismiss: { presentingReadSheet = false }) {
-                    BookPreviewView(viewModel: previewViewModel)
-                }
+                
             } else {
                 EmptyView()
             }
         }
         .toolbar {
             toolbarContent()
-        }
-        .onChange(of: modelData.readingBook) {book in
-            if let book = book {
-                modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
-            }
         }
         .onChange(of: downloadStatus) { value in
             if downloadStatus == .DOWNLOADED {
@@ -186,15 +184,16 @@ struct BookDetailView: View {
                 .scaledToFit()
             Button(action: {
                 if (book.inShelf) {
-                    if _viewModel.listVM == nil {
-                        _viewModel.listVM = ReadingPositionListViewModel(
-                            modelData: modelData, book: book, positions: book.readPos.getDevices()
-                        )
-                    } else {
-                        _viewModel.listVM.book = book
-                        _viewModel.listVM.positions = book.readPos.getDevices()
-                    }
-                    presentingReadPositionList = true
+//                    if _viewModel.listVM == nil {
+//                        _viewModel.listVM = ReadingPositionListViewModel(
+//                            modelData: modelData, book: book, positions: book.readPos.getDevices()
+//                        )
+//                    } else {
+//                        _viewModel.listVM.book = book
+//                        _viewModel.listVM.positions = book.readPos.getDevices()
+//                    }
+//                    presentingReadPositionList = true
+                    presentingReadingSheet = true
                 } else {
                     if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
                         //TODO prompt for formats
@@ -222,7 +221,26 @@ struct BookDetailView: View {
                         .foregroundColor(.gray)
                 }
                 
-            }.opacity(0.8)
+            }
+            .opacity(0.8)
+            .fullScreenCover(
+                isPresented: $presentingReadingSheet,
+                onDismiss: {
+                    guard let book = modelData.readingBook,
+                        let selectedPosition = modelData.readerInfo?.position,
+                        modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false
+                    else { return }
+                    
+                    modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)
+                    
+                    modelData.updateCurrentPosition(alertDelegate: self)
+                } ) {
+                if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
+                    YabrEBookReader(book: book, readerInfo: readerInfo)
+                } else {
+                    Text("Nil Book")
+                }
+            }
         }
         .frame(width: 300, height: 400)
     }
@@ -230,6 +248,10 @@ struct BookDetailView: View {
     @ViewBuilder
     private func metadataViewContent(book: CalibreBook, isCompat: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                metadataIcon(systemName: "building.columns")
+                Text("\(book.library.name) @ Server \(book.library.server.name)")
+            }
             HStack {
                 metadataIcon(systemName: "face.smiling")
                 Text(book.ratingDescription)
@@ -307,6 +329,19 @@ struct BookDetailView: View {
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
+                    if let pluginGoodreadsSync = book.library.pluginGoodreadsSyncWithDefault,
+                       pluginGoodreadsSync.isEnabled(), pluginGoodreadsSync.tagsColumnName.count > 0,
+                       let shelves = book.userMetadatas[pluginGoodreadsSync.tagsColumnName] as? [String],
+                       shelves.count > 0 {
+                        Text(shelves.joined(separator: ", "))
+                    } else {
+                        Text("Unspecified")
+                    }
+                }
+                
+                if false {  //deprecated
+                HStack {
+                    metadataIcon(systemName: "books.vertical")
                     if shelfNameCustomized {
                         TextField("Shelf Name", text: $shelfName)
                     } else {
@@ -344,6 +379,7 @@ struct BookDetailView: View {
                     }
                 }
             }
+            }
         }
         .lineLimit(2)
         .font(.subheadline)
@@ -375,6 +411,8 @@ struct BookDetailView: View {
                 Text(String(format: "%.1f%%", position.lastProgress))
                 Text("on")
                 Text(position.id)
+            } else {
+                Text("No Reading History")
             }
         }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
             readingPositionHistoryViewPresenting = false
@@ -616,6 +654,9 @@ struct BookDetailView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
         }
+        .sheet(isPresented: $presentingPreviewSheet) {
+            BookPreviewView(viewModel: previewViewModel)
+        }
     }
     
     @ToolbarContentBuilder
@@ -645,14 +686,10 @@ struct BookDetailView: View {
                     }
                 }
             }) {
-                if viewMode == .SHELF {
-                    if modelData.updatingMetadata {
-                        Image(systemName: "xmark")
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                    }
+                if modelData.updatingMetadata {
+                    Image(systemName: "xmark")
                 } else {
-                    EmptyView().hidden()
+                    Image(systemName: "arrow.triangle.2.circlepath")
                 }
             }
         }
@@ -821,7 +858,7 @@ struct BookDetailView: View {
             self.parseManifestToTOC(json: data)
         }
         
-        presentingReadSheet = true
+        presentingPreviewSheet = true
     }
     
     func parseManifestToTOC(json: Data) {
