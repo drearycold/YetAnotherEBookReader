@@ -38,7 +38,7 @@ struct CalibreServerService {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
 
-        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
+        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, probing: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
 
         guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
             modelData.calibreServerInfo = serverInfo
@@ -79,11 +79,13 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, bookId: nil, libraryId: nil)
 
+        serverInfo.probing = true
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             defer {
                 modelData.logFinishCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: serverInfo.errorMsg)
                 
                 DispatchQueue.main.async {
+                    serverInfo.probing = false
                     modelData.calibreServerInfo = serverInfo
                     modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
                     modelData.calibreServerUpdating = false
@@ -784,8 +786,7 @@ struct CalibreServerService {
         var serverInfo = serverInfo
         
         serverInfo.reachable = false
-        serverInfo.errorMsg = "Cannot connect to server"
-        serverInfo.probingTask?.cancel()
+        serverInfo.errorMsg = "Cannot connect"
         
         var url = serverInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
@@ -1244,8 +1245,8 @@ struct CalibreServerInfo: Identifiable {
     let isPublic: Bool
     let url: URL
     var reachable: Bool
+    var probing: Bool
     var errorMsg: String
-    var probingTask: URLSessionDataTask?
     var defaultLibrary: String
     var libraryMap: [String:String]
 }

@@ -86,7 +86,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     
     var autoUpdate = true
     var discoverable = true
-    var hidden = true
+    var hidden = false
     var lastModified = Date(timeIntervalSince1970: 0)
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
@@ -966,13 +966,19 @@ struct CalibreLibraryReadingPosition: CalibreLibraryPluginColumnInfo, Codable, H
     
     init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
         guard let library = ModelData.shared?.calibreLibraries[libraryId] else { return }
-        
-        if let prefs = configuration?.reading_position_prefs,
-           let library_config = prefs.library_config[library.name],
-           let column_info = library_config.readingPositionColumns[library.server.username],
+        let library_config = configuration?.reading_position_prefs?.library_config[library.name]
+        if let column_info = library_config?.readingPositionColumns[library.server.username],
            column_info.exists {
             readingPositionCN = "#" + column_info.label
-        } else {
+        } else if library.server.username.isEmpty,
+                  let prefix = library_config?.readingPositionOptions.prefix,
+                  prefix.isEmpty == false,
+                  let column_info = library.customColumnInfos[prefix],
+                  column_info.datatype == "comments" {
+            readingPositionCN = "#" + column_info.label
+        }
+        else {
+            
             let filtered = library.customColumnInfoCommentsKeysFull.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
             guard filtered.count > 0 else { return }
             if filtered.count == 1, let first = filtered.first {

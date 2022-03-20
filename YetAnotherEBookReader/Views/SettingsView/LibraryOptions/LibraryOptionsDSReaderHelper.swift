@@ -37,11 +37,18 @@ struct LibraryOptionsDSReaderHelper: View {
     @State private var serverAddedCancellable: AnyCancellable?
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Plugin Service Port")
+        Form {
+            
                 HStack {
+                    Text("Plugin Service Port")
                     Spacer()
+//                    Button(action:{
+//                        if dsreaderHelperServer.port > 1024 {
+//                            portStr = (dsreaderHelperServer.port-1).description
+//                        }
+//                    }) {
+//                        Image(systemName: "minus")
+//                    }
                     TextField("Plugin Service Port", text: $portStr)
                         .frame(idealWidth: 80, maxWidth: 80)
                         .multilineTextAlignment(.center)
@@ -62,165 +69,112 @@ struct LibraryOptionsDSReaderHelper: View {
                             portStr = value.description
                         })
                     
-                    Button(action:{
-                        if dsreaderHelperServer.port > 1024 {
-                            portStr = (dsreaderHelperServer.port-1).description
-                        }
-                    }) {
-                        Image(systemName: "minus")
-                    }
-                    Button(action:{
-                        if dsreaderHelperServer.port < 65535 {
-                            portStr = (dsreaderHelperServer.port+1).description
-                        }
-                    }) {
-                        Image(systemName: "plus")
-                    }
-                }.padding([.leading, .trailing], 8)
-                
-                Text(helperStatus)
-                
-                Divider()
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Helper configurations")
-                        
-                    Group {
-                        HStack {
-                            Text("Reading Positions")
-                            Spacer()
-                            if configuration?.reading_position_prefs?.library_config.count ?? 0 > 0 {
-                                Text("enabled")
-                            } else {
-                                Text("missing")
-                            }
-                            Button(action: {
-                                readingPositionDetails.toggle()
-                            }) {
-                                Image(systemName: readingPositionDetails ? "chevron.up.circle" : "chevron.down.circle")
-                            }
-                        }
-                        
-                        if readingPositionDetails {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Details for troubleshooting")
-                                    .font(.callout)
-                                ForEach (
-                                    configuration?.reading_position_prefs?.library_config.map {
-                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                                ) { library_entry in
-                                    Text(library_entry.key)
-                                        .font(.caption)
-                                    readingPositionDetailsUser(library_entry: library_entry)
-                                        .font(.caption2)
-                                }
-                            }
-                        }
-                        
-                        HStack {
-                            Text("Dictionary Viewer")
-                            Spacer()
-                            if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
-                               options.dictViewerEnabled,
-                               options.dictViewerLibraryName.count > 0 {
-                                Text("enabled")
-                            } else {
-                                Text("missing")
-                            }
-                            Button(action: {
-                                dictionaryViewerDetails.toggle()
-                            }) {
-                                Image(systemName: dictionaryViewerDetails ? "chevron.up.circle" : "chevron.down.circle")
-                            }
-                        }
-                        
-                        if dictionaryViewerDetails {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Details for troubleshooting")
-                                    .font(.callout)
-                                Text("Dictionary Library: \(configuration?.dsreader_helper_prefs?.plugin_prefs.Options.dictViewerLibraryName ?? "")")
-                                    .font(.caption2)
-                            }
-                        }
-                        
-                        
-                    }.padding([.leading, .trailing], 8)
+                    
+//                    Button(action:{
+//                        if dsreaderHelperServer.port < 65535 {
+//                            portStr = (dsreaderHelperServer.port+1).description
+//                        }
+//                    }) {
+//                        Image(systemName: "plus")
+//                    }
                 }
-                .font(.callout)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Supported server plugins")
-                        
-                    Group {
-                        HStack {
-                            Text("Count Pages")
-                            Spacer()
-                            if configuration?.count_pages_prefs?.library_config.count ?? 0 > 0 {
-                                Text("detected")
-                            } else {
-                                Text("missing")
-                            }
-                            Button(action: {
-                                countPagesDetails.toggle()
-                            }) {
-                                Image(systemName: countPagesDetails ? "chevron.up.circle" : "chevron.down.circle")
+            Section(header: Text("Helper Informations")) {
+                NavigationLink(
+                    destination: List {
+                        ForEach (
+                            configuration?.reading_position_prefs?.library_config.map {
+                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                        ) { library_entry in
+                            VStack(alignment: .leading) {
+                                Text(library_entry.key)
+                                readingPositionDetailsUser(library_entry: library_entry)
+                                    .font(.caption)
                             }
                         }
-                        
-                        if countPagesDetails {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Details for troubleshooting")
-                                    .font(.callout)
-                                ForEach (
-                                    configuration?.count_pages_prefs?.library_config.map {
-                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                                ) { library_entry in
-                                    Text(library_entry.key)
-                                        .font(.caption)
+                    }) {
+                    HStack {
+                        Text("Reading Positions")
+                        Spacer()
+                        if configuration?.reading_position_prefs?.library_config.count ?? 0 > 0 {
+                            Text("enabled")
+                        } else {
+                            Text("missing")
+                        }
+                    }
+                }.disabled(configuration?.reading_position_prefs?.library_config.count ?? 0 == 0)
+                
+                HStack {
+                    Text("Dictionary Viewer")
+                    Spacer()
+                    if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
+                       options.dictViewerEnabled,
+                       options.dictViewerLibraryName.count > 0 {
+                        Text("Using Library \(options.dictViewerLibraryName)")
+                            .font(.caption2)
+                    } else {
+                        Text("missing")
+                    }
+                    
+                }
+            }
+            Section(header: Text("Supported server plugins")) {
+                NavigationLink(
+                    destination: List {
+                        ForEach (
+                            configuration?.count_pages_prefs?.library_config.map {
+                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                        ) { library_entry in
+                            VStack(alignment: .leading) {
+                                Text(library_entry.key)
+                                HStack {
+                                    Spacer()
                                     Text("\(library_entry.value.customColumnPages) / \(library_entry.value.customColumnWords) / \(library_entry.value.customColumnFleschReading) / \(library_entry.value.customColumnFleschGrade) / \(library_entry.value.customColumnGunningFog)")
-                                        .font(.caption2)
-                                }
-                            }
-                        }
-                        
-                        HStack {
-                            Text("Goodreads Sync")
-                            Spacer()
-                            if configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
-                                Text("detected")
-                            } else {
-                                Text("missing")
-                            }
-                            Button(action: {
-                                goodreadsSyncDetails.toggle()
-                            }) {
-                                Image(systemName: goodreadsSyncDetails ? "chevron.up.circle" : "chevron.down.circle")
-                            }
-                        }
-                        
-                        if goodreadsSyncDetails {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Details for troubleshooting")
-                                    .font(.callout)
-                                ForEach (
-                                    configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
-                                        (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                                ) { user_entry in
-                                    Text(user_entry.key)
                                         .font(.caption)
-                                    goodreadsSyncDetailsShelf(user_entry: user_entry)
-                                        .font(.caption2)
                                 }
                             }
                         }
-                        
-                    }.padding([.leading, .trailing], 8)
+                    }
+                    .navigationTitle("Count Pages Columns")
+                ) {
+                    HStack {
+                        Text("Count Pages")
+                        Spacer()
+                        if configuration?.count_pages_prefs?.library_config.count ?? 0 > 0 {
+                            Text("detected")
+                        } else {
+                            Text("missing")
+                        }
+                    }
                 }
-                .font(.callout)
-                .padding([.top], 8)
+                
+                NavigationLink(
+                    destination: List{
+                        ForEach (
+                            configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
+                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
+                        ) { user_entry in
+                            VStack(alignment: .leading) {
+                                Text(user_entry.key)
+                                goodreadsSyncDetailsShelf(user_entry: user_entry)
+                                    .font(.caption)
+                            }
+                        }
+                    }
+                    .navigationTitle("Goodreads Sync Profiles")
+                ) {
+                    HStack {
+                        Text("Goodreads Sync")
+                        Spacer()
+                        if configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
+                            Text("detected")
+                        } else {
+                            Text("missing")
+                        }
+                    }
+                    
+                }
             }
         }
-        .padding()
         .navigationTitle("DSReader Helper")
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -288,13 +242,14 @@ struct LibraryOptionsDSReaderHelper: View {
         configuration = dsreaderHelperServer.configuration
         
         self.dsreaderHelperServer = dsreaderHelperServer
+        portStr = dsreaderHelperServer.port.description
     }
     
     private func connect() {
         refreshCancellable?.cancel()
         configurationData = nil
         configuration = nil
-        helperStatus = "Connecting"
+        helperStatus = "Connecting..."
 
         let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
         refreshCancellable = connector.refreshConfiguration()?
@@ -445,5 +400,6 @@ struct LibraryOptionsDSReaderHelper_Previews: PreviewProvider {
             LibraryOptionsDSReaderHelper(server: $server, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
                 .environmentObject(modelData)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }

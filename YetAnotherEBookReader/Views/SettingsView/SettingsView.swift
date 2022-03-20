@@ -17,40 +17,38 @@ struct SettingsView: View {
     @State private var alertItem: AlertItem?
 
     @State private var serverList = [CalibreServer]()
-    @State private var serverListDeleteIndex = 0
+    @State private var serverListDelete: CalibreServer? = nil
     @State private var updater = 0
 
     var body: some View {
         VStack {
             NavigationView {
                 List {
-                    NavigationLink(
-                        destination: AddModServerView(
-                            server: Binding<CalibreServer>(get: {
-                                .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-                            }, set: { newServer in
-                                serverList.append(newServer)
-                                sortServerList()
-                            }),
-                            isActive: $addServerActive)
-                            .navigationTitle("Add Server"),
-                        isActive: $addServerActive
-                    ) {
-                        HStack {
-                            Text("Connect to a new server")
-                            if modelData.booksInShelf.isEmpty {
-                                Spacer()
-                                Text("Start here")
-                                    .foregroundColor(.red)
-                                    .font(.caption2)
+                    Section(header: Text("Servers")) {
+                        
+                        NavigationLink(
+                            destination: AddModServerView(
+                                server: Binding<CalibreServer>(get: {
+                                    .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+                                }, set: { newServer in
+                                    serverList.append(newServer)
+                                    sortServerList()
+                                }),
+                                isActive: $addServerActive)
+                                .navigationTitle("Add Server"),
+                            isActive: $addServerActive
+                        ) {
+                            HStack {
+                                Text("Connect to a new server")
+                                if modelData.booksInShelf.isEmpty {
+                                    Spacer()
+                                    Text("Start here")
+                                        .foregroundColor(.red)
+                                        .font(.caption2)
+                                }
                             }
                         }
-                    }
-                    
-                    Group {
-                        Text("Servers")
-                            .font(.caption)
-                            .padding([.top], 8)
+                        
                         ForEach(serverList) { server in
                             NavigationLink (
                                 destination: ServerDetailView(server: Binding<CalibreServer>(get: {
@@ -66,8 +64,8 @@ struct SettingsView: View {
                             .isDetailLink(false)
                         }
                         .onDelete(perform: { indexSet in
-                            guard let index = indexSet.first else { return }
-                            serverListDeleteIndex = index
+                            guard let index = indexSet.first, index < serverList.count else { return }
+                            serverListDelete = serverList.remove(at: index)
                             alertItem = AlertItem(id: "DelServer")
                         })
                         .alert(item: $alertItem) { item in
@@ -78,25 +76,30 @@ struct SettingsView: View {
                                     primaryButton: .destructive(Text("Confirm")) {
                                         self.deleteServer()
                                     },
-                                    secondaryButton: .cancel()
+                                    secondaryButton: .cancel{
+                                        guard let server = serverListDelete else { return }
+                                        serverList.append(server)
+                                        sortServerList()
+                                        serverListDelete = nil
+                                    }
                                 )
                             }
                             return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
                                 item.action?()
                             })
                         }
+                        
+                        HStack{}.frame(height: 4)
                     }
                     
-                    Group {
-                        Text("Options")
-                            .font(.caption)
-                            .padding([.top], 8)
+                    Section(header: Text("Options")) {
                         NavigationLink("Formats & Readers", destination: ReaderOptionsView())
                         NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(libraryId: nil, bookId: nil))
                         NavigationLink("Activity Logs", destination: ActivityList())
                         HStack{}.frame(height: 4)
                     }
-                    Group {
+                    
+                    Section(header: Text("Support")) {
                         NavigationLink("Version History", destination: VersionHistoryView())
                         NavigationLink("Support", destination: SupportInfoView())
                         NavigationLink("About calibre Server", destination: ServerCalibreIntroView().frame(maxWidth: 600))
@@ -125,7 +128,9 @@ struct SettingsView: View {
             .foregroundColor(.gray)
             
         }.onAppear() {
-            serverList = modelData.calibreServers.map { $0.value }
+            serverList = modelData.calibreServers
+                .filter { $0.value.isLocal == false }
+                .map { $0.value }
             sortServerList()
         }
     }
@@ -141,6 +146,7 @@ struct SettingsView: View {
                         .resizable()
                         .frame(width: 16, height: 16, alignment: .center)
                 }
+                
                 if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
                     Image(
                         systemName: reachable ? "flag.circle" : "flag.slash.circle"
@@ -152,14 +158,28 @@ struct SettingsView: View {
                         systemName: reachable ? "flag" : "flag.slash"
                     ).foregroundColor(reachable ? .green : .red)
                 }
+                
             }
-            HStack(spacing: 8) {
-                if server.isLocal == false {
-                    Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries")
-                } else {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    if server.isLocal == false {
+                        Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries")
+                    } else {
+                        
+                    }
                     
+                    HStack(spacing: 4) {
+                        Text("Location:")
+                        if server.isLocal == false {
+                            Text(server.username.isEmpty ? "\(server.baseUrl)" : "\(server.username) @ \(server.baseUrl)")
+                        } else {
+                            Text("On Device")
+                        }
+                    }
                 }
+                
                 Spacer()
+                
                 if modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count > 0 {
                     Text("\(modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count) processing")
                 } else if let serverInfo = modelData.getServerInfo(server: server) {
@@ -172,18 +192,6 @@ struct SettingsView: View {
                 }
             }
             .font(.caption)
-            HStack(spacing: 4) {
-                Text("Location:")
-                if server.isLocal == false {
-                    Text(server.username.isEmpty ? "\(server.baseUrl)" : "\(server.username) @ \(server.baseUrl)")
-                } else {
-                    Text("On Device")
-                }
-                Spacer()
-                
-            }
-            .font(.caption)
-
         }
     }
     
@@ -337,9 +345,8 @@ struct SettingsView: View {
     }
     
     private func deleteServer() {
-        let server = serverList.remove(at: serverListDeleteIndex)
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        let isSuccess = modelData.removeServer(serverId: server.id, realm: realm)
+        guard let server = serverListDelete else { return }
+        let isSuccess = modelData.removeServer(serverId: server.id, realm: modelData.realm)
         if !isSuccess {
             alertItem = AlertItem(id: "DelServerFailed")
         }

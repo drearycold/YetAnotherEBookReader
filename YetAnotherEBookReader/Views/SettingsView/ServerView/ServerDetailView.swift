@@ -33,41 +33,29 @@ struct ServerDetailView: View {
     
     var body: some View {
         List {
-            
-            HStack {
-                Text("Options")
-                Spacer()
-                if let serverInfo = modelData.getServerInfo(server: server) {
-                    if serverInfo.reachable {
-                        Text("Server has \(serverInfo.libraryMap.count) libraries")
-                    } else {
-                        Text("\(serverInfo.errorMsg)")
-                            .foregroundColor(.red)
+            Section(header: Text("Options")) {
+                NavigationLink(
+                    destination: AddModServerView(server: $server, isActive: $modServerActive)
+                        .navigationTitle("Modify: \(server.name)"),
+                    isActive: $modServerActive,
+                    label: {
+                        Text("Modify Configuration")
                     }
+                )
+                
+                NavigationLink(
+                    destination: LibraryOptionsDSReaderHelper(server: $server, updater: $updater),
+                    isActive: $dshelperActive,
+                    label: {
+                        Text("DSReader Helper")
+                    })
+                
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
                 }
-            }
-            .font(.caption)
-            .padding([.top], 16)
-            
-            NavigationLink(
-                destination: AddModServerView(server: $server, isActive: $modServerActive)
-                    .navigationTitle("Modify: \(server.name)"),
-                isActive: $modServerActive,
-                label: {
-                    Text("Modify Configuration")
-                }
-            )
-            
-            NavigationLink(
-                destination: LibraryOptionsDSReaderHelper(server: $server, updater: $updater),
-                isActive: $dshelperActive,
-                label: {
-                    Text("DSReader Helper")
-                })
-            
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
+                
+                HStack{}
             }
             
             Section(header: librarySectionHeader()) {

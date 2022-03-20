@@ -50,65 +50,67 @@ struct AddModServerView: View {
     @State private var alertItem: AlertItem?
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        Form {
+            Section(
+                header: Text("Basic"),
+                footer: Text(calibreServerUrlWelformed)
+                        .font(.caption).foregroundColor(.red)
+            ) {
                 textFieldView(label: "Name", title: "Name Your Server", text: $calibreServerName, original: server.name)
                 textFieldView(label: "URL", title: "Internal Server Address", text: $calibreServerUrl, original: server.baseUrl)
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                Text(calibreServerUrlWelformed)
-                    .font(.caption).foregroundColor(.red)
                 
-                VStack(spacing: 8) {
-                    Toggle("Set a Separate Public Address", isOn: $calibreServerSetPublicAddress)
-                    Group {
-                        if calibreServerSetPublicAddress {
-                            textFieldView(label: "Public", title: "Public Server Address", text: $calibreServerUrlPublic, original: server.publicUrl)
-                                .keyboardType(.URL)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-
-                            HStack {
-                                Text("It's highly recommended to enable HTTPS and user authentication before exposing server to Internet.")
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .lineLimit(2)
-                                    .font(.caption)
-                                Spacer()
-                                Button(action:{
-                                    guard let url = URL(string: "https://manual.calibre-ebook.com/server.html#accessing-the-server-from-anywhere-on-the-internet") else { return }
-                                    openURL(url)
-                                }) {
-                                    Image(systemName: "questionmark.circle")
-                                }
-                            }
-                        }
-                    }.padding([.leading, .trailing], 8)
+            }
+            Section(
+                header: Text("Internet Access"),
+                footer: HStack {
+                    Text("It's highly recommended to enable HTTPS and user authentication before exposing server to Internet.")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
+                        .font(.caption)
+                    Spacer()
+                    Button(action:{
+                        guard let url = URL(string: "https://manual.calibre-ebook.com/server.html#accessing-the-server-from-anywhere-on-the-internet") else { return }
+                        openURL(url)
+                    }) {
+                        Image(systemName: "questionmark.circle")
+                    }
                 }
-                VStack(spacing: 8) {
-                    Toggle("Need Authentication", isOn: $calibreServerNeedAuth)
+            ) {
+                Toggle("Internet Accessible", isOn: $calibreServerSetPublicAddress)
+                textFieldView(label: "Address", title: "Public Server Address", text: $calibreServerUrlPublic, original: server.publicUrl)
+                    .keyboardType(.URL)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                .disabled(!calibreServerSetPublicAddress)
+            }
+            Section(header: Text("Authentication")) {
+                Toggle("Require", isOn: $calibreServerNeedAuth)
+                
+                Group {
+                    textFieldView(label: "Username", title: "Username", text: $calibreUsername, original: server.username)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                    secureFieldView(label: "Password", title: "", text: $calibrePassword, visible: $calibrePasswordVisible, original: server.password)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                }.disabled(!calibreServerNeedAuth)
+            }
+            
+            Section(
+                header: HStack {
+                    Text("Status")
                     
-                    Group {
-                        if calibreServerNeedAuth {
-                            textFieldView(label: "Username", title: "Username", text: $calibreUsername, original: server.username)
-                                    .keyboardType(.emailAddress)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                            secureFieldView(label: "Password", title: "", text: $calibrePassword, visible: $calibrePasswordVisible, original: server.password)
-                                    .autocapitalization(.none)
-                                    .disableAutocorrection(true)
-                        }
-                    }.padding([.leading, .trailing], 8)
-                }
-                
-                HStack {
+                    Spacer()
+                    
                     if dataLoading {
                         Text("Connecting...")
                     } else {
                         Text(modelData.calibreServerUpdatingStatus ?? "")
                     }
-                    
-                    Spacer()
                     
                     if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
                         Image(
@@ -121,36 +123,18 @@ struct AddModServerView: View {
                             systemName: reachable ? "flag" : "flag.slash"
                         ).foregroundColor(reachable ? .green : .red)
                     }
+                },
+                footer: HStack(alignment: .center, spacing: 8) {
+                    Spacer()
+                    Text("Got \(libraryList.count) Library(s) in Server")
                 }
-                if server.isLocal == false {
-                    HStack(alignment: .center, spacing: 8) {
-                        Spacer()
-                        
-                        Text("Got \(libraryList.count) Library(s) in Server")
-                        
-                        Button(action: {
-                            dataAction = "Sync"
-                            processUrlInputs()
-                            dataLoading = true  //ready for consuming results
-                            modelData.calibreServerService.getServerLibraries(server: server)
-                        }) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        
-                        Button(action:{
-                            libraryListExpanded.toggle()
-                        }) {
-                            Image(systemName: libraryListExpanded ? "chevron.up" : "chevron.down")
-                        }
+            ) {
+                if libraryList.isEmpty {
+                    Text("No Library")
+                } else {
+                    ForEach(libraryList, id: \.self) { name in
+                        Text(name).font(.callout)
                     }
-                }
-                
-                if libraryListExpanded {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(libraryList, id: \.self) { name in
-                            Text(name).font(.callout)
-                        }
-                    }.padding()
                 }
             }
         }
@@ -159,13 +143,15 @@ struct AddModServerView: View {
         }
         .alert(item: $alertItem) { item in
             if item.id == "AddServer" {
-                return Alert(title: Text("Add Server"),
-                             message: Text(item.msg!),
-                             primaryButton: .default(Text("Confirm")
-                             ) {
-                                addServerConfirmed()
-                             },
-                             secondaryButton: .cancel())
+                return Alert(
+                    title: Text("Add Server \(calibreServerName)"),
+                    message: Text(item.msg!),
+                    primaryButton: .default(Text("Confirm")
+                    ) {
+                        addServerConfirmed()
+                    },
+                    secondaryButton: .cancel()
+                )
             }
             if item.id == "AddServerExists" {
                 return Alert(title: Text("Add Server Error"), message: Text("A server with the same address and username already exists"), dismissButton: .cancel())
@@ -278,9 +264,7 @@ struct AddModServerView: View {
                     Image(systemName: "arrow.counterclockwise")
                 }
             }
-        }.frame(maxWidth: 720)
-        .padding(.all, 8)
-        .disabled(dataLoading)
+        }
         
     }
     
@@ -407,6 +391,15 @@ struct AddModServerView: View {
             .map { CalibreLibrary(server: serverInfo.server, key: $0, name: $1) }
         
         modelData.addServer(server: newServer, libraries: libraries)
+        if let url = URL(string: newServer.baseUrl) {
+            modelData.updateServerDSReaderHelper(
+                dsreaderHelper: CalibreServerDSReaderHelper(
+                    id: newServer.id,
+                    port: (url.port ?? -1) + 1
+                ),
+                realm: modelData.realm)
+        }
+        
         
         modelData.probeServersReachability(with: [newServer.id])
         
@@ -486,6 +479,6 @@ struct AddModServerView_Previews: PreviewProvider {
                     let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
                     modelData.calibreLibraries[library.id] = library
                 }
-        }
+        }.navigationViewStyle(StackNavigationViewStyle())
     }
 }

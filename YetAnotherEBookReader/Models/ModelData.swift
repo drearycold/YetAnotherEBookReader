@@ -281,7 +281,7 @@ final class ModelData: ObservableObject {
         )
         
         
-        kfImageCache.diskStorage.config.expiration = .never
+        kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
         
@@ -1650,7 +1650,7 @@ final class ModelData: ObservableObject {
                 if calibreServerInfoStaging[infoId] == nil,
                    let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
                     calibreServerInfoStaging[infoId] =
-                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, errorMsg: "Connecting", probingTask: nil, defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:])
                 }
             }
         }
@@ -1669,6 +1669,10 @@ final class ModelData: ObservableObject {
         }
         
         calibreServiceCancellable?.cancel()
+        probingList.forEach {
+            self.calibreServerInfoStaging[$0.key]?.probing = true
+            self.calibreServerInfoStaging[$0.key]?.errorMsg = "Connecting"
+        }
         calibreServiceCancellable = probingList.publisher.flatMap {
             self.calibreServerService.probeServerReachabilityNew(serverInfo: $0.value)
         }
@@ -1685,6 +1689,7 @@ final class ModelData: ObservableObject {
         }, receiveValue: { results in
             results.forEach { newServerInfo in
                 guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
+                serverInfo.probing = false
                 serverInfo.errorMsg = newServerInfo.errorMsg
 
                 if newServerInfo.libraryMap.isEmpty {
@@ -1929,10 +1934,6 @@ final class ModelData: ObservableObject {
             let objectsNeedUpdate = objects.filter("serverUrl == nil OR lastSynced < lastModified")
             bookNeedUpdateCount = objectsNeedUpdate.count
             
-            if results.isIncremental == false {
-                bookDeleted = objects.filter({ results.list.data.last_modified[$0.id.description] == nil }).map { $0.id }
-            }
-            
             DispatchQueue.main.async {
                 self.calibreLibraries[library.id] = library
                 try? self.updateLibraryRealm(library: library, realm: self.realm)
@@ -1981,6 +1982,17 @@ final class ModelData: ObservableObject {
                 }
             } catch {
                 writeSucc = false
+            }
+        }
+        defer {
+            let objects = realm.objects(CalibreBookRealm.self).filter(
+                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
+            )
+            if writeSucc == true, results.isIncremental == false {
+                bookDeleted = objects.filter {
+                    $0.inShelf == false && results.list.data.last_modified[$0.id.description] == nil
+                }
+                .map { $0.id }
             }
         }
         
@@ -2260,7 +2272,7 @@ final class ModelData: ObservableObject {
 
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
-        for sectionInfo in [("lastModified", "Modified", "last_modified"),
+        for sectionInfo in [("lastModified", "Recently Modified", "last_modified"),
                             ("timestamp", "New in Library", "last_added"),
                             ("pubDate", "Last Published", "last_published")] {
             let results = realm.objects(CalibreBookRealm.self)
