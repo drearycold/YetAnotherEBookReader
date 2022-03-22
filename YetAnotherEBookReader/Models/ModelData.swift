@@ -79,6 +79,10 @@ final class ModelData: ObservableObject {
         for: .YABR_LibraryBookListNeedUpdate
     ).eraseToAnyPublisher()
     
+    let discoverShelfGenerated = NotificationCenter.default.publisher(
+        for: .YABR_DiscoverShelfGenerated
+    ).eraseToAnyPublisher()
+    
     var presentingStack = [Binding<Bool>]()
     
     var currentBookId: String = "" {
@@ -191,6 +195,7 @@ final class ModelData: ObservableObject {
     var shelfRefreshCancellable: AnyCancellable?
     var dshelperRefreshCancellable: AnyCancellable?
     var syncLibrariesIncrementalCancellable: AnyCancellable?
+    var generateDiscovertShelf: AnyCancellable?
     
     lazy var metadataQueue: OperationQueue = {
         var queue = OperationQueue()
@@ -364,12 +369,19 @@ final class ModelData: ObservableObject {
         
         self.reloadCustomFonts()
         
-        DispatchQueue.global(qos: .userInitiated).async {
-            let bookModelSection = self.updateBookModel()
-            DispatchQueue.main.async {
-                self.bookModelSection = bookModelSection
-            }
-        }
+        generateDiscovertShelf = booksRefreshedPublisher
+            .subscribe(on: DispatchQueue.global(qos: .userInteractive))
+            .sink(receiveValue: { output in
+                let limit = output.object as? Bool == true ? 10 : 100
+                let earlyCut = output.object as? Bool == true ? true : false
+                let bookModelSection = self.generateShelfBookModel(limit: limit, earlyCut: earlyCut)
+                DispatchQueue.main.async {
+                    self.bookModelSection = bookModelSection
+                    NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
+                }
+            })
+        
+        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed, object: Bool(true)))
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
@@ -2266,24 +2278,40 @@ final class ModelData: ObservableObject {
         return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
     }
     
-    func updateBookModel() -> [ShelfModelSection] {
-        let limit = 100
+    func generateShelfBookModel(limit: Int = 100, earlyCut: Bool = false) -> [ShelfModelSection] {
         var shelfModelSection = [ShelfModelSection]()
 
+        let discoverableLibraries = self.calibreLibraries.filter { $1.discoverable && !$1.hidden }.map {
+            CalibreBookRealm.PrimaryKey(serverUsername: $1.server.username, serverUrl: $1.server.baseUrl, libraryName: $1.name, id: "")
+        }
+        
+        guard discoverableLibraries.count > 0 else { return [] }
+        
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
+        
+        let discoverableLibrariesFilter = Array(repeating: "primaryKey BEGINSWITH %@", count: discoverableLibraries.count).joined(separator: " OR ")
+        var baselinePredicate = NSPredicate(format: "inShelf == false")
+        if discoverableLibraries.count > 1 {
+            baselinePredicate = NSPredicate(format: "( \(discoverableLibrariesFilter) ) AND inShelf == false", argumentArray: discoverableLibraries)
+        } else {
+            baselinePredicate = NSPredicate(format: "\(discoverableLibrariesFilter) AND inShelf == false", argumentArray: discoverableLibraries)
+        }
+        
+        let baselineObjects = realm.objects(CalibreBookRealm.self)
+            .filter(baselinePredicate)
         
         for sectionInfo in [("lastModified", "Recently Modified", "last_modified"),
                             ("timestamp", "New in Library", "last_added"),
                             ("pubDate", "Last Published", "last_published")] {
-            let results = realm.objects(CalibreBookRealm.self)
-                .filter(NSPredicate(format: "inShelf == false"))
-                .sorted(byKeyPath: sectionInfo.0, ascending: false)
+            let results = baselineObjects.sorted(byKeyPath: sectionInfo.0, ascending: false)
                 
             var shelfModel = [ShelfModel]()
+            var parsed = 0
             for i in 0 ..< results.count {
                 if shelfModel.count > limit {
                     break
                 }
+                parsed += 1
                 if let book = self.convert(bookRealm: results[i]),
                    book.library.discoverable,
                    let coverURL = book.coverURL {
@@ -2302,11 +2330,16 @@ final class ModelData: ObservableObject {
                     // print("updateBookModel \(sectionInfo.0) \(book)")
                 }
             }
+            print("\(#function) parsed=\(parsed)")
             
             if shelfModel.count > 1 {
                 let section = ShelfModelSection(sectionName: sectionInfo.1, sectionId: sectionInfo.2, sectionShelf: shelfModel)
                 shelfModelSection.append(section)
             }
+        }
+        
+        if earlyCut {
+            return shelfModelSection
         }
         
         let emptyBook = CalibreBook(id: 0, library: .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: ""))
@@ -2315,9 +2348,8 @@ final class ModelData: ObservableObject {
               let readPosDataEmpty = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData else {
             return []
         }
-        
 
-        let resultsWithReadPos = realm.objects(CalibreBookRealm.self)
+        let resultsWithReadPos = baselineObjects
             .filter(NSPredicate(format: "readPosData != nil AND readPosData != %@", readPosDataEmpty))
             .compactMap {
                 self.convert(bookRealm: $0)
@@ -2361,13 +2393,11 @@ final class ModelData: ObservableObject {
         }
 //        print("resultsWithReadPos \(authorSet) \(seriesSet) \(tagSet)")
         
-        let readingSection = ShelfModelSection(
+        if resultsWithReadPos.count > 1 {
+            let readingSection = ShelfModelSection(
             sectionName: "Reading",
             sectionId: "reading",
             sectionShelf: resultsWithReadPos
-                .filter {
-                    $0.inShelf == false
-                }
                 .map { book in
                     ShelfModel(
                         bookCoverSource: book.coverURL?.absoluteString ?? ".",
@@ -2384,7 +2414,9 @@ final class ModelData: ObservableObject {
                     )
                 }
         )
-        shelfModelSection.append(readingSection)
+        
+            shelfModelSection.append(readingSection)
+        }
         
         [
             (seriesSet, "series", "seriesIndex", "More in Series", true),
@@ -2393,8 +2425,8 @@ final class ModelData: ObservableObject {
         ].forEach { def in
             def.0.sorted().forEach { member in
                 let sectionId = "\(def.1)-\(member)"
-                let books: [ShelfModel] = realm.objects(CalibreBookRealm.self)
-                    .filter(NSPredicate(format: "%K == %@ and inShelf == false", def.1, member))
+                let books: [ShelfModel] = baselineObjects
+                    .filter(NSPredicate(format: "%K == %@", def.1, member))
                     .sorted(byKeyPath: def.2, ascending: def.4)
                     .prefix(limit)
                     .compactMap {
@@ -2433,8 +2465,8 @@ final class ModelData: ObservableObject {
             .forEach { id, library in
             let sectionId = "\(library)-\(id)"
             let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
-            let books: [ShelfModel] = realm.objects(CalibreBookRealm.self)
-                .filter(NSPredicate(format: "primaryKey BEGINSWITH %@ and inShelf == false", partialPrimaryKey))
+            let books: [ShelfModel] = baselineObjects
+                .filter(NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey))
                 .sorted(byKeyPath: "lastModified", ascending: false)
                 .prefix(limit)
                 .compactMap {

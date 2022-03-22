@@ -20,7 +20,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
-    var shelfBookSink: AnyCancellable?
+//    var shelfBookSink: AnyCancellable?
     
     #if canImport(GoogleMobileAds)
     var bannerSize = kGADAdSizeBanner
@@ -80,7 +80,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     bookStatus: bookStatus
                 )
             }
-        
+        print("\(#function) modelData.booksInShelf.count=\(modelData.booksInShelf.count) bookModel.count=\(bookModel.count)")
+
         self.shelfView.reloadBooks(bookModel: bookModel)
     }
     
@@ -115,9 +116,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 y: 0,
                 width: view.frame.width,
                 height: view.frame.height - bannerSize.size.height
-            ),
-            bookModel: bookModel,
-            bookSource: PlainShelfView.BOOK_SOURCE_URL)
+            )
+        )
         
         shelfView.delegate = self
         shelfView.translatesAutoresizingMaskIntoConstraints = false
@@ -162,9 +162,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         ])
         #endif
         
-        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
-            self?.updateBookModel()
-        }
+        self.updateBookModel()
+//        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
+//            self?.updateBookModel()
+//        }
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {

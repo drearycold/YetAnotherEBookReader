@@ -39,18 +39,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         true
     }
     
-    func updateBookModel(reload: Bool = false) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            let bookModelSection = self.modelData.updateBookModel()
-            DispatchQueue.main.async {
-                self.modelData.bookModelSection = bookModelSection
-                if reload {
-                    self.reloadBookModel()
-                }
-            }
-        }
-    }
-
     func reloadBookModel() {
         self.shelfView.reloadBooks(bookModelSection: modelData.bookModelSection)
     }
@@ -67,18 +55,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
         #endif
-        
-        updateAndReloadCancellable?.cancel()
-        updateAndReloadCancellable = modelData.booksRefreshedPublisher
-            .collect(Publishers.TimeGroupingStrategy.byTime(RunLoop.main, .seconds(10)))
-            .sink { _ in
-                self.updateBookModel(reload: true)
-            }
-        
-        dismissControllerCancellable?.cancel()
-        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
-            self.dismiss(animated: true, completion: nil)
-        }
     }
 
     override func viewDidLoad() {
@@ -87,7 +63,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         if let tabBarController = self.tabBarController {
             tabBarHeight = tabBarController.tabBar.frame.height
         }
-        updateBookModel()
         
         #if canImport(GoogleMobileAds)
         shelfView = SectionShelfCompositionalView(
@@ -152,6 +127,22 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             shelfView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ])
         #endif
+        
+        updateAndReloadCancellable?.cancel()
+        updateAndReloadCancellable = modelData.discoverShelfGenerated
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                self.reloadBookModel()
+            }
+        
+        dismissControllerCancellable?.cancel()
+        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
+            self.dismiss(animated: true, completion: nil)
+        }
+        
+        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
+        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
+
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
