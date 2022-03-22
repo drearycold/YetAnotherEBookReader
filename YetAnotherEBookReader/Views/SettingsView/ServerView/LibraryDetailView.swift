@@ -29,16 +29,14 @@ struct LibraryDetailView: View {
     @State private var isStoreActive = false
     
     var body: some View {
-        List {
-            Toggle("Include in Discover", isOn: $discoverable)
-            
-            Toggle("Auto Update with Server", isOn: $autoUpdate)
-            
-            Group {
-                Text("More Customizations")
-                    .font(.headline)
-                    .padding([.top], 16)
+        Form {
+            Section(header: Text("Behavior")) {
+                Toggle("Include in Discover", isOn: $discoverable)
                 
+                Toggle("Keep in Sync with Server", isOn: $autoUpdate)
+            }
+            
+            Section(header: Text("More Customizations")) {
                 NavigationLink(
                     destination: LibraryOptionsReadingPosition(
                         library: library,
@@ -82,7 +80,8 @@ struct LibraryDetailView: View {
                             },
                             set: { _ in }
                         )
-                    ),
+                    ).navigationTitle("\(library.name) - Reading Positions")
+                    ,
                     isActive: $isStoreActive) {
                     Text("Reading Positions")
                 }
@@ -126,15 +125,13 @@ struct LibraryDetailView: View {
                             }
                         )
                     )
+                    .navigationTitle("\(library.name) - Custom Column Mappings")
                 ) {
                     Text("Custom Column Mappings")
                 }
             }
             
-            Group {
-                Text("Troubleshooting")
-                    .font(.headline)
-                    .padding([.top], 16)
+            Section(header: Text("Troubleshooting")) {
                 NavigationLink(
                     destination: ActivityList(libraryId: library.id, bookId: nil)
                 ) {
@@ -142,108 +139,9 @@ struct LibraryDetailView: View {
                 }
             }
         }
-        .navigationTitle(library.name)
+        
     }
-    
-    private func setStates(libraryId: String) {
-//        readingPosition = library.pluginReadingPositionWithDefault ?? .init()
-        //dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault ?? .init()
-        countPages = library.pluginCountPagesWithDefault ?? .init()
-//        goodreadsSync = library.pluginGoodreadsSyncWithDefault ?? .init()
 
-    }
-    
-//    @ViewBuilder
-//    private func storeReadingPositionView() -> some View {
-//        VStack(alignment: .leading, spacing: 8) {
-//            Toggle("Store Reading Positions in Custom Column", isOn: $readingPosition._isEnabled)
-//
-//            VStack(alignment: .leading, spacing: 4) {
-//                if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
-//                    Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
-//                        ForEach(library.customColumnInfoCommentsKeys
-//                                    .map{ ($0.name, "#" + $0.label) }, id: \.1) {
-//                            Text("\($1)\n\($0)").tag($1)
-//                        }
-//                    }.pickerStyle(MenuPickerStyle())
-//                    .disabled(!readingPosition.isEnabled())
-//                } else {
-//                    Text("no available column, please refresh library after adding column to calibre").font(.caption).foregroundColor(.red)
-//                }
-//            }
-//        }.onChange(of: readingPosition) { [readingPosition] value in
-//            print("readingPosition change from \(readingPosition) to \(value)")
-//            if modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault != value {
-//                var newValue = value
-//                newValue._isOverride = true
-//                let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
-//            }
-//        }
-//    }
-    
-//    @ViewBuilder
-//    private func goodreadsSyncAutomationView() -> some View {
-//        VStack(alignment: .leading, spacing: 4) {
-//            Toggle("Goodreads Sync Automation", isOn: $dsreaderHelperLibrary._isEnabled)
-//
-//            Group {
-//                HStack {
-//                    if let names = dsreaderHelperServer.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
-//                        Picker("Profile Name:     \(goodreadsSync.profileName)", selection: $goodreadsSync.profileName) {
-//                            ForEach(names, id: \.self) { name in
-//                                Text(name)
-//                            }
-//                        }
-//                        .pickerStyle(MenuPickerStyle())
-//                    } else {
-//                        Text("Empty Profile List")
-//                    }
-//                }
-//
-//                Toggle("Auto Update Reading Progress", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsProgress)
-//
-//                Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
-//            }
-//            .padding([.leading, .trailing], 8)
-//            .disabled( !dsreaderHelperLibrary.isEnabled() )
-//
-//            if !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false) {
-//                HStack {
-//                    Spacer()
-//                    Text("Plugin not available").font(.caption).foregroundColor(.red)
-//                }
-//            }
-//        }
-//        .onChange(of: dsreaderHelperLibrary) { [dsreaderHelperLibrary] value in
-//            print("dsreaderHelperLibrary change from \(dsreaderHelperLibrary) to \(value)")
-//            if modelData.calibreLibraries[library.id]?.pluginDSReaderHelperWithDefault != value {
-//                let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: value)
-//            }
-//        }
-//        .disabled(
-//            !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false)
-//        )
-//    }
-    
-    @ViewBuilder
-    private func customColumnMappingsView() -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-//            LibraryOptionsGoodreadsSync(library: library, configuration: configuration ?? .init(), goodreadsSync: $goodreadsSync)
-//                .onChange(of: goodreadsSync, perform: { newValue in
-//                    if newValue != modelData.calibreLibraries[library.id]?.pluginGoodreadsSyncWithDefault {
-//                        let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue)
-//                    }
-//                })
-//                .onChange(of: countPages) { newValue in
-//                    if newValue != modelData.calibreLibraries[library.id]?.pluginCountPagesWithDefault {
-//                        let _ = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: countPages)
-//                    }
-//                }
-//            Divider()
-//
-//            LibraryOptionsCountPages(library: library, configuration: configuration ?? .init(), countPages: $countPages)
-        }
-    }
 }
 
 struct LibraryDetailView_Previews: PreviewProvider {
@@ -258,5 +156,6 @@ struct LibraryDetailView_Previews: PreviewProvider {
             LibraryDetailView(library: $library, discoverable: $discoverable, autoUpdate: $autoUpdate)
                 .environmentObject(modelData)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }

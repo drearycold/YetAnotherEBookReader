@@ -18,35 +18,43 @@ struct LibraryOptionsReadingPosition: View {
     @State private var instructionPresenting = false
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
+        Form {
+            Section(
+                header: Text("Reading Position Storage"),
+                footer: HStack {
+                    Spacer()
+                    if library.customColumnInfos.filter{ $1.datatype == "comments" }.isEmpty {
+                        Text("Please refresh library after adding column to server library")
+                            .foregroundColor(.red)
+                    }
+                }) {
                 Toggle("Store Reading Positions in Custom Column", isOn: $readingPosition._isEnabled)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
-                        Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
-                            ForEach(library.customColumnInfoCommentsKeys
-                                        .map{ ($0.name, "#" + $0.label) }, id: \.1) {
-                                Text("\($1)\n\($0)").tag($1)
-                            }
-                        }.pickerStyle(MenuPickerStyle())
-                        .disabled(!readingPosition.isEnabled())
-                    } else {
-                        Text("no available column, please refresh library after adding column to calibre").font(.caption).foregroundColor(.red)
-                    }
+                if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
+                    Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
+                        ForEach(library.customColumnInfoCommentsKeys
+                                    .map{ ($0.name, "#" + $0.label) }, id: \.1) {
+                            Text("\($1)\n\($0)").tag($1)
+                        }
+                    }.pickerStyle(MenuPickerStyle())
+                    .disabled(!readingPosition.isEnabled())
+                } else {
+                    Text("Column Name:     No Available Column")
                 }
             }
             
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Goodreads Sync Automation", isOn: $dsreaderHelperLibrary._isEnabled)
-                if !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false) {
-                    HStack {
+            Section(
+                header: Text("Goodreads Sync"),
+                footer: HStack {
+                    if !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false) {
                         Spacer()
-                        Text("Plugin not available").font(.caption).foregroundColor(.red)
+                        
+                        Text("Plugin not available").foregroundColor(.red)
                     }
                 }
+            ) {
+                Toggle("Enable Automation", isOn: $dsreaderHelperLibrary._isEnabled)
+                
                 Group {
                     HStack {
                         if let names = dsreaderHelperServer.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
@@ -57,7 +65,7 @@ struct LibraryOptionsReadingPosition: View {
                             }
                             .pickerStyle(MenuPickerStyle())
                         } else {
-                            Text("Empty Profile List")
+                            Text("Profile Name:     Empty Profile List")
                         }
                     }
                     
@@ -65,43 +73,12 @@ struct LibraryOptionsReadingPosition: View {
                     
                     Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
                 }
-                .padding([.leading, .trailing], 8)
                 .disabled( !dsreaderHelperLibrary.isEnabled() )
-                
-                
             }
             .disabled(
                 !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false)
             )
-            
-//            Divider()
-//
-//            VStack(alignment: .leading, spacing: 8) {
-//
-//                Text("Instructions").font(.title3)
-//
-//                VStack(alignment: .leading, spacing: 4) {
-//                    Text("Please add a custom column of type \"Long text, like comments\" on calibre server.")
-//
-//                    Text("If there are multiple users, it's better to add a unique column for each user.")
-//
-//                    Text("Defaults to #read_pos(_username).")
-//                }    .font(.callout)
-//
-//                if library.server.username.isEmpty {
-//                    Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
-//                        .font(.caption)
-//                }
-//
-//                Divider()
-//
-//                Toggle("Set as Server-wide Default", isOn: $readingPosition._isDefault)
-//                    .font(.title3).hidden()
-//
-//            }
-//            .disabled(!readingPosition.isEnabled())
         }
-        .padding()
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
@@ -163,5 +140,6 @@ struct LibraryOptionsReadingPosition_Previews: PreviewProvider {
         NavigationView {
             LibraryOptionsReadingPosition(library: library, dsreaderHelperServer: $dsreaderHelperServer, readingPosition: $readingPosition, dsreaderHelperLibrary: $dsreaderHelperLibrary, goodreadsSync: $goodreadsSync)
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
 }

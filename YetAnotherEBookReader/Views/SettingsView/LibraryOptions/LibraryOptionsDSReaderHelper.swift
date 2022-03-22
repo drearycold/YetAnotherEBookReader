@@ -38,7 +38,6 @@ struct LibraryOptionsDSReaderHelper: View {
     
     var body: some View {
         Form {
-            
                 HStack {
                     Text("Plugin Service Port")
                     Spacer()
@@ -85,13 +84,13 @@ struct LibraryOptionsDSReaderHelper: View {
                             configuration?.reading_position_prefs?.library_config.map {
                                 (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
                         ) { library_entry in
-                            VStack(alignment: .leading) {
-                                Text(library_entry.key)
+                            Section(header: Text("Library \(library_entry.key)")) {
                                 readingPositionDetailsUser(library_entry: library_entry)
-                                    .font(.caption)
+                                    .font(.callout)
                             }
                         }
-                    }) {
+                    }.navigationTitle("Reading Positions Configuration")
+                ) {
                     HStack {
                         Text("Reading Positions")
                         Spacer()
@@ -109,8 +108,9 @@ struct LibraryOptionsDSReaderHelper: View {
                     if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
                        options.dictViewerEnabled,
                        options.dictViewerLibraryName.count > 0 {
-                        Text("Using Library \(options.dictViewerLibraryName)")
+                        Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
                             .font(.caption2)
+                            .multilineTextAlignment(.trailing)
                     } else {
                         Text("missing")
                     }
@@ -123,14 +123,16 @@ struct LibraryOptionsDSReaderHelper: View {
                         ForEach (
                             configuration?.count_pages_prefs?.library_config.map {
                                 (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                        ) { library_entry in
-                            VStack(alignment: .leading) {
-                                Text(library_entry.key)
-                                HStack {
-                                    Spacer()
-                                    Text("\(library_entry.value.customColumnPages) / \(library_entry.value.customColumnWords) / \(library_entry.value.customColumnFleschReading) / \(library_entry.value.customColumnFleschGrade) / \(library_entry.value.customColumnGunningFog)")
-                                        .font(.caption)
+                        ) { key, value in
+                            Section(header: Text("Library \(key)")) {
+                                Group {
+                                    Text("Pages: \(value.customColumnPages.isEmpty ? "not set" : value.customColumnPages)")
+                                    Text("Words: \(value.customColumnWords.isEmpty ? "not set" : value.customColumnWords)")
+                                    Text("Flesch Reading: \(value.customColumnFleschReading.isEmpty ? "not set" : value.customColumnFleschReading)")
+                                    Text("Flesch Grade: \(value.customColumnFleschGrade.isEmpty ? "not set" : value.customColumnFleschGrade)")
+                                    Text("Gunning Fog: \(value.customColumnGunningFog.isEmpty ? "not set" : value.customColumnGunningFog)")
                                 }
+                                .font(.callout)
                             }
                         }
                     }
@@ -153,10 +155,9 @@ struct LibraryOptionsDSReaderHelper: View {
                             configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
                                 (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
                         ) { user_entry in
-                            VStack(alignment: .leading) {
-                                Text(user_entry.key)
+                            Section(header: Text("Profile \(user_entry.key)")) {
                                 goodreadsSyncDetailsShelf(user_entry: user_entry)
-                                    .font(.caption)
+                                    .font(.callout)
                             }
                         }
                     }
@@ -295,14 +296,17 @@ struct LibraryOptionsDSReaderHelper: View {
     
     @ViewBuilder
     private func readingPositionDetailsUser(library_entry: (key: String, value: CalibreReadingPositionPrefs.ReadingPositionLibraryConfig)) -> some View {
-        ForEach (
-            library_entry.value.readingPositionColumns.map { (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } , id: \.key
-        ) { user_entry in
-            HStack {
-                Spacer()
-                Text(user_entry.key)
-                Text(": ")
-                Text(user_entry.value.label)
+        if library_entry.value.readingPositionColumns.isEmpty {
+            Text("None Exists")
+        } else {
+            ForEach (
+                library_entry.value.readingPositionColumns.map { (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } , id: \.key
+            ) { user_entry in
+                HStack {
+                    Text("User: \(user_entry.key)")
+                    Spacer()
+                    Text("Column \(user_entry.value.label)")
+                }
             }
         }
     }
@@ -313,10 +317,9 @@ struct LibraryOptionsDSReaderHelper: View {
             user_entry.value.shelves, id: \.self
         ) { shelf in
             HStack {
+                Text("Shelf \(shelf.name)")
                 Spacer()
-                Text(shelf.name)
-                Text(": ")
-                Text("\(shelf.book_count)")
+                Text("\(shelf.book_count) books")
                     .frame(minWidth: 80, alignment: .trailing)
             }
         }

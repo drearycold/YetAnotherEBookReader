@@ -15,17 +15,11 @@ struct LibraryOptionsOverrideCustomColumnMappings: View {
     @Binding var countPages: CalibreLibraryCountPages
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 8) {
-                LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
-                
-                Divider()
-                
-                LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
-            }
+        Form {
+            LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
+            
+            LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
         }
-        .padding()
-
     }
 }
 

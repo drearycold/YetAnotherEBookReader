@@ -201,6 +201,7 @@ struct CalibreServerService {
                 if let list = listResult["result"] {
                     result.list = list
                 }
+                modelData.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
                 return result
             }
             .eraseToAnyPublisher()

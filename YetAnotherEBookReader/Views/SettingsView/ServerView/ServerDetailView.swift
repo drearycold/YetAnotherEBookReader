@@ -32,7 +32,7 @@ struct ServerDetailView: View {
     @State private var libraryRestoreListSelection = Set<String>()
     
     var body: some View {
-        List {
+        Form {
             Section(header: Text("Options")) {
                 NavigationLink(
                     destination: AddModServerView(server: $server, isActive: $modServerActive)
@@ -55,7 +55,6 @@ struct ServerDetailView: View {
                     Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
                 }
                 
-                HStack{}
             }
             
             Section(header: librarySectionHeader()) {
@@ -84,7 +83,7 @@ struct ServerDetailView: View {
                                 modelData.calibreLibraries[id]!.autoUpdate = newValue
                                 try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
                             })
-                        ),
+                        ).navigationTitle(modelData.calibreLibraries[id]!.name),
                         tag: id,
                         selection: $selectedLibrary) {
                         libraryRowBuilder(library: modelData.calibreLibraries[id]!)

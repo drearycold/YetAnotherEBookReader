@@ -21,113 +21,106 @@ struct SettingsView: View {
     @State private var updater = 0
 
     var body: some View {
-        VStack {
-            NavigationView {
-                List {
-                    Section(header: Text("Servers")) {
-                        
-                        NavigationLink(
-                            destination: AddModServerView(
-                                server: Binding<CalibreServer>(get: {
-                                    .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-                                }, set: { newServer in
-                                    serverList.append(newServer)
-                                    sortServerList()
-                                }),
-                                isActive: $addServerActive)
-                                .navigationTitle("Add Server"),
-                            isActive: $addServerActive
-                        ) {
-                            HStack {
-                                Text("Connect to a new server")
-                                if modelData.booksInShelf.isEmpty {
-                                    Spacer()
-                                    Text("Start here")
-                                        .foregroundColor(.red)
-                                        .font(.caption2)
-                                }
-                            }
-                        }
-                        
-                        ForEach(serverList) { server in
-                            NavigationLink (
-                                destination: ServerDetailView(server: Binding<CalibreServer>(get: {
-                                    server
-                                }, set: { [server] newServer in
-                                    updateServer(oldServer: server, newServer: newServer)
-                                })),
-                                tag: server.id,
-                                selection: $selectedServer
-                            ) {
-                                serverRowBuilder(server: server)
-                            }
-                            .isDetailLink(false)
-                        }
-                        .onDelete(perform: { indexSet in
-                            guard let index = indexSet.first, index < serverList.count else { return }
-                            serverListDelete = serverList.remove(at: index)
-                            alertItem = AlertItem(id: "DelServer")
-                        })
-                        .alert(item: $alertItem) { item in
-                            if item.id == "DelServer" {
-                                return Alert(
-                                    title: Text("Remove Server"),
-                                    message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
-                                    primaryButton: .destructive(Text("Confirm")) {
-                                        self.deleteServer()
-                                    },
-                                    secondaryButton: .cancel{
-                                        guard let server = serverListDelete else { return }
-                                        serverList.append(server)
-                                        sortServerList()
-                                        serverListDelete = nil
-                                    }
-                                )
-                            }
-                            return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
-                                item.action?()
-                            })
-                        }
-                        
-                        HStack{}.frame(height: 4)
-                    }
-                    
-                    Section(header: Text("Options")) {
-                        NavigationLink("Formats & Readers", destination: ReaderOptionsView())
-                        NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(libraryId: nil, bookId: nil))
-                        NavigationLink("Activity Logs", destination: ActivityList())
-                        HStack{}.frame(height: 4)
-                    }
-                    
-                    Section(header: Text("Support")) {
-                        NavigationLink("Version History", destination: VersionHistoryView())
-                        NavigationLink("Support", destination: SupportInfoView())
-                        NavigationLink("About calibre Server", destination: ServerCalibreIntroView().frame(maxWidth: 600))
-                        NavigationLink("About DSReader", destination: AppInfoView())
-                    }
-                }
-                .toolbar {
-                    ToolbarItem {
-                        Button(action:{
-                            modelData.probeServersReachability(with: [], updateLibrary: true)
-                        }) {
-                            Image(systemName: "arrow.triangle.2.circlepath")
+        Form {
+            Section(header: Text("Servers")) {
+                NavigationLink(
+                    destination: AddModServerView(
+                        server: Binding<CalibreServer>(get: {
+                            .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+                        }, set: { newServer in
+                            serverList.append(newServer)
+                            sortServerList()
+                        }),
+                        isActive: $addServerActive)
+                        .navigationTitle("Add Server"),
+                    isActive: $addServerActive
+                ) {
+                    HStack {
+                        Text("Connect to a new server")
+                        if modelData.booksInShelf.isEmpty {
+                            Spacer()
+                            Text("Start here")
+                                .foregroundColor(.red)
+                                .font(.caption2)
                         }
                     }
                 }
+                
+                ForEach(serverList) { server in
+                    NavigationLink (
+                        destination: ServerDetailView(server: Binding<CalibreServer>(get: {
+                            server
+                        }, set: { [server] newServer in
+                            updateServer(oldServer: server, newServer: newServer)
+                        })),
+                        tag: server.id,
+                        selection: $selectedServer
+                    ) {
+                        serverRowBuilder(server: server)
+                    }
+                    .isDetailLink(false)
+                }
+                .onDelete(perform: { indexSet in
+                    guard let index = indexSet.first, index < serverList.count else { return }
+                    serverListDelete = serverList.remove(at: index)
+                    alertItem = AlertItem(id: "DelServer")
+                })
+                .alert(item: $alertItem) { item in
+                    if item.id == "DelServer" {
+                        return Alert(
+                            title: Text("Remove Server"),
+                            message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
+                            primaryButton: .destructive(Text("Confirm")) {
+                                self.deleteServer()
+                            },
+                            secondaryButton: .cancel{
+                                guard let server = serverListDelete else { return }
+                                serverList.append(server)
+                                sortServerList()
+                                serverListDelete = nil
+                            }
+                        )
+                    }
+                    return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
+                        item.action?()
+                    })
+                }
             }
-            .navigationViewStyle(StackNavigationViewStyle())
             
-            Spacer()
-            
-            HStack {
-                Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
-                Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+            Section(header: Text("Options")) {
+                NavigationLink("Formats & Readers", destination: ReaderOptionsView())
+                NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(libraryId: nil, bookId: nil))
+                NavigationLink("Activity Logs", destination: ActivityList())
             }
-            .font(.caption)
-            .foregroundColor(.gray)
             
-        }.onAppear() {
+            Section(
+                header: Text("Support"),
+                footer: HStack {
+                    Spacer()
+                    Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
+                    Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+                    Spacer()
+                }
+                .font(.caption)
+                .foregroundColor(.gray)
+            ) {
+                NavigationLink("Version History", destination: VersionHistoryView())
+                NavigationLink("Support", destination: SupportInfoView())
+                NavigationLink("About calibre Server", destination: ServerCalibreIntroView().frame(maxWidth: 600))
+                NavigationLink("About DSReader", destination: AppInfoView())
+            }
+        }
+        .navigationTitle("Settings")
+        .toolbar {
+            ToolbarItem {
+                Button(action:{
+                    modelData.probeServersReachability(with: [], updateLibrary: true)
+                }) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+            }
+        }
+        .onAppear() {
             serverList = modelData.calibreServers
                 .filter { $0.value.isLocal == false }
                 .map { $0.value }
@@ -358,7 +351,10 @@ struct SettingsView_Previews: PreviewProvider {
     static private var modelData = ModelData()
 
     static var previews: some View {
-        SettingsView()
-            .environmentObject(modelData)
+        NavigationView {
+            SettingsView()
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+        .environmentObject(modelData)
     }
 }

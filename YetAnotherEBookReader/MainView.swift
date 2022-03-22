@@ -62,12 +62,15 @@ struct MainView: View {
                     }
                     .tag(2)
                 
-                SettingsView()
-                    .tabItem {
-                        Image(systemName: "gearshape.fill")
-                        Text("Settings")
-                    }
-                    .tag(3)
+                NavigationView {
+                    SettingsView()
+                }
+                .navigationViewStyle(StackNavigationViewStyle())
+                .tabItem {
+                    Image(systemName: "gearshape.fill")
+                    Text("Settings")
+                }
+                .tag(3)
             }
             if modelData.activeTab < 2 && modelData.booksInShelf.isEmpty {
                 VStack {
