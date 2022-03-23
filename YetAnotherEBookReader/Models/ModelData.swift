@@ -1652,7 +1652,7 @@ final class ModelData: ObservableObject {
         return true
     }
     
-    func probeServersReachability(with serverIds: [String], updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
+    func probeServersReachability(with serverIds: [String], updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, disableAutoThreshold: Int = 0) {
         calibreServers.filter {
             $0.value.isLocal == false
         }.forEach { serverId, server in
@@ -1737,7 +1737,8 @@ final class ModelData: ObservableObject {
                     $0.value.isLocal == false
                 }.map{ $0.key },
                 autoUpdateOnly: autoUpdateOnly,
-                incremental: incremental
+                incremental: incremental,
+                disableAutoThreshold: disableAutoThreshold
             )
         })
     }
@@ -1836,7 +1837,7 @@ final class ModelData: ObservableObject {
         })
     }
     
-    func syncLibraries(with serverIds: [String], autoUpdateOnly: Bool, incremental: Bool) {
+    func syncLibraries(with serverIds: [String], autoUpdateOnly: Bool, incremental: Bool, disableAutoThreshold: Int) {
         syncLibrariesIncrementalCancellable?.cancel()
         
         syncLibrariesIncrementalCancellable = calibreLibraries.filter {
@@ -1905,6 +1906,21 @@ final class ModelData: ObservableObject {
         .sink { complete in
             
         } receiveValue: { results in
+            if disableAutoThreshold > 0,
+               results.list.book_ids.count > disableAutoThreshold {
+                DispatchQueue.main.async {
+                    self.librarySyncStatus[results.library.id]?.isSync = false
+                    self.librarySyncStatus[results.library.id]?.isError = true
+                    self.librarySyncStatus[results.library.id]?.msg = "Large Library, Must Enable Manually"
+                    self.librarySyncStatus[results.library.id]?.cnt = results.list.book_ids.count
+
+                    self.calibreLibraries[results.library.id]?.autoUpdate = false
+                    if let library = self.calibreLibraries[results.library.id] {
+                        try? self.updateLibraryRealm(library: library, realm: self.realm)
+                    }
+                }
+                return
+            }
             self.syncLibrariesSinkValue(results: results)
         }
     }
@@ -2290,11 +2306,11 @@ final class ModelData: ObservableObject {
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
         let discoverableLibrariesFilter = Array(repeating: "primaryKey BEGINSWITH %@", count: discoverableLibraries.count).joined(separator: " OR ")
-        var baselinePredicate = NSPredicate(format: "inShelf == false")
+        var baselinePredicate = NSPredicate(format: "libraryName != nil AND inShelf == false")
         if discoverableLibraries.count > 1 {
-            baselinePredicate = NSPredicate(format: "( \(discoverableLibrariesFilter) ) AND inShelf == false", argumentArray: discoverableLibraries)
+            baselinePredicate = NSPredicate(format: "libraryName != nil AND ( \(discoverableLibrariesFilter) ) AND inShelf == false", argumentArray: discoverableLibraries)
         } else {
-            baselinePredicate = NSPredicate(format: "\(discoverableLibrariesFilter) AND inShelf == false", argumentArray: discoverableLibraries)
+            baselinePredicate = NSPredicate(format: "libraryName != nil AND \(discoverableLibrariesFilter) AND inShelf == false AND libraryName != nil", argumentArray: discoverableLibraries)
         }
         
         let baselineObjects = realm.objects(CalibreBookRealm.self)

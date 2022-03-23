@@ -39,10 +39,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         true
     }
     
-    func reloadBookModel() {
-        self.shelfView.reloadBooks(bookModelSection: modelData.bookModelSection)
-    }
-    
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
@@ -55,6 +51,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
         #endif
+        
+        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
     }
 
     override func viewDidLoad() {
@@ -132,7 +130,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         updateAndReloadCancellable = modelData.discoverShelfGenerated
             .receive(on: DispatchQueue.main)
             .sink { _ in
-                self.reloadBookModel()
+                self.shelfView.reloadBooks(bookModelSection: self.modelData.bookModelSection)
             }
         
         dismissControllerCancellable?.cancel()
@@ -141,8 +139,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         }
         
         NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
-        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
-
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {

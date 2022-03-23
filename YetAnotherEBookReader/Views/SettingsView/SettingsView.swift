@@ -339,10 +339,12 @@ struct SettingsView: View {
     
     private func deleteServer() {
         guard let server = serverListDelete else { return }
+        
         let isSuccess = modelData.removeServer(serverId: server.id, realm: modelData.realm)
         if !isSuccess {
             alertItem = AlertItem(id: "DelServerFailed")
         }
+        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
     }
     
 }

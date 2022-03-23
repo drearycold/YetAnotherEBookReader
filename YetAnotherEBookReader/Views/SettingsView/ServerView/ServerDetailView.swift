@@ -240,7 +240,7 @@ struct ServerDetailView: View {
                     Text("processing")
                 }
                 if modelData.librarySyncStatus[library.id]?.isError == true {
-                    Text("Status Unknown")
+                    Text(modelData.librarySyncStatus[library.id]?.msg ?? "Status Unknown")
                 } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt,
                           let upd = modelData.librarySyncStatus[library.id]?.upd {
                     if upd > 0, cnt > upd {

@@ -30,7 +30,6 @@ struct AddModServerView: View {
     @State private var dataLoading = false
     
     @State private var libraryList = [String]()
-    @State private var libraryListExpanded = false
     
     @State private var serverCalibreInfoPresenting = false {
         willSet { if newValue { modelData.presentingStack.append($serverCalibreInfoPresenting) } }
@@ -191,7 +190,6 @@ struct AddModServerView: View {
                 if newStatus == "Success" {
                     dataLoading = false
                     libraryList = serverInfo.libraryMap.values.sorted()
-                    libraryListExpanded = true
                 } else {
                     self.alertItem = AlertItem(id: "Sync Error", msg: serverInfo.errorMsg, action: {
                         dataLoading = false
@@ -201,7 +199,8 @@ struct AddModServerView: View {
             if dataAction == "Add" {
                 if newStatus == "Success" {
                     dataLoading = false
-
+                    libraryList = serverInfo.libraryMap.values.sorted()
+                    
                     var content = "Library List:"
                     serverInfo.libraryMap
                         .sorted { $0.1 < $1.1 }
@@ -400,8 +399,7 @@ struct AddModServerView: View {
                 realm: modelData.realm)
         }
         
-        
-        modelData.probeServersReachability(with: [newServer.id])
+        modelData.probeServersReachability(with: [newServer.id], disableAutoThreshold: 999)
         
         server = newServer
         isActive = false
