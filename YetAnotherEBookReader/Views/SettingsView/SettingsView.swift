@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 import RealmSwift
 
 struct SettingsView: View {
@@ -20,9 +21,19 @@ struct SettingsView: View {
     @State private var serverListDelete: CalibreServer? = nil
     @State private var updater = 0
 
+    @State private var removeServerCancellable: AnyCancellable?
+    
     var body: some View {
         Form {
-            Section(header: Text("Servers")) {
+            Section(header: HStack {
+                Text("Servers")
+                Spacer()
+                if serverListDelete != nil || modelData.calibreServerInfoStaging.allSatisfy{$1.probing == false} == false {
+                    ProgressView().progressViewStyle(CircularProgressViewStyle())
+                } else {
+                    ProgressView().progressViewStyle(CircularProgressViewStyle()).hidden()
+                }
+            }) {
                 NavigationLink(
                     destination: AddModServerView(
                         server: Binding<CalibreServer>(get: {
@@ -86,6 +97,7 @@ struct SettingsView: View {
                     })
                 }
             }
+            .disabled(serverListDelete != nil)
             
             Section(header: Text("Options")) {
                 NavigationLink("Formats & Readers", destination: ReaderOptionsView())
@@ -122,7 +134,7 @@ struct SettingsView: View {
         }
         .onAppear() {
             serverList = modelData.calibreServers
-                .filter { $0.value.isLocal == false }
+                .filter { $1.isLocal == false && $1.id != serverListDelete?.id}
                 .map { $0.value }
             sortServerList()
         }
@@ -340,11 +352,21 @@ struct SettingsView: View {
     private func deleteServer() {
         guard let server = serverListDelete else { return }
         
-        let isSuccess = modelData.removeServer(serverId: server.id, realm: modelData.realm)
-        if !isSuccess {
-            alertItem = AlertItem(id: "DelServerFailed")
-        }
-        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
+        modelData.calibreServiceCancellable?.cancel()
+        modelData.dshelperRefreshCancellable?.cancel()
+        modelData.syncLibrariesIncrementalCancellable?.cancel()
+        
+        removeServerCancellable = [server].publisher
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .sink { output in
+                guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
+                let isSuccess = modelData.removeServer(serverId: server.id, realm: realm)
+                if !isSuccess {
+                    alertItem = AlertItem(id: "DelServerFailed")
+                }
+                serverListDelete = nil
+                NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
+            }
     }
     
 }

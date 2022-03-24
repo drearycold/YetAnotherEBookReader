@@ -33,6 +33,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
     var updateAndReloadCancellable: AnyCancellable?
+    var dismissControllerCancellable: AnyCancellable?
+    var bookDetailViewPresenting = false
 
     var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
     
@@ -99,12 +101,13 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         bannerView.load(gadRequest)
         #endif
         
-        updateAndReloadCancellable?.cancel()
-        updateAndReloadCancellable = modelData.booksRefreshedPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { _ in
-                self.updateBookModel()
-            }
+        
+        dismissControllerCancellable?.cancel()
+        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
+            guard self.bookDetailViewPresenting else { return }
+            self.dismiss(animated: true, completion: { self.bookDetailViewPresenting = false })
+        }
+        
     }
 
     override func viewDidLoad() {
@@ -166,6 +169,13 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 //        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
 //            self?.updateBookModel()
 //        }
+        
+        updateAndReloadCancellable = modelData.booksRefreshedPublisher
+            .subscribe(on: DispatchQueue.main)
+            .sink { _ in
+                self.updateBookModel()
+            }
+        
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
@@ -263,7 +273,9 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             
             detailView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
             
-            self.present(nav, animated: true, completion: nil)
+            self.present(nav, animated: true, completion: {
+                self.bookDetailViewPresenting = true
+            })
         }
     }
     

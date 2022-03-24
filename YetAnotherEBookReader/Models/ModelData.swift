@@ -1309,7 +1309,15 @@ final class ModelData: ObservableObject {
     }
     
     func startBatchDownload(bookIds: [String], formats: [String]) {
-        
+        bookIds.forEach { bookId in
+            guard let obj = getBookRealm(forPrimaryKey: bookId), let book = convert(bookRealm: obj) else { return }
+            formats.forEach { format in
+                guard let f = Format(rawValue: format),
+                      let formatInfo = book.formats[format],
+                      formatInfo.serverSize > 0 else { return }
+                let _ = startDownloadFormat(book: book, format: f)
+            }
+        }
     }
     
     func clearCache(inShelfId: String) {
@@ -1582,14 +1590,12 @@ final class ModelData: ObservableObject {
         }
         
         //remove library info
+        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         do {
             let booksCached = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-                            library.server.baseUrl,
-                            library.server.username,
-                            library.name
-                )
+                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
             )
+            
             try realm.write {
                 realm.delete(booksCached)
             }
@@ -1617,8 +1623,10 @@ final class ModelData: ObservableObject {
         }
         
         //remove library info
-        libraries.forEach {
-            calibreLibraries.removeValue(forKey: $0.key)
+        DispatchQueue.main.async {
+            libraries.forEach {
+                self.calibreLibraries.removeValue(forKey: $0.key)
+            }
         }
         do {
             let serverLibraryRealms = realm.objects(CalibreLibraryRealm.self).filter(
@@ -1634,7 +1642,9 @@ final class ModelData: ObservableObject {
         }
         
         //remove server
-        calibreServers.removeValue(forKey: serverId)
+        DispatchQueue.main.async {
+            self.calibreServers.removeValue(forKey: serverId)
+        }
         do {
             let serverRealms = realm.objects(CalibreServerRealm.self).filter(
                 NSPredicate(format: "baseUrl = %@ AND username = %@",
@@ -1681,12 +1691,10 @@ final class ModelData: ObservableObject {
         }
         
         calibreServiceCancellable?.cancel()
-        probingList.forEach {
-            self.calibreServerInfoStaging[$0.key]?.probing = true
-            self.calibreServerInfoStaging[$0.key]?.errorMsg = "Connecting"
-        }
-        calibreServiceCancellable = probingList.publisher.flatMap {
-            self.calibreServerService.probeServerReachabilityNew(serverInfo: $0.value)
+        calibreServiceCancellable = probingList.publisher.flatMap { input -> AnyPublisher<CalibreServerInfo, Never> in
+            self.calibreServerInfoStaging[input.key]?.probing = true
+            self.calibreServerInfoStaging[input.key]?.errorMsg = "Connecting"
+            return self.calibreServerService.probeServerReachabilityNew(serverInfo: input.value)
         }
         .collect()
         .eraseToAnyPublisher()
@@ -1773,9 +1781,9 @@ final class ModelData: ObservableObject {
             .publisher.flatMap(calibreServerService.getMetadata(task:))
             .collect()
             .eraseToAnyPublisher()
-            .receive(on: DispatchQueue.main)
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .sink { results in
-                results.compactMap { (task, entry) -> CalibreBook? in
+                let books = results.compactMap { (task, entry) -> CalibreBook? in
                     //print("refreshShelfMetadata \(task) \(entry)")
                     
                     guard var book = self.booksInShelf[task.inShelfId] else { return nil }
@@ -1797,11 +1805,15 @@ final class ModelData: ObservableObject {
                     }
                     
                     return book
-                }.forEach {
-                    self.updateBook(book: $0)
                 }
                 
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                DispatchQueue.main.async {
+                    books.forEach {
+                        self.updateBook(book: $0)
+                    }
+                    
+                    NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                }
             }
     }
     

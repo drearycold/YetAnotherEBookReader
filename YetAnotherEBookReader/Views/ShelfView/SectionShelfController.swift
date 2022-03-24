@@ -33,7 +33,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
     var updateAndReloadCancellable: AnyCancellable?
-    var dismissControllerCancellable: AnyCancellable?
     
     override var canBecomeFirstResponder: Bool {
         true
@@ -132,11 +131,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             .sink { _ in
                 self.shelfView.reloadBooks(bookModelSection: self.modelData.bookModelSection)
             }
-        
-        dismissControllerCancellable?.cancel()
-        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
-            self.dismiss(animated: true, completion: nil)
-        }
         
         NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
     }

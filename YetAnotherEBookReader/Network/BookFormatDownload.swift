@@ -218,11 +218,7 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
         } catch {
             print ("file error: \(error)")
         }
-        
-        DispatchQueue.main.sync {
-            download.downloadService?.modelData.activeDownloads[download.sourceURL]?.isDownloading = false
-            download.downloadService?.modelData.activeDownloads[download.sourceURL]?.resumeData = nil
-        }
+
     }
     
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
@@ -235,6 +231,9 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
                        else { return }
                 
                 modelData.addedCache(book: download.book, format: download.format)
+                modelData.activeDownloads[download.sourceURL]?.isDownloading = false
+                modelData.activeDownloads[download.sourceURL]?.resumeData = nil
+                
                 guard let request = download.downloadTask?.originalRequest ?? task.originalRequest else { return }
                 modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(fileSize)")
             }

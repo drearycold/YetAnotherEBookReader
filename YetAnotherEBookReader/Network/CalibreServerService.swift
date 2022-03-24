@@ -43,6 +43,7 @@ struct CalibreServerService {
         guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
             modelData.calibreServerInfo = serverInfo
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
+            modelData.calibreServerUpdating = false
             return
         }
         
@@ -52,6 +53,8 @@ struct CalibreServerService {
         guard let url = urlComponents.url(relativeTo: serverUrl), let host = url.host else {
             modelData.calibreServerInfo = serverInfo
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
+            modelData.calibreServerUpdating = false
+
             return
         }
         //url.appendPathComponent("/ajax/library-info", isDirectory: false)
@@ -106,13 +109,13 @@ struct CalibreServerService {
             guard httpResponse.statusCode != 401 else {
                 serverInfo.errorMsg = httpResponse.statusCode.description
                     + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                    + " " + dataAsString
+//                    + " " + dataAsString
                 return
             }
             guard (200...299).contains(httpResponse.statusCode) else {
                 serverInfo.errorMsg = httpResponse.statusCode.description
                     + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                    + " " + dataAsString
+//                    + " " + dataAsString
                 return
             }
             guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
@@ -136,8 +139,7 @@ struct CalibreServerService {
             serverInfo.errorMsg = "Success"
         }
 
-        modelData.calibreServerUpdating = true
-
+        modelData.calibreServerUpdatingStatus = "Connecting"
         setCredential(server: server, task: task)
 
         task.resume()

@@ -11,10 +11,11 @@ struct LibraryInfoBatchDownloadSheet: View {
     @EnvironmentObject var modelData: ModelData
     
     @Binding var presenting: Bool
+    @Binding var editMode: EditMode
     @Binding var selectedBookIds: Set<String>
     
     @State private var formats = [String]()
-    @State private var selectedFormat = [String: Int]()
+    @State private var selectedFormats = [String: Int]()
     @State private var selectedFormatBookIds = [String]()
     
     var body: some View {
@@ -24,14 +25,14 @@ struct LibraryInfoBatchDownloadSheet: View {
             List {
                 ForEach(formats, id: \.self) { format in
                     Button( action: {
-                        if selectedFormat.keys.contains(format) {
-                            selectedFormat.removeValue(forKey: format)
+                        if selectedFormats.keys.contains(format) {
+                            selectedFormats.removeValue(forKey: format)
                         } else {
-                            selectedFormat[format] = (selectedFormat.values.max() ?? 0) + 1
+                            selectedFormats[format] = (selectedFormats.values.max() ?? 0) + 1
                         }
                         formats.sort {
-                            let priorityLeft = selectedFormat[$0] ?? -1
-                            let priorityRight = selectedFormat[$1] ?? -1
+                            let priorityLeft = selectedFormats[$0] ?? -1
+                            let priorityRight = selectedFormats[$1] ?? -1
                             if priorityLeft > 0 && priorityRight > 0 {
                                 return priorityLeft < priorityRight
                             } else if priorityLeft < 0 && priorityRight < 0 {
@@ -47,14 +48,14 @@ struct LibraryInfoBatchDownloadSheet: View {
                         
                         selectedFormatBookIds = selectedBookIds.reduce(into: [String](), { result, bookId in
                             guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
-                            guard book.formats().keys.filter(selectedFormat.keys.contains).isEmpty == false else { return }
+                            guard book.formats().keys.filter(selectedFormats.keys.contains).isEmpty == false else { return }
                             result.append(bookId)
                         })
                     }) {
                         HStack {
                             Text(format)
                             Spacer()
-                            if selectedFormat.keys.contains(format) {
+                            if selectedFormats.keys.contains(format) {
                                 Image(systemName: "minus.circle")
                             } else {
                                 Image(systemName: "plus.circle")
@@ -68,9 +69,9 @@ struct LibraryInfoBatchDownloadSheet: View {
                     guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
                     result.formUnion(book.formats().keys)
                 }.sorted()
-                if formats.count == 1 {
-                    selectedFormat[formats.first!] = 1
-                }
+//                if formats.count == 1 {
+//                    selectedFormats[formats.first!] = 1
+//                }
             }
             .frame(height: CGFloat(200))
             
@@ -84,7 +85,10 @@ struct LibraryInfoBatchDownloadSheet: View {
                 Button(action: {
                     presenting = false
                     
-                    modelData.startBatchDownload(bookIds: selectedFormatBookIds, formats: Array(selectedFormat.keys))
+                    modelData.startBatchDownload(bookIds: selectedFormatBookIds, formats: Array(selectedFormats.keys))
+                    
+                    selectedBookIds.removeAll()
+                    editMode = .inactive
                 }) {
                     Text("OK")
                 }

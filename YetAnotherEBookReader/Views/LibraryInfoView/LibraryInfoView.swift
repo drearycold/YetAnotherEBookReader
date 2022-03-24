@@ -43,9 +43,6 @@ struct LibraryInfoView: View {
     @State private var booksListCancellable: AnyCancellable?
     @State private var dismissAllCancellable: AnyCancellable?
 
-    @State private var booksListChangesetCancellable: AnyCancellable?
-    
-    @State private var realm: Realm!
     private var errBook = CalibreBook(id: -1, library: CalibreLibrary(server: CalibreServer(name: "Error", baseUrl: "Error", hasPublicUrl: false, publicUrl: "Error", hasAuth: false, username: "Error", password: "Error"), key: "Error", name: "Error"))
     
     private var defaultLog = Logger()
@@ -110,7 +107,7 @@ struct LibraryInfoView: View {
                              attachmentAnchor: .rect(.bounds),
                              arrowEdge: .top
                     ) {
-                        LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, selectedBookIds: $selectedBookIds)
+                        LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, editMode: $editMode, selectedBookIds: $selectedBookIds)
                     }
                     
                     if booksListRefreshing {
@@ -130,6 +127,7 @@ struct LibraryInfoView: View {
                                     modelData.clearCache(inShelfId: bookId)
                                 }
                                 selectedBookIds.removeAll()
+                                editMode = .inactive
                             }) {
                                 Image(systemName: "star.slash")
                             }.disabled(selectedBookIds.isEmpty)
@@ -214,8 +212,6 @@ struct LibraryInfoView: View {
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         })
         .onAppear {
-            self.realm = try! Realm(configuration: modelData.realmConf)
-            
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 batchDownloadSheetPresenting = false
@@ -224,8 +220,15 @@ struct LibraryInfoView: View {
             booksListCancellable?.cancel()
             booksListCancellable = modelData.libraryBookListNeedUpdate
                 .receive(on: DispatchQueue.global(qos: .userInitiated))
-                .sink { _ in
+                .flatMap { _ -> AnyPublisher<Int, Never> in
                     updateBooksList()
+                    return Just<Int>(0).setFailureType(to: Never.self).eraseToAnyPublisher()
+                }
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    if modelData.activeTab == 2, modelData.readingBook == nil {
+                        modelData.readingBookInShelfId = booksList.first
+                    }
                 }
             
             bookUpdateCancellable?.cancel()
@@ -239,6 +242,7 @@ struct LibraryInfoView: View {
             
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         }
+        
         //Body
     }   //View
     
@@ -265,8 +269,6 @@ struct LibraryInfoView: View {
     }
 
     func updateBooksList() {
-        booksListChangesetCancellable?.cancel()
-
         guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
         
         booksListRefreshing = true
@@ -389,7 +391,7 @@ struct LibraryInfoView: View {
     }
     
     private func getBook(for primaryKey: String) -> CalibreBook? {
-        guard let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+        guard let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
               let book = modelData.convert(bookRealm: obj) else { return nil }
         return book
     }
@@ -408,7 +410,7 @@ struct LibraryInfoView: View {
                 if book.inShelf {
                     Image(systemName: "books.vertical")
                         .frame(width: 64 - 8, height: 96 - 8, alignment: .bottomTrailing)
-                        .foregroundColor(.red)
+                        .foregroundColor(.primary)
                         .opacity(0.8)
                 }
             }
