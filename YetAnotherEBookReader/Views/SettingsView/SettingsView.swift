@@ -28,6 +28,7 @@ struct SettingsView: View {
             Section(header: HStack {
                 Text("Servers")
                 Spacer()
+                Text(modelData.calibreServerUpdatingStatus ?? "")
                 if serverListDelete != nil || modelData.calibreServerInfoStaging.allSatisfy{$1.probing == false} == false {
                     ProgressView().progressViewStyle(CircularProgressViewStyle())
                 } else {
@@ -38,12 +39,12 @@ struct SettingsView: View {
                     destination: AddModServerView(
                         server: Binding<CalibreServer>(get: {
                             .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-                        }, set: { newServer in
-                            serverList.append(newServer)
-                            sortServerList()
+                        }, set: { _ in
+                            updateServerList()
                         }),
-                        isActive: $addServerActive)
-                        .navigationTitle("Add Server"),
+                        isActive: $addServerActive
+                    )
+                    .navigationTitle("Add Server"),
                     isActive: $addServerActive
                 ) {
                     HStack {
@@ -57,7 +58,7 @@ struct SettingsView: View {
                     }
                 }
                 
-                ForEach(serverList) { server in
+                ForEach(serverList, id: \.self) { server in
                     NavigationLink (
                         destination: ServerDetailView(server: Binding<CalibreServer>(get: {
                             server
@@ -85,9 +86,6 @@ struct SettingsView: View {
                                 self.deleteServer()
                             },
                             secondaryButton: .cancel{
-                                guard let server = serverListDelete else { return }
-                                serverList.append(server)
-                                sortServerList()
                                 serverListDelete = nil
                             }
                         )
@@ -133,11 +131,11 @@ struct SettingsView: View {
             }
         }
         .onAppear() {
-            serverList = modelData.calibreServers
-                .filter { $1.isLocal == false && $1.id != serverListDelete?.id}
-                .map { $0.value }
-            sortServerList()
+            updateServerList()
         }
+        .onChange(of: serverListDelete, perform: { value in
+            updateServerList()
+        })
     }
     
     @ViewBuilder
@@ -200,6 +198,13 @@ struct SettingsView: View {
         }
     }
     
+    private func updateServerList() {
+        serverList = modelData.calibreServers
+            .filter { $1.isLocal == false && $1.id != serverListDelete?.id}
+            .map { $0.value }
+        sortServerList()
+    }
+    
     private func sortServerList() {
         serverList.sort {
             if $0.isLocal {
@@ -218,133 +223,93 @@ struct SettingsView: View {
     //MARK: Model Funtionalities
     
     private func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
-        do {
-            try modelData.updateServerRealm(server: newServer)
-        } catch {
-            
+        if oldServer.id == newServer.id {
+            //minor changes only
+            modelData.calibreServers[newServer.id] = newServer
+            try? modelData.updateServerRealm(server: newServer)
+            if let index = serverList.firstIndex(where: {$0.id == newServer.id}) {
+                serverList[index] = newServer
+            }
+
+            modelData.calibreServerUpdatingStatus = "Updated"
+            return
         }
-        modelData.calibreServers.removeValue(forKey: oldServer.id)
-        modelData.calibreServers[newServer.id] = newServer
         
-        serverList.removeAll { $0.id == oldServer.id }
-        serverList.append(newServer)
-        sortServerList()
-        
-        guard oldServer.id != newServer.id else { return }  //minor changes
-        
+        serverListDelete = oldServer        //staging
+        print("\(#function) staging finished \(oldServer.id) -> \(newServer.id)")
+
         modelData.calibreServerUpdating = true
         modelData.calibreServerUpdatingStatus = "Updating..."
         
-        //if major change occured
+        let newServerLibraries = modelData.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
+            var newLibrary = library
+            newLibrary.server = newServer
+            if var syncStat = modelData.librarySyncStatus[library.id] {
+                syncStat.library = newLibrary
+                modelData.librarySyncStatus[newLibrary.id] = syncStat
+            }
+            return newLibrary
+        }
+        
+        modelData.addServer(server: newServer, libraries: newServerLibraries)
+        
+        selectedServer = nil
+        print("\(#function) addServer finished")
+        
         DispatchQueue(label: "data").async {
             let realm = try! Realm(configuration: modelData.realmConf)
 
-            //remove old server from realm
-            realm.objects(CalibreServerRealm.self).forEach { serverRealm in
-                guard serverRealm.baseUrl == oldServer.baseUrl && serverRealm.username == oldServer.username else {
-                    return
-                }
-                do {
-                    try realm.write {
-                        realm.delete(serverRealm)
-                    }
-                } catch {
-                    
-                }
-            }
-            
-            //update library
-            let librariesCached = realm.objects(CalibreLibraryRealm.self)
-            librariesCached.forEach { libraryRealm in
-                guard libraryRealm.serverUrl == oldServer.baseUrl && libraryRealm.serverUsername == oldServer.username else { return }
-                    
-                let oldLibrary = CalibreLibrary(
-                    server: oldServer,
-                    key: libraryRealm.key!,
-                    name: libraryRealm.name!,
-                    autoUpdate: libraryRealm.autoUpdate,
-                    discoverable: libraryRealm.discoverable,
-                    hidden: libraryRealm.hidden,
-                    lastModified: libraryRealm.lastModified,
-                    customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
-                        $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
-                    },
-                    pluginColumns: {
-                        var result = [String: CalibreLibraryPluginColumnInfo]()
-                        if let plugin = libraryRealm.pluginDSReaderHelper {
-                            result[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(managedObject: plugin)
-                        }
-                        if let plugin = libraryRealm.pluginReadingPosition {
-                            result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
-                        }
-                        if let plugin = libraryRealm.pluginDictionaryViewer {
-                            result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(managedObject: plugin)
-                        }
-                        if let plugin = libraryRealm.pluginGoodreadsSync {
-                            result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(managedObject: plugin)
-                        }
-                        if let plugin = libraryRealm.pluginCountPages {
-                            result[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(managedObject: plugin)
-                        }
-                        return result
-                    }()
-                )
-                
-                
-                let newLibrary = CalibreLibrary(
-                    server: newServer,
-                    key: oldLibrary.key,
-                    name: oldLibrary.name,
-                    autoUpdate: oldLibrary.autoUpdate,
-                    discoverable: oldLibrary.discoverable,
-                    hidden: oldLibrary.hidden,
-                    lastModified: oldLibrary.lastModified,
-                    customColumnInfos: oldLibrary.customColumnInfos,
-                    pluginColumns: oldLibrary.pluginColumns)
-                
-                do {
-                    try realm.write {
-                        realm.delete(libraryRealm)
-                    }
-                } catch {
-                    
-                }
-                
-                DispatchQueue.main.sync {
-                    try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
-                    modelData.calibreLibraries.removeValue(forKey: oldLibrary.id)
-                    modelData.calibreLibraries[newLibrary.id] = newLibrary
-                }
-            }
-            
             //update books
             let booksCached = realm.objects(CalibreBookRealm.self)
+                .filter("serverUrl == %@ AND serverUsername == %@", oldServer.baseUrl, oldServer.username)
+            let booksCount = booksCached.count
+            var booksProgress = 0
             do {
-                try realm.write {
-                    booksCached.forEach { oldBookRealm in
-                        guard oldBookRealm.serverUrl == oldServer.baseUrl && oldBookRealm.serverUsername == oldServer.username else { return }
-                        let newBookRealm = CalibreBookRealm(value: oldBookRealm)
-                        newBookRealm.serverUrl = newServer.baseUrl
-                        newBookRealm.serverUsername = newServer.username
-                        
-                        realm.delete(oldBookRealm)
-                        realm.add(newBookRealm, update: .all)
+                var batch: [CalibreBookRealm] = booksCached.prefix(256).map { $0 }
+                while batch.count > 0 {
+                    booksProgress += batch.count
+                    print("\(#function) update books \(batch.count) / \(booksProgress) / \(booksCount)")
+                    DispatchQueue.main.async {
+                        modelData.calibreServerUpdatingStatus = "Updating... \(booksProgress)/\(booksCount)"
                     }
+                    
+                    try realm.write {
+                        batch.forEach { oldBookRealm in
+                            let newBookRealm = CalibreBookRealm(value: oldBookRealm)
+                            newBookRealm.serverUrl = newServer.baseUrl
+                            newBookRealm.serverUsername = newServer.username
+                            newBookRealm.updatePrimaryKey()
+                            realm.delete(oldBookRealm)
+                            realm.add(newBookRealm, update: .all)
+                        }
+                    }
+                    batch = booksCached.prefix(256).map { $0 }
                 }
             } catch {
-                
+                print("\(#function) update books error=\(error)")
             }
+            print("\(#function) update books finished")
+
+            DispatchQueue.main.async {
+                modelData.calibreServerUpdatingStatus = "Cleanup up..."
+            }
+            let _ = modelData.removeServer(serverId: oldServer.id, realm: realm)
             
-            DispatchQueue.main.sync {
+            print("\(#function) removeServer finished")
+
+            DispatchQueue.main.async {
                 //reload shelf
                 modelData.realm.refresh()
 
                 modelData.booksInShelf.removeAll(keepingCapacity: true)
                 modelData.populateBookShelf()
                 
-                //reload book list
                 modelData.calibreServerUpdating = false
                 modelData.calibreServerUpdatingStatus = "Finished"
+                
+                serverListDelete = nil      //will trigger updateServerList
+
+                modelData.probeServersReachability(with: [newServer.id])
             }
         }
     }

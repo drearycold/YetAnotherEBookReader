@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct CalibreServer: Hashable, Identifiable {
+struct CalibreServer: Hashable {
     var id: String {
         get {
             if isLocal {
@@ -444,6 +444,7 @@ struct CalibreBook {
 struct CalibreSyncStatus {
     var library: CalibreLibrary
     var isSync = false
+    var isUpd = false
     var isError = false
     var msg: String? = nil
     var cnt: Int? = nil

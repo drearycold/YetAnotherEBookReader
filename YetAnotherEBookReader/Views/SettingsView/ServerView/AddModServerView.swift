@@ -300,6 +300,7 @@ struct AddModServerView: View {
                 }
             }
         }
+        .buttonStyle(BorderlessButtonStyle())
     }
     @ViewBuilder
     private func secureFieldView(label: String, title: String, text: Binding<String>, visible: Binding<Bool>, original: String) -> some View {
@@ -329,6 +330,7 @@ struct AddModServerView: View {
                 }
             }
         }
+        .buttonStyle(BorderlessButtonStyle())
     }
     
     private func resetStates() {
@@ -458,11 +460,8 @@ struct AddModServerView: View {
         newServer.defaultLibrary = serverInfo.defaultLibrary
         newServer.lastLibrary = server.lastLibrary
         
-        // modelData.updateServer(oldServer: server, newServer: newServer)
         server = newServer
         
-        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true)
-
         isActive = false
     }
     

@@ -970,20 +970,20 @@ final class ModelData: ObservableObject {
     }
     
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
-        calibreServers[server.id] = server
-        do {
-            try updateServerRealm(server: server)
-        } catch {
-            
+        libraries.forEach {
+            do {
+                try updateLibraryRealm(library: $0, realm: self.realm)
+                calibreLibraries[$0.id] = $0
+            } catch {
+                
+            }
         }
         
-        libraries.forEach { (library) in
-            calibreLibraries[library.id] = library
-            do {
-                try updateLibraryRealm(library: library, realm: self.realm)
-            } catch {
+        do {
+            try updateServerRealm(server: server)
+            calibreServers[server.id] = server
+        } catch {
             
-            }
         }
     }
     
@@ -1035,6 +1035,7 @@ final class ModelData: ObservableObject {
     
     func hideLibrary(libraryId: String) {
         calibreLibraries[libraryId]?.hidden = true
+        calibreLibraries[libraryId]?.autoUpdate = false
         if let library = calibreLibraries[libraryId] {
             try? updateLibraryRealm(library: library, realm: realm)
         }
@@ -1592,12 +1593,20 @@ final class ModelData: ObservableObject {
         //remove library info
         let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         do {
-            let booksCached = realm.objects(CalibreBookRealm.self).filter(
+            var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self).filter(
                 NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
-            )
-            
-            try realm.write {
-                realm.delete(booksCached)
+            ).prefix(256).map{ $0 }
+            while booksCached.count > 0 {
+                while self.librarySyncStatus[libraryId]?.isSync == true || self.librarySyncStatus[libraryId]?.isUpd == true {
+                    Thread.sleep(forTimeInterval: 0.1)
+                }
+                print("\(#function) will delete \(booksCached.count) entries of \(libraryId)")
+                try realm.write {
+                    realm.delete(booksCached)
+                }
+                booksCached = realm.objects(CalibreBookRealm.self).filter(
+                    NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
+                ).prefix(256).map{ $0 }
             }
         } catch {
             return false
@@ -1611,6 +1620,12 @@ final class ModelData: ObservableObject {
         
         let libraries = calibreLibraries.filter {
             $0.value.server == server
+        }
+        
+        DispatchQueue.main.async {
+            libraries.forEach {
+                self.hideLibrary(libraryId: $0.key)
+            }
         }
         
         var isSuccess = true
@@ -1663,6 +1678,8 @@ final class ModelData: ObservableObject {
     }
     
     func probeServersReachability(with serverIds: [String], updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, disableAutoThreshold: Int = 0) {
+        guard calibreServerUpdating == false else { return }    //structural changing ongoing
+        
         calibreServers.filter {
             $0.value.isLocal == false
         }.forEach { serverId, server in
@@ -2052,17 +2069,28 @@ final class ModelData: ObservableObject {
         guard let realm = try? Realm(configuration: self.realmConf) else {
             return
         }
+        guard self.librarySyncStatus[library.id]?.isUpd == false else { return }
+        guard let hidden = self.calibreLibraries[library.id]?.hidden, hidden == false else { return }
+        
+        DispatchQueue.main.sync {
+            self.librarySyncStatus[library.id]?.isUpd = true
+        }
         
         let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         
         let chunk = realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "( serverUrl == nil OR lastSynced < lastModified ) AND primaryKey BEGINSWITH %@", partialPrimaryKey)
         )
-        .sorted(byKeyPath: "lastModified", ascending: true)
+        .sorted(byKeyPath: "lastModified", ascending: false)
         .map { $0.id }
         .prefix(256)
         
-        guard chunk.isEmpty == false else { return }
+        guard chunk.isEmpty == false else {
+            DispatchQueue.main.sync {
+                self.librarySyncStatus[library.id]?.isUpd = false
+            }
+            return
+        }
         print("\(#function) prepareGetBooksMetadata \(library.name) \(chunk.count)")
         if let task = calibreServerService.buildBooksMetadataTask(library: library, books: chunk.map{ $0.description }) {
             getBooksMetadataSubject.send(task)
@@ -2106,10 +2134,11 @@ final class ModelData: ObservableObject {
                         self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
                     }
                 }
-                DispatchQueue.main.async {
+                DispatchQueue.main.sync {
                     if let upd = self.librarySyncStatus[result.library.id]?.upd {
                         self.librarySyncStatus[result.library.id]?.upd = upd - result.books.count
                     }
+                    self.librarySyncStatus[result.library.id]?.isUpd = false
                 }
                 
                 self.trySendGetBooksMetadataTask(library: result.library)
