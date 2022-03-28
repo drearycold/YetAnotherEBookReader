@@ -67,9 +67,7 @@ struct BookFormatDownloadService {
         
         let downloadDelegate = BookFormatDownloadDelegate(download: modelData.activeDownloads[bookFormatDownloadIndex].value)
         
-        let downloadConfiguration = URLSessionConfiguration.ephemeral
-        downloadConfiguration.urlCredentialStorage = .shared
-
+        let downloadConfiguration = URLSessionConfiguration.default
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
         let downloadTask = downloadSession.downloadTask(withResumeData: resumeData)
         
@@ -120,12 +118,10 @@ struct BookFormatDownloadService {
         
         let downloadDelegate = BookFormatDownloadDelegate(download: bookFormatDownload)
         
-        let downloadConfiguration = URLSessionConfiguration.ephemeral
-        downloadConfiguration.urlCredentialStorage = .shared
-
+        let downloadConfiguration = URLSessionConfiguration.default
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
-        
         let downloadTask = downloadSession.downloadTask(with: url)
+        
         if let request = downloadTask.originalRequest {
             modelData.logStartCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, bookId: book.id, libraryId: book.library.id)
         }
@@ -182,7 +178,7 @@ struct BookFormatDownload {
     var protectionSpace: URLProtectionSpace?
 }
 
-class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownloadDelegate {
+class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadDelegate {
     private var defaultLog = Logger()
 
     var download: BookFormatDownload
@@ -192,6 +188,7 @@ class BookFormatDownloadDelegate: NSObject, URLSessionDelegate, URLSessionDownlo
     
     init(download: BookFormatDownload) {
         self.download = download
+        super.init(download.book.library.server)
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {

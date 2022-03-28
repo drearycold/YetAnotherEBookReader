@@ -47,15 +47,7 @@ struct SettingsView: View {
                     .navigationTitle("Add Server"),
                     isActive: $addServerActive
                 ) {
-                    HStack {
-                        Text("Connect to a new server")
-                        if modelData.booksInShelf.isEmpty {
-                            Spacer()
-                            Text("Start here")
-                                .foregroundColor(.red)
-                                .font(.caption2)
-                        }
-                    }
+                    Text("Connect to a new server")
                 }
                 
                 ForEach(serverList, id: \.self) { server in

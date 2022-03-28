@@ -1421,7 +1421,7 @@ final class ModelData: ObservableObject {
         return book.readPos.getDevices().first
     }
     
-    func updateCurrentPosition(alertDelegate: AlertDelegate) {
+    func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard var readingBook = self.readingBook else {
             return
         }
@@ -1455,7 +1455,7 @@ final class ModelData: ObservableObject {
             if ret != 0 {
                 updatingMetadataStatus = "Internal Error"
                 updatingMetadata = false
-                alertDelegate.alert(msg: updatingMetadataStatus)
+                alertDelegate?.alert(msg: updatingMetadataStatus)
                 return
             }
         }
@@ -1751,11 +1751,13 @@ final class ModelData: ObservableObject {
             
             self.refreshShelfMetadata(with: serverIds)
             
-            self.refreshServerDSHelperConfiguration(
-                with: self.calibreServers.filter {
-                    $0.value.isLocal == false
-                }.map{ $0.key }
-            )
+            if updateLibrary == true, autoUpdateOnly == false {
+                self.refreshServerDSHelperConfiguration(
+                    with: self.calibreServers.filter {
+                        $0.value.isLocal == false
+                    }.map{ $0.key }
+                )
+            }
             
             self.syncLibraries(
                 with: self.calibreServers.filter {
@@ -2024,8 +2026,13 @@ final class ModelData: ObservableObject {
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
         
         var writeSucc = true
+        var progress = 0
+        let total = results.list.book_ids.count
         results.list.book_ids.chunks(size: 1024).forEach { chunk in
             do {
+                DispatchQueue.main.async {
+                    self.librarySyncStatus[library.id]?.msg = "\(progress) / \(total)"
+                }
                 try realm.write {
                     chunk.map {(i:$0, s:$0.description)}.forEach { id in
                         guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
@@ -2037,6 +2044,7 @@ final class ModelData: ObservableObject {
                         ], update: .modified)
                     }
                 }
+                progress += chunk.count
             } catch {
                 writeSucc = false
             }

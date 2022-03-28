@@ -747,7 +747,7 @@ struct BookDetailView: View {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = modelData.calibreServerService.urlSession(server: book.library.server, timeout: 60).dataTask(with: request) { data, response, error in
             if let error = error {
                 // self.handleClientError(error)
                 defaultLog.warning("error: \(error.localizedDescription)")

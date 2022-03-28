@@ -14,23 +14,23 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
-    func urlSession(serverId: String, username: String) -> URLSession {
-        if let session = modelData.metadataSessions[serverId] {
+    func urlSession(server: CalibreServer, timeout: Double = 600) -> URLSession {
+        if let session = modelData.metadataSessions[server.id] {
             return session
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 600
+        urlSessionConfiguration.timeoutIntervalForRequest = timeout
         urlSessionConfiguration.httpMaximumConnectionsPerHost = 2
-        let urlSessionDelegate = CalibreServerTaskDelegate(username)
+        let urlSessionDelegate = CalibreServerTaskDelegate(server)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
-        if Thread.isMainThread {
-            modelData.metadataSessions[serverId] = urlSession
-        } else {
-            DispatchQueue.main.sync {
-                modelData.metadataSessions[serverId] = urlSession
-            }
-        }
+//        if Thread.isMainThread {
+//            modelData.metadataSessions[server.id] = urlSession
+//        } else {
+//            DispatchQueue.main.sync {
+//                modelData.metadataSessions[server.id] = urlSession
+//            }
+//        }
         return urlSession
     }
     
@@ -50,7 +50,7 @@ struct CalibreServerService {
         var urlComponents = URLComponents()
         urlComponents.path = "ajax/library-info"
         
-        guard let url = urlComponents.url(relativeTo: serverUrl), let host = url.host else {
+        guard let url = urlComponents.url(relativeTo: serverUrl)/*, let host = url.host*/ else {
             modelData.calibreServerInfo = serverInfo
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
             modelData.calibreServerUpdating = false
@@ -59,31 +59,12 @@ struct CalibreServerService {
         }
         //url.appendPathComponent("/ajax/library-info", isDirectory: false)
         
-        if server.username.count > 0 && server.password.count > 0 {
-            var authMethod = NSURLAuthenticationMethodDefault
-            if url.scheme == "http" {
-                authMethod = NSURLAuthenticationMethodHTTPDigest
-            }
-            if url.scheme == "https" {
-                authMethod = NSURLAuthenticationMethodHTTPBasic
-            }
-            let protectionSpace = URLProtectionSpace.init(host: host,
-                                                          port: url.port ?? 0,
-                                                          protocol: url.scheme,
-                                                          realm: "calibre",
-                                                          authenticationMethod: authMethod)
-            let userCredential = URLCredential(user: server.username,
-                                               password: server.password,
-                                               persistence: .forSession)
-            URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-        }
-
         let request = URLRequest(url: url)
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, bookId: nil, libraryId: nil)
 
         serverInfo.probing = true
-        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+        let task = urlSession(server: server).dataTask(with: request) { data, response, error in
             defer {
                 modelData.logFinishCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: serverInfo.errorMsg)
                 
@@ -95,7 +76,15 @@ struct CalibreServerService {
                 }
             }
             if let error = error {
-                serverInfo.errorMsg = error.localizedDescription
+                if let urlError = error as? URLError {
+                    if urlError.code == .cancelled {
+                        serverInfo.errorMsg = "Cancelled\nPlease recheck username/password"
+                    } else {
+                        serverInfo.errorMsg = urlError.localizedDescription
+                    }
+                } else {
+                    serverInfo.errorMsg = error.localizedDescription
+                }
                 return
             }
             var dataAsString = ""
@@ -158,7 +147,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        urlComponents.path = "/cdb/cmd/list/0"
+        urlComponents.path.append("/cdb/cmd/list/0")
         urlComponents.queryItems = [URLQueryItem(name: "library_id", value: resultPrev.library.key)]
         
         guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
@@ -186,7 +175,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.library.id)
 
-        let a = urlSession(serverId: resultPrev.library.server.id, username: resultPrev.library.server.username).dataTaskPublisher(for: urlRequest)
+        let a = urlSession(server: resultPrev.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 // print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -236,7 +225,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
 
-        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+        let task = urlSession(server: oldbook.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknonwn Error"
             var bookResult = oldbook
             defer {
@@ -503,7 +492,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
-        let task = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+        let task = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             defer {
                 modelData.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
@@ -553,8 +542,10 @@ struct CalibreServerService {
             return -1
         }
         
-        endpointURLComponent.path = "/cdb/cmd/set_metadata/0"
-        endpointURLComponent.query = "library_id=\(library.name)"
+        endpointURLComponent.path.append("/cdb/cmd/set_metadata/0")
+        endpointURLComponent.queryItems = [
+            URLQueryItem(name: "library_id", value: library.key)
+        ]
         guard let endpointUrl = endpointURLComponent.url else {
             return -1
         }
@@ -578,7 +569,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
 
-        let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+        let updatingMetadataTask = urlSession(server: library.server).dataTask(with: request) { [self] data, response, error in
             print("\(#function) \(data) \(response) \(error)")
             modelData.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
         }
@@ -589,13 +580,15 @@ struct CalibreServerService {
         return 0
     }
     
-    func updateBookReadingPosition(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate, success: (() -> Void)?) -> Int {
+    func updateBookReadingPosition(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate?, success: (() -> Void)?) -> Int {
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
             return -1
         }
         
-        endpointURLComponent.path = "/cdb/cmd/set_metadata/0"
-        endpointURLComponent.query = "library_id=\(book.library.name)"
+        endpointURLComponent.path.append("/cdb/cmd/set_metadata/0")
+        endpointURLComponent.queryItems = [
+            URLQueryItem(name: "library_id", value: book.library.key)
+        ]
         guard let endpointUrl = endpointURLComponent.url else {
             return -1
         }
@@ -631,7 +624,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
         
-        let updatingMetadataTask = URLSession.shared.dataTask(with: request) { [self] data, response, error in
+        let updatingMetadataTask = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             var newBook = book
             
@@ -646,7 +639,7 @@ struct CalibreServerService {
                         modelData.updateBook(book: newBook)
                         success?()
                     } else {
-                        alertDelegate.alert(msg: updatingMetadataStatus)
+                        alertDelegate?.alert(msg: updatingMetadataStatus)
                     }
                 }
             }
@@ -746,10 +739,10 @@ struct CalibreServerService {
     }
 
     func setCredential(server: CalibreServer, task: URLSessionDataTask) {
-        if let protectionSpace = getProtectionSpace(server: server, port: nil),
-            let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {
-            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
-        }
+//        if let protectionSpace = getProtectionSpace(server: server, port: nil),
+//            let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {
+//            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
+//        }
     }
     
     func getProtectionSpace(server: CalibreServer, port: Int?) -> URLProtectionSpace? {
@@ -793,12 +786,8 @@ struct CalibreServerService {
         
         var url = serverInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.timeoutIntervalForRequest = 10
-        let urlSessionDelegate = CalibreServerTaskDelegate(serverInfo.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
-        return urlSession.dataTaskPublisher(for: url)
+        return urlSession(server: serverInfo.server, timeout: 10).dataTaskPublisher(for: url)
             .tryMap { data, response in
                 guard let httpResponse = response as? HTTPURLResponse else {
                     serverInfo.errorMsg = "Cannot get HTTP response"
@@ -839,11 +828,10 @@ struct CalibreServerService {
         }
         
         return CalibreBookTask(
-            serverId: library.server.id,
+            server: library.server,
             bookId: bookId,
             inShelfId: "",
-            url: endpointUrl,
-            username: library.server.username)
+            url: endpointUrl)
     }
     
     func buildMetadataTask(book: CalibreBook) -> CalibreBookTask? {
@@ -857,11 +845,10 @@ struct CalibreServerService {
         }
         
         return CalibreBookTask(
-            serverId: book.library.server.id,
+            server: book.library.server,
             bookId: book.id,
             inShelfId: book.inShelfId,
-            url: endpointUrl,
-            username: book.library.server.username)
+            url: endpointUrl)
     }
     
     func buildBooksMetadataTask(library: CalibreLibrary, books: [String]) -> CalibreBooksTask? {
@@ -885,7 +872,7 @@ struct CalibreServerService {
     }
     
     func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
-        return urlSession(serverId: task.serverId, username: task.username).dataTaskPublisher(for: task.url)
+        return urlSession(server: task.server).dataTaskPublisher(for: task.url)
             .map { $0.data }
             .decode(type: CalibreBookEntry.self, decoder: JSONDecoder())
             .replaceError(with: CalibreBookEntry())
@@ -894,14 +881,14 @@ struct CalibreServerService {
     }
     
     func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
-        return urlSession(serverId: task.serverId, username: task.username)
+        return urlSession(server: task.server)
             .dataTaskPublisher(for: task.url)
             .map { (task, $0.data, $0.response) }
             .eraseToAnyPublisher()
     }
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        return urlSession(serverId: task.library.server.id, username: task.library.server.username)
+        return urlSession(server: task.library.server)
             .dataTaskPublisher(for: task.url)
             .map { result -> CalibreBooksTask in
                 var task = task
@@ -926,9 +913,6 @@ struct CalibreServerService {
         guard let postData = try? JSONEncoder().encode(entry) else {
             return -2
         }
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
@@ -936,7 +920,7 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
+        modelData.calibreServiceCancellable = urlSession(server: book.library.server, timeout: 60).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 print("setLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -982,11 +966,7 @@ struct CalibreServerService {
             return -1
         }
         
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-        
-        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
+        modelData.calibreServiceCancellable = urlSession(server: book.library.server).dataTaskPublisher(for: endpointUrl)
             .tryMap { output in
                 print("getLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -1034,10 +1014,7 @@ struct CalibreServerService {
         guard let postData = try? JSONEncoder().encode(entry) else {
             return -2
         }
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-
+        
         var urlRequest = URLRequest(url: endpointUrl)
         urlRequest.httpMethod = "POST"
         urlRequest.httpBody = postData
@@ -1047,7 +1024,7 @@ struct CalibreServerService {
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
-        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: urlRequest)
+        modelData.calibreServiceCancellable = urlSession(server: book.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 print("updateAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -1139,11 +1116,7 @@ struct CalibreServerService {
          }
          */
         
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        let urlSessionDelegate = CalibreServerTaskDelegate(book.library.server.username)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
-        
-        modelData.calibreServiceCancellable = urlSession.dataTaskPublisher(for: endpointUrl)
+        modelData.calibreServiceCancellable = urlSession(server: book.library.server).dataTaskPublisher(for: endpointUrl)
             .tryMap { output in
                 print("getAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -1208,7 +1181,7 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let a = urlSession(serverId: library.server.id, username: library.server.username)
+        let a = urlSession(server: library.server)
             .dataTaskPublisher(for: urlRequest)
             .tryMap { output in
 //                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
@@ -1255,25 +1228,50 @@ struct CalibreServerInfo: Identifiable {
 }
 
 class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {
-    let username: String
+//    let username: String
     
-    init(_ username: String) {
-        self.username = username
+    var userCredential: URLCredential?
+    
+    init(_ server: CalibreServer) {
+//        if server.username.count > 0,
+//           server.password.count > 0,
+//           let host = url.host {
+//            var authMethod = NSURLAuthenticationMethodDefault
+//            if url.scheme == "http" {
+//                authMethod = NSURLAuthenticationMethodHTTPDigest
+//            }
+//            if url.scheme == "https" {
+//                authMethod = NSURLAuthenticationMethodHTTPBasic
+//            }
+//            let protectionSpace = URLProtectionSpace.init(host: host,
+//                                                          port: url.port ?? 0,
+//                                                          protocol: url.scheme,
+//                                                          realm: "calibre",
+//                                                          authenticationMethod: authMethod)
+//
+//        }
+        if server.username.isEmpty == false,
+           server.password.isEmpty == false {
+            userCredential = URLCredential(user: server.username,
+                                           password: server.password,
+                                           persistence: .forSession)
+        }
     }
     
     func urlSession(_ session: URLSession,
                         task: URLSessionTask,
                   didReceive challenge: URLAuthenticationChallenge,
                   completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        guard challenge.previousFailureCount < 3 else {
+        guard let userCredential = userCredential,
+              challenge.previousFailureCount < 3 else {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
         
         print("CalibreServerTaskDelegate \(task) \(challenge.previousFailureCount) \(challenge.protectionSpace)")
         
-        let credentials = URLCredentialStorage.shared.credentials(for: challenge.protectionSpace)
-        completionHandler(.useCredential, credentials?[username])
+//        let credentials = URLCredentialStorage.shared.credentials(for: challenge.protectionSpace)
+        completionHandler(.useCredential, userCredential)
     }
 }
 

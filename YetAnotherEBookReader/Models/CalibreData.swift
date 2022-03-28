@@ -627,11 +627,10 @@ struct CalibreBookLastReadPositionEntry: Codable {
 }
 
 struct CalibreBookTask {
-    var serverId: String
+    var server: CalibreServer
     var bookId: Int32
     var inShelfId: String
     var url: URL
-    var username: String
 }
 
 struct CalibreBooksTask {

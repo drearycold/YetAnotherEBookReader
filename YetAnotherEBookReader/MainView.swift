@@ -131,7 +131,7 @@ struct MainView: View {
                 }
             }
             else {
-                modelData.updateCurrentPosition(alertDelegate: self)
+                modelData.updateCurrentPosition(alertDelegate: nil)
             }
         }) {
             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {

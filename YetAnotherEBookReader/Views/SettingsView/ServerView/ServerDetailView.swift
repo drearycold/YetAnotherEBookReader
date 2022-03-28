@@ -236,8 +236,10 @@ struct ServerDetailView: View {
             VStack(alignment: .trailing) {
                 if let cnt = modelData.librarySyncStatus[library.id]?.cnt {
                     Text("\(cnt) books")
+                } else if let msg = modelData.librarySyncStatus[library.id]?.msg {
+                    Text("processing\n\(msg)")
                 } else {
-                    Text("processing")
+                    Text("processing ...")
                 }
                 if modelData.librarySyncStatus[library.id]?.isError == true {
                     Text(modelData.librarySyncStatus[library.id]?.msg ?? "Status Unknown")

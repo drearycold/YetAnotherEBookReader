@@ -29,7 +29,7 @@ struct DSReaderHelperConnector {
             URLCredentialStorage.shared.set(userCredential, for: space)
         }
         
-        return calibreServerService.urlSession(serverId: server.id, username: server.username)
+        return calibreServerService.urlSession(server: server)
     }
     
     func endpointConfiguration() -> URLComponents? {

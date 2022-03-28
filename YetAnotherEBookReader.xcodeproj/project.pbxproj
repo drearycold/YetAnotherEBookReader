@@ -1006,11 +1006,11 @@
 		2A2C38D926C4AF9D007E2F3B /* Network */ = {
 			isa = PBXGroup;
 			children = (
-				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
-				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */,
 				2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */,
+				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */,
+				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
