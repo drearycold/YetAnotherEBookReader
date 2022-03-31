@@ -433,6 +433,7 @@ struct BookDetailView: View {
                 }, content: {
                     NavigationView {
                         ActivityList(libraryId: book.library.id, bookId: book.id)
+                            .environmentObject(modelData)
                     }
                 })
             }

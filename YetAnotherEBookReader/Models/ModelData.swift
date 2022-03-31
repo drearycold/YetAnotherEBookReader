@@ -123,12 +123,12 @@ final class ModelData: ObservableObject {
                let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
                 readingBook = convert(bookRealm: bookRealm)
             }
-            if let readingBook = readingBook {
-                calibreServerService.getMetadata(oldbook: readingBook, completion: { newBook in
-                    self.readingBook = newBook
-                    self.bookUpdatedSubject.send(newBook)
-                })
-            }
+//            if let readingBook = readingBook {
+//                calibreServerService.getMetadata(oldbook: readingBook, completion: { newBook in
+//                    self.readingBook = newBook
+//                    self.bookUpdatedSubject.send(newBook)
+//                })
+//            }
         }
     }
     @Published var readingBook: CalibreBook? = nil {
@@ -370,7 +370,8 @@ final class ModelData: ObservableObject {
         self.reloadCustomFonts()
         
         generateDiscovertShelf = booksRefreshedPublisher
-            .subscribe(on: DispatchQueue.global(qos: .userInteractive))
+            .subscribe(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
             .sink(receiveValue: { output in
                 let limit = output.object as? Bool == true ? 10 : 100
                 let earlyCut = output.object as? Bool == true ? true : false
@@ -1925,7 +1926,7 @@ final class ModelData: ObservableObject {
                 formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
                 formatter.timeZone = .current
                 let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
-                filter = "last_modified:>=\(lastModifiedStr)"
+                filter = "last_modified:\">=\(lastModifiedStr)\""
             }
             print("\(#function) syncLibraryPublisher \(customColumnResult.library.id) \(filter)")
             
@@ -2132,10 +2133,12 @@ final class ModelData: ObservableObject {
                     result.books.forEach { id in
                         guard let obj = realm.object(
                                 ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)),
-                              let entryOptional = entries[id],
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)) else { return }
+                        guard let entryOptional = entries[id],
                               let entry = entryOptional,
                               let root = json?[id] as? NSDictionary else {
+                            // null data, treat as delted, update lastSynced to lastModified to prevent further actions
+                            obj.lastSynced = obj.lastModified
                             return
                         }
                         

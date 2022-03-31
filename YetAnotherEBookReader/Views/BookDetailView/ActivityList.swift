@@ -14,13 +14,16 @@ struct ActivityList: View {
     var bookId: Int32? = nil
     
     var body: some View {
-        List {
-            ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
-                NavigationLink(destination: detail(obj: obj), label: {
-                    row(obj: obj)
-                })
+        NavigationView {
+            List {
+                ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
+                    NavigationLink(destination: detail(obj: obj), label: {
+                        row(obj: obj)
+                    })
+                }
             }
         }.frame(maxWidth: 500)
+        .navigationViewStyle(StackNavigationViewStyle())
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
     }

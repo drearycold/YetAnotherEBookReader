@@ -172,6 +172,8 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
         urlRequest.addValue("gzip", forHTTPHeaderField: "Accept-Encoding")
         
+        print("\(#function) listRequest \(endpointUrl.absoluteString) \(String(data: data, encoding: .utf8))")
+        
         let startDatetime = Date()
         modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.library.id)
 

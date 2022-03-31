@@ -132,6 +132,7 @@ struct MainView: View {
             }
             else {
                 modelData.updateCurrentPosition(alertDelegate: nil)
+                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
             }
         }) {
             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {

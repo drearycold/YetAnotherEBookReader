@@ -995,14 +995,6 @@
 			path = LibraryOptions;
 			sourceTree = "<group>";
 		};
-		2A270B23272F7DE7006552A3 /* ActivityView */ = {
-			isa = PBXGroup;
-			children = (
-				2A270B24272F7E07006552A3 /* ActivityList.swift */,
-			);
-			path = ActivityView;
-			sourceTree = "<group>";
-		};
 		2A2C38D926C4AF9D007E2F3B /* Network */ = {
 			isa = PBXGroup;
 			children = (
@@ -1099,7 +1091,6 @@
 		2ABB914C261F1A47004AA7C0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				2A270B23272F7DE7006552A3 /* ActivityView */,
 				2A1A4BF42616CCD900E95ED5 /* ADViews */,
 				6E7733BC2664E747008318C3 /* BookDetailView */,
 				2A84650C269AE539000638B2 /* FolioReaderView */,
@@ -1204,6 +1195,7 @@
 		6E7733BC2664E747008318C3 /* BookDetailView */ = {
 			isa = PBXGroup;
 			children = (
+				2A270B24272F7E07006552A3 /* ActivityList.swift */,
 				2ABB914D261F1A47004AA7C0 /* BookDetailView.swift */,
 				2AA5DEB626D3571A00954255 /* ReadingPositionListView.swift */,
 				2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */,
