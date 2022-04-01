@@ -50,19 +50,15 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 guard let coverUrl = book.coverURL else { return nil }
                 guard let readerInfo = modelData.prepareBookReading(book: book) else { return nil }
                 
-                let bookHasUpdate = book.formats.values.reduce(false) { hasUpdate, formatInfo in
-                    guard formatInfo.cached else { return hasUpdate }
-                    if formatInfo.cacheUptoDate {
-                        return hasUpdate
-                    } else {
-                        return true
-                    }
+                let bookUptoDate = book.formats.allSatisfy {
+                    $1.cached == false ||
+                        ($1.cached && $1.cacheUptoDate)
                 }
                 var bookStatus = BookModel.BookStatus.READY
                 if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
                     bookStatus = .NOCONNECT
                 }
-                if bookHasUpdate {
+                if !bookUptoDate {
                     bookStatus = .HASUPDATE
                 }
                 if modelData.activeDownloads.contains(where: { (url, download) in
@@ -137,6 +133,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         )
         #if DEBUG
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
+        GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ "23e0202ad7a1682137a4ad8bccc0e35b" ]
         #else
         bannerView.adUnitID = modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
         #endif
@@ -308,7 +305,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             guard let format = Format(rawValue: $0) else { return }
             let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
             if started {
-                
+                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
             }
         }
     }

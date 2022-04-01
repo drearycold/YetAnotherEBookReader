@@ -1798,10 +1798,11 @@ final class ModelData: ObservableObject {
                 }
             }
             .compactMap(calibreServerService.buildMetadataTask(book:))
-            .publisher.flatMap(calibreServerService.getMetadata(task:))
+            .publisher
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .flatMap(calibreServerService.getMetadata(task:))
             .collect()
             .eraseToAnyPublisher()
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .sink { results in
                 let books = results.compactMap { (task, entry) -> CalibreBook? in
                     //print("refreshShelfMetadata \(task) \(entry)")
