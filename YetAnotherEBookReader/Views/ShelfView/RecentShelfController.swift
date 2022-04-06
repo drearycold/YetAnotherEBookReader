@@ -57,14 +57,15 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 var bookStatus = BookModel.BookStatus.READY
                 if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
                     bookStatus = .NOCONNECT
-                }
-                if !bookUptoDate {
-                    bookStatus = .HASUPDATE
-                }
-                if modelData.activeDownloads.contains(where: { (url, download) in
-                    download.isDownloading && download.book.inShelfId == inShelfId
-                }) {
-                    bookStatus = .DOWNLOADING
+                } else {
+                    if !bookUptoDate {
+                        bookStatus = .HASUPDATE
+                    }
+                    if modelData.activeDownloads.contains(where: { (url, download) in
+                        download.isDownloading && download.book.inShelfId == inShelfId
+                    }) {
+                        bookStatus = .DOWNLOADING
+                    }
                 }
                 if book.library.server.isLocal {
                     bookStatus = .LOCAL
