@@ -7,7 +7,11 @@ target 'YetAnotherEBookReader' do
 
   # Pods for YetAnotherEBookReader
   pod 'Google-Mobile-Ads-SDK'
-  pod 'SSZipArchive'
+  pod 'Kingfisher/SwiftUI', '~> 5.0'
+  # pod 'Realm', '~> 5.0'
+  # pod 'RealmSwift', '~> 5.0'
+  pod 'ShelfView', :path => '../ShelfView-iOS'  
+  pod 'FolioReaderKit', path: '../FolioReaderKit'
 
   target 'YetAnotherEBookReaderTests' do
     inherit! :search_paths
@@ -17,5 +21,18 @@ target 'YetAnotherEBookReader' do
   target 'YetAnotherEBookReaderUITests' do
     # Pods for testing
   end
+
+end
+
+target 'YetAnotherEBookReader-Catalyst' do
+  # Comment the next line if you don't want to use dynamic frameworks
+  use_frameworks!
+
+  # Pods for YetAnotherEBookReader
+  pod 'Kingfisher/SwiftUI', '~> 5.0'
+  pod 'ShelfView', :path => '../ShelfView-iOS'  
+  pod 'FolioReaderKit', path: '../FolioReaderKit'
+  # pod 'Realm', '~> 5.0'
+  # pod 'RealmSwift', '~> 5.0'
 
 end

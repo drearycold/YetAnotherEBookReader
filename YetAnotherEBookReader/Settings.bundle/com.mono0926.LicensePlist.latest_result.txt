@@ -1,0 +1,203 @@
+name: AEXML, nameSpecified: 
+body: Copyright (c) 2014-2…
+version: 4.3.3
+
+name: AEXML, nameSpecified: 
+body: Copyright (c) 2014-2…
+version: 4.3.3
+
+name: AEXML, nameSpecified: 
+body: Copyright (c) 2014-2…
+version: 4.3.3
+
+name: FolioReaderKit, nameSpecified: 
+body: Copyright (c) 2015-2…
+version: 1.9.0
+
+name: FolioReaderKit, nameSpecified: 
+body: Copyright (c) 2015-2…
+version: 1.9.0
+
+name: FolioReaderKit, nameSpecified: 
+body: Copyright (c) 2015-2…
+version: 1.9.0
+
+name: FontBlaster, nameSpecified: 
+body: The MIT License (MIT…
+version: 4.1.0
+
+name: FontBlaster, nameSpecified: 
+body: The MIT License (MIT…
+version: 4.1.0
+
+name: FontBlaster, nameSpecified: 
+body: The MIT License (MIT…
+version: 4.1.0
+
+name: Google-Mobile-Ads-SDK, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 8.12.0
+
+name: Google-Mobile-Ads-SDK, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 8.12.0
+
+name: GoogleAppMeasurement, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 8.8.0
+
+name: GoogleAppMeasurement, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 8.8.0
+
+name: GoogleUserMessagingPlatform, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 2.0.0
+
+name: GoogleUserMessagingPlatform, nameSpecified: 
+body: Copyright 2021 Googl…
+version: 2.0.0
+
+name: GoogleUtilities, nameSpecified: 
+body: 
+                   …
+version: 7.5.2
+
+name: GoogleUtilities, nameSpecified: 
+body: 
+                   …
+version: 7.5.2
+
+name: Kingfisher, nameSpecified: 
+body: The MIT License (MIT…
+version: 5.15.8
+
+name: Kingfisher, nameSpecified: 
+body: The MIT License (MIT…
+version: 5.15.8
+
+name: Kingfisher, nameSpecified: 
+body: The MIT License (MIT…
+version: 5.15.8
+
+name: MenuItemKit, nameSpecified: 
+body: Copyright (c) 2016 —…
+version: 3.1.3
+
+name: MenuItemKit, nameSpecified: 
+body: Copyright (c) 2016 —…
+version: 3.1.3
+
+name: MenuItemKit, nameSpecified: 
+body: Copyright (c) 2016 —…
+version: 3.1.3
+
+name: nanopb, nameSpecified: 
+body: Copyright (c) 2011 P…
+version: 2.30908.0
+
+name: nanopb, nameSpecified: 
+body: Copyright (c) 2011 P…
+version: 2.30908.0
+
+name: PromisesObjC, nameSpecified: 
+body: 
+                   …
+version: 2.0.0
+
+name: PromisesObjC, nameSpecified: 
+body: 
+                   …
+version: 2.0.0
+
+name: ShelfView, nameSpecified: 
+body: Copyright (c) 2017 A…
+version: 1.1
+
+name: ShelfView, nameSpecified: 
+body: Copyright (c) 2017 A…
+version: 1.1
+
+name: ShelfView, nameSpecified: 
+body: Copyright (c) 2017 A…
+version: 1.1
+
+name: SSZipArchive, nameSpecified: 
+body: Copyright (c) 2010-2…
+version: 2.1.1
+
+name: SSZipArchive, nameSpecified: 
+body: Copyright (c) 2010-2…
+version: 2.1.1
+
+name: SSZipArchive, nameSpecified: 
+body: Copyright (c) 2010-2…
+version: 2.1.1
+
+name: ZFDragableModalTransition, nameSpecified: 
+body: The MIT License (MIT…
+version: 0.6
+
+name: ZFDragableModalTransition, nameSpecified: 
+body: The MIT License (MIT…
+version: 0.6
+
+name: ZFDragableModalTransition, nameSpecified: 
+body: The MIT License (MIT…
+version: 0.6
+
+name: CryptoSwift, nameSpecified: , owner: krzyzanowskim, version: 1.3.8
+
+name: Fuzi, nameSpecified: , owner: cezheng, version: 3.1.3
+
+name: GCDWebServer, nameSpecified: , owner: edrlab, version: 3.6.3
+
+name: Kingfisher, nameSpecified: , owner: onevcat, version: 5.15.8
+
+name: MBProgressHUD, nameSpecified: , owner: jdg, version: 1.2.0
+
+name: Minizip, nameSpecified: , owner: dexman, version: 1.4.0
+
+name: r2-lcp-swift, nameSpecified: , owner: readium, version: 2.0.0
+
+name: r2-navigator-swift, nameSpecified: , owner: readium, version: 2.0.0
+
+name: r2-opds-swift, nameSpecified: , owner: readium, version: 2.0.0
+
+name: r2-shared-swift, nameSpecified: , owner: readium, version: 2.0.0
+
+name: r2-streamer-swift, nameSpecified: , owner: readium, version: 2.0.0
+
+name: r2-testapp-swift, nameSpecified: , owner: readium, version: 2.2.0
+
+name: realm-cocoa, nameSpecified: , owner: realm, version: v5.5.2
+
+name: SQLite.swift, nameSpecified: , owner: stephencelis, version: 0.12.2
+
+name: SwiftSoup, nameSpecified: , owner: scinfu, version: 2.3.2
+
+name: ZIPFoundation, nameSpecified: , owner: weichsel, version: 0.9.11
+
+name: AEXML, nameSpecified: AEXML, owner: tadija, version: 4.6.0
+
+name: FolioReaderKit, nameSpecified: FolioReaderKit, owner: drearycold, version: 
+
+name: FontBlaster, nameSpecified: FontBlaster, owner: ArtSabintsev, version: 5.1.3
+
+name: Kingfisher, nameSpecified: Kingfisher, owner: onevcat, version: 5.15.8
+
+name: MenuItemKit, nameSpecified: MenuItemKit, owner: cxa, version: 3.2.2
+
+name: realm-cocoa, nameSpecified: Realm, owner: realm, version: 3.21.0
+
+name: realm-core, nameSpecified: RealmCore, owner: realm, version: 5.23.5
+
+name: ShelfView-iOS, nameSpecified: ShelfView-iOS, owner: drearycold, version: 
+
+name: ZFDragableModalTransition, nameSpecified: ZFDragableModalTransition, owner: drearycold, version: 0.6.5
+
+name: ZipArchive, nameSpecified: ZipArchive, owner: drearycold, version: 2.2.5
+
+add-version-numbers: true
+
+LicensePlist Version: 3.14.4

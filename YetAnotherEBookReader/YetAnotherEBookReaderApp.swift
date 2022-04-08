@@ -9,15 +9,32 @@ import SwiftUI
 
 @main
 struct YetAnotherEBookReaderApp: App {
-    private var modelData = ModelData()
+    @StateObject private var modelData = ModelData()
+    @Environment(\.scenePhase) private var scenePhase
+    
     var body: some Scene {
         WindowGroup {
 //            ContentView()
 //                .environment(\.managedObjectContext, persistenceController.container.viewContext)
             MainView()
                 .environmentObject(modelData)
-            
-//            ReaderView()
+        }
+        .onChange(of: scenePhase) { newScenePhase in
+            print("newScenePhase \(scenePhase) -> \(newScenePhase)")
+
+            switch(newScenePhase) {
+            case .active:
+                modelData.registerGetBooksMetadataCancellable()
+                modelData.probeServersReachability(with: [], updateLibrary: true)
+                break
+            case .inactive:
+                break
+            case .background:
+                NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterBackground))
+                break
+            @unknown default:
+                break
+            }
         }
     }
 }
