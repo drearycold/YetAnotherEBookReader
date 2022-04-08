@@ -2324,7 +2324,7 @@ final class ModelData: ObservableObject {
         }
         results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
         print("\(#function) \(results.count)")
-        return results.map {$0}
+        return results.map {$0}.filter { $0.endPosition != nil }
     }
     
     func getReadingStatistics(bookId: Int32? = nil, libraryId: String? = nil, limitDays: Int = 7) -> [Double] {

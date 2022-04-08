@@ -184,15 +184,6 @@ struct BookDetailView: View {
                 .scaledToFit()
             Button(action: {
                 if (book.inShelf) {
-//                    if _viewModel.listVM == nil {
-//                        _viewModel.listVM = ReadingPositionListViewModel(
-//                            modelData: modelData, book: book, positions: book.readPos.getDevices()
-//                        )
-//                    } else {
-//                        _viewModel.listVM.book = book
-//                        _viewModel.listVM.positions = book.readPos.getDevices()
-//                    }
-//                    presentingReadPositionList = true
                     presentingReadingSheet = true
                 } else {
                     if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
@@ -350,28 +341,40 @@ struct BookDetailView: View {
         HStack {
             metadataIcon(systemName: "text.book.closed")
             
-            if let readDateGR = book.readDateGRByLocale {
-                Image(systemName: "arrow.down.to.line")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 20, height: 20)
-                Text(readDateGR)
-            } else if let readProgressGR = book.readProgressGRDescription {
-                Image(systemName: "hourglass")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 20, height: 20)
-                Text("\(readProgressGR)%")
-            } else if let position = modelData.getSelectedReadingPosition(book: book) {
-                Image(systemName: "book.circle")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 20, height: 20)
-                Text(String(format: "%.1f%%", position.lastProgress))
-                Text("on")
-                Text(position.id)
-            } else {
-                Text("No Reading History")
+            Button(action:{
+                if _viewModel.listVM == nil {
+                    _viewModel.listVM = ReadingPositionListViewModel(
+                        modelData: modelData, book: book, positions: book.readPos.getDevices()
+                    )
+                } else {
+                    _viewModel.listVM.book = book
+                    _viewModel.listVM.positions = book.readPos.getDevices()
+                }
+                presentingReadPositionList = true
+            }) {
+                if let readDateGR = book.readDateGRByLocale {
+                    Image(systemName: "arrow.down.to.line")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                    Text(readDateGR)
+                } else if let readProgressGR = book.readProgressGRDescription {
+                    Image(systemName: "hourglass")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                    Text("\(readProgressGR)%")
+                } else if let position = modelData.getSelectedReadingPosition(book: book) {
+                    Image(systemName: "book.circle")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 20, height: 20)
+                    Text(String(format: "%.1f%%", position.lastProgress))
+                    Text("on")
+                    Text(position.id)
+                } else {
+                    Text("No Reading History")
+                }
             }
         }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
             readingPositionHistoryViewPresenting = false
@@ -706,6 +709,7 @@ struct BookDetailView: View {
                 }
             }.disabled(!modelData.updatingMetadataSucceed)
         }
+        
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
                 guard modelData.readingBook != nil else { return }
