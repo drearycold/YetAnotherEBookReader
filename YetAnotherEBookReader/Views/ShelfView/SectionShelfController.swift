@@ -67,12 +67,12 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 x: 0,
                 y: 0,
                 width: view.frame.width,
-                height: view.frame.height - kGADAdSizeBanner.size.height
+                height: view.frame.height - GADAdSizeBanner.size.height
             )
         )
         shelfView.translatesAutoresizingMaskIntoConstraints = false
         
-        print("SECTIONFRAME \(view.frame) \(kGADAdSizeBanner.size) \(tabBarHeight)")
+        print("SECTIONFRAME \(view.frame) \(GADAdSizeBanner.size) \(tabBarHeight)")
         
         shelfView.delegate = self
         view.addSubview(shelfView)
@@ -81,8 +81,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             frame: CGRect(
                 x: 0,
                 y: shelfView.frame.maxY,
-                width:  kGADAdSizeBanner.size.width,
-                height: kGADAdSizeBanner.size.height))
+                width:  GADAdSizeBanner.size.width,
+                height: GADAdSizeBanner.size.height))
         #if DEBUG
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ "23e0202ad7a1682137a4ad8bccc0e35b" ]
@@ -92,7 +92,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         bannerView.rootViewController = self
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false
-        bannerView.adSize = kGADAdSizeBanner
+        bannerView.adSize = GADAdSizeBanner
         
         view.addSubview(bannerView)
         
@@ -143,16 +143,16 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         #if canImport(GoogleMobileAds)
         if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .regular {
-            bannerSize = kGADAdSizeLeaderboard
+            bannerSize = GADAdSizeLeaderboard
         }
         if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .regular {
-            bannerSize = kGADAdSizeLargeBanner
+            bannerSize = GADAdSizeLargeBanner
         }
         if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .compact {
-            bannerSize = kGADAdSizeFullBanner
+            bannerSize = GADAdSizeFullBanner
         }
         if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .compact {
-            bannerSize = kGADAdSizeBanner
+            bannerSize = GADAdSizeBanner
         }
         
         bannerView.adSize = bannerSize

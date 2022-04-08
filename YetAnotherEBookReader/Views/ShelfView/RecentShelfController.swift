@@ -23,7 +23,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 //    var shelfBookSink: AnyCancellable?
     
     #if canImport(GoogleMobileAds)
-    var bannerSize = kGADAdSizeBanner
+    var bannerSize = GADAdSizeBanner
     var bannerView: GADBannerView!
     var gadRequestInitialized = false
     #else
@@ -129,8 +129,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             frame: CGRect(
                 x: 0,
                 y: shelfView.frame.maxY,
-                width:  kGADAdSizeBanner.size.width,
-                height: kGADAdSizeBanner.size.height)
+                width:  GADAdSizeBanner.size.width,
+                height: GADAdSizeBanner.size.height)
         )
         #if DEBUG
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
@@ -141,7 +141,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         bannerView.rootViewController = self
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false
-        bannerView.adSize = kGADAdSizeBanner
+        bannerView.adSize = GADAdSizeBanner
 
         view.addSubview(bannerView)
         
@@ -184,16 +184,16 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         #if canImport(GoogleMobileAds)
         if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .regular {
-            bannerSize = kGADAdSizeLeaderboard
+            bannerSize = GADAdSizeLeaderboard
         }
         if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .regular {
-            bannerSize = kGADAdSizeLargeBanner
+            bannerSize = GADAdSizeLargeBanner
         }
         if newCollection.horizontalSizeClass == .regular && newCollection.verticalSizeClass == .compact {
-            bannerSize = kGADAdSizeFullBanner
+            bannerSize = GADAdSizeFullBanner
         }
         if newCollection.horizontalSizeClass == .compact && newCollection.verticalSizeClass == .compact {
-            bannerSize = kGADAdSizeBanner
+            bannerSize = GADAdSizeBanner
         }
         
         bannerView.adSize = bannerSize
