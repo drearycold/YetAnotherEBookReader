@@ -140,8 +140,8 @@ struct ReadingPositionHistoryView: View {
                 Text("Chapter: \(position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))")
                 
                 HStack {
-                    Text("Chapter Left:")
-                    Text("\(String(format: "%.2f%%", 100 - position.lastChapterProgress))")
+                    Text("Chapter Progress:")
+                    Text("\(String(format: "%.2f%%", position.lastChapterProgress))")
                 }
                 
                 HStack {
@@ -154,13 +154,13 @@ struct ReadingPositionHistoryView: View {
                 }
                 
                 HStack {
-                    Text("Book Left:")
-                    Text("\(String(format: "%.2f%% Left", 100 - position.lastProgress))")
+                    Text("Book Progress:")
+                    Text("\(String(format: "%.2f%% Left", position.lastProgress))")
                 }
                 
                 HStack {
                     Text("Datetime:")
-                    Text(position.epochLocaleLong ?? "Unknown")
+                    Text(position.epochLocaleLong)
                 }
                 #if DEBUG
                 HStack {

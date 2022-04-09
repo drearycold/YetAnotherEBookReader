@@ -236,10 +236,9 @@ struct MainView: View {
                             guard let localLibrary = modelData.localLibrary else { return }
                             let book = CalibreBook(id: bookId, library: localLibrary)
                             modelData.readingBookInShelfId = book.inShelfId
-                            guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+                            guard modelData.readingBook != nil, modelData.readerInfo != nil else { return }
 
                             modelData.presentingEBookReaderFromShelf = true
-                            modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
                         }),
                         .cancel()
                     ]

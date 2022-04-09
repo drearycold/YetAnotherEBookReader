@@ -200,7 +200,6 @@ struct ReadingPositionDetailView: View {
         _VM.modelData.updatedReadingPosition.update(with: _VM.position)
         
         presentingReadSheet = true
-        _VM.modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: _VM.position, startDatetime: Date())
     }
 
     func updatePosition() {

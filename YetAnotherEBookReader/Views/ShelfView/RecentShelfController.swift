@@ -242,11 +242,9 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+        guard modelData.readingBook != nil, modelData.readerInfo != nil else { return }
 
         modelData.presentingEBookReaderFromShelf = true
-        
-        modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: readerInfo.position, startDatetime: Date())
     }
     
     func onBookLongClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {

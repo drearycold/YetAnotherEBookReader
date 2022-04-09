@@ -183,7 +183,7 @@ struct BookDetailView: View {
                 .resizable()
                 .scaledToFit()
             Button(action: {
-                if (book.inShelf) {
+                if book.inShelf, modelData.readerInfo != nil {
                     presentingReadingSheet = true
                 } else {
                     if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
