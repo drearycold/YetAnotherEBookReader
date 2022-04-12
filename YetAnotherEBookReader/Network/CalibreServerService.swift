@@ -34,7 +34,7 @@ struct CalibreServerService {
         return urlSession
     }
     
-    func getServerLibraries(server: CalibreServer) {
+    func getServerLibraries(server: CalibreServer) -> URLSessionDataTask? {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
 
@@ -44,7 +44,7 @@ struct CalibreServerService {
             modelData.calibreServerInfo = serverInfo
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
             modelData.calibreServerUpdating = false
-            return
+            return nil
         }
         
         var urlComponents = URLComponents()
@@ -55,7 +55,7 @@ struct CalibreServerService {
             modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
             modelData.calibreServerUpdating = false
 
-            return
+            return nil
         }
         //url.appendPathComponent("/ajax/library-info", isDirectory: false)
         
@@ -129,9 +129,10 @@ struct CalibreServerService {
         }
 
         modelData.calibreServerUpdatingStatus = "Connecting"
-        setCredential(server: server, task: task)
 
         task.resume()
+        
+        return task
     }
     
     func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, filter: String = "") -> AnyPublisher<CalibreSyncLibraryResult, Never> {
@@ -293,7 +294,6 @@ struct CalibreServerService {
         
         modelData.updatingMetadata = true
         
-        setCredential(server: oldbook.library.server, task: task)
         task.resume()
     }
     
@@ -534,7 +534,6 @@ struct CalibreServerService {
         
         modelData.updatingMetadata = true
 
-        setCredential(server: book.library.server, task: task)
         task.resume()
     }
     
@@ -576,7 +575,6 @@ struct CalibreServerService {
             modelData.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
         }
         
-        setCredential(server: library.server, task: updatingMetadataTask)
         updatingMetadataTask.resume()
         
         return 0
@@ -713,7 +711,6 @@ struct CalibreServerService {
         
         modelData.updatingMetadata = true
         
-        setCredential(server: book.library.server, task: updatingMetadataTask)
         updatingMetadataTask.resume()
         
         return 0
@@ -740,13 +737,6 @@ struct CalibreServerService {
         return 0
     }
 
-    func setCredential(server: CalibreServer, task: URLSessionDataTask) {
-//        if let protectionSpace = getProtectionSpace(server: server, port: nil),
-//            let credential = URLCredentialStorage.shared.credentials(for: protectionSpace)?[server.username] {
-//            URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: task)
-//        }
-    }
-    
     func getProtectionSpace(server: CalibreServer, port: Int?) -> URLProtectionSpace? {
         guard server.username.count > 0 && server.password.count > 0,
               let url = getServerUrlByReachability(server: server),

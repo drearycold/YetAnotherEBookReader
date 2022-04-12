@@ -28,6 +28,7 @@ struct AddModServerView: View {
     
     @State private var dataAction = ""
     @State private var dataLoading = false
+    @State private var dataLoadingTask: URLSessionDataTask? = nil
     
     @State private var libraryList = [String]()
     
@@ -105,7 +106,12 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    Text(modelData.calibreServerUpdatingStatus ?? "Unknown")
+                    if modelData.calibreServerUpdating {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                    } else {
+                        Text(modelData.calibreServerUpdatingStatus ?? "Unknown")
+                    }
                     
                     if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
                         Image(
@@ -136,128 +142,30 @@ struct AddModServerView: View {
         .onAppear {
             resetStates()
         }
+        .sheet(isPresented: $serverCalibreInfoPresenting, onDismiss: {
+            dataAction = ""
+            dataLoading = false
+            dataLoadingTask?.cancel()
+            dataLoadingTask = nil
+            modelData.calibreServerUpdating = false
+        }, content: {
+            serverCalibreInfoSheetView()
+        })
         .alert(item: $alertItem) { item in
-            if item.id == "AddServer" {
+            if item.id == "Exist" {
                 return Alert(
-                    title: Text("Add Server \(calibreServerName)"),
-                    message: Text(item.msg!),
-                    primaryButton: .default(
-                        Text("Confirm")
-                    ) {
-                        addServerConfirmed()
-                    },
-                    secondaryButton: .cancel() {
-                        alertItem = nil
-                    }
-                )
-            }
-            if item.id == "AddServerExists" {
-                return Alert(
-                    title: Text("Add Server Error"),
-                    message: Text("A server with the same address and username already exists"),
-                    dismissButton: .cancel(){
-                        alertItem = nil
-                    }
-                )
-            }
-            if item.id == "ModServerExists" {
-                return Alert(
-                    title: Text("Modify Server Errer"),
-                    message: Text("A server with the same address and username already exists"),
-                    dismissButton: .cancel(){
-                        alertItem = nil
-                    }
-                )
-            }
-            if item.id == "ModServer" {
-                return Alert(
-                    title: Text("Mod Server"),
+                    title: Text("\(dataAction) Server Errer"),
                     message: Text(item.msg ?? ""),
-                    primaryButton: .default(
-                        Text("Confirm")
-                    ) {
-                        modServerConfirmed()
-                    },
-                    secondaryButton: .cancel(){
+                    dismissButton: .cancel(){
                         alertItem = nil
                     }
                 )
             }
-            return Alert(title: Text("Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
+            return Alert(title: Text("Unknown Error"), message: Text(item.id + "\n" + (item.msg ?? "")), dismissButton: .cancel() {
                 item.action?()
             })
         }
-        .onChange(of: modelData.calibreServerUpdating) { newStatus in
-            //handle sync library action
-            guard dataLoading, newStatus == false  else { return }   //triggered by other initiator
-            
-            guard let serverInfo = modelData.calibreServerInfo else { return }
-            
-            if dataAction == "Sync" {
-                if modelData.calibreServerUpdatingStatus == "Success" {
-                    modelData.updateServerLibraryInfo(serverInfo: serverInfo)
-                    dataLoading = false
-                } else {
-                    self.alertItem = AlertItem(id: "Sync Error", msg: serverInfo.errorMsg, action: {
-                        dataLoading = false
-                    })
-                }
-            }
-            if dataAction == "Test" {
-                if modelData.calibreServerUpdatingStatus == "Success" {
-                    dataLoading = false
-                    libraryList = serverInfo.libraryMap.values.sorted()
-                } else {
-                    self.alertItem = AlertItem(id: "Sync Error", msg: serverInfo.errorMsg, action: {
-                        dataLoading = false
-                    })
-                }
-            }
-            if dataAction == "Add" {
-                if modelData.calibreServerUpdatingStatus == "Success" {
-                    dataLoading = false
-                    libraryList = serverInfo.libraryMap.values.sorted()
-                    
-                    var content = "Library List:"
-                    serverInfo.libraryMap
-                        .sorted { $0.1 < $1.1 }
-                        .forEach { content += "\n\($0.1)" }
-                    
-                    
-                    alertItem = AlertItem(id: "AddServer", msg: content)
-                } else {
-                    self.alertItem = AlertItem(id: "Add Error", msg: serverInfo.errorMsg, action: {
-                        dataLoading = false
-                    })
-                }
-            }
-            if dataAction == "Mod" {
-                if modelData.calibreServerUpdatingStatus == "Success" {
-                    dataLoading = false
-                    
-                    var content = "Library List:"
-                    serverInfo.libraryMap
-                        .sorted { $0.1 < $1.1 }
-                        .forEach { content += "\n\($0.1)" }
-                    
-                    alertItem = AlertItem(id: "ModServer", msg: content)
-                } else {
-                    self.alertItem = AlertItem(id: "Mod Error", msg: serverInfo.errorMsg, action: {
-                        dataLoading = false
-                    })
-                }
-            }
-            
-        }.toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(action:{
-                    dataAction = "Test"
-                    processUrlInputs()
-                    testServerConfirmButtonAction()
-                }) {
-                    Text("Test")
-                }
-            }
+        .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
                     if server.baseUrl.isEmpty {
@@ -272,6 +180,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "square.and.arrow.down")
                 }
+                .disabled(modelData.calibreServerUpdating)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -279,9 +188,55 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
+                .disabled(modelData.calibreServerUpdating)
             }
         }
         
+    }
+    
+    @ViewBuilder
+    func serverCalibreInfoSheetView() -> some View {
+        List {
+            Section(header: Text("Server Status")) {
+                Text(modelData.calibreServerUpdating ? "Connecting" : modelData.calibreServerUpdatingStatus ?? "Unexcepted Error")
+            }
+            
+            Button(action: {
+                serverCalibreInfoPresenting = false
+            }) {
+                Text("Cancel")
+            }
+            
+            Button(action: {
+                if dataAction == "Add" {
+                    addServerConfirmed()
+                } else if dataAction == "Mod" {
+                    modServerConfirmed()
+                }
+                serverCalibreInfoPresenting = false
+            }) {
+                if dataAction == "Add" {
+                    Text("Add")
+                } else if dataAction == "Mod" {
+                    Text("Update")
+                } else {
+                    Text("OK")
+                }
+            }.disabled(modelData.calibreServerUpdatingStatus != "Success")
+            
+            Section(header: Text("Library List")) {
+                if let updatingStatus = modelData.calibreServerUpdatingStatus,
+                   updatingStatus == "Success",
+                   let serverInfo = modelData.calibreServerInfo {
+                    ForEach(serverInfo.libraryMap.values.sorted(), id: \.self) {
+                        Text($0)
+                    }
+                } else {
+                    Text("Cannot Fetch Library List")
+                }
+                
+            }
+        }
     }
     
     @ViewBuilder
@@ -388,14 +343,19 @@ struct AddModServerView: View {
         }
         let calibreServer = CalibreServer(
             name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
-        if modelData.calibreServers[calibreServer.id] != nil {
-            alertItem = AlertItem(id: "AddServerExists")
+        if let existingServer = modelData.calibreServers[calibreServer.id] {
+            alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
             return
         }
 
         modelData.calibreServerUpdating = true
         dataLoading = true
-        modelData.calibreServerService.getServerLibraries(server: calibreServer)
+        if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
+            dataLoadingTask = task
+            serverCalibreInfoPresenting = true
+        } else {
+            alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
+        }
     }
     
     private func addServerConfirmed() {
@@ -439,14 +399,20 @@ struct AddModServerView: View {
             server = newServer
             isActive = false
         } else {
-            if modelData.calibreServers[newServer.id] != nil {
-                alertItem = AlertItem(id: "ModServerExists")
+            if let existingServer = modelData.calibreServers[newServer.id] {
+                alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
                 return
             }
 
             modelData.calibreServerUpdating = true
             dataLoading = true
-            modelData.calibreServerService.getServerLibraries(server: newServer)
+            
+            if let task = modelData.calibreServerService.getServerLibraries(server: newServer) {
+                dataLoadingTask = task
+                serverCalibreInfoPresenting = true
+            } else {
+                alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
+            }
         }
     }
     
@@ -463,15 +429,6 @@ struct AddModServerView: View {
         server = newServer
         
         isActive = false
-    }
-    
-    private func testServerConfirmButtonAction() {
-        let newServer = CalibreServer(
-            name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
-        
-        modelData.calibreServerUpdating = true
-        dataLoading = true
-        modelData.calibreServerService.getServerLibraries(server: newServer)
     }
 }
 
