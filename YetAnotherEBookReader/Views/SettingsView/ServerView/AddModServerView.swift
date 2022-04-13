@@ -26,8 +26,7 @@ struct AddModServerView: View {
     @State private var calibrePassword = ""
     @State private var calibrePasswordVisible = false
     
-    @State private var dataAction = ""
-    @State private var dataLoading = false
+    @State private var dataAction: String?
     @State private var dataLoadingTask: URLSessionDataTask? = nil
     
     @State private var libraryList = [String]()
@@ -143,8 +142,7 @@ struct AddModServerView: View {
             resetStates()
         }
         .sheet(isPresented: $serverCalibreInfoPresenting, onDismiss: {
-            dataAction = ""
-            dataLoading = false
+            dataAction = nil
             dataLoadingTask?.cancel()
             dataLoadingTask = nil
             modelData.calibreServerUpdating = false
@@ -154,7 +152,7 @@ struct AddModServerView: View {
         .alert(item: $alertItem) { item in
             if item.id == "Exist" {
                 return Alert(
-                    title: Text("\(dataAction) Server Errer"),
+                    title: Text("\(dataAction ?? "") Server Errer"),
                     message: Text(item.msg ?? ""),
                     dismissButton: .cancel(){
                         alertItem = nil
@@ -349,7 +347,6 @@ struct AddModServerView: View {
         }
 
         modelData.calibreServerUpdating = true
-        dataLoading = true
         if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
             dataLoadingTask = task
             serverCalibreInfoPresenting = true
@@ -405,7 +402,6 @@ struct AddModServerView: View {
             }
 
             modelData.calibreServerUpdating = true
-            dataLoading = true
             
             if let task = modelData.calibreServerService.getServerLibraries(server: newServer) {
                 dataLoadingTask = task

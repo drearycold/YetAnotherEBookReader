@@ -28,10 +28,14 @@ struct SettingsView: View {
             Section(header: HStack {
                 Text("Servers")
                 Spacer()
-                Text(modelData.calibreServerUpdatingStatus ?? "")
-                if serverListDelete != nil || modelData.calibreServerInfoStaging.allSatisfy{$1.probing == false} == false {
+                if let serverListDelete = serverListDelete {
+                    Text("Removing \(serverListDelete.name)")
+                    ProgressView().progressViewStyle(CircularProgressViewStyle())
+                } else if modelData.calibreServerInfoStaging.allSatisfy{$1.probing == false} == false {
+                    Text("Refreshing")
                     ProgressView().progressViewStyle(CircularProgressViewStyle())
                 } else {
+                    Text(modelData.calibreServerUpdatingStatus ?? "")
                     ProgressView().progressViewStyle(CircularProgressViewStyle()).hidden()
                 }
             }) {
@@ -208,7 +212,10 @@ struct SettingsView: View {
             if $0.name != $1.name {
                 return $0.name < $1.name
             }
-            return $0.baseUrl < $1.baseUrl
+            if $0.baseUrl != $1.baseUrl {
+                return $0.baseUrl < $1.baseUrl
+            }
+            return $0.username < $1.username
         }
     }
     
