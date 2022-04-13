@@ -46,8 +46,6 @@ struct ReaderOptionsView: View {
             ForEach(Format.allCases.dropFirst(), id: \.self) { format in
                 Section(header: HStack {
                     Text("Prefered Reader for \(format.rawValue)")
-                        .frame(minWidth: 160, alignment: .leading)
-                        .padding(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0))
                     Spacer()
                     Button(action: {
                         optionsHelpPresenting = OptionItem(rawValue: "Reader\(format.rawValue)")
@@ -55,13 +53,11 @@ struct ReaderOptionsView: View {
                         Image(systemName: "questionmark.circle")
                     }
                 }) {
-                
                     Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
                         ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
                             Text(reader.rawValue).tag(reader)
                         }
                     }.pickerStyle(SegmentedPickerStyle())
-                    
                 }
             }
 
@@ -89,7 +85,35 @@ struct ReaderOptionsView: View {
                         Text("View")
                             .disabled(modelData.userFontInfos.isEmpty)
                     }
-                    
+                    .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
+                        fontsDetailPresenting = false
+                        let newCount = modelData.userFontInfos.count
+                        let deletedCount = fontsCount - newCount
+                        if deletedCount > 0 {
+                            fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                        }
+                        fontsCount = newCount
+                    }) {
+                        NavigationView {
+                            List {
+                                ForEach(
+                                    modelData.userFontInfos.sorted {
+                                            ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
+                                        } , id: \.key ) { (fontId, fontInfo) in
+                                    NavigationLink(destination: FontPreviewBuilder(fontId: fontId, fontInfo: fontInfo)) {
+                                        VStack(alignment: .leading, spacing: 0) {
+                                            Text(fontInfo.localizedName ?? fontInfo.displayName ?? fontId)
+                                                .font(Font.custom(fontId, size: 20, relativeTo: .body))
+                                            HStack {
+                                                Spacer()
+                                                Text(fontInfo.fileURL?.lastPathComponent ?? "").font(.caption2)
+                                            }
+                                        }
+                                    }
+                                }.onDelete(perform: removeFontRows)
+                            }.navigationTitle("Favorite Fonts")
+                        }
+                    }
                 }
                 
                 Button(action:{
@@ -98,74 +122,45 @@ struct ReaderOptionsView: View {
                 }) {
                     Text("Import Fonts")
                 }
-                
-            }
-            .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
-                fontsDetailPresenting = false
-                let newCount = modelData.userFontInfos.count
-                let deletedCount = fontsCount - newCount
-                if deletedCount > 0 {
-                    fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                .sheet(isPresented: $fontsFolderPresenting, onDismiss: {
+                    fontsFolderPresenting = false
+                }) {
+                    FontImportPicker(fontURLs: $fontsFolderPicked)
                 }
-                fontsCount = newCount
-            }) {
-                NavigationView {
-                    List {
-                        ForEach(
-                            modelData.userFontInfos.sorted {
-                                    ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
-                                } , id: \.key ) { (fontId, fontInfo) in
-                            NavigationLink(destination: FontPreviewBuilder(fontId: fontId, fontInfo: fontInfo)) {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(fontInfo.localizedName ?? fontInfo.displayName ?? fontId)
-                                        .font(Font.custom(fontId, size: 20, relativeTo: .body))
-                                    HStack {
-                                        Spacer()
-                                        Text(fontInfo.fileURL?.lastPathComponent ?? "").font(.caption2)
-                                    }
-                                }
-                            }
-                        }.onDelete(perform: removeFontRows)
-                    }.navigationTitle("Favorite Fonts")
-                }
-            }
-            .sheet(isPresented: $fontsFolderPresenting, onDismiss: {
-                fontsFolderPresenting = false
-            }) {
-                FontImportPicker(fontURLs: $fontsFolderPicked)
-            }
-            .onChange(of: fontsFolderPicked) { tmpURLs in
-                let urls = tmpURLs.filter { $0 != FontImportPicker.FakeURL }
-                urls.forEach {
-                    print("documentPicker \($0.absoluteString)")
-                }
-                fontsImportNotice = ""
-                guard let imported = modelData.importCustomFonts(urls: urls) else {
-                    fontsImportNotice = "Error occured during import"
-                    return
-                }
-                modelData.reloadCustomFonts()
-                let newCount = modelData.userFontInfos.count
-                let deletedCount = fontsCount + imported.count - newCount
-                if imported.count > 0 {
-                    fontsImportNotice = "Successfully imported \(imported.count) font(s)"
-                }
-                if deletedCount > 0 {
-                    if fontsImportNotice.count > 0 {
-                        fontsImportNotice = "\(fontsImportNotice), and deleted \(deletedCount) font(s)"
-                    } else {
-                        fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                .onChange(of: fontsFolderPicked) { tmpURLs in
+                    let urls = tmpURLs.filter { $0 != FontImportPicker.FakeURL }
+                    urls.forEach {
+                        print("documentPicker \($0.absoluteString)")
                     }
-                }
-                if urls.count - imported.count > 0 {
-                    if fontsImportNotice.count > 0 {
-                        fontsImportNotice = "\(fontsImportNotice), and failed \(urls.count - imported.count) font(s)"
-                    } else {
-                        fontsImportNotice = "Failed \(urls.count - imported.count) font(s)"
+                    fontsImportNotice = ""
+                    guard let imported = modelData.importCustomFonts(urls: urls) else {
+                        fontsImportNotice = "Error occured during import"
+                        return
                     }
+                    modelData.reloadCustomFonts()
+                    let newCount = modelData.userFontInfos.count
+                    let deletedCount = fontsCount + imported.count - newCount
+                    if imported.count > 0 {
+                        fontsImportNotice = "Successfully imported \(imported.count) font(s)"
+                    }
+                    if deletedCount > 0 {
+                        if fontsImportNotice.count > 0 {
+                            fontsImportNotice = "\(fontsImportNotice), and deleted \(deletedCount) font(s)"
+                        } else {
+                            fontsImportNotice = "Deleted \(deletedCount) font(s)"
+                        }
+                    }
+                    if urls.count - imported.count > 0 {
+                        if fontsImportNotice.count > 0 {
+                            fontsImportNotice = "\(fontsImportNotice), and failed \(urls.count - imported.count) font(s)"
+                        } else {
+                            fontsImportNotice = "Failed \(urls.count - imported.count) font(s)"
+                        }
+                    }
+                    fontsCount = newCount
                 }
-                fontsCount = newCount
             }
+            
         }
         .sheet(item: $optionsHelpPresenting) { item in
             switch item {
