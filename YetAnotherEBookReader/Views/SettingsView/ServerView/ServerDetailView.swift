@@ -18,8 +18,6 @@ struct ServerDetailView: View {
     @State private var modServerActive = false
     @State private var dshelperActive = false
     
-    @State private var dictionaryViewer = CalibreLibraryDictionaryViewer()
-    
     @State private var libraryList = [String]()
 
     @State private var syncingLibrary = false
@@ -44,17 +42,11 @@ struct ServerDetailView: View {
                 )
                 
                 NavigationLink(
-                    destination: LibraryOptionsDSReaderHelper(server: $server, updater: $updater),
+                    destination: ServerOptionsDSReaderHelper(server: $server, updater: $updater),
                     isActive: $dshelperActive,
                     label: {
                         Text("DSReader Helper")
                     })
-                
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Enable Dictionary Viewer", isOn: $dictionaryViewer._isEnabled)
-                }
-                
             }
             
             Section(header: librarySectionHeader()) {

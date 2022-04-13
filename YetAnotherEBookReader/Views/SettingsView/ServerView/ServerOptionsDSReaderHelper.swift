@@ -8,7 +8,7 @@
 import SwiftUI
 import Combine
 
-struct LibraryOptionsDSReaderHelper: View {
+struct ServerOptionsDSReaderHelper: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.openURL) var openURL
 
@@ -391,7 +391,7 @@ struct LibraryOptionsDSReaderHelper: View {
     
 }
 
-struct LibraryOptionsDSReaderHelper_Previews: PreviewProvider {
+struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
     static private var modelData = ModelData()
 
     @State static private var server = CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -400,7 +400,7 @@ struct LibraryOptionsDSReaderHelper_Previews: PreviewProvider {
     @State static private var updater = 0
     static var previews: some View {
         NavigationView {
-            LibraryOptionsDSReaderHelper(server: $server, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
+            ServerOptionsDSReaderHelper(server: $server, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
                 .environmentObject(modelData)
         }
         .navigationViewStyle(StackNavigationViewStyle())

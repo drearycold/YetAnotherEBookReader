@@ -291,7 +291,7 @@
 		2ADCD86026F4B96200FBAE11 /* PublicationMenuViewController.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D6C2663CB55007DCA20 /* PublicationMenuViewController.strings */; };
 		2ADCD86126F4B96200FBAE11 /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DA12663CB55007DCA20 /* Outline.storyboard */; };
 		2ADCD86926F4B96200FBAE11 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2AE26433274B8D4B00DC5806 /* LibraryOptionsDSReaderHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE26432274B8D4B00DC5806 /* LibraryOptionsDSReaderHelper.swift */; };
+		2AE26433274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */; };
 		2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD02675F680006E92E0 /* SettingsView.swift */; };
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
 		2AF6FE0A2701B205002BA27E /* YabrReadiumPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */; };
@@ -569,7 +569,7 @@
 		2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionViewModel.swift; sourceTree = "<group>"; };
 		2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsCountPages.swift; sourceTree = "<group>"; };
 		2ADCD87626F4B96200FBAE11 /* YetAnotherEBookReader-Catalyst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "YetAnotherEBookReader-Catalyst.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AE26432274B8D4B00DC5806 /* LibraryOptionsDSReaderHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsDSReaderHelper.swift; sourceTree = "<group>"; };
+		2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOptionsDSReaderHelper.swift; sourceTree = "<group>"; };
 		2AEE912D26F4712800B012B0 /* AEXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = AEXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AEE913026F4715700B012B0 /* ZFDragableModalTransition.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZFDragableModalTransition.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AEE913726F471B800B012B0 /* Realm.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Realm.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -987,7 +987,6 @@
 			isa = PBXGroup;
 			children = (
 				2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */,
-				2AE26432274B8D4B00DC5806 /* LibraryOptionsDSReaderHelper.swift */,
 				2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */,
 				2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */,
 				2A88D9AB275204F900372660 /* LibraryOptionsOverrideCustomColumnMappings.swift */,
@@ -1012,6 +1011,8 @@
 			children = (
 				2A47581A27BE250600642AD1 /* AddModServerView.swift */,
 				2A47581627B9EF8400642AD1 /* ServerDetailView.swift */,
+				2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */,
+				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
 				2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */,
 			);
 			path = ServerView;
@@ -1026,7 +1027,6 @@
 				2AF8589C2712825400FA87AD /* FormatOptionsView.swift */,
 				2A25E247272BAC3B009D5341 /* LibraryOptions */,
 				2A25E246272BAC18009D5341 /* ReaderOptions */,
-				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
 				2A47581527B9EF6800642AD1 /* ServerView */,
 				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
 				2A0A0486271BF65A00589B87 /* SupportInfoView.swift */,
@@ -1707,7 +1707,7 @@
 				2A107DF02663CB56007DCA20 /* BookmarkDatabase.swift in Sources */,
 				2AA07E9126D73239008CE451 /* BookDetailViewModel.swift in Sources */,
 				2A107DCE2663CB56007DCA20 /* OPDSFacetViewController.swift in Sources */,
-				2AE26433274B8D4B00DC5806 /* LibraryOptionsDSReaderHelper.swift in Sources */,
+				2AE26433274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift in Sources */,
 				2A107DEB2663CB56007DCA20 /* LCPViewModel.swift in Sources */,
 				2ABB912A261DE894004AA7C0 /* SectionShelfController.swift in Sources */,
 				2AA5DEB726D3571A00954255 /* ReadingPositionListView.swift in Sources */,

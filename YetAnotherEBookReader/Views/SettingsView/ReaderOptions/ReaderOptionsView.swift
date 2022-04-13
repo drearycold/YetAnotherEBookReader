@@ -10,11 +10,8 @@ import Combine
 
 struct ReaderOptionsView: View {
     @EnvironmentObject var modelData: ModelData
-    
-    @State private var optionsFormatPresenting = false
-    @State private var optionsReaderEpubPresenting = false
-    @State private var optionsReaderPdfPresenting = false
-    @State private var optionsReaderCbzPresenting = false
+
+    @State private var optionsHelpPresenting: OptionItem?
 
     @State private var fontsFolderPresenting = false
     @State private var fontsFolderPicked = [URL]()
@@ -28,98 +25,62 @@ struct ReaderOptionsView: View {
     @State private var dismissAllCancellable: AnyCancellable?
     
     var body: some View {
-        ScrollView {
+        Form {
+            Section(header: HStack {
+                Text("Preferred Book Format")
+                Spacer()
+                Button(action:{
+                    optionsHelpPresenting = .BookFormat
+                }) {
+                    Image(systemName: "questionmark.circle")
+                }
+            }) {
+                Picker("PreferredFormat", selection: preferredReaderTypeBinding()) {
+                    ForEach(Format.allCases.dropFirst(), id: \.self) { format in
+                        Text(format.rawValue).tag(format)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+            }
             
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Preferred Book Format and Reader")
-                    .font(.title3)
-                
-                Text("Book Format")
-                    .frame(minWidth: 160, alignment: .leading)
-                    .padding(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0))
-                HStack {
+            ForEach(Format.allCases.dropFirst(), id: \.self) { format in
+                Section(header: HStack {
+                    Text("Prefered Reader for \(format.rawValue)")
+                        .frame(minWidth: 160, alignment: .leading)
+                        .padding(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0))
                     Spacer()
-                    Picker("PreferredFormat", selection: preferredReaderTypeBinding()) {
-                        ForEach(Format.allCases.dropFirst(), id: \.self) { format in
-                            Text(format.rawValue).tag(format)
-                        }
-                    }.pickerStyle(SegmentedPickerStyle())
-                    .frame(maxWidth: 600)
-                    
-                    Button(action:{
-                        optionsFormatPresenting = true
+                    Button(action: {
+                        optionsHelpPresenting = OptionItem(rawValue: "Reader\(format.rawValue)")
                     }) {
                         Image(systemName: "questionmark.circle")
                     }
-                    Spacer()
-                }.sheet(isPresented: $optionsFormatPresenting, onDismiss: { optionsFormatPresenting = false}, content: {
-                    FormatOptionsView()
-                })
+                }) {
                 
-                ForEach(Format.allCases.dropFirst(), id: \.self) { format in
-                    HStack {
-                        Text("Reader for \(format.rawValue)")
-                        .frame(minWidth: 160, alignment: .leading)
-                        .padding(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0))
-                        Spacer()
-                    }
-                    
-                    HStack {
-                        Spacer()
-                        Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
-                            ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
-                                Text(reader.rawValue).tag(reader)
-                            }
-                        }.pickerStyle(SegmentedPickerStyle())
-                        .frame(maxWidth: 600)
-                        
-                        Button(action:{
-                            switch(format) {
-                            case .EPUB:
-                                optionsReaderEpubPresenting = true
-                            case .PDF:
-                                optionsReaderPdfPresenting = true
-                            case .CBZ:
-                                optionsReaderCbzPresenting = true
-                            default: break
-                            }
-                        }) {
-                            Image(systemName: "questionmark.circle")
+                    Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
+                        ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
+                            Text(reader.rawValue).tag(reader)
                         }
-                        Spacer()
-                    }
-                }.sheet(isPresented: $optionsReaderEpubPresenting, onDismiss: { optionsReaderEpubPresenting = false }, content: {
-                        ReaderOptionsEpubView()
+                    }.pickerStyle(SegmentedPickerStyle())
                     
-                })
-                .sheet(isPresented: $optionsReaderPdfPresenting, onDismiss: { optionsReaderPdfPresenting = false }, content: {
-                        ReaderOptionsPdfView()
-                })
-                .sheet(isPresented: $optionsReaderCbzPresenting, onDismiss: { optionsReaderCbzPresenting = false }, content: {
-                        ReaderOptionsCbzView()
-                })
-            }.padding()
-            
-            Divider()
-            
-            VStack(alignment: .leading, spacing: 4) {
+                }
+            }
+
+            Section(header: HStack {
                 Text("Custom Fonts for \(ReaderType.YabrEPUB.rawValue)")
-                    .font(.title3)
-                Group {
-                    Text("Don't get limited by eBook publisher's aesthetic. \(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with your favorite choosing.")
-                    Text("You can place font files inside \"Fonts\" folder of this App or import them directly from here. They will appear in the \"Font\" tab of \(ReaderType.YabrEPUB.rawValue)'s style menu.")
-                    Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
-                }.font(.caption)
+                Spacer()
+                Button(action:{
+                    optionsHelpPresenting = .YabrEPUBFont
+                }) {
+                    Image(systemName: "questionmark.circle")
+                }
+            }, footer: HStack {
+                Text(fontsImportNotice).font(.caption)
+            }) {
                 HStack {
-                    Text("Loaded \(modelData.userFontInfos.count) font(s)")
+                    Text("Loaded")
+                    Text("\(modelData.userFontInfos.count)")
+                    Text("font(s)")
                     Spacer()
-                    
-                    Button(action:{
-                        fontsCount = modelData.userFontInfos.count
-                        fontsFolderPresenting = true
-                    }) {
-                        Text("Import")
-                    }
                     
                     Button(action:{
                         fontsCount = modelData.userFontInfos.count
@@ -128,10 +89,16 @@ struct ReaderOptionsView: View {
                         Text("View")
                             .disabled(modelData.userFontInfos.isEmpty)
                     }
+                    
                 }
-                HStack {
-                    Text(fontsImportNotice).font(.caption)
+                
+                Button(action:{
+                    fontsCount = modelData.userFontInfos.count
+                    fontsFolderPresenting = true
+                }) {
+                    Text("Import Fonts")
                 }
+                
             }
             .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
                 fontsDetailPresenting = false
@@ -199,25 +166,37 @@ struct ReaderOptionsView: View {
                 }
                 fontsCount = newCount
             }
-            .padding()
-            
-            
-            
-            Divider()
-            
-            Spacer()
-        }   //ScrollView
+        }
+        .sheet(item: $optionsHelpPresenting) { item in
+            switch item {
+            case .BookFormat:
+                FormatOptionsView()
+            case .ReaderEPUB:
+                ReaderOptionsEpubView()
+            case .ReaderPDF:
+                ReaderOptionsPdfView()
+            case .ReaderCBZ:
+                ReaderOptionsCbzView()
+            case .YabrEPUBFont:
+                NavigationView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("About Custom Fonts for YabrEPUB Reader")
+                            .font(.title3).bold()
+                        Text("Don't get limited by eBook publisher's aesthetic. \(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with your favorite choosing.")
+                        Text("You can place font files inside \"Fonts\" folder of this App or import them directly from here. They will appear in the \"Font\" tab of \(ReaderType.YabrEPUB.rawValue)'s style menu.")
+                        Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
+                    }.padding()
+                }
+            }
+        }
         .onAppear() {
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 fontsFolderPresenting = false
                 fontsDetailPresenting = false
-                optionsFormatPresenting = false
-                optionsReaderEpubPresenting = false
-                optionsReaderPdfPresenting = false
-                optionsReaderCbzPresenting = false
+                optionsHelpPresenting = nil
             }
-        }.frame(maxWidth: 720)
+        }
         .navigationTitle("Reader Options")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -303,8 +282,20 @@ struct ReaderOptionsView: View {
     }
 }
 
+enum OptionItem: String, CaseIterable, Identifiable {
+    case BookFormat
+    case ReaderEPUB
+    case ReaderPDF
+    case ReaderCBZ
+    case YabrEPUBFont
+    
+    var id: String { self.rawValue }
+}
+
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {
-        ReaderOptionsView().environmentObject(ModelData())
+        NavigationView {
+            ReaderOptionsView().environmentObject(ModelData())
+        }.navigationViewStyle(StackNavigationViewStyle())
     }
 }
