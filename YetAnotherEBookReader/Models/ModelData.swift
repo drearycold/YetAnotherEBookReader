@@ -1753,11 +1753,12 @@ final class ModelData: ObservableObject {
             self.refreshShelfMetadata(with: serverIds)
             
             if updateLibrary == true, autoUpdateOnly == false {
-                self.refreshServerDSHelperConfiguration(
-                    with: self.calibreServers.filter {
-                        $0.value.isLocal == false
-                    }.map{ $0.key }
-                )
+                let ids = self.calibreServers.filter {
+                    $0.value.isLocal == false && ( serverIds.isEmpty || serverIds.contains($0.key) )
+                }.map{ $0.key }
+                if ids.isEmpty == false {
+                    self.refreshServerDSHelperConfiguration(with: ids)
+                }
             }
             
             self.syncLibraries(

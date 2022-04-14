@@ -376,7 +376,7 @@ struct AddModServerView: View {
                 realm: modelData.realm)
         }
         
-        modelData.probeServersReachability(with: [newServer.id], disableAutoThreshold: 999)
+        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: false, disableAutoThreshold: 999)
         
         server = newServer
         isActive = false

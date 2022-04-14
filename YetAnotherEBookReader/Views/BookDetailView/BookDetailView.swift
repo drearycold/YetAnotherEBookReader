@@ -282,32 +282,41 @@ struct BookDetailView: View {
                 metadataIcon(systemName: "link")
                 
                 Button(action:{
-                    if let goodreadsId = book.identifiers["goodreads"],
-                       let url = URL(string: "https://www.goodreads.com/book/show/\(goodreadsId)") {
-                        openURL(url)
-                    } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
-                        urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
-                        if let url = urlComponents.url {
+                    var url: URL? = nil
+                    defer {
+                        if let url = url {
                             openURL(url)
                         }
                     }
+                    
+                    if let goodreadsId = book.identifiers["goodreads"] {
+                       url = URL(string: "https://www.goodreads.com/book/show/\(goodreadsId)")
+                    } else if var urlComponents = URLComponents(string: "https://www.goodreads.com/search") {
+                        urlComponents.queryItems = [URLQueryItem(name: "q", value: book.title + " " + book.authors.joined(separator: " "))]
+                        url = urlComponents.url
+                    }
                 }) {
-                    metadataLinkIcon("icon-goodreads")
+                    metadataLinkIcon("icon-goodreads", matched: book.identifiers["goodreads"] != nil)
                 }
                 
-                if let id = book.identifiers["amazon"] {
-                    Button(action:{
-                        openURL(URL(string: "http://www.amazon.com/dp/\(id)")!)
-                    }) {
-                        metadataLinkIcon("icon-amazon")
+                Button(action:{
+                    var url: URL? = nil
+                    defer {
+                        if let url = url {
+                            openURL(url)
+                        }
                     }
-                } else {
-                    Button(action:{
-                        openURL(URL(string: "https://www.amazon.com/")!)
-                    }) {
-                        metadataLinkIcon("icon-amazon")
-                    }.hidden()
+                    
+                    if let id = book.identifiers["amazon"] {
+                       url = URL(string: "http://www.amazon.com/dp/\(id)")
+                    } else if var urlComponents = URLComponents(string: "https://www.amazon.com/s") {
+                        urlComponents.queryItems = [URLQueryItem(name: "k", value: book.title + " " + book.authors.joined(separator: " "))]
+                        url = urlComponents.url
+                    }
+                }) {
+                    metadataLinkIcon("icon-amazon", matched: book.identifiers["amazon"] != nil)
                 }
+                
             }
             
             Group {     // lastModified readDate(GR) ShelfName
@@ -454,11 +463,19 @@ struct BookDetailView: View {
     }
     
     @ViewBuilder
-    private func metadataLinkIcon(_ name: String) -> some View {
-        Image(name)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 20, height: 20)
+    private func metadataLinkIcon(_ name: String, matched: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: -2) {
+            Image(name)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 20, height: 20)
+            if matched == false {
+                Image(systemName: "questionmark")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 8, height: 8)
+            }
+        }
     }
     
     @ViewBuilder
