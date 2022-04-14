@@ -14,16 +14,13 @@ struct ActivityList: View {
     var bookId: Int32? = nil
     
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
-                    NavigationLink(destination: detail(obj: obj), label: {
-                        row(obj: obj)
-                    })
-                }
+        List {
+            ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
+                NavigationLink(destination: detail(obj: obj), label: {
+                    row(obj: obj)
+                })
             }
-        }.frame(maxWidth: 500)
-        .navigationViewStyle(StackNavigationViewStyle())
+        }
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -130,7 +127,10 @@ struct ActivityList_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
     
     static var previews: some View {
-        ActivityList()
-            .environmentObject(modelData)
+        NavigationView {
+            ActivityList()
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+        .environmentObject(modelData)
     }
 }

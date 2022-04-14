@@ -145,7 +145,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         }), for: .primaryActionTriggered)
         
         pageSlider.minimumValue = 1
-        pageSlider.maximumValue = Float(pdfView.document!.pageCount)
+        pageSlider.maximumValue = Float(pdfView.document?.pageCount ?? 1)
         pageSlider.isContinuous = true
         pageSlider.addAction(UIAction(handler: { (action) in
             if let destPage = self.pdfView.document?.page(at: Int(self.pageSlider.value.rounded())) {
@@ -828,7 +828,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
         position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
         
-        let bookProgress = 100.0 * Double(position["pageNumber"]! as! Int) / Double(pdfView.document!.pageCount)
+        let bookProgress = 100.0 * Double(position["pageNumber"] as? Int ?? 0) / Double(pdfView.document?.pageCount ?? 1)
         
         var chapterProgress = 0.0
         let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
@@ -837,7 +837,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             let nextIndex = firstIndex.advanced(by: 1)
             let chapterStartPageNum = tocList[curIndex].1
             let chapterEndPageNum = nextIndex < tocList.count ?
-                tocList[nextIndex].1 + 1 : pdfView.document!.pageCount + 1
+                tocList[nextIndex].1 + 1 : (pdfView.document?.pageCount ?? 1) + 1
             if chapterEndPageNum > chapterStartPageNum {
                 chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
             }
