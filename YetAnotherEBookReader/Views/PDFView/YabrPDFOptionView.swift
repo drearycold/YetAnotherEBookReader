@@ -32,9 +32,17 @@ enum PDFThemeMode: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+enum PDFLayoutMode: String, CaseIterable, Identifiable {
+    case Page
+    case Scroll
+    
+    var id: String { self.rawValue }
+}
+
 struct PDFOptions: Equatable {
     var themeMode = PDFThemeMode.serpia
     var selectedAutoScaler = PDFAutoScaler.Width
+    var pageMode = PDFLayoutMode.Page
     var readingDirection = PDFReadDirection.LtR_TtB
     var hMarginAutoScaler = CGFloat(5.0)
     var vMarginAutoScaler = CGFloat(5.0)
@@ -45,19 +53,13 @@ struct PDFOptions: Equatable {
 }
 
 struct PDFOptionView: View {
-    var pdfViewController: YabrPDFViewController?
+    @Binding var pdfViewController: YabrPDFViewController
     
     @State private var pdfOptions = PDFOptions()
     
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Spacer()
-                    Button(action: {}, label: {
-                        Image(systemName: "questionmark.circle")
-                    })
-                }.hidden()
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Theme Mode")
@@ -65,22 +67,32 @@ struct PDFOptionView: View {
                         Text("need reopen").font(.caption)
                     }
                     Picker(selection: $pdfOptions.themeMode, label: Text("Theme Mode")) {
-                        ForEach(PDFThemeMode.allCases, id: \.self) { themeMode in
-                            Image("icon-theme-\(themeMode.rawValue)").tag(themeMode)
+                        ForEach(PDFThemeMode.allCases, id: \.self) {
+                            Image("icon-theme-\($0.rawValue)").tag($0)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
+                
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Reading Direction")
                     Picker(selection: $pdfOptions.readingDirection, label: Text("Reading Direction")) {
-                        ForEach(PDFReadDirection.allCases, id:\.self) { readingDirection in
-                            Text(readingDirection.id).tag(readingDirection)
+                        ForEach(PDFReadDirection.allCases, id:\.self) {
+                            Text($0.id).tag($0)
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
-                .padding(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Layout Mode")
+                    Picker(selection: $pdfOptions.pageMode, label: Text("Layout Mode")) {
+                        ForEach(PDFLayoutMode.allCases, id: \.self) {
+                            Text($0.id).tag($0)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                }
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Auto Fit Visible Content")
@@ -91,7 +103,6 @@ struct PDFOptionView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                 }
-                .padding(EdgeInsets(top: 0, leading: 0, bottom: 4, trailing: 0))
                 
                 HStack {
                     Toggle("Remember In-Page Position", isOn: $pdfOptions.rememberInPagePosition)
@@ -130,21 +141,21 @@ struct PDFOptionView: View {
                     }
                 }
             }
-            .padding(EdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10))
+            .padding(10)
             .onAppear() {
-                if self.pdfViewController != nil {
-                    self.pdfOptions = self.pdfViewController!.pdfOptions
-                }
+                    self.pdfOptions = self.pdfViewController.pdfOptions
             }
             .onChange(of: pdfOptions) {_ in
-                self.pdfViewController!.handleOptionsChange(pdfOptions: self.pdfOptions)
+                self.pdfViewController.handleOptionsChange(pdfOptions: self.pdfOptions)
             }
         }
     }
 }
 
 struct PDFOptionView_Previews: PreviewProvider {
+    @State static var pdfViewController = YabrPDFViewController()
+    
     static var previews: some View {
-        PDFOptionView(pdfViewController: nil).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
+        PDFOptionView(pdfViewController: $pdfViewController).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
     }
 }

@@ -136,11 +136,12 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             let pdfViewController = YabrPDFViewController()
-            pdfViewController.modelData = modelData
             let ret = pdfViewController.open(pdfURL: bookURL, position: bookPosition)
             if ret == 0 {
                 nav.pushViewController(pdfViewController, animated: false)
                 return nav
+            } else {
+                
             }
         }
         

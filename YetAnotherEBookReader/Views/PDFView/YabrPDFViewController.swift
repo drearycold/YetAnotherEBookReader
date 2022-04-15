@@ -15,23 +15,22 @@ import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class YabrPDFViewController: UIViewController, PDFViewDelegate {
-    var modelData: ModelData?
-    var pdfView = PDFView()
-    var blankView = UIImageView()
-    var mDictView = MDictViewContainer()
-    var doubleTapLeftLabel = UILabel()
-    var doubleTapRightLabel = UILabel()
+    let pdfView = PDFView()
+    let blankView = UIImageView()
+    let mDictView = MDictViewContainer()
+    let doubleTapLeftLabel = UILabel()
+    let doubleTapRightLabel = UILabel()
     
     let logger = Logger()
     
     var historyMenu = UIMenu(title: "History", children: [])
     
-    var stackView = UIStackView()
+    let stackView = UIStackView()
     
-    var pageSlider = UISlider()
-    var pageIndicator = UIButton()
-    var pageNextButton = UIButton()
-    var pagePrevButton = UIButton()
+    let pageSlider = UISlider()
+    let pageIndicator = UIButton()
+    let pageNextButton = UIButton()
+    let pagePrevButton = UIButton()
     
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
@@ -41,7 +40,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     
     var pdfOptions = PDFOptions() {
         didSet {
-            var isDark = false
             switch (pdfOptions.themeMode) {
             case .none:
                 PDFPageWithBackground.fillColor = nil
@@ -55,8 +53,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     alpha: 1.0)
             case .dark:
                 PDFPageWithBackground.fillColor = .init(gray: 0.0, alpha: 1.0)
-                isDark = true
             }
+            let isDark = pdfOptions.themeMode == .dark
             let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor.init(gray: 1.0, alpha: 1.0))
             self.navigationController?.navigationBar.barTintColor = backgroundColor
             self.navigationController?.navigationBar.backgroundColor = backgroundColor
@@ -75,18 +73,36 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //            pageSlider.backgroundColor = backgroundColor
 //            pageIndicator.backgroundColor = backgroundColor
 //            self.view.backgroundColor = backgroundColor
+            
+            switch pdfOptions.pageMode {
+            case .Page:
+                self.pdfView.displayMode = .singlePage
+                break;
+            case .Scroll:
+                self.pdfView.displayMode = .singlePageContinuous
+                break
+            }
+            
+            switch pdfOptions.readingDirection {
+            case .LtR_TtB:
+                pageSlider.semanticContentAttribute = .forceLeftToRight
+                pdfView.displaysRTL = false
+                break
+            case .TtB_RtL:
+                pageSlider.semanticContentAttribute = .forceRightToLeft
+                pdfView.displaysRTL = true
+                break
+            }
+            
+            pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
         }
     }
         
-    var bookTitle: String!
-    
     var pageViewPositionHistory = [Int: PageViewPosition]() //key is 1-based (pdfView.currentPage?.pageRef?.pageNumber)
     
     var realm: Realm?
     
     func open(pdfURL: URL, position: BookDeviceReadingPosition) -> Int {
-        self.bookTitle = modelData?.readingBook?.title
-        
         logger.info("pdfURL: \(pdfURL.absoluteString)")
         logger.info("Exist: \(FileManager.default.fileExists(atPath: pdfURL.path))")
         
@@ -208,7 +224,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 image: UIImage(systemName: "doc.badge.gearshape"),
                 primaryAction: UIAction { (UIAction) in
                     //self.present(self.optionMenu, animated: true, completion: nil)
-                    let optionView = PDFOptionView(pdfViewController: self)
+                    let optionView = PDFOptionView(pdfViewController: Binding<YabrPDFViewController>(
+                        get: { return self },
+                        set: { _ in }
+                    ))
                     
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
                     optionViewController.preferredContentSize = CGSize(width:340, height:600)
@@ -301,7 +320,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         self.view = pdfView
 
-        if modelData?.getCustomDictViewer().0 ?? false {     // if enabled
+        if ModelData.shared?.getCustomDictViewer().0 ?? false {     // if enabled
             UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
             mDictView.loadViewIfNeeded()
         } else {
@@ -416,15 +435,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     }
     
     @objc private func handlePageChange(notification: Notification) {
-        var titleLabel = self.bookTitle
+        var titleLabel = ModelData.shared?.readingBook?.title
         guard let curPage = pdfView.currentPage else { return }
 
-        addBlankSubView(page: curPage)
-        
-        defer {
-            clearBlankSubView()
-        }
-        
         if var outlineRoot = pdfView.document?.outlineRoot {
             while outlineRoot.numberOfChildren == 1 {
                 outlineRoot = outlineRoot.child(at: 0)!
@@ -446,16 +459,15 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
         
-        if pdfOptions.readingDirection.rawValue.contains("LtR") {
-            pageSlider.semanticContentAttribute = .forceLeftToRight
-            pdfView.displaysRTL = false
-        }
-        if pdfOptions.readingDirection.rawValue.contains("RtL") {
-            pageSlider.semanticContentAttribute = .forceRightToLeft
-            pdfView.displaysRTL = true
-        }
-        
         print("handlePageChange \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
+        
+        guard pdfView.displayMode == .singlePage else { return }
+
+        addBlankSubView(page: curPage)
+        
+        defer {
+            clearBlankSubView()
+        }
         
         if pdfView.frame.width < 1.0 {
             // have not been populated, cannot fit content
@@ -843,7 +855,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             }
         }
         
-        if var updatedReadingPosition = modelData?.updatedReadingPosition {
+        if var updatedReadingPosition = ModelData.shared?.updatedReadingPosition {
             updatedReadingPosition.lastPosition[0] = pageNum
             updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
             updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
@@ -855,29 +867,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
-            modelData?.updatedReadingPosition = updatedReadingPosition
+            ModelData.shared?.updatedReadingPosition = updatedReadingPosition
         }
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         
-        if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: modelData!.readingBook!.id), modelData!.readingBook!.library.name)
-        ).first {
-            try? realm?.write {
-                pdfOptionsRealm.themeMode = pdfOptions.themeMode.rawValue
-                pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
-                pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
-                pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
-                pdfOptionsRealm.vMarginAutoScaler = Double(pdfOptions.vMarginAutoScaler)
-                pdfOptionsRealm.hMarginDetectStrength = Double(pdfOptions.hMarginDetectStrength)
-                pdfOptionsRealm.vMarginDetectStrength = Double(pdfOptions.vMarginDetectStrength)
-                pdfOptionsRealm.lastScale = Double(pdfOptions.lastScale)
-                pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+        guard let bookId = ModelData.shared?.readingBook?.id,
+              let libraryName = ModelData.shared?.readingBook?.library.name else { return }
+        
+        
+        let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).filter(
+            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: bookId), libraryName)
+        ).first ?? PDFOptionsRealm()
+        try? realm?.write {
+            if pdfOptionsRealm.id == 0 {
+                pdfOptionsRealm.id = bookId
+                pdfOptionsRealm.libraryName = libraryName
+                realm?.add(pdfOptionsRealm)
             }
-        } else {
-            let pdfOptionsRealm = PDFOptionsRealm()
-            pdfOptionsRealm.id = modelData!.readingBook!.id
-            pdfOptionsRealm.libraryName = modelData!.readingBook!.library.name
+            
             pdfOptionsRealm.themeMode = pdfOptions.themeMode.rawValue
             pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
             pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
@@ -887,9 +895,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             pdfOptionsRealm.vMarginDetectStrength = Double(pdfOptions.vMarginDetectStrength)
             pdfOptionsRealm.lastScale = Double(pdfOptions.lastScale)
             pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
-            try? realm?.write {
-                realm?.add(pdfOptionsRealm)
-            }
         }
         
     }
