@@ -2071,6 +2071,10 @@ final class ModelData: ObservableObject {
            let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) {
             print("\(#function) updateLibraryLastModified \(library.name) \(library.lastModified) -> \(lastModified)")
             library.lastModified = lastModified
+            
+            DispatchQueue.main.async {
+                self.librarySyncStatus[library.id]?.msg = "Success"
+            }
         }
         
         self.trySendGetBooksMetadataTask(library: library)
