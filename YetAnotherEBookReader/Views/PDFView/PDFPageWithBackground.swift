@@ -21,7 +21,7 @@ class PDFPageWithBackground : PDFPage {
             let fillColorDeviceRGB = fillColor.converted(to: PDFPageWithBackground.colorSpace, intent: .defaultIntent, options: nil) else { return }
         
         let grayComponents = fillColor.converted(to: CGColorSpace(name: CGColorSpace.linearGray)!, intent: .defaultIntent, options: nil)?.components ?? []
-        print("draw gray \(grayComponents)")
+        print("\(#function) draw gray \(grayComponents)")
         
         let rect = self.bounds(for: box)
 
@@ -58,7 +58,7 @@ class PDFPageWithBackground : PDFPage {
             let fillColorDeviceRGB = fillColor.converted(to: PDFPageWithBackground.colorSpace, intent: .defaultIntent, options: nil) else { return image }
         
         let grayComponents = fillColor.converted(to: CGColorSpace(name: CGColorSpace.linearGray)!, intent: .defaultIntent, options: nil)?.components ?? []
-        print("draw gray \(grayComponents)")
+        print("\(#function) draw gray \(grayComponents)")
         
         UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
         guard let context = UIGraphicsGetCurrentContext() else { return image }
@@ -89,6 +89,8 @@ class PDFPageWithBackground : PDFPage {
     
     override func thumbnail(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
         let uiImage = super.thumbnail(of: size, for: box)
+        
+        print("\(#function) size=\(size) box=\(box)")
         
         return uiImage
     }

@@ -324,6 +324,7 @@
 		6E76E9C3265FF36900885D26 /* ZIPFoundation.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
+		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -622,6 +623,7 @@
 		AAA7697A91827809D1CFC488 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; sourceTree = "<group>"; };
 		AD8951C85BCF23E2FFDF70D6 /* Pods-YetAnotherEBookReader-Catalyst.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; sourceTree = "<group>"; };
 		BE1A56B3346178A15F209183 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.release.xcconfig"; sourceTree = "<group>"; };
+		E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFModel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1063,6 +1065,7 @@
 				2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */,
 				2A890570260076780072B580 /* YabrPDFOptionView.swift */,
 				2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */,
+				E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */,
 			);
 			path = PDFView;
 			sourceTree = "<group>";
@@ -1721,6 +1724,7 @@
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,
 				2ACE265926A921230037FCB4 /* RealmModel.swift in Sources */,
+				E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
 				2A107DFE2663CB56007DCA20 /* AdvancedSettingsViewController.swift in Sources */,
 				2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
 				2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */,
@@ -2147,7 +2151,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 50;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2227,7 +2231,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 49;
+				CURRENT_PROJECT_VERSION = 50;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

@@ -74,6 +74,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //            pageIndicator.backgroundColor = backgroundColor
 //            self.view.backgroundColor = backgroundColor
             
+            let curPage = self.pdfView.currentPage
+            let displayModeBefore = self.pdfView.displayMode
             switch pdfOptions.pageMode {
             case .Page:
                 self.pdfView.displayMode = .singlePage
@@ -95,6 +97,17 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             }
             
             pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
+            
+            
+            if displayModeBefore == .singlePage,
+               displayModeBefore != pdfView.displayMode, curPage != nil {
+                pdfView.goToFirstPage(self)
+                self.pdfView.go(to: curPage!)
+                delay(0.1) {
+                    print("\(#function) page to scroll fix \(curPage?.pageRef?.pageNumber)")
+                    
+                }
+            }
         }
     }
         
@@ -112,6 +125,20 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         logger.info("pdfDoc: \(pdfDoc.majorVersion) \(pdfDoc.minorVersion)")
         pdfView.document = pdfDoc
 
+        pdfView.displayMode = PDFDisplayMode.singlePage
+        pdfView.displayDirection = PDFDisplayDirection.horizontal
+        pdfView.interpolationQuality = PDFInterpolationQuality.high
+        
+        if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
+            realm = try? Realm(configuration: config)
+            if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
+                self.pdfOptions = PDFOptions(managedObject: pdfOptionsRealm)
+            }
+        }
+        
+        self.pdfOptions.id = ModelData.shared?.readingBook?.id ?? 0
+        self.pdfOptions.libraryName = ModelData.shared?.readingBook?.library.name ?? ""
+        
         let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
         
         pageViewPositionHistory[intialPageNum] = PageViewPosition(
@@ -119,33 +146,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
         )
         
-        if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
-            realm = try? Realm(configuration: config)
-            if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
-                var pdfOptions = PDFOptions()
-                pdfOptions.themeMode = PDFThemeMode.init(rawValue: pdfOptionsRealm.themeMode) ?? .serpia
-                pdfOptions.selectedAutoScaler = PDFAutoScaler.init(rawValue: pdfOptionsRealm.selectedAutoScaler) ?? .Width
-                pdfOptions.readingDirection = PDFReadDirection.init(rawValue: pdfOptionsRealm.readingDirection) ?? .LtR_TtB
-                pdfOptions.hMarginAutoScaler = CGFloat(pdfOptionsRealm.hMarginAutoScaler)
-                pdfOptions.vMarginAutoScaler = CGFloat(pdfOptionsRealm.vMarginAutoScaler)
-                pdfOptions.hMarginDetectStrength = CGFloat(pdfOptionsRealm.hMarginDetectStrength)
-                pdfOptions.vMarginDetectStrength = CGFloat(pdfOptionsRealm.vMarginDetectStrength)
-                pdfOptions.lastScale = CGFloat(pdfOptionsRealm.lastScale)
-                pdfOptions.rememberInPagePosition = pdfOptionsRealm.rememberInPagePosition
-                self.pdfOptions = pdfOptions
-            }
-        }
-        
-        
         return 0
     }
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        pdfView.displayMode = PDFDisplayMode.singlePage
-        pdfView.displayDirection = PDFDisplayDirection.horizontal
-        pdfView.interpolationQuality = PDFInterpolationQuality.high
         
         // pdfView.usePageViewController(true, withViewOptions: nil)
         
@@ -164,10 +169,15 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pageSlider.maximumValue = Float(pdfView.document?.pageCount ?? 1)
         pageSlider.isContinuous = true
         pageSlider.addAction(UIAction(handler: { (action) in
-            if let destPage = self.pdfView.document?.page(at: Int(self.pageSlider.value.rounded())) {
-                self.addBlankSubView(page: destPage)
-                self.pdfView.go(to: destPage)
-            }
+            guard let currentPageNumber = self.pdfView.currentPage?.pageRef?.pageNumber else { return }
+            let destPageNumber = Int(self.pageSlider.value.rounded())
+            print("\(#function) current=\(currentPageNumber) target=\(destPageNumber)")
+            
+            guard currentPageNumber != destPageNumber,
+                  let destPage = self.pdfView.document?.page(at: destPageNumber - 1) else { return }
+            
+            self.addBlankSubView(page: destPage)
+            self.pdfView.go(to: destPage)
         }), for: .valueChanged)
 
         pagePrevButton.setImage(UIImage(systemName: "arrow.left"), for: .normal)
@@ -327,18 +337,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             UIMenuController.shared.menuItems = []
         }
         
-        let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
-        
-        if let page = pdfView.document?.page(at: destPageIndex) {
-            if page.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                self.addBlankSubView(page: page)
-            }
-            pdfView.go(to: page)
-        }
-        
-        if destPageIndex == 0 {
-            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
-        }
         
         print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
         stackView.frame = self.navigationController?.toolbar.frame ?? .zero
@@ -383,6 +381,19 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pdfView.addSubview(blankView)
         
         self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
+        
+        let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
+        
+        if let page = pdfView.document?.page(at: destPageIndex) {
+            if page.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                self.addBlankSubView(page: page)
+            }
+            pdfView.go(to: page)
+        }
+        
+        if destPageIndex == 0 {
+            self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
+        }
         
         DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [weak self] in
             UIView.animate(withDuration: TimeInterval(0.5)) {
@@ -461,13 +472,32 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         print("handlePageChange \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
         
-        guard pdfView.displayMode == .singlePage else { return }
-
-        addBlankSubView(page: curPage)
-        
-        defer {
-            clearBlankSubView()
+        if pdfView.displayMode != .singlePage {
+            if let pageViewPosition = pageViewPositionHistory[curPageNum],
+               pageViewPosition.scaler > 0,
+               pageViewPosition.viewSize == pdfView.frame.size || pageViewPosition.viewSize == .zero {
+                let lastDest = PDFDestination(
+                    page: curPage,
+                    at: pageViewPosition.point
+                )
+                lastDest.zoom = pageViewPosition.scaler
+                print("\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
+                
+                pdfView.scaleFactor = pageViewPosition.scaler
+                
+                let docView = pdfView.documentView
+                print("\(#function) \(docView.debugDescription)")
+                
+//                let originalMode = pdfView.displayMode
+//                pdfView.displayMode = .singlePage
+//                pdfView.go(to: lastDest)
+//                pdfView.displayMode = originalMode
+            }
+            
+            return
         }
+        
+        addBlankSubView(page: curPage)
         
         if pdfView.frame.width < 1.0 {
             // have not been populated, cannot fit content
@@ -778,6 +808,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         blankView.tintColor = backgroundColor
         blankView.backgroundColor = backgroundColor
         blankView.frame.size = pdfView.frame.size
+        
+        clearBlankSubView()
     }
     
     func clearBlankSubView() {
@@ -872,29 +904,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)
         
-        guard let bookId = ModelData.shared?.readingBook?.id,
-              let libraryName = ModelData.shared?.readingBook?.library.name else { return }
-        
-        
-        let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).filter(
-            NSPredicate(format: "id = %@ AND libraryName = %@", NSNumber(value: bookId), libraryName)
-        ).first ?? PDFOptionsRealm()
+        let pdfOptionsRealm = pdfOptions.managedObject()
         try? realm?.write {
-            if pdfOptionsRealm.id == 0 {
-                pdfOptionsRealm.id = bookId
-                pdfOptionsRealm.libraryName = libraryName
-                realm?.add(pdfOptionsRealm)
-            }
-            
-            pdfOptionsRealm.themeMode = pdfOptions.themeMode.rawValue
-            pdfOptionsRealm.selectedAutoScaler = pdfOptions.selectedAutoScaler.rawValue
-            pdfOptionsRealm.readingDirection = pdfOptions.readingDirection.rawValue
-            pdfOptionsRealm.hMarginAutoScaler = Double(pdfOptions.hMarginAutoScaler)
-            pdfOptionsRealm.vMarginAutoScaler = Double(pdfOptions.vMarginAutoScaler)
-            pdfOptionsRealm.hMarginDetectStrength = Double(pdfOptions.hMarginDetectStrength)
-            pdfOptionsRealm.vMarginDetectStrength = Double(pdfOptions.vMarginDetectStrength)
-            pdfOptionsRealm.lastScale = Double(pdfOptions.lastScale)
-            pdfOptionsRealm.rememberInPagePosition = pdfOptions.rememberInPagePosition
+            realm?.add(pdfOptionsRealm, update: .all)
         }
         
     }
@@ -934,26 +946,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         )
         print("updatePageViewPositionHistory \(pageViewPositionHistory[pageNum]!)")
     }
-}
-
-struct PageViewPosition {
-    var scaler = CGFloat()
-    var point = CGPoint()
-    var viewSize = CGSize()
-}
-
-class PDFOptionsRealm: Object {
-    @objc dynamic var id: Int32 = 0
-    @objc dynamic var libraryName = ""
-    @objc dynamic var themeMode = PDFThemeMode.serpia.rawValue
-    @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
-    @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
-    @objc dynamic var hMarginAutoScaler = 5.0
-    @objc dynamic var vMarginAutoScaler = 5.0
-    @objc dynamic var hMarginDetectStrength = 2.0
-    @objc dynamic var vMarginDetectStrength = 2.0
-    @objc dynamic var lastScale = -1.0
-    @objc dynamic var rememberInPagePosition = true
 }
 
 extension YabrPDFViewController: PDFDocumentDelegate {
