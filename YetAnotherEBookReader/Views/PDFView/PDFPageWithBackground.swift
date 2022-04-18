@@ -89,8 +89,8 @@ class PDFPageWithBackground : PDFPage {
     
     override func thumbnail(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
         let uiImage = super.thumbnail(of: size, for: box)
-        
-        print("\(#function) size=\(size) box=\(box)")
+    
+        print("\(#function) size=\(size) box=\(box.rawValue) imageSize=\(uiImage.size) imageScale=\(uiImage.scale) transform=\(super.transform(for: box))")
         
         return uiImage
     }

@@ -74,9 +74,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //            pageIndicator.backgroundColor = backgroundColor
 //            self.view.backgroundColor = backgroundColor
             
-            let curPage = self.pdfView.currentPage
-            
-            updatePageViewPositionHistory()
+            if oldValue.pageMode != pdfOptions.pageMode {
+                updatePageViewPositionHistory()
+            }
             let displayModeBefore = self.pdfView.displayMode
             switch pdfOptions.pageMode {
             case .Page:
@@ -100,14 +100,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             
             pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
             
+            guard let curPage = self.pdfView.currentPage else { return }
             if displayModeBefore == .singlePage,
-               displayModeBefore != pdfView.displayMode, curPage != nil {
+               displayModeBefore != pdfView.displayMode{
                 pdfView.goToFirstPage(self)
-                self.pdfView.go(to: curPage!)
-                delay(0.1) {
-                    print("\(#function) page to scroll fix \(curPage?.pageRef?.pageNumber)")
-                    
-                }
+                self.pdfView.go(to: curPage)
             }
         }
     }
@@ -485,7 +482,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pageIndicator.setTitle("\(curPageNum) / \(pdfView.document?.pageCount ?? 1)", for: .normal)
         pageSlider.setValue(Float(curPageNum), animated: true)
         
-        print("handlePageChange \(curPageNum) \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
+        print("\(#function) curPageNum=\(curPageNum) pageIndicator=\(pageIndicator.title(for: .normal) ?? "Untitled") pageSlider=\(pageSlider.value)")
         
         guard pdfView.frame.width > 1.0 else { return }     // have not been populated, cannot fit content
         
@@ -500,18 +497,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     at: pageViewPosition.point
                 )
                 lastDest.zoom = pageViewPosition.scaler
-                print("\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
+                print("\(#function) displayMode=\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
                 
                 pdfView.scaleFactor = pageViewPosition.scaler
                 
-                let docView = pdfView.documentView
-                print("\(#function) \(docView.debugDescription)")
-                
-//                let originalMode = pdfView.displayMode
-//                pdfView.displayMode = .singlePage
                 pdfView.go(to: lastDest)
                 pageViewPositionHistory.removeValue(forKey: curPageNum)     //prevent further application
-//                pdfView.displayMode = originalMode
             }
             
             return
@@ -519,8 +510,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         addBlankSubView(page: curPage)
         
-        
+        [PDFDisplayBox.mediaBox, PDFDisplayBox.cropBox, PDFDisplayBox.trimBox, PDFDisplayBox.bleedBox, PDFDisplayBox.artBox].forEach {
+            let bounds = curPage.bounds(for: $0)
+            print("\(#function) boundsForBox box=\($0.rawValue) bounds=\(bounds)")
+        }
         let boundsForCropBox = curPage.bounds(for: .cropBox)
+        let boundsForMediaBox = curPage.bounds(for: .mediaBox)
         let boundForVisibleContent = getVisibleContentsBound(pdfPage: curPage)
         
         if let pageViewPosition = pageViewPositionHistory[curPageNum],
@@ -531,7 +526,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 at: pageViewPosition.point
             )
             lastDest.zoom = pageViewPosition.scaler
-            print("BEFORE POINT lastDestPoint=\(lastDest.point)")
+            print("\(#function) displayMode=\(pdfView.displayMode) BEFORE POINT lastDestPoint=\(lastDest.point)")
             
             let bottomRight = PDFDestination(
                 page: curPage,
@@ -550,10 +545,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 
         let visibleWidthRatio = 1.0 * (boundForVisibleContent.width + 1) / boundsForCropBox.width
         let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
-        print("curScale \(pdfView.scaleFactor) \(visibleWidthRatio) \(visibleHeightRatio) \(pdfView.scaleFactorForSizeToFit)")
+        print("\(#function) curScale scaleFactor=\(pdfView.scaleFactor) visibleWidthRatio=\(visibleWidthRatio) visibleHeightRatio=\(visibleHeightRatio) boundsForCropBox=\(boundsForCropBox) boundForVisibleContent=\(boundForVisibleContent)")
         
-        let newDestX = boundForVisibleContent.minX + 4
-        let newDestY = boundsForCropBox.height - boundForVisibleContent.minY
+        let newDestX = boundForVisibleContent.minX + 2
+        let newDestY = boundsForCropBox.height - boundForVisibleContent.minY + 2
         
         let visibleRectInView = pdfView.convert(
             CGRect(x: newDestX,
@@ -562,9 +557,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                    height: boundsForCropBox.height * visibleHeightRatio),
             from: curPage)
         
-        print("pdfView frame \(pdfView.frame)")
+        print("\(#function) pdfView pdfView.frame=\(pdfView.frame)")
         
-        print("initialRect \(visibleRectInView)")
+        print("\(#function) initialRect visibleRectInView=\(visibleRectInView)")
         
         // let insetsScaleFactor = 0.9
         let insetsHorizontalScaleFactor = 1.0 - (pdfOptions.hMarginAutoScaler * 2.0) / 100.0
@@ -586,45 +581,46 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 return pdfOptions.lastScale
             }
         }()
-        
-        //pdfView.scaleFactor = self.lastScale
-        print("scaleFactor \(pdfOptions.lastScale)")
-        
         pdfView.scaleFactor = scaleFactor
-
+        //pdfView.scaleFactor = self.lastScale
         let navBarFrame = self.navigationController!.navigationBar.frame
-        let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
+        let navBarFrameInPDF = pdfView.convert(navBarFrame, to: curPage)
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
+        let stackViewFrameInPDF = pdfView.convert(stackView.frame, to: curPage)
         
         let newDest = PDFDestination(
             page: curPage,
             at: CGPoint(
                 x: pageViewPositionHistory[curPageNum]?.point.x ??
-                    newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
+                (newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX),
                 y: pageViewPositionHistory[curPageNum]?.point.y ??
-                    newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
+                (newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)
             )
         )
         
-        print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory[curPageNum]?.point.x)")
+        
+        print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory[curPageNum]?.point.y)")
+        
+        print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         //            let bottomRight = PDFDestination(
         //                page: curPage,
         //                at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY + boundsForCropBox.height))
         
         let bottomRight = PDFDestination(
             page: curPage,
-            at: CGPoint(x: newDestX + boundsForCropBox.width, y: newDestY - boundsForCropBox.height))
+            at: CGPoint(x: boundsForMediaBox.width, y: 0))
         
         pdfView.go(to: bottomRight)
         
-        print("BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
         pdfView.go(to: newDest)
         
         var afterPointX = pdfView.currentDestination!.point.x
-        var afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        var afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
         
-        print("AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDest.point) \(boundsForCropBox)")
+        print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
         let newDestForCompensation = PDFDestination(
             page: curPage,
@@ -638,8 +634,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pdfView.go(to: newDestForCompensation)
         afterPointX = pdfView.currentDestination!.point.x
         afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
-        print("AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDestForCompensation.point) \(boundsForCropBox)")
+        print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
 
+        print("\(#function) scaleFactor=\(pdfOptions.lastScale)")
+        
+        
     }
     
     func getThumbnailImageSize(boundsForCropBox: CGRect) -> CGSize {
@@ -658,48 +657,90 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     }
     
     func getVisibleContentsBound(pdfPage: PDFPage) -> CGRect{
+        let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
         let sizeForThumbnailImage = getThumbnailImageSize(boundsForCropBox: boundsForCropBox)
+        let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
+
+        let imageMediaBox = pdfPage.thumbnail(
+            of: CGSize(
+                width: boundsForMediaBox.width * thumbnailScale,
+                height: boundsForMediaBox.height * thumbnailScale),
+            for: .mediaBox
+        )
+        let imageCropBox = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
         
-        let image = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
-        
-        guard let cgimage = image.cgImage else { return boundsForCropBox }
+        guard let cgimage = imageMediaBox.cgImage else { return boundsForMediaBox }
         
         let numberOfComponents = 4
         
-        var top = 0
-        var bottom = 0
-        var leading = 0
-        var trailing = 0
+        var top = (0, 0)
+        var bottom = (0, 0)
+        var leading = (0, 0)
+        var trailing = (0, 0)
         
-        print("bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
-        print("sizeForThumbnailImage \(sizeForThumbnailImage)")
-        print("image width=\(image.size.width) height=\(image.size.height)")
-        
+        print("\(#function) bounds cropBox=\(boundsForCropBox) mediaBox=\(pdfPage.bounds(for: .mediaBox)) artBox=\(pdfPage.bounds(for: .artBox)) bleedBox=\(pdfPage.bounds(for: .bleedBox)) trimBox=\(pdfPage.bounds(for: .trimBox))")
+        print("\(#function) sizeForThumbnailImage \(sizeForThumbnailImage)")
+        print("\(#function) imageCropBox width=\(imageCropBox.size.width) height=\(imageCropBox.size.height)")
+        print("\(#function) imageMediaBox width=\(imageMediaBox.size.width) height=\(imageMediaBox.size.height)")
+
         let align = 8
-        let padding = (align - Int(image.size.width) % align) % align
-        print("CGIMAGE PADDING \(padding)")
+        let padding = (align - Int(imageMediaBox.size.width) % align) % align
+        print("\(#function) CGIMAGE PADDING \(padding)")
         
         //TOP
         if let provider = cgimage.dataProvider,
               let providerData = provider.data,
               let data = CFDataGetBytePtr(providerData) {
-            top      = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .up, data: data)
-            bottom   = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .down, data: data)
-            leading  = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .right, data: data)
-            trailing = getBlankBorderWidth(size: image.size, padding: padding, numberOfComponents: numberOfComponents, orientation: .left, data: data)
+            top      = getBlankBorderWidth(
+                size: imageMediaBox.size,
+                padding: padding,
+                numberOfComponents: numberOfComponents,
+                orientation: .up,
+                data: data,
+                ratio: boundsForMediaBox.width / boundsForCropBox.width
+            )
+            bottom   = getBlankBorderWidth(
+                size: imageMediaBox.size,
+                padding: padding,
+                numberOfComponents: numberOfComponents,
+                orientation: .down,
+                data: data,
+                ratio: boundsForMediaBox.width / boundsForCropBox.width
+            )
+            leading  = getBlankBorderWidth(
+                size: imageMediaBox.size,
+                padding: padding,
+                numberOfComponents: numberOfComponents,
+                orientation: .right,
+                data: data,
+                ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+            )
+            trailing = getBlankBorderWidth(
+                size: imageMediaBox.size,
+                padding: padding,
+                numberOfComponents: numberOfComponents,
+                orientation: .left,
+                data: data,
+                ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+            )
         }
-        print("white border \(top) \(bottom) \(leading) \(trailing)")
+        print("\(#function) white border \(top) \(bottom) \(leading) \(trailing)")
         
-        let imageSize = image.size
-        UIGraphicsBeginImageContextWithOptions(imageSize, false, CGFloat.zero)
-        image.draw(at: CGPoint.zero)
-        let rectangle = CGRect(x: leading, y: top, width: trailing - leading + 2, height: bottom - top + 1)
+        UIGraphicsBeginImageContextWithOptions(imageMediaBox.size, false, CGFloat.zero)
+        imageMediaBox.draw(at: CGPoint.zero)
+        
+        //imageCropBox.draw(at: CGPoint(x: boundsForCropBox.minX, y: boundsForMediaBox.maxY - boundsForCropBox.maxY), blendMode: .darken, alpha: 0.8)
+        
+        let rectangle = CGRect(
+            x: leading.0,
+            y: top.0,
+            width: trailing.0 - leading.0 + 2,
+            height: bottom.0 - top.0 + 1
+        )
         UIColor.black.setFill()
         UIRectFrame(rectangle)
         
-        let thumbnailScale = sizeForThumbnailImage.width / boundsForCropBox.width
-
         #if DEBUG
         UIColor.red.setStroke()
         let drawBounds = CGRect(x: boundsForCropBox.minX * thumbnailScale,
@@ -714,14 +755,20 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         self.thumbImageView.image = newImage
         
-        return CGRect(x: rectangle.minX / thumbnailScale, y: rectangle.minY / thumbnailScale, width: rectangle.width / thumbnailScale, height: rectangle.height / thumbnailScale)
+//        return CGRect(x: rectangle.minX / thumbnailScale, y: rectangle.minY / thumbnailScale, width: rectangle.width / thumbnailScale, height: rectangle.height / thumbnailScale)
+        //transform to cropBox coordination
+        return CGRect(
+            x: CGFloat(leading.0) / thumbnailScale - boundsForCropBox.minX,
+            y: CGFloat(top.0) / thumbnailScale - (boundsForMediaBox.maxY - boundsForCropBox.maxY),
+            width: rectangle.width / thumbnailScale,
+            height: rectangle.height / thumbnailScale
+        )
     }
     
     /*
      from top to bottom
      */
-    func getBlankBorderWidth(size: CGSize, padding: Int, numberOfComponents: Int, orientation: CGImagePropertyOrientation, data: UnsafePointer<UInt8>) -> Int {
-        var isWhite = true
+    func getBlankBorderWidth(size: CGSize, padding: Int, numberOfComponents: Int, orientation: CGImagePropertyOrientation, data: UnsafePointer<UInt8>, ratio: Double = 1.0) -> (Int, Int) {
         let lineNumMax = { () -> Int in
             switch(orientation) {
             case .up, .down, .upMirrored, .downMirrored:
@@ -738,8 +785,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 return Int(size.height)
             }
         }()
-        var border = lineNumMax/4
+        var border = lineNumMax/2
         let pixelNumInRow = Int(size.width) + padding
+        var nonWhiteLineFirst = 0
+        var nonWhiteLines = 0
+        var whiteLines = 0
         for line in (1 ..< (lineNumMax/4)) {    //bypassing first line due to noises
             var nonWhiteDensity = 0.0
             for pixelInLine in (1 ..< pixelNumMax) {    //bypassing first line due to noises
@@ -770,23 +820,38 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 nonWhiteDensity += getPixelGreyLevel(pixelIndex: pixelIndex, data: data)
             }
             if nonWhiteDensity > 0 {
-                print("nonWhiteDensity h=\(line) density=\(nonWhiteDensity)")
-                if CGFloat(nonWhiteDensity) / CGFloat(pixelNumMax) > pdfOptions.hMarginDetectStrength / 20.0 {
-                    isWhite = false
+                print("nonWhiteDensity h=\(line) density=\(nonWhiteDensity) orientation=\(orientation.rawValue)")
+            }
+            
+            if nonWhiteDensity > 0,
+               nonWhiteDensity / Double(pixelNumMax) * ratio * 20.0 > pdfOptions.hMarginDetectStrength {
+                nonWhiteLines += 1
+                if nonWhiteLineFirst == 0 {
+                    nonWhiteLineFirst = line
                 }
+            } else {
+                whiteLines += 1
+                nonWhiteLines = 0
+                nonWhiteLineFirst = 0
             }
-            //print("isWhite h=\(h) \(isWhite)")
-            if !isWhite {
-                border = line
-                break
+            
+                //print("isWhite h=\(h) \(isWhite)")
+            if nonWhiteLines > 2,
+               nonWhiteLineFirst < lineNumMax / 4,
+               border == lineNumMax / 2 {
+                border = nonWhiteLineFirst
             }
+        }
+        
+        if border == lineNumMax/2 {
+            border = 1
         }
         
         switch(orientation) {
         case .up, .upMirrored, .right, .rightMirrored:
-            return border     //top to bottom & left to right
+            return (border, whiteLines)     //top to bottom & left to right
         case .down, .downMirrored, .left, .leftMirrored:
-            return lineNumMax - border - 1
+            return (lineNumMax - border - 1, whiteLines)
         }
         
 //        if bottomUp {
@@ -801,11 +866,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let r = data[pixelIndex]
         let g = data[pixelIndex + 1]
         let b = data[pixelIndex + 2]
-        // let a = data[pixelIndex + 3]
-        // print("\(h) \(w) \(r) \(g) \(b) \(a)")
+        
         
         if r < 200 && g < 200 && b < 200 {
-            return Double(UInt(255-r) + UInt(255-g) + UInt(255-b) / 3) / 255.0
+            return Double(UInt(255-r) + UInt(255-g) + UInt(255-b)) / 3 / 255.0
             //print("top=\(h) w=\(w) \(r) \(g) \(b) \(a)")
             //isWhite = false
             //break
