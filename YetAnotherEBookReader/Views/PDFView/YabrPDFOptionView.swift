@@ -98,9 +98,10 @@ struct PDFOptionView: View {
             }
             .padding(10)
             .onAppear() {
-                    self.pdfOptions = self.pdfViewController.pdfOptions
+                self.pdfOptions = self.pdfViewController.pdfOptions
             }
             .onChange(of: pdfOptions) {_ in
+                self.pdfViewController.updatePageViewPositionHistory()
                 self.pdfViewController.handleOptionsChange(pdfOptions: self.pdfOptions)
             }
         }
