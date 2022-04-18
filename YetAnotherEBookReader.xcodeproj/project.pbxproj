@@ -325,6 +325,7 @@
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
 		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
+		E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5E280D39D9006E6901 /* YabrPDFView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -624,6 +625,7 @@
 		AD8951C85BCF23E2FFDF70D6 /* Pods-YetAnotherEBookReader-Catalyst.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; sourceTree = "<group>"; };
 		BE1A56B3346178A15F209183 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.release.xcconfig"; sourceTree = "<group>"; };
 		E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFModel.swift; sourceTree = "<group>"; };
+		E7832D5E280D39D9006E6901 /* YabrPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1066,6 +1068,7 @@
 				2A890570260076780072B580 /* YabrPDFOptionView.swift */,
 				2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */,
 				E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */,
+				E7832D5E280D39D9006E6901 /* YabrPDFView.swift */,
 			);
 			path = PDFView;
 			sourceTree = "<group>";
@@ -1742,6 +1745,7 @@
 				2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */,
 				2A107DDB2663CB56007DCA20 /* PublicationCollectionViewCell.swift in Sources */,
 				2A47581927BA8C0200642AD1 /* LibraryDetailView.swift in Sources */,
+				E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */,
 				2A107DEA2663CB56007DCA20 /* PDFViewController.swift in Sources */,
 				2A107DE22663CB56007DCA20 /* ScreenOrientation.swift in Sources */,
 				2A107DFB2663CB56007DCA20 /* AssociatedColors.swift in Sources */,

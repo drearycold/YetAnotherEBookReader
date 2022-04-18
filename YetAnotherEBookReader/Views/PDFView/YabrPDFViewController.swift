@@ -15,7 +15,7 @@ import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class YabrPDFViewController: UIViewController, PDFViewDelegate {
-    let pdfView = PDFView()
+    let pdfView = YabrPDFView()
     let blankView = UIImageView()
     let mDictView = MDictViewContainer()
     let doubleTapLeftLabel = UILabel()
@@ -341,6 +341,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
         stackView.frame = self.navigationController?.toolbar.frame ?? .zero
         
+        
         doubleTapLeftLabel.text = "Double Tap\nThis Region\nto Turn Page"
         doubleTapLeftLabel.textAlignment = .center
         doubleTapLeftLabel.numberOfLines = 0
@@ -369,14 +370,23 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //        starDictView.loadViewIfNeeded()
         blankView.contentMode = .scaleAspectFill
         
-        doubleTapLeftLabel.frame = CGRect(origin: CGPoint(x: 0, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
-        
-        doubleTapRightLabel.frame = CGRect(origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
-        
-
-        UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
-            pdfView.addSubview(doubleTapLeftLabel)
-            pdfView.addSubview(doubleTapRightLabel)
+        if pdfOptions.pageMode == .Page {
+            doubleTapLeftLabel.frame = CGRect(origin: CGPoint(x: 0, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
+            
+            doubleTapRightLabel.frame = CGRect(origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
+            
+            
+            UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
+                pdfView.addSubview(doubleTapLeftLabel)
+                pdfView.addSubview(doubleTapRightLabel)
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [weak self] in
+                UIView.animate(withDuration: TimeInterval(0.5)) {
+                    self?.doubleTapLeftLabel.removeFromSuperview()
+                    self?.doubleTapRightLabel.removeFromSuperview()
+                }
+            }
         }
         pdfView.addSubview(blankView)
         
@@ -395,12 +405,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
         
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [weak self] in
-            UIView.animate(withDuration: TimeInterval(0.5)) {
-                self?.doubleTapLeftLabel.removeFromSuperview()
-                self?.doubleTapRightLabel.removeFromSuperview()
-            }
-        }
+        
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -424,6 +429,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     
     @objc private func tappedGesture(sender: UITapGestureRecognizer) {
         print("tappedGesture \(sender.state.rawValue)")
+        
+        guard pdfOptions.pageMode == .Page else { return }
         
         if sender.state == .ended {
             let frameRect = self.pdfView.frame
@@ -472,7 +479,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         print("handlePageChange \(pageIndicator.title(for: .normal) ?? "Untitled") \(pageSlider.value)")
         
+        guard pdfView.frame.width > 1.0 else { return }     // have not been populated, cannot fit content
+        
         if pdfView.displayMode != .singlePage {
+            pdfView.scaleFactor = pdfOptions.lastScale
+            
             if let pageViewPosition = pageViewPositionHistory[curPageNum],
                pageViewPosition.scaler > 0,
                pageViewPosition.viewSize == pdfView.frame.size || pageViewPosition.viewSize == .zero {
@@ -490,7 +501,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                 
 //                let originalMode = pdfView.displayMode
 //                pdfView.displayMode = .singlePage
-//                pdfView.go(to: lastDest)
+                pdfView.go(to: lastDest)
+                pageViewPositionHistory.removeValue(forKey: curPageNum)     //prevent further application
 //                pdfView.displayMode = originalMode
             }
             
@@ -499,10 +511,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         addBlankSubView(page: curPage)
         
-        if pdfView.frame.width < 1.0 {
-            // have not been populated, cannot fit content
-            return
-        }
+        
         let boundsForCropBox = curPage.bounds(for: .cropBox)
         let boundForVisibleContent = getVisibleContentsBound(pdfPage: curPage)
         
@@ -853,6 +862,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
+        updatePageViewPositionHistory()
+
         updateReadingProgress()
         
         self.dismiss(animated: true, completion: nil)
@@ -861,38 +872,35 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     func updateReadingProgress() {
         var position = [String : Any]()
         
-        guard let curDest = pdfView.currentDestination,
-              let pageNum = curDest.page?.pageRef?.pageNumber
+        guard let curPageNum = pdfView.page(for: .zero, nearest: true)?.pageRef?.pageNumber,
+              let curPagePos = pageViewPositionHistory[curPageNum]
         else { return }
         
-        position["pageNumber"] = pageNum
-        position["pageOffsetX"] = curDest.point.x
-        let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curDest.page!)
-        let navFrameInPDF = pdfView.convert(navigationController!.navigationBar.frame, to: curDest.page!)
-        print("viewFrameInPDF=\(viewFrameInPDF) navFrameInPDF=\(navFrameInPDF) curDestY=\(curDest.point.y)")
-        position["pageOffsetY"] = curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height
+        position["pageNumber"] = curPageNum
+        position["pageOffsetX"] = curPagePos.point.x
+        position["pageOffsetY"] = curPagePos.point.y
         
         let bookProgress = 100.0 * Double(position["pageNumber"] as? Int ?? 0) / Double(pdfView.document?.pageCount ?? 1)
         
         var chapterProgress = 0.0
         let chapterName = titleInfoButton.currentTitle ?? "Unknown Title"
-        if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= pageNum }) {
+        if let firstIndex = tocList.lastIndex(where: { $0.0 == chapterName && $0.1 <= curPageNum }) {
             let curIndex = firstIndex.advanced(by: 0)
             let nextIndex = firstIndex.advanced(by: 1)
             let chapterStartPageNum = tocList[curIndex].1
             let chapterEndPageNum = nextIndex < tocList.count ?
                 tocList[nextIndex].1 + 1 : (pdfView.document?.pageCount ?? 1) + 1
             if chapterEndPageNum > chapterStartPageNum {
-                chapterProgress = 100.0 * Double(pageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
+                chapterProgress = 100.0 * Double(curPageNum - chapterStartPageNum) / Double(chapterEndPageNum - chapterStartPageNum)
             }
         }
         
         if var updatedReadingPosition = ModelData.shared?.updatedReadingPosition {
-            updatedReadingPosition.lastPosition[0] = pageNum
-            updatedReadingPosition.lastPosition[1] = Int(curDest.point.x.rounded())
-            updatedReadingPosition.lastPosition[2] = Int((curDest.point.y + viewFrameInPDF.height + navFrameInPDF.height).rounded())
+            updatedReadingPosition.lastPosition[0] = curPageNum
+            updatedReadingPosition.lastPosition[1] = Int(curPagePos.point.x.rounded())
+            updatedReadingPosition.lastPosition[2] = Int((curPagePos.point.y).rounded())
             updatedReadingPosition.maxPage = self.pdfView.document?.pageCount ?? 1
-            updatedReadingPosition.lastReadPage = pageNum
+            updatedReadingPosition.lastReadPage = curPageNum
             updatedReadingPosition.lastChapterProgress = chapterProgress
             updatedReadingPosition.lastProgress = bookProgress
             updatedReadingPosition.lastReadChapter = chapterName
@@ -927,24 +935,40 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     }
     
     func updatePageViewPositionHistory() {
-        guard let dest = pdfView.currentDestination,
-              let curPage = dest.page,
-              let pageNum = curPage.pageRef?.pageNumber else { return }
+        guard let curDest = pdfView.currentDestination,
+              let curDestPage = curDest.page,
+              let curPage = pdfView.page(for: .zero, nearest: true),
+              let curPageNum = curPage.pageRef?.pageNumber
+              else { return }
+        
+        var curDestPoint = curDest.point
+        if curPage != curDestPage {
+//            CGPoint(x: curDest.point.x, y: curDest.point.y - curDestPage.bounds(for: .cropBox).height)
+            //translate curDest point to curPage point
+            let curDestPointInView = pdfView.convert(curDestPoint, from: curDestPage)
+            let curDestPointInCurPage = pdfView.convert(curDestPointInView, to: curPage)
+            curDestPoint = curDestPointInCurPage
+        }
         
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
         let navBarFrame = self.navigationController?.navigationBar.frame ?? CGRect()
         let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
-
-        let pointUpperLeft = CGPoint(
-            x: dest.point.x,
-            y: dest.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
-        )
-        pageViewPositionHistory[pageNum] = PageViewPosition(
-            scaler: pdfView.scaleFactor,
-            point: pointUpperLeft,
-            viewSize: pdfView.frame.size
-        )
-        print("updatePageViewPositionHistory \(pageViewPositionHistory[pageNum]!)")
+    
+//        guard let dest = pdfView.currentDestination,
+//              let curPage = dest.page,
+//              let pageNum = curPage.pageRef?.pageNumber else { return }
+        
+            
+            let pointUpperLeft = CGPoint(
+                x: curDestPoint.x,
+                y: curDestPoint.y + navBarFrameInPDF.height + viewFrameInPDF.height
+            )
+            pageViewPositionHistory[curPageNum] = PageViewPosition(
+                scaler: pdfView.scaleFactor,
+                point: pointUpperLeft,
+                viewSize: pdfView.frame.size
+            )
+        print("updatePageViewPositionHistory \(pageViewPositionHistory[curPageNum])")
     }
 }
 

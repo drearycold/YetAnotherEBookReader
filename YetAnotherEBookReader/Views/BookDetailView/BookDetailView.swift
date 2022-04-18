@@ -69,10 +69,6 @@ struct BookDetailView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
-    @State private var shelfNameShowDetail = false
-    @State private var shelfName = ""
-    @State private var shelfNameCustomized = false
-    
     @StateObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
@@ -93,8 +89,9 @@ struct BookDetailView: View {
             toolbarContent()
         }
         .onChange(of: downloadStatus) { value in
+            guard let book = modelData.readingBook else { return }
             if downloadStatus == .DOWNLOADED {
-                modelData.addToShelf(modelData.readingBook!.inShelfId, shelfName: shelfName)
+                modelData.addToShelf(book.inShelfId, shelfName: book.tags.first ?? "Unspecified")
             }
         }
         .alert(item: $alertItem) { item in
@@ -793,9 +790,6 @@ struct BookDetailView: View {
     }
     
     func initStates(book: CalibreBook) {
-        shelfName = book.inShelfName.isEmpty ? book.tags.first ?? "Untagged" : book.inShelfName
-        shelfNameCustomized = !book.tags.contains(shelfName)
-        
         if _viewModel.listVM == nil {
             _viewModel.listVM = ReadingPositionListViewModel(
                 modelData: modelData, book: book, positions: book.readPos.getDevices()
