@@ -81,21 +81,18 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             switch pdfOptions.pageMode {
             case .Page:
                 self.pdfView.displayMode = .singlePage
-                break;
+                switch pdfOptions.readingDirection {
+                case .LtR_TtB:
+                    pageSlider.semanticContentAttribute = .forceLeftToRight
+                    pdfView.displaysRTL = false
+                case .TtB_RtL:
+                    pageSlider.semanticContentAttribute = .forceRightToLeft
+                    pdfView.displaysRTL = true
+                }
             case .Scroll:
                 self.pdfView.displayMode = .singlePageContinuous
-                break
-            }
-            
-            switch pdfOptions.readingDirection {
-            case .LtR_TtB:
                 pageSlider.semanticContentAttribute = .forceLeftToRight
                 pdfView.displaysRTL = false
-                break
-            case .TtB_RtL:
-                pageSlider.semanticContentAttribute = .forceRightToLeft
-                pdfView.displaysRTL = true
-                break
             }
             
             pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
