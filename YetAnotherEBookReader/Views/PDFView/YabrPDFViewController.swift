@@ -74,10 +74,16 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //            pageIndicator.backgroundColor = backgroundColor
 //            self.view.backgroundColor = backgroundColor
             
+            guard let curPage = self.pdfView.currentPage,
+                  let curPageNum = curPage.pageRef?.pageNumber else { return }
+            
             if oldValue.pageMode != pdfOptions.pageMode {
                 updatePageViewPositionHistory()
             }
+            
+            let viewPosition = pageViewPositionHistory[curPageNum]?.point
             let displayModeBefore = self.pdfView.displayMode
+            
             switch pdfOptions.pageMode {
             case .Page:
                 self.pdfView.displayMode = .singlePage
@@ -97,20 +103,24 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             
             pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
             
-            guard let curPage = self.pdfView.currentPage,
-                  let curPageNum = curPage.pageRef?.pageNumber else { return }
-            if displayModeBefore == .singlePage,
-               displayModeBefore != pdfView.displayMode {
+//            if displayModeBefore == .singlePage,
+            if displayModeBefore != pdfView.displayMode {
                 if let firstPage = pdfView.document?.page(at: 1) {
                     pdfView.go(to: PDFDestination(page: firstPage, at: .zero))
                 }
                 
-                pdfView.go(to: PDFDestination(page: curPage, at: pageViewPositionHistory[curPageNum]?.point ?? .zero))
+                if viewPosition != nil {
+                    pdfView.go(to: PDFDestination(page: curPage, at: viewPosition!))
+                } else {
+                    pdfView.go(to: curPage)
+                }
             }
         }
     }
         
     var pageViewPositionHistory = [Int: PageViewPosition]() //key is 1-based (pdfView.currentPage?.pageRef?.pageNumber)
+    
+    var pageVisibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
     
     var realm: Realm?
     
@@ -162,7 +172,18 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         pdfView.autoScales = false
 
         pageIndicator.setTitle("0 / 0", for: .normal)
-        pageIndicator.addAction(UIAction(handler: { (action) in
+        pageIndicator.addAction(UIAction(handler: { [self] (action) in
+            guard let curPageNum = pdfView.currentPage?.pageRef?.pageNumber,
+                  let bounds = pageVisibleContentBounds[
+                    PageVisibleContentKey(
+                        pageNumber: curPageNum,
+                        readingDirection: pdfOptions.readingDirection,
+                        hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+                        vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+                    )
+                  ],
+                  let image = bounds.thumbImage else { return }
+            self.thumbImageView.image = image
             self.present(self.thumbController, animated: true, completion: nil)
         }), for: .primaryActionTriggered)
         
@@ -517,7 +538,66 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         }
         let boundsForCropBox = curPage.bounds(for: .cropBox)
         let boundsForMediaBox = curPage.bounds(for: .mediaBox)
-        let boundForVisibleContent = getVisibleContentsBound(pdfPage: curPage)
+        let boundForVisibleContentKey = PageVisibleContentKey(
+            pageNumber: curPageNum,
+            readingDirection: pdfOptions.readingDirection,
+            hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+            vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+        )
+        
+        let boundForVisibleContent = pageVisibleContentBounds[boundForVisibleContentKey]?.bounds ?? { () -> CGRect in
+            let bounds = getVisibleContentsBound(pdfPage: curPage)
+            pageVisibleContentBounds[boundForVisibleContentKey] = bounds
+            return bounds.bounds
+        }()
+        pageVisibleContentBounds[boundForVisibleContentKey]?.lastUsed = Date()
+        
+        //pre-analyze next page
+        while( pageVisibleContentBounds.count > 9 ) {
+            if let minPageEntry = pageVisibleContentBounds.min(by: {$0.value.lastUsed < $1.value.lastUsed}) {
+                pageVisibleContentBounds.removeValue(forKey: minPageEntry.key)
+                print("\(#function) pageVisibleContentBounds.removeValue=\(minPageEntry.key.pageNumber)")
+            } else {
+                break
+            }
+        }
+        DispatchQueue.global(qos: .utility).async { [self] in
+            let boundForVisibleContentKeyNext = PageVisibleContentKey(
+                pageNumber: curPageNum + 1,
+                readingDirection: pdfOptions.readingDirection,
+                hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+                vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+            )
+            let boundForVisibleContentKeyPrev = PageVisibleContentKey(
+                pageNumber: curPageNum - 1,
+                readingDirection: pdfOptions.readingDirection,
+                hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+                vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+            )
+            var boundsNext: PageVisibleContentValue? = nil
+            var boundsPrev: PageVisibleContentValue? = nil
+            defer {
+                DispatchQueue.main.async {
+                    if boundsNext != nil {
+                        pageVisibleContentBounds[boundForVisibleContentKeyNext] = boundsNext!
+                    }
+                    if boundsPrev != nil {
+                        pageVisibleContentBounds[boundForVisibleContentKeyPrev] = boundsPrev!
+                    }
+                }
+            }
+            
+            if pageVisibleContentBounds[boundForVisibleContentKeyNext] == nil,
+               let prePage = pdfView.document?.page(at: boundForVisibleContentKeyNext.pageNumber - 1) {   //page(at:) is 0-based
+                boundsNext = getVisibleContentsBound(pdfPage: prePage)
+            }
+                        
+            if pageVisibleContentBounds[boundForVisibleContentKeyPrev] == nil,
+               let prePage = pdfView.document?.page(at: boundForVisibleContentKeyPrev.pageNumber - 1) {   //page(at:) is 0-based
+                boundsPrev = getVisibleContentsBound(pdfPage: prePage)
+            }
+        }
+        print("\(#function) pageVisibleContentBounds.count=\(pageVisibleContentBounds.count)")
         
         if let pageViewPosition = pageViewPositionHistory[curPageNum],
            pageViewPosition.scaler > 0,
@@ -657,7 +737,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         }
     }
     
-    func getVisibleContentsBound(pdfPage: PDFPage) -> CGRect{
+    func getVisibleContentsBound(pdfPage: PDFPage) -> PageVisibleContentValue {
         let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
         let sizeForThumbnailImage = getThumbnailImageSize(boundsForCropBox: boundsForCropBox)
@@ -671,7 +751,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         )
         let imageCropBox = pdfPage.thumbnail(of: sizeForThumbnailImage, for: .cropBox)
         
-        guard let cgimage = imageMediaBox.cgImage else { return boundsForMediaBox }
+        guard let cgimage = imageMediaBox.cgImage else { return PageVisibleContentValue(bounds: boundsForMediaBox, thumbImage: nil) }
         
         let numberOfComponents = 4
         
@@ -793,15 +873,16 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let newImage = UIGraphicsGetImageFromCurrentImageContext()
         UIGraphicsEndImageContext()
         
-        self.thumbImageView.image = newImage
-        
 //        return CGRect(x: rectangle.minX / thumbnailScale, y: rectangle.minY / thumbnailScale, width: rectangle.width / thumbnailScale, height: rectangle.height / thumbnailScale)
         //transform to cropBox coordination
-        return CGRect(
-            x: CGFloat(leading.0) / thumbnailScale - boundsForCropBox.minX,
-            y: CGFloat(top.0) / thumbnailScale - (boundsForMediaBox.maxY - boundsForCropBox.maxY),
-            width: rectangle.width / thumbnailScale,
-            height: rectangle.height / thumbnailScale
+        return PageVisibleContentValue(
+            bounds: CGRect(
+                x: CGFloat(leading.0) / thumbnailScale - boundsForCropBox.minX,
+                y: CGFloat(top.0) / thumbnailScale - (boundsForMediaBox.maxY - boundsForCropBox.maxY),
+                width: rectangle.width / thumbnailScale,
+                height: rectangle.height / thumbnailScale
+            ),
+            thumbImage: newImage
         )
     }
     
@@ -1055,7 +1136,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         guard let pagePoint = getPagePoint() else { return }
         
         pageViewPositionHistory[pagePoint.0] = pagePoint.1
-        print("updatePageViewPositionHistory \(pageViewPositionHistory[pagePoint.0])")
+        print("updatePageViewPositionHistory \(pagePoint)")
     }
     
     func getPagePoint() -> (Int, PageViewPosition)? {

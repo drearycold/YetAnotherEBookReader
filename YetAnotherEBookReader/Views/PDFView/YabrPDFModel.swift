@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreGraphics
+import UIKit
 import RealmSwift
 
 enum PDFAutoScaler: String, CaseIterable, Identifiable {
@@ -117,3 +118,15 @@ struct PageViewPosition {
     var viewSize = CGSize()
 }
 
+struct PageVisibleContentKey: Hashable {
+    let pageNumber: Int
+    let readingDirection: PDFReadDirection
+    let hMarginDetectStrength: Double
+    let vMarginDetectStrength: Double
+}
+
+struct PageVisibleContentValue {
+    let bounds: CGRect
+    let thumbImage: UIImage?
+    var lastUsed = Date()
+}
