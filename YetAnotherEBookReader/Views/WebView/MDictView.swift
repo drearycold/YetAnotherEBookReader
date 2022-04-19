@@ -51,7 +51,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         guard let server = server else { return }
 
         word = self.title ?? "_"
-        if let url = URL(string: server + "?word=" + word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) {
+        if let url = URL(string: server + "?word=" + word.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) {
             webView.load(URLRequest(url: url))
         }
         

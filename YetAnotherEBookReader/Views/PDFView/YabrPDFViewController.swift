@@ -548,7 +548,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let visibleHeightRatio = 1.0 * (boundForVisibleContent.height + 1) / boundsForCropBox.height
         print("\(#function) curScale scaleFactor=\(pdfView.scaleFactor) visibleWidthRatio=\(visibleWidthRatio) visibleHeightRatio=\(visibleHeightRatio) boundsForCropBox=\(boundsForCropBox) boundForVisibleContent=\(boundForVisibleContent)")
         
-        let newDestX = boundForVisibleContent.minX + 2
+        let newDestX = boundForVisibleContent.minX + boundsForMediaBox.minX + 2
         let newDestY = boundsForCropBox.height - boundForVisibleContent.minY + 2
         
         let visibleRectInView = pdfView.convert(
@@ -764,6 +764,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             }
             
         }
+        
         print("\(#function) white border \(top) \(bottom) \(leading) \(trailing)")
         
         UIGraphicsBeginImageContextWithOptions(imageMediaBox.size, false, CGFloat.zero)
