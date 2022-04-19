@@ -10,7 +10,7 @@ import UIKit
 import WebKit
 
 open class MDictViewContainer : UIViewController, WKUIDelegate {
-    var webView: WKWebView!
+    let webView = WKWebView()
     var server: String?
     var word = ""
     
@@ -21,8 +21,6 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         
         print("MDICT viewDidLoad \(self.view.frame)")
         
-        // let webConfiguration = WKWebViewConfiguration()
-        webView = WKWebView()
         webView.uiDelegate = self
         view.addSubview(webView)
         
@@ -56,6 +54,8 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         if let url = URL(string: server + "?word=" + word.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) {
             webView.load(URLRequest(url: url))
         }
+        
+        self.navigationItem.title = word
         
         super.viewWillAppear(animated)
     }

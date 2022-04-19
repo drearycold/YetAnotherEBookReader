@@ -1039,9 +1039,14 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
 //    }
     @objc func lookupMDict() {
         if let s = pdfView.currentSelection?.string {
-            print(s)
+            print("\(#function) word=\(s)")
             mDictView.title = s
-            self.present(mDictView, animated: true, completion: nil)
+            
+            let nav = UINavigationController(rootViewController: mDictView)
+            nav.setNavigationBarHidden(false, animated: false)
+            nav.setToolbarHidden(false, animated: false)
+            
+            self.present(nav, animated: true, completion: nil)
         }
     }
     
