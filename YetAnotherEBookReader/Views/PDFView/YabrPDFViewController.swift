@@ -100,11 +100,15 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             
             pdfView.displayDirection = pdfOptions.readingDirection == .LtR_TtB ? .vertical : .horizontal
             
-            guard let curPage = self.pdfView.currentPage else { return }
+            guard let curPage = self.pdfView.currentPage,
+                  let curPageNum = curPage.pageRef?.pageNumber else { return }
             if displayModeBefore == .singlePage,
-               displayModeBefore != pdfView.displayMode{
-                pdfView.goToFirstPage(self)
-                self.pdfView.go(to: curPage)
+               displayModeBefore != pdfView.displayMode {
+                if let firstPage = pdfView.document?.page(at: 1) {
+                    pdfView.go(to: PDFDestination(page: firstPage, at: .zero))
+                }
+                
+                pdfView.go(to: PDFDestination(page: curPage, at: pageViewPositionHistory[curPageNum]?.point ?? .zero))
             }
         }
     }
@@ -613,12 +617,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         pdfView.go(to: bottomRight)
         
-        print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
+        print("\(#function) BEFORE POINT BOTTOM RIGHT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
         pdfView.go(to: newDest)
         
         var afterPointX = pdfView.currentDestination!.point.x
-        var afterPointY = pdfView.currentDestination!.point.y + viewFrameInPDF.height
+        var afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
         
         print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
@@ -688,42 +692,80 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         let padding = (align - Int(imageMediaBox.size.width) % align) % align
         print("\(#function) CGIMAGE PADDING \(padding)")
         
-        //TOP
         if let provider = cgimage.dataProvider,
               let providerData = provider.data,
               let data = CFDataGetBytePtr(providerData) {
-            top      = getBlankBorderWidth(
-                size: imageMediaBox.size,
-                padding: padding,
-                numberOfComponents: numberOfComponents,
-                orientation: .up,
-                data: data,
-                ratio: boundsForMediaBox.width / boundsForCropBox.width
-            )
-            bottom   = getBlankBorderWidth(
-                size: imageMediaBox.size,
-                padding: padding,
-                numberOfComponents: numberOfComponents,
-                orientation: .down,
-                data: data,
-                ratio: boundsForMediaBox.width / boundsForCropBox.width
-            )
-            leading  = getBlankBorderWidth(
-                size: imageMediaBox.size,
-                padding: padding,
-                numberOfComponents: numberOfComponents,
-                orientation: .right,
-                data: data,
-                ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
-            )
-            trailing = getBlankBorderWidth(
-                size: imageMediaBox.size,
-                padding: padding,
-                numberOfComponents: numberOfComponents,
-                orientation: .left,
-                data: data,
-                ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
-            )
+            switch pdfOptions.readingDirection {
+            case .LtR_TtB:
+                top      = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .up,
+                    data: data,
+                    ratio: boundsForMediaBox.width / boundsForCropBox.width
+                )
+                bottom   = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .down,
+                    data: data,
+                    ratio: boundsForMediaBox.width / boundsForCropBox.width
+                )
+                leading  = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .right,
+                    data: data,
+                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+                )
+                trailing = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .left,
+                    data: data,
+                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+                )
+                break
+            case .TtB_RtL:
+                leading  = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .right,
+                    data: data,
+                    ratio: boundsForMediaBox.height / boundsForCropBox.height
+                )
+                trailing = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .left,
+                    data: data,
+                    ratio: boundsForMediaBox.height / boundsForCropBox.height
+                )
+                top      = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .up,
+                    data: data,
+                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1)
+                )
+                bottom   = getBlankBorderWidth(
+                    size: imageMediaBox.size,
+                    padding: padding,
+                    numberOfComponents: numberOfComponents,
+                    orientation: .down,
+                    data: data,
+                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1)
+                )
+                break
+            }
+            
         }
         print("\(#function) white border \(top) \(bottom) \(leading) \(trailing)")
         
