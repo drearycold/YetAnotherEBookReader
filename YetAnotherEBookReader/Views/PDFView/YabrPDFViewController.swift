@@ -18,8 +18,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
     let pdfView = YabrPDFView()
     let blankView = UIImageView()
     let mDictView = MDictViewContainer()
+    
     let doubleTapLeftLabel = UILabel()
     let doubleTapRightLabel = UILabel()
+    let singleTapLeftLabel = UILabel()
+    let singleTapRightLabel = UILabel()
     
     let logger = Logger()
     
@@ -113,6 +116,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
                     pdfView.go(to: PDFDestination(page: curPage, at: viewPosition!))
                 } else {
                     pdfView.go(to: curPage)
+                }
+                
+                if pdfOptions.pageMode == .Page {
+                    pageTapPreview()
                 }
             }
         }
@@ -344,10 +351,16 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         
         thumbController.view = thumbImageView
         
-        let tapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(tappedGesture(sender:)))
-        tapGestureRecognizer.numberOfTapsRequired = 2
+        let doubleTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(doubleTappedGesture(sender:)))
+        doubleTapGestureRecognizer.numberOfTapsRequired = 2
+        pdfView.addGestureRecognizer(doubleTapGestureRecognizer)
         
-        pdfView.addGestureRecognizer(tapGestureRecognizer)
+        let singleTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(singleTappedGesture(sender:)))
+        singleTapGestureRecognizer.numberOfTapsRequired = 1
+        pdfView.addGestureRecognizer(singleTapGestureRecognizer)
+        
+        
+        
         pdfView.delegate = self
         
         self.view = pdfView
@@ -369,7 +382,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         doubleTapLeftLabel.numberOfLines = 0
         doubleTapLeftLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
         doubleTapLeftLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
-        doubleTapLeftLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
+        doubleTapLeftLabel.layer.backgroundColor = UIColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 0.9).cgColor
         doubleTapLeftLabel.layer.cornerRadius = 8
         doubleTapLeftLabel.layer.masksToBounds = true
         
@@ -378,10 +391,27 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         doubleTapRightLabel.numberOfLines = 0
         doubleTapRightLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
         doubleTapRightLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
-        doubleTapRightLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
+        doubleTapRightLabel.layer.backgroundColor = UIColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 0.9).cgColor
         doubleTapRightLabel.layer.cornerRadius = 8
         doubleTapRightLabel.layer.masksToBounds = true
         
+        singleTapLeftLabel.text = "Tap to Turn"
+        singleTapLeftLabel.textAlignment = .center
+        singleTapLeftLabel.numberOfLines = 0
+        singleTapLeftLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
+        singleTapLeftLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
+        singleTapLeftLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
+        singleTapLeftLabel.layer.cornerRadius = 8
+        singleTapLeftLabel.layer.masksToBounds = true
+        
+        singleTapRightLabel.text = "Tap to Turn"
+        singleTapRightLabel.textAlignment = .center
+        singleTapRightLabel.numberOfLines = 0
+        singleTapRightLabel.textColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
+        singleTapRightLabel.font = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 24 : 20, weight: .regular)
+        singleTapRightLabel.layer.backgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
+        singleTapRightLabel.layer.cornerRadius = 8
+        singleTapRightLabel.layer.masksToBounds = true
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -393,22 +423,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         blankView.contentMode = .scaleAspectFill
         
         if pdfOptions.pageMode == .Page {
-            doubleTapLeftLabel.frame = CGRect(origin: CGPoint(x: 0, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
-            
-            doubleTapRightLabel.frame = CGRect(origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfView.frame.height * 0.1), size: CGSize(width: pdfView.frame.width / 5, height: pdfView.frame.height * 0.8))
-            
-            
-            UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
-                pdfView.addSubview(doubleTapLeftLabel)
-                pdfView.addSubview(doubleTapRightLabel)
-            }
-            
-            DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [weak self] in
-                UIView.animate(withDuration: TimeInterval(0.5)) {
-                    self?.doubleTapLeftLabel.removeFromSuperview()
-                    self?.doubleTapRightLabel.removeFromSuperview()
-                }
-            }
+            pageTapPreview()
         }
         pdfView.addSubview(blankView)
         
@@ -454,8 +469,49 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
         }
     }
     
-    @objc private func tappedGesture(sender: UITapGestureRecognizer) {
-        print("tappedGesture \(sender.state.rawValue)")
+    func pageTapPreview() {
+        let navBarHeight = navigationController?.navigationBar.frame.height ?? 0
+        let pdfViewHeight = pdfView.frame.height
+        doubleTapLeftLabel.frame = CGRect(
+            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1 - navBarHeight),
+            size: CGSize(width: pdfView.frame.width / 5, height: pdfViewHeight * 0.8)
+        )
+        
+        doubleTapRightLabel.frame = CGRect(
+            origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfViewHeight * 0.1 - navBarHeight),
+            size: CGSize(width: pdfView.frame.width / 5, height: pdfViewHeight * 0.8)
+        )
+        
+        singleTapLeftLabel.frame = CGRect(
+            origin: CGPoint(x: 0, y: pdfViewHeight * 0.9 - navBarHeight),
+            size: CGSize(width: pdfView.frame.width / 5, height: pdfViewHeight * 0.1)
+        )
+        
+        singleTapRightLabel.frame = CGRect(
+            origin: CGPoint(x: pdfView.frame.width * 4 / 5, y: pdfViewHeight * 0.9 - navBarHeight),
+            size: CGSize(width: pdfView.frame.width / 5, height: pdfViewHeight * 0.1)
+        )
+        
+        
+        UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
+            pdfView.addSubview(doubleTapLeftLabel)
+            pdfView.addSubview(doubleTapRightLabel)
+            pdfView.addSubview(singleTapLeftLabel)
+            pdfView.addSubview(singleTapRightLabel)
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .seconds(3))) { [weak self] in
+            UIView.animate(withDuration: TimeInterval(0.5)) {
+                self?.doubleTapLeftLabel.removeFromSuperview()
+                self?.doubleTapRightLabel.removeFromSuperview()
+                self?.singleTapLeftLabel.removeFromSuperview()
+                self?.singleTapRightLabel.removeFromSuperview()
+            }
+        }
+    }
+    
+    @objc private func doubleTappedGesture(sender: UITapGestureRecognizer) {
+        print("\(#function) \(sender.state.rawValue)")
         
         guard pdfOptions.pageMode == .Page else { return }
         
@@ -464,17 +520,34 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate {
             let tapRect = sender.location(in: self.pdfView)
             print("tappedGesture \(tapRect) in \(frameRect)")
             
-            if( tapRect.y < frameRect.height * 0.9 && tapRect.y > frameRect.height * 0.1 ) {
-                if tapRect.x < frameRect.width * 0.2 {
-                    pagePrevButton.sendActions(for: .primaryActionTriggered)
-                    return
-                }
-                if tapRect.x > frameRect.width * 0.8 {
-                    pageNextButton.sendActions(for: .primaryActionTriggered)
-                    return
-                }
-                
-                self.pdfView.scaleFactor = self.pdfView.scaleFactor * 1.2
+            if doubleTapLeftLabel.frame.contains(tapRect) {
+                pagePrevButton.sendActions(for: .primaryActionTriggered)
+                return
+            }
+            if doubleTapRightLabel.frame.contains(tapRect) {
+                pageNextButton.sendActions(for: .primaryActionTriggered)
+                return
+            }
+
+            self.pdfView.scaleFactor = self.pdfView.scaleFactor * 1.2
+        }
+    }
+    
+    @objc private func singleTappedGesture(sender: UITapGestureRecognizer) {
+        print("\(#function) \(sender.state.rawValue)")
+        
+        guard pdfOptions.pageMode == .Page else { return }
+        
+        if sender.state == .ended {
+            let frameRect = self.pdfView.frame
+            let tapRect = sender.location(in: self.pdfView)
+            print("tappedGesture \(tapRect) in \(frameRect)")
+            
+            if singleTapLeftLabel.frame.contains(tapRect) {
+                pagePrevButton.sendActions(for: .primaryActionTriggered)
+            }
+            if singleTapRightLabel.frame.contains(tapRect) {
+                pageNextButton.sendActions(for: .primaryActionTriggered)
             }
         }
     }
