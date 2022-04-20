@@ -26,6 +26,13 @@ enum PDFReadDirection: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+enum PDFScrollDirection: String, CaseIterable, Identifiable {
+    case Vertical
+    case Horizontal
+    
+    var id: String { self.rawValue }
+}
+
 enum PDFThemeMode: String, CaseIterable, Identifiable {
     case none
     case serpia
@@ -49,6 +56,7 @@ struct PDFOptions: Equatable {
     var selectedAutoScaler = PDFAutoScaler.Width
     var pageMode = PDFLayoutMode.Page
     var readingDirection = PDFReadDirection.LtR_TtB
+    var scrollDirection = PDFScrollDirection.Vertical
     var hMarginAutoScaler = CGFloat(5.0)
     var vMarginAutoScaler = CGFloat(5.0)
     var hMarginDetectStrength = CGFloat(2.0)
@@ -64,6 +72,7 @@ class PDFOptionsRealm: Object {
     @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
     @objc dynamic var pageMode = PDFLayoutMode.Page.rawValue
     @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
+    @objc dynamic var scrollDirection = PDFScrollDirection.Vertical.rawValue
     @objc dynamic var hMarginAutoScaler = 5.0
     @objc dynamic var vMarginAutoScaler = 5.0
     @objc dynamic var hMarginDetectStrength = 2.0
@@ -84,6 +93,7 @@ extension PDFOptions: Persistable {
         self.selectedAutoScaler = .init(rawValue: managedObject.selectedAutoScaler) ?? .Width
         self.pageMode = .init(rawValue: managedObject.pageMode) ?? .Page
         self.readingDirection = .init(rawValue: managedObject.readingDirection) ?? .LtR_TtB
+        self.scrollDirection = .init(rawValue: managedObject.scrollDirection) ?? .Vertical
         self.hMarginAutoScaler = managedObject.hMarginAutoScaler
         self.vMarginAutoScaler = managedObject.vMarginAutoScaler
         self.hMarginDetectStrength = managedObject.hMarginDetectStrength
@@ -101,6 +111,7 @@ extension PDFOptions: Persistable {
         obj.selectedAutoScaler = self.selectedAutoScaler.rawValue
         obj.pageMode = self.pageMode.rawValue
         obj.readingDirection = self.readingDirection.rawValue
+        obj.scrollDirection = self.scrollDirection.rawValue
         obj.hMarginAutoScaler = self.hMarginAutoScaler
         obj.vMarginAutoScaler = self.vMarginAutoScaler
         obj.hMarginDetectStrength = self.hMarginDetectStrength

@@ -30,16 +30,6 @@ struct PDFOptionView: View {
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Reading Direction")
-                    Picker(selection: $pdfOptions.readingDirection, label: Text("Reading Direction")) {
-                        ForEach(PDFReadDirection.allCases, id:\.self) {
-                            Text($0.id).tag($0)
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
                     Text("Layout Mode")
                     Picker(selection: $pdfOptions.pageMode, label: Text("Layout Mode")) {
                         ForEach(PDFLayoutMode.allCases, id: \.self) {
@@ -47,6 +37,29 @@ struct PDFOptionView: View {
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
+                }
+                
+                switch pdfOptions.pageMode {
+                case .Page:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Reading Direction")
+                        Picker(selection: $pdfOptions.readingDirection, label: Text("Reading Direction")) {
+                            ForEach(PDFReadDirection.allCases, id:\.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                case .Scroll:
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Scroll Direction")
+                        Picker(selection: $pdfOptions.scrollDirection, label: Text("Scroll Direction")) {
+                            ForEach(PDFScrollDirection.allCases, id:\.self) {
+                                Text($0.id).tag($0)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
