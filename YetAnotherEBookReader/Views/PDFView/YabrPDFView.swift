@@ -24,8 +24,6 @@ class YabrPDFView: PDFView {
     var doubleTapGestureRecognizer: UITapGestureRecognizer?
     var singleTapGestureRecognizer: UITapGestureRecognizer?
     
-    var longPressDisabled = false
-    
     var pageNextButton: UIButton?
     var pagePrevButton: UIButton?
     
@@ -40,9 +38,9 @@ class YabrPDFView: PDFView {
     
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         if gestureRecognizer == singleTapGestureRecognizer || gestureRecognizer == doubleTapGestureRecognizer {
-//            if gestureRecognizer == singleTapGestureRecognizer {
-                if otherGestureRecognizer is UILongPressGestureRecognizer { return false }
-//            }
+            if otherGestureRecognizer is UILongPressGestureRecognizer { return false }
+            if gestureRecognizer == doubleTapGestureRecognizer && otherGestureRecognizer == singleTapGestureRecognizer { return false }
+            if gestureRecognizer == singleTapGestureRecognizer && otherGestureRecognizer == doubleTapGestureRecognizer { return false }
             return true
         }
         
@@ -50,14 +48,15 @@ class YabrPDFView: PDFView {
     }
     
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        if longPressDisabled && gestureRecognizer is UILongPressGestureRecognizer { return false }
-
         let location = touch.location(in: self)
         if singleTapGestureRecognizer == gestureRecognizer {
             return touch.tapCount == 1 && (singleTapLeftLabel.frame.contains(location) || singleTapRightLabel.frame.contains(location))
         }
         if doubleTapGestureRecognizer == gestureRecognizer {
-            return doubleTapLeftLabel.frame.contains(location) || doubleTapRightLabel.frame.contains(location)
+            return doubleTapLeftLabel.frame.contains(location) ||
+            doubleTapRightLabel.frame.contains(location) ||
+            singleTapLeftLabel.frame.contains(location) ||
+            singleTapRightLabel.frame.contains(location)
         }
         if gestureRecognizer is UITapGestureRecognizer {
             return doubleTapLeftLabel.frame.contains(location) == false
@@ -220,6 +219,14 @@ class YabrPDFView: PDFView {
                 pageNextButton?.sendActions(for: .primaryActionTriggered)
                 return
             }
+            if sender.view == singleTapLeftLabel || singleTapLeftLabel.frame.contains(sender.location(in: self))  {
+                pagePrevButton?.sendActions(for: .primaryActionTriggered)
+                return
+            }
+            if sender.view == singleTapRightLabel || singleTapRightLabel.frame.contains(sender.location(in: self))  {
+                pageNextButton?.sendActions(for: .primaryActionTriggered)
+                return
+            }
         }
     }
     
@@ -232,18 +239,10 @@ class YabrPDFView: PDFView {
             print("tappedGesture \(sender.location(in: self)) in \(self.frame)")
             
             if sender.view == singleTapLeftLabel || singleTapLeftLabel.frame.contains(sender.location(in: self))  {
-                longPressDisabled = true
-                delay(1.0) {
-                    self.longPressDisabled = false
-                }
                 pagePrevButton?.sendActions(for: .primaryActionTriggered)
                 return
             }
             if sender.view == singleTapRightLabel || singleTapRightLabel.frame.contains(sender.location(in: self))  {
-                longPressDisabled = true
-                delay(1.0) {
-                    self.longPressDisabled = false
-                }
                 pageNextButton?.sendActions(for: .primaryActionTriggered)
                 return
             }
