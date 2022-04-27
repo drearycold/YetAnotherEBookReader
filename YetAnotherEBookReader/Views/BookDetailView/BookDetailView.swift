@@ -222,6 +222,7 @@ struct BookDetailView: View {
                     modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)
                     
                     modelData.updateCurrentPosition(alertDelegate: self)
+                    NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
                 } ) {
                 if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
                     YabrEBookReader(book: book, readerInfo: readerInfo)

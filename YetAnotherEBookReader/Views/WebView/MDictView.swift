@@ -9,7 +9,7 @@ import Foundation
 import UIKit
 import WebKit
 
-open class MDictViewContainer : UIViewController, WKUIDelegate {
+open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     let webView = WKWebView()
     var server: String?
     var word = ""
@@ -22,6 +22,9 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         print("MDICT viewDidLoad \(self.view.frame)")
         
         webView.uiDelegate = self
+        webView.navigationDelegate = self
+        webView.configuration.userContentController.add(self, name: "MDictView")
+        
         view.addSubview(webView)
         
         let constraints = [
@@ -41,17 +44,37 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
         server = UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)?.absoluteString
         guard let server = server else { return }
         
-        if let url = URL(string: server) {
-            webView.load(URLRequest(url: url))
-        }
+        self.toolbarItems = [
+            UIBarButtonItem(
+                image: UIImage(systemName: "chevron.backward"),
+                primaryAction: UIAction { action in
+                    print("\(#function) backward action")
+                    if self.webView.canGoBack {
+                        self.webView.goBack()
+                    }
+                }
+            ),
+            UIBarButtonItem(
+                image: UIImage(systemName: "chevron.forward"),
+                primaryAction: UIAction { action in
+                    print("\(#function) forward action")
+                    if self.webView.canGoForward {
+                        self.webView.goForward()
+                    }
+                }
+            )
+        ]
         
+        self.toolbarItems?[0].isEnabled = false
+        self.toolbarItems?[1].isEnabled = false
     }
     
     open override func viewWillAppear(_ animated: Bool) {
         guard let server = server else { return }
 
         word = self.title ?? "_"
-        if let url = URL(string: server + "?word=" + word.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!) {
+        if let wordEncoded = word.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: server + "?word=" + wordEncoded) {
             webView.load(URLRequest(url: url))
         }
         
@@ -71,5 +94,54 @@ open class MDictViewContainer : UIViewController, WKUIDelegate {
     
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
+    }
+    
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        
+    }
+    
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        print("\(#function) didFinish=\(navigation)")
+        if let url = webView.url,
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first(where: { $0.name == "word" })?.value {
+            self.navigationItem.title = word
+        }
+        toolbarItems?[0].isEnabled = webView.canGoBack
+        toolbarItems?[1].isEnabled = webView.canGoForward
+
+        webView.evaluateJavaScript(
+            """
+            var mdict_def = document.getElementsByClassName("mdictDefinition")
+            var names = []
+            for (var i=0; i<mdict_def.length; i+=1) {
+                var h = mdict_def.item(i).getElementsByTagName("h5")[0]
+                names.push({name: h.innerText, id: mdict_def.item(i).id})
+            }
+            names
+            """
+        ) { result, error in
+            print("\(#function) result=\(result) error=\(error)")
+            guard let array = result as? NSArray else { return }
+            array.forEach {
+                guard let a = $0 as? NSDictionary else { return }
+                print("\(#function) a=\(a)")
+                guard let id = a["id"], let name = a["name"] else { return }
+                print("\(#function) id=\(id) name=\(name)")
+
+            }
+            let menu = UIMenu(title: "Dictionary", image: nil, identifier: nil, options: [], children: array.compactMap({
+                guard let a = $0 as? NSDictionary, let id = a["id"] as? String, let name = a["name"] as? String else { return nil }
+                return UIAction(title: name, image: nil, identifier: nil, discoverabilityTitle: nil, attributes: [], state: .off) { action in
+                    print("\(#function) id=\(id) name=\(name)")
+                    self.webView.evaluateJavaScript("document.getElementById('\(id)').offsetTop") { result, error in
+                        if let offset = result as? CGFloat {
+                            self.webView.scrollView.contentOffset.y = offset - (self.navigationController?.navigationBar.frame.height ?? 0)
+                        }
+                    }
+                }
+            })
+            )
+            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "List", image: UIImage(systemName: "list.bullet"), primaryAction: nil, menu: menu)
+        }
     }
 }

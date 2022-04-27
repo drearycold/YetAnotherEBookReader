@@ -107,38 +107,32 @@ struct MainView: View {
             }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
-            guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
+            guard let book = modelData.readingBook,
+                  let selectedPosition = modelData.readerInfo?.position,
+                  modelData.updatedReadingPosition.isSameProgress(with: selectedPosition)
+            else { return }
 
             modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)
 
-            let originalPosition = readerInfo.position
-            if modelData.updatedReadingPosition.isSameProgress(with: originalPosition) {
-                return
-            }
-            if false && modelData.updatedReadingPosition < originalPosition {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    alertItem = AlertItem(
-                        id: "BackwardProgress",
-                        msg: "You have reached a position behind last saved, is this alright?"
-                    )
-                }
-            } else if false && originalPosition << modelData.updatedReadingPosition {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    alertItem = AlertItem(
-                        id: "ForwardProgress",
-                        msg: "You have advanced more than 10% in this book, is this alright?"
-                    )
-                }
-            }
-            else {
-                modelData.updateCurrentPosition(alertDelegate: nil)
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
-            }
+            
+            modelData.updateCurrentPosition(alertDelegate: nil)
+            NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
         }) {
             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {
-                Text("No Suitable Format/Reader/Position Combo")
+                NavigationView {
+                    Text("No Suitable Format/Reader/Position Combo")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(action: {
+                                    modelData.presentingEBookReaderFromShelf = false
+                                }) {
+                                    Image(systemName: "xmark")
+                                }
+                            }
+                        }
+                }
             }
         }
         .alert(item: $alertItem) { item in
