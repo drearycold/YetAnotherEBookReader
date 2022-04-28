@@ -153,25 +153,13 @@ struct ReadingPositionDetailView: View {
             isPresented: $presentingReadSheet,
             onDismiss: {
                 guard let book = _VM.modelData.readingBook,
-                    let selectedPosition = _VM.modelData.readerInfo?.position else { return }
+                    let selectedPosition = _VM.modelData.readerInfo?.position,
+                      _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false else { return }
                 
                 _VM.modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: _VM.modelData.updatedReadingPosition)
                 
-                if _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) {
-                    return
-                }
-                if false && _VM.modelData.updatedReadingPosition < selectedPosition {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        alertItem = AlertItem(id: "BackwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                    }
-                } else if false && selectedPosition << _VM.modelData.updatedReadingPosition {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        alertItem = AlertItem(id: "ForwardProgress", msg: "Previous \(selectedPosition.description) VS Current \(_VM.modelData.updatedReadingPosition.description)")
-                    }
-                }
-                else {
-                    updatePosition()
-                }
+                updatePosition()
+                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
             } ) {
             if let book = _VM.modelData.readingBook, let readerInfo = _VM.modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
@@ -188,7 +176,6 @@ struct ReadingPositionDetailView: View {
             alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
             return
         }
-        
         
        _VM.modelData.prepareBookReading(
             url: bookFileUrl,

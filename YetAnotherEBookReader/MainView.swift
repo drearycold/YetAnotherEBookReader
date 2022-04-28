@@ -109,7 +109,7 @@ struct MainView: View {
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
             guard let book = modelData.readingBook,
                   let selectedPosition = modelData.readerInfo?.position,
-                  modelData.updatedReadingPosition.isSameProgress(with: selectedPosition)
+                  modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false
             else { return }
 
             modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)

@@ -27,25 +27,31 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     }
     
     override func viewWillAppear(_ animated: Bool) {
-        guard let modelData = ModelData.shared else { return }
+        guard let modelData = ModelData.shared,
+              let readerInfo = modelData.readerInfo else { return }
         
         modelData.bookReaderEnterBackgroundCancellable?.cancel()
-        modelData.bookReaderEnterBackgroundCancellable = ModelData.shared?.bookReaderEnterBackgroundPublished.sink { _ in
-            if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {
-                yabrEPub.folioReader.saveReaderState {
-                    yabrEPub.updateReadingPosition(yabrEPub.folioReader)
+        modelData.bookReaderEnterBackgroundCancellable = modelData.bookReaderEnterBackgroundPublished.sink { _ in
+            switch readerInfo.readerType {
+            case .YabrEPUB:
+                if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {
+                    yabrEPub.folioReader.saveReaderState {
+                        yabrEPub.updateReadingPosition(yabrEPub.folioReader)
+                        self.saveUpdatedReadingPosition()
+                    }
+                }
+            case .YabrPDF:
+                if let yabrPDF: YabrPDFViewController = self.findChildViewController() {
+                    yabrPDF.updateReadingProgress()
                     self.saveUpdatedReadingPosition()
                 }
-            }
-            
-            if let yabrPDF: YabrPDFViewController = self.findChildViewController() {
-                yabrPDF.updateReadingProgress()
-                self.saveUpdatedReadingPosition()
-            }
-            
-            if let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController() {
-                modelData.updatedReadingPosition = yabrReadium.getUpdateReadingPosition(position: modelData.updatedReadingPosition)
-                self.saveUpdatedReadingPosition()
+            case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
+                if let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController() {
+                    modelData.updatedReadingPosition = yabrReadium.getUpdateReadingPosition(position: modelData.updatedReadingPosition)
+                    self.saveUpdatedReadingPosition()
+                }
+            case .UNSUPPORTED:
+                break
             }
         }
         

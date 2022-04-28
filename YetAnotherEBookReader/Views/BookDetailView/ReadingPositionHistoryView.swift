@@ -155,7 +155,7 @@ struct ReadingPositionHistoryView: View {
                 
                 HStack {
                     Text("Book Progress:")
-                    Text("\(String(format: "%.2f%% Left", position.lastProgress))")
+                    Text("\(String(format: "%.2f%%", position.lastProgress))")
                 }
                 
                 HStack {
