@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import WebKit
+import NaturalLanguage
 
 open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
     let webView = WKWebView()
@@ -73,6 +74,19 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
         guard let server = server else { return }
 
         word = self.title ?? "_"
+        if word.contains(" ") == false {
+            let tagger = NLTagger(tagSchemes: [.lemma])
+            tagger.string = word
+            tagger.enumerateTags(in: word.startIndex..<word.endIndex, unit: .word, scheme: .lemma) { tag, tokenRange in
+                print("\(#function) word=\(word) tag=\(tag) tokenRange=\(tokenRange)")
+                if let tagRaw = tag?.rawValue {
+                    word = tagRaw
+                    return true
+                }
+                return false
+            }
+        }
+        
         if let wordEncoded = word.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
            let url = URL(string: server + "?word=" + wordEncoded) {
             webView.load(URLRequest(url: url))
