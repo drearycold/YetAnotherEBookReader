@@ -526,7 +526,7 @@ struct BookDetailView: View {
                                 book: book,
                                 format: format,
                                 formatInfo: formatInfo
-                            )
+                            ).disabled(modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).count > 0)
                             
                             clearFormatButton(
                                 book: book,

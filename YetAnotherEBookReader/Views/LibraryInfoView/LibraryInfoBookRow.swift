@@ -8,6 +8,7 @@
 import SwiftUI
 import struct Kingfisher.KFImage
 
+@available(*, deprecated, message: "replaced by bookRowView()")
 struct LibraryInfoBookRow: View {
     @EnvironmentObject var modelData: ModelData
 

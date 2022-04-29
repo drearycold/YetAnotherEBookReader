@@ -1350,6 +1350,7 @@ final class ModelData: ObservableObject {
         }
 
         newBook.formats[format.rawValue] = formatInfo
+        newBook.lastUpdated = .init()
         
         updateBook(book: newBook)
 

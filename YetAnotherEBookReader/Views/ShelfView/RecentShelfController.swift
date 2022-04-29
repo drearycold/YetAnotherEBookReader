@@ -45,7 +45,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     @objc func updateBookModel() {
         bookModel = modelData.booksInShelf
 //            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) || $0.value.library.server.isLocal }
-            .sorted { $0.value.lastModified > $1.value.lastModified }
+            .sorted { max($0.value.lastModified, $0.value.lastUpdated) > max($1.value.lastModified, $1.value.lastUpdated) }
             .compactMap { (inShelfId, book) in
                 guard let coverUrl = book.coverURL else { return nil }
                 guard let readerInfo = modelData.prepareBookReading(book: book) else { return nil }

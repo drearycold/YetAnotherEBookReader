@@ -24,7 +24,7 @@ struct LibraryInfoView: View {
     @State private var formatList = [String]()
     @State private var identifierList = [String]()
     
-    @State private var sortCriteria = (by: SortCriteria.Added, ascending: false)
+    @State private var sortCriteria = (by: SortCriteria.Modified, ascending: false)
     
     @State private var booksListRefreshing = false
     @State private var searchString = ""
@@ -412,6 +412,21 @@ struct LibraryInfoView: View {
                         .frame(width: 64 - 8, height: 96 - 8, alignment: .bottomTrailing)
                         .foregroundColor(.primary)
                         .opacity(0.8)
+                }
+                
+                if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                    ZStack {
+                        Rectangle()
+                            .frame(width: 64, height: 10, alignment: .center)
+                            .foregroundColor(.gray)
+                            .cornerRadius(4.0)
+                            .opacity(0.8)
+                        ProgressView(value: download.progress)
+                            .frame(width: 56, height: 10, alignment: .center)
+                            .progressViewStyle(LinearProgressViewStyle())
+                            .foregroundColor(.primary)
+                    }
+                    .frame(width: 64, height: 96 - 8, alignment: .bottom)
                 }
             }
             
