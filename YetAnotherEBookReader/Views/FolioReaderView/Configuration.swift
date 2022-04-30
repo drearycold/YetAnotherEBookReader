@@ -14,13 +14,15 @@ extension EpubFolioReaderContainer {
         config.shouldHideNavigationOnTap = false
         config.canChangeScrollDirection = true
         config.allowSharing = true
-        config.displayTitle = true
+        config.enableTTS = false
+        config.displayTitle = UITraitCollection.current.horizontalSizeClass == .regular
         //config.localizedShareWebLink = URL(string: "yabr://share.book/")
         
         #if DEBUG
-    //    config.debug.formUnion([.borderHighlight])
+        config.debug = []
+        //config.debug.formUnion([.borderHighlight])
         //config.debug.formUnion([.viewTransition])
-        // config.debug.formUnion([.functionTrace])
+        //config.debug.formUnion([.functionTrace])
         //config.debug.formUnion([.htmlStyling, .borderHighlight])
         config.debug.formUnion([.htmlStyling])
         #endif
