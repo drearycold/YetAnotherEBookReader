@@ -160,6 +160,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                 return nav
             }
             let folioReader = FolioReader()
+            folioReader.initializeWebServer()
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path, unzipPath: unzipPath.path, removeEpub: false)
             
             epubReaderContainer.modelData = modelData

@@ -3,28 +3,32 @@ PODS:
   - FolioReaderKit (2.0.0):
     - AEXML (~> 4.0)
     - FontBlaster (~> 5.0)
+    - GCDWebServer (~> 3.0)
     - MenuItemKit (~> 4.0)
     - SSZipArchive (~> 2.0)
     - ZFDragableModalTransition (~> 0.6)
   - FontBlaster (5.2.1)
-  - Google-Mobile-Ads-SDK (9.3.0):
-    - GoogleAppMeasurement (< 9.0, >= 7.0)
+  - GCDWebServer (3.5.4):
+    - GCDWebServer/Core (= 3.5.4)
+  - GCDWebServer/Core (3.5.4)
+  - Google-Mobile-Ads-SDK (9.4.0):
+    - GoogleAppMeasurement (< 10.0, >= 7.0)
     - GoogleUserMessagingPlatform (>= 1.1)
-  - GoogleAppMeasurement (8.14.0):
-    - GoogleAppMeasurement/AdIdSupport (= 8.14.0)
+  - GoogleAppMeasurement (9.0.0):
+    - GoogleAppMeasurement/AdIdSupport (= 9.0.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
     - nanopb (~> 2.30908.0)
-  - GoogleAppMeasurement/AdIdSupport (8.14.0):
-    - GoogleAppMeasurement/WithoutAdIdSupport (= 8.14.0)
+  - GoogleAppMeasurement/AdIdSupport (9.0.0):
+    - GoogleAppMeasurement/WithoutAdIdSupport (= 9.0.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
     - nanopb (~> 2.30908.0)
-  - GoogleAppMeasurement/WithoutAdIdSupport (8.14.0):
+  - GoogleAppMeasurement/WithoutAdIdSupport (9.0.0):
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
@@ -75,6 +79,7 @@ SPEC REPOS:
   trunk:
     - AEXML
     - FontBlaster
+    - GCDWebServer
     - Google-Mobile-Ads-SDK
     - GoogleAppMeasurement
     - GoogleUserMessagingPlatform
@@ -94,10 +99,11 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AEXML: 1e255ecc6597212f97a7454a69ebd3ede64ac1cf
-  FolioReaderKit: e6afd8f4061fd9648e90f527e8edeeb3e20fe4f3
+  FolioReaderKit: c05af93ec45f33f532c15b53f5344c8d2a9bca94
   FontBlaster: 43136e99dc6b3c8d0ba31e29bc6fdbf378b724c6
-  Google-Mobile-Ads-SDK: 2c8ad48ccc3839a5927f7d7c51505a7cd4f0b672
-  GoogleAppMeasurement: 71156240babd3cc6ced03e0d54816f01a880c730
+  GCDWebServer: 2c156a56c8226e2d5c0c3f208a3621ccffbe3ce4
+  Google-Mobile-Ads-SDK: 5a1d44987c82e441811ecaa5ae824e100ea819d7
+  GoogleAppMeasurement: 2c2792d43ebdea0524adbc90cba9139721f3039b
   GoogleUserMessagingPlatform: ab890ce5f6620f293a21b6bdd82e416a2c73aeca
   GoogleUtilities: e0913149f6b0625b553d70dae12b49fc62914fd1
   Kingfisher: a3c03d702433fa6cfedabb2bddbe076fb8f2e902
