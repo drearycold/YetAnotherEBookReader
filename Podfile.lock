@@ -3,15 +3,11 @@ PODS:
   - FolioReaderKit (2.0.0):
     - AEXML (~> 4.0)
     - FontBlaster (~> 5.0)
-    - GCDWebServer (~> 3.0)
     - MenuItemKit (~> 4.0)
     - SSZipArchive (~> 2.0)
     - ZFDragableModalTransition (~> 0.6)
     - ZIPFoundation (~> 0.9)
   - FontBlaster (5.2.1)
-  - GCDWebServer (3.5.4):
-    - GCDWebServer/Core (= 3.5.4)
-  - GCDWebServer/Core (3.5.4)
   - Google-Mobile-Ads-SDK (9.4.0):
     - GoogleAppMeasurement (< 10.0, >= 7.0)
     - GoogleUserMessagingPlatform (>= 1.1)
@@ -81,7 +77,6 @@ SPEC REPOS:
   trunk:
     - AEXML
     - FontBlaster
-    - GCDWebServer
     - Google-Mobile-Ads-SDK
     - GoogleAppMeasurement
     - GoogleUserMessagingPlatform
@@ -102,9 +97,8 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   AEXML: 1e255ecc6597212f97a7454a69ebd3ede64ac1cf
-  FolioReaderKit: 4f87900be0efad8a57d9d035615c930a4470a109
+  FolioReaderKit: 47cb1416f4fafa4960325554eb4bacc9d04e608b
   FontBlaster: 43136e99dc6b3c8d0ba31e29bc6fdbf378b724c6
-  GCDWebServer: 2c156a56c8226e2d5c0c3f208a3621ccffbe3ce4
   Google-Mobile-Ads-SDK: 5a1d44987c82e441811ecaa5ae824e100ea819d7
   GoogleAppMeasurement: 2c2792d43ebdea0524adbc90cba9139721f3039b
   GoogleUserMessagingPlatform: ab890ce5f6620f293a21b6bdd82e416a2c73aeca

@@ -119,10 +119,6 @@
 		2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; platformFilter = ios; };
 		2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A73B8F426DB7BE0004B001D /* ReadiumLCP.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */; platformFilter = ios; };
-		2A73B8F526DB7BE0004B001D /* ReadiumLCP.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A73B8F626DB7BE1004B001D /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; platformFilter = ios; };
-		2A73B8F726DB7BE1004B001D /* ReadiumOPDS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A73B8F926DC8890004B001D /* BookPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A73B8F826DC8890004B001D /* BookPreference.swift */; };
 		2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78A6312717D96000A81E53 /* BookImportPicker.swift */; };
 		2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8464F4269AE3EE000638B2 /* MDictView.swift */; };
@@ -308,8 +304,8 @@
 		6BE6DDB13475A85A1D94444B /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22BED5CB8454A86BCB647E0C /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */; };
 		6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; platformFilter = ios; };
 		6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; platformFilter = ios; };
-		6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; };
+		6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; platformFilter = ios; };
 		6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; platformFilter = ios; };
@@ -320,8 +316,12 @@
 		6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
+		E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; };
+		E72B6144283336A7002EF889 /* ReadiumOPDS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
 		E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5E280D39D9006E6901 /* YabrPDFView.swift */; };
+		E7CC4ECF283294B60094FF10 /* GCDWebServer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; };
+		E7CC4ED0283294B60094FF10 /* GCDWebServer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -348,8 +348,8 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				2A73B8F526DB7BE0004B001D /* ReadiumLCP.xcframework in Embed Frameworks */,
-				2A73B8F726DB7BE1004B001D /* ReadiumOPDS.xcframework in Embed Frameworks */,
+				E7CC4ED0283294B60094FF10 /* GCDWebServer.xcframework in Embed Frameworks */,
+				E72B6144283336A7002EF889 /* ReadiumOPDS.xcframework in Embed Frameworks */,
 				2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */,
 				6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */,
 				6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */,
@@ -631,17 +631,17 @@
 				6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */,
 				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
 				2A0A0489271BFEE500589B87 /* AppTrackingTransparency.framework in Frameworks */,
-				2A73B8F426DB7BE0004B001D /* ReadiumLCP.xcframework in Frameworks */,
 				2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */,
 				6E76E9C0265FF36600885D26 /* SwiftSoup.xcframework in Frameworks */,
 				2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */,
 				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				2A6D881427550F6100A33771 /* Realm.xcframework in Frameworks */,
-				2A73B8F626DB7BE1004B001D /* ReadiumOPDS.xcframework in Frameworks */,
+				E7CC4ECF283294B60094FF10 /* GCDWebServer.xcframework in Frameworks */,
 				2A6D881627550F6400A33771 /* RealmSwift.xcframework in Frameworks */,
 				6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */,
 				E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */,
 				2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */,
+				E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */,
 				17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */,
 				4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */,
 				4C8D6A8BE24380426C1F893E /* (null) in Frameworks */,
@@ -2147,7 +2147,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 51;
+				CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2227,7 +2227,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 51;
+				CURRENT_PROJECT_VERSION = 55;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
