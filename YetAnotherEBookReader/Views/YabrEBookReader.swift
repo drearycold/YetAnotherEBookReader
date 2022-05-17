@@ -156,11 +156,9 @@ struct YabrEBookReader: UIViewControllerRepresentable {
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true
 //            readerConfiguration.shouldHideNavigationOnTap = true
-            guard let unzipPath = makeFolioReaderUnzipPath() else {
-                return nav
-            }
+            
             let folioReader = FolioReader()
-            let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path, unzipPath: unzipPath.path, removeEpub: false)
+            let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: bookURL.path)
             
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open(bookReadingPosition: bookPosition)
