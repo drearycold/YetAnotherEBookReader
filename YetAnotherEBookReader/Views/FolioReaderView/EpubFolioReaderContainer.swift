@@ -153,7 +153,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
             
             if let modificationDate = entry.fileAttributes[.modificationDate] as? Date {
                 streamResponse.setValue(self.dateFormatter.string(from: modificationDate), forAdditionalHeader: "Last-Modified")
-                streamResponse.cacheControlMaxAge = 86400
+                streamResponse.cacheControlMaxAge = 60
             }
             
             var totalCount = 0
