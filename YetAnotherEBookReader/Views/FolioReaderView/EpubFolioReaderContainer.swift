@@ -120,7 +120,9 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
             pathSegs.removeFirst()
             let resourcePath = pathSegs.joined(separator: "/")
             
-            guard let archive = self.epubArchive,
+            //The Archive class maintains the state of its underlying file descriptor for performance reasons and is therefore not re-entrant. #29
+            guard let archiveURL = self.epubArchive?.url,
+                  let archive = Archive(url: archiveURL, accessMode: .read),
                   let entry = archive[resourcePath] else { return GCDWebServerErrorResponse() }
             
             var contentType = GCDWebServerGetMimeTypeForExtension((resourcePath as NSString).pathExtension, nil)
@@ -175,6 +177,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
                         print("\(#function) zipfile-deflate \(resourcePath) dataCount=\(data.count)")
                     }
                 } catch {
+                    print("\(#function) zipfile-deflate-error \(resourcePath) error=\(error.localizedDescription)")
                     isError = true
                 }
             }
@@ -199,15 +202,13 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         
         try? webServer.start(options: [
             GCDWebServerOption_Port: kGCDWebServerPreferredPort,
-            GCDWebServerOption_BindToLocalhost: true,
-            GCDWebServerOption_AutomaticallySuspendInBackground: false
+            GCDWebServerOption_BindToLocalhost: true
         ])
         
         // fallback
         if webServer.isRunning == false {
             try? webServer.start(options: [
                 GCDWebServerOption_BindToLocalhost: true,
-                GCDWebServerOption_AutomaticallySuspendInBackground: false
             ])
             
             if webServer.isRunning == false {
