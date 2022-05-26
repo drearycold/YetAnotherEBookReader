@@ -32,7 +32,7 @@ struct LibraryOptionsReadingPosition: View {
                 
                 if library.customColumnInfos.filter{ $1.datatype == "comments" }.count > 0 {
                     Picker("Column Name:     \(readingPosition.readingPositionCN)", selection: $readingPosition.readingPositionCN) {
-                        ForEach(library.customColumnInfoCommentsKeys
+                        ForEach(library.customColumnInfoCommentsKeysFull
                                     .map{ ($0.name, "#" + $0.label) }, id: \.1) {
                             Text("\($1)\n\($0)").tag($1)
                         }
