@@ -1734,7 +1734,7 @@ final class ModelData: ObservableObject {
                 if newServerInfo.libraryMap.isEmpty {
                     serverInfo.reachable = false
                 } else {
-                    serverInfo.reachable = true
+                    serverInfo.reachable = newServerInfo.reachable
                     serverInfo.libraryMap = newServerInfo.libraryMap
                     serverInfo.defaultLibrary = newServerInfo.defaultLibrary
                 }

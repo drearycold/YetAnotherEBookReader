@@ -802,6 +802,7 @@ struct CalibreServerService {
                 serverInfo.defaultLibrary = defaultLibrary
                 serverInfo.libraryMap = libraryInfo.libraryMap
                 serverInfo.errorMsg = "Success"
+                serverInfo.reachable = true
 
                 return serverInfo
             }
