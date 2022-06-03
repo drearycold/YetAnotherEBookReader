@@ -248,8 +248,11 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
 //        print("BookFormatDownloadDelegate.urlSession \(bytesWritten) \(totalBytesWritten) \(totalBytesExpectedToWrite)")
         
-        DispatchQueue.main.async {
-            self.download.downloadService?.modelData.activeDownloads[self.download.sourceURL]?.progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
+        guard progress > (self.download.downloadService?.modelData.activeDownloads[self.download.sourceURL]?.progress ?? 0.0) + 0.01 else { return }
+        
+        DispatchQueue.main.sync {
+            self.download.downloadService?.modelData.activeDownloads[self.download.sourceURL]?.progress = progress
 //            print("BookFormatDownloadDelegate.urlSession \(bytesWritten) \(totalBytesWritten) \(totalBytesExpectedToWrite) \(modelData.activeDownloads[self.download.sourceURL]?.progress)")
 
         }
