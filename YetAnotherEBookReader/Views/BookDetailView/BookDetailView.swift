@@ -180,28 +180,28 @@ struct BookDetailView: View {
                 .resizable()
                 .scaledToFit()
             Button(action: {
+                guard modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty else { return }
+                
                 if book.inShelf, modelData.readerInfo != nil {
                     presentingReadingSheet = true
                 } else {
-                    if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
-                        //TODO prompt for formats
-                        if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
-                            downloadStatus = .DOWNLOADING
-                        } else {
-                            alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
-                        }
+                    //TODO prompt for formats
+                    if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
+                        downloadStatus = .DOWNLOADING
+                    } else {
+                        alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
                     }
                 }
             }) {
-                if (book.inShelf) {
+                if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                    ProgressView(value: download.progress)
+                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
+                        .scaleEffect(6, anchor: .center)
+                } else if book.inShelf {
                     Image(systemName: "book")
                         .resizable()
                         .frame(width: 160, height: 160)
                         .foregroundColor(.gray)
-                } else if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
-                    ProgressView(value: download.progress)
-                        .progressViewStyle(CircularProgressViewStyle(tint: .gray))
-                        .scaleEffect(6, anchor: .center)
                 } else {
                     Image(systemName: "tray.and.arrow.down")
                         .resizable()
@@ -547,13 +547,7 @@ struct BookDetailView: View {
                                     countStyle: .file
                                 )
                             )
-                            if formatInfo.cached {
-                                Text(formatInfo.cacheUptoDate ? "Up to date" : "Server has update")
-                                Image(systemName: formatInfo.cacheUptoDate ? "hand.thumbsup" : "hand.thumbsdown")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 16, height: 16)
-                            } else if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                            if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
                                 ProgressView(value: download.progress)
                                     .progressViewStyle(LinearProgressViewStyle())
                                     .frame(maxWidth: 160)
@@ -576,8 +570,13 @@ struct BookDetailView: View {
                                     Image(systemName: "xmark")
                                         .foregroundColor(.red)
                                 }
-                            }
-                            else {
+                            } else if formatInfo.cached {
+                                Text(formatInfo.cacheUptoDate ? "Up to date" : "Server has update")
+                                Image(systemName: formatInfo.cacheUptoDate ? "hand.thumbsup" : "hand.thumbsdown")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 16, height: 16)
+                            } else {
                                 Text("Not cached")
                             }
                         }
@@ -598,10 +597,10 @@ struct BookDetailView: View {
     
     private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
-            modelData.clearCache(book: book, format: format)
             modelData.startDownloadFormat(
                 book: book,
-                format: format
+                format: format,
+                overwrite: true
             )
         }) {
             Image(systemName: "tray.and.arrow.down")

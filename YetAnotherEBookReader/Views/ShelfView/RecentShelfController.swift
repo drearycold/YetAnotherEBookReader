@@ -309,6 +309,30 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         }
     }
     
+    func onBookProgressClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
+        print("I just clicked progress \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
+        
+        modelData.readingBookInShelfId = bookId
+        guard let book = modelData.readingBook else { return }
+        
+        
+        let readingPositionHistoryView = UIHostingController(
+            rootView: ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id).environmentObject(modelData)
+        )
+        
+        let nav = UINavigationController(rootViewController: readingPositionHistoryView)
+        nav.modalPresentationStyle = .automatic
+        nav.navigationBar.isTranslucent = true
+        nav.navigationBar.prefersLargeTitles = true
+        //nav.setToolbarHidden(false, animated: true)
+        
+        readingPositionHistoryView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
+        
+        self.present(nav, animated: true, completion: {
+            
+        })
+    }
+
     @objc func gotoAction(_ sender: Any?) {
         let goodreadsMenuItem = UIMenuItem(title: "Goodreads", action: #selector(goodreadsAction))
         let doubanMenuItem = UIMenuItem(title: "Douban", action: #selector(doubanAction))

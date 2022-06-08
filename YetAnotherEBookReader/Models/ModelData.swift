@@ -1275,7 +1275,8 @@ final class ModelData: ObservableObject {
         
         booksInShelf.removeValue(forKey: inShelfId)
         
-        if let library = calibreLibraries[book.library.id],
+        if self.getLatestReadingPosition(book: book)?.id == deviceName,
+           let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
            let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf {

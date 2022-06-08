@@ -318,6 +318,7 @@
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
 		E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; };
 		E72B6144283336A7002EF889 /* ReadiumOPDS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		E746FE59285063D20032B96C /* ReadingPositionHistoryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E746FE58285063D20032B96C /* ReadingPositionHistoryDetailView.swift */; };
 		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
 		E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5E280D39D9006E6901 /* YabrPDFView.swift */; };
 		E7CC4ECF283294B60094FF10 /* GCDWebServer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; };
@@ -618,6 +619,7 @@
 		AAA7697A91827809D1CFC488 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.debug.xcconfig"; sourceTree = "<group>"; };
 		AD8951C85BCF23E2FFDF70D6 /* Pods-YetAnotherEBookReader-Catalyst.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst.release.xcconfig"; sourceTree = "<group>"; };
 		BE1A56B3346178A15F209183 /* Pods-YetAnotherEBookReaderTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.release.xcconfig"; sourceTree = "<group>"; };
+		E746FE58285063D20032B96C /* ReadingPositionHistoryDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionHistoryDetailView.swift; sourceTree = "<group>"; };
 		E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFModel.swift; sourceTree = "<group>"; };
 		E7832D5E280D39D9006E6901 /* YabrPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -1202,6 +1204,7 @@
 				2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */,
 				2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */,
 				2A264A4027311E8200C4CEFA /* ReadingPositionHistoryView.swift */,
+				E746FE58285063D20032B96C /* ReadingPositionHistoryDetailView.swift */,
 			);
 			path = BookDetailView;
 			sourceTree = "<group>";
@@ -1735,6 +1738,7 @@
 				2A2A853A275C699500C17825 /* YabrEBookReaderNavigationController.swift in Sources */,
 				2A264A4127311E8200C4CEFA /* ReadingPositionHistoryView.swift in Sources */,
 				2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */,
+				E746FE59285063D20032B96C /* ReadingPositionHistoryDetailView.swift in Sources */,
 				2A107DDB2663CB56007DCA20 /* PublicationCollectionViewCell.swift in Sources */,
 				2A47581927BA8C0200642AD1 /* LibraryDetailView.swift in Sources */,
 				E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */,
