@@ -546,6 +546,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         case furthestReadChapter
         case maxPage
         case lastPosition
+        case epoch
     }
     
     var description: String {

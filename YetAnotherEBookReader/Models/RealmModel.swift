@@ -201,8 +201,9 @@ class CalibreBookRealm: Object {
             deviceReadingPosition.furthestReadPage = deviceReadingPositionDict["furthestReadPage"] as? Int ?? deviceReadingPosition.lastReadPage
             deviceReadingPosition.furthestReadChapter = deviceReadingPositionDict["furthestReadChapter"] as? String ?? deviceReadingPosition.lastReadChapter
             deviceReadingPosition.maxPage = deviceReadingPositionDict["maxPage"] as? Int ?? 1
-            if let lastPosition = deviceReadingPositionDict["lastPosition"] {
-                deviceReadingPosition.lastPosition = lastPosition as! [Int]
+            deviceReadingPosition.epoch = deviceReadingPositionDict["epoch"] as? Double ?? 0.0
+            if let lastPosition = deviceReadingPositionDict["lastPosition"] as? [Int] {
+                deviceReadingPosition.lastPosition = lastPosition
             }
             
             readPos.updatePosition(deviceName, deviceReadingPosition)
