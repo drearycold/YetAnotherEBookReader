@@ -55,11 +55,21 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
             }
         }
         
+        modelData.bookReaderEnterActiveCancellable?.cancel()
+        modelData.bookReaderEnterActiveCancellable = modelData.bookReaderEnterActivePublished.sink { _ in
+            guard let modelData = ModelData.shared else { return }
+
+            guard let book = modelData.readingBook else { return }
+            
+            modelData.logBookDeviceReadingPositionHistoryStart(book: book, position: modelData.updatedReadingPosition, startDatetime: Date())
+        }
     }
     
     override func viewWillDisappear(_ animated: Bool) {
         ModelData.shared?.bookReaderEnterBackgroundCancellable?.cancel()
         ModelData.shared?.bookReaderEnterBackgroundCancellable = nil
+        ModelData.shared?.bookReaderEnterActiveCancellable?.cancel()
+        ModelData.shared?.bookReaderEnterActiveCancellable = nil
         
         NotificationCenter.default.post(.init(name: .YABR_BookReaderClosed))
     }

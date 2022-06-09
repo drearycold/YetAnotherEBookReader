@@ -45,7 +45,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIViewController {
         defer {
-            modelData.logBookDeviceReadingPositionHistoryStart(book: book, startPosition: bookPosition, startDatetime: Date())
+            modelData.logBookDeviceReadingPositionHistoryStart(book: book, position: bookPosition, startDatetime: Date())
         }
         let nav = YabrEBookReaderNavigationController()
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen

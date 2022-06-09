@@ -105,10 +105,16 @@ final class ModelData: ObservableObject {
     let bookReaderClosedPublisher = NotificationCenter.default.publisher(
         for: .YABR_BookReaderClosed
     ).eraseToAnyPublisher()
+    
     let bookReaderEnterBackgroundPublished = NotificationCenter.default.publisher(
         for: .YABR_BookReaderEnterBackground
     ).eraseToAnyPublisher()
     var bookReaderEnterBackgroundCancellable: AnyCancellable? = nil
+    
+    let bookReaderEnterActivePublished = NotificationCenter.default.publisher(
+        for: .YABR_BookReaderEnterActive
+    ).eraseToAnyPublisher()
+    var bookReaderEnterActiveCancellable: AnyCancellable? = nil
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -2267,18 +2273,30 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func logBookDeviceReadingPositionHistoryStart(book: CalibreBook, startPosition: BookDeviceReadingPosition, startDatetime: Date) {
+    func logBookDeviceReadingPositionHistoryStart(book: CalibreBook, position: BookDeviceReadingPosition, startDatetime: Date) {
         activityDispatchQueue.async {
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
             
-            let historyEntry = BookDeviceReadingPositionHistoryRealm()
-            historyEntry.bookId = book.id
-            historyEntry.libraryId = book.library.id
-            historyEntry.startDatetime = startDatetime
-            historyEntry.startPosition = startPosition.managedObject()
+            let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
+                NSPredicate(format: "bookId = %@ AND libraryId = %@",
+                            NSNumber(value: book.id),
+                            book.library.id
+                           )
+            ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first
             
             try? realm.write {
-                realm.add(historyEntry)
+                if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
+                    historyEntryFirst?.endPosition = nil
+                } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
+                    historyEntryFirst?.endPosition = nil
+                } else {
+                    let historyEntry = BookDeviceReadingPositionHistoryRealm()
+                    historyEntry.bookId = book.id
+                    historyEntry.libraryId = book.library.id
+                    historyEntry.startDatetime = startDatetime
+                    historyEntry.startPosition = position.managedObject()
+                    realm.add(historyEntry)
+                }
             }
         }
     }

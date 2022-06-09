@@ -39,6 +39,11 @@ struct ReadingPositionHistoryDetailView: View {
                 }
                 Spacer()
             }.font(.title2)
+            
+            HStack {
+                Text("Start Datetime:")
+                Text(positionHistory.startDatetime.description(with: Locale.autoupdatingCurrent))
+            }
                 
             if let position = positionHistory.endPosition {
                 VStack(alignment: .leading) {
@@ -217,6 +222,11 @@ struct ReadingPositionHistoryDetailView: View {
                 HStack {
                     Text("Datetime:")
                     Text(position.epochLocaleLong)
+                }
+                
+                HStack {
+                    Text("Epoch:")
+                    Text(position.epoch.description)
                 }
                 #if DEBUG
                 HStack {

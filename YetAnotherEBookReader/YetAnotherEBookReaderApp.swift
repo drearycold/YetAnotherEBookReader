@@ -26,6 +26,7 @@ struct YetAnotherEBookReaderApp: App {
             case .active:
                 modelData.registerGetBooksMetadataCancellable()
                 modelData.probeServersReachability(with: [], updateLibrary: true)
+                NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterActive))
                 break
             case .inactive:
                 break
