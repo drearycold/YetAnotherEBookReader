@@ -67,28 +67,21 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     func updateReadingPosition(_ folioReader: FolioReader) {
         guard var updatedReadingPosition = modelData?.updatedReadingPosition else { return }
         
-        guard let chapterProgress = folioReader.readerCenter?.getCurrentPageProgress(),
-           let bookProgress = folioReader.readerCenter?.getBookProgress(),
-           let savedPosition = folioReader.savedPositionForCurrentBook
+        guard let savedPosition = folioReader.savedPositionForCurrentBook else { return }
+        
+        guard let pageNumber = savedPosition["pageNumber"] as? Int,
+              let pageOffsetX = savedPosition["pageOffsetX"] as? CGFloat,
+              let pageOffsetY = savedPosition["pageOffsetY"] as? CGFloat,
+              let chapterProgress = savedPosition["chapterProgress"] as? CGFloat,
+              let bookProgress = savedPosition["bookProgress"] as? CGFloat,
+              let chapterName = savedPosition["chapterName"] as? String
         else {
             return
-        }
-        
-        if let currentChapterName = folioReader.readerCenter?.getCurrentChapterName() {
-            updatedReadingPosition.lastReadChapter = currentChapterName
-        } else {
-            updatedReadingPosition.lastReadChapter = "Untitled Chapter"
         }
         
         updatedReadingPosition.lastChapterProgress = chapterProgress
         updatedReadingPosition.lastProgress = bookProgress
-        
-        guard let pageNumber = savedPosition["pageNumber"] as? Int,
-              let pageOffsetX = savedPosition["pageOffsetX"] as? CGFloat,
-              let pageOffsetY = savedPosition["pageOffsetY"] as? CGFloat
-        else {
-            return
-        }
+        updatedReadingPosition.lastReadChapter = chapterName
         
         updatedReadingPosition.lastPosition[0] = pageNumber
         updatedReadingPosition.lastPosition[1] = Int(pageOffsetX.rounded())
