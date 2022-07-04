@@ -17,6 +17,8 @@ import FolioReaderKit
 class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecognizerDelegate {
     let pdfView = YabrPDFView()
     let blankView = UIImageView()
+    let blankActivityView = UIActivityIndicatorView()
+    
     let mDictView = MDictViewContainer()
     
     let logger = Logger()
@@ -398,6 +400,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
         blankView.contentMode = .scaleAspectFill
+        blankView.addSubview(blankActivityView)
         
         if pdfOptions.pageMode == .Page {
             pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
@@ -974,7 +977,17 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor.init(gray: 1.0, alpha: 1.0))
         
         if let page = page as? PDFPageWithBackground {
-            let thumbImage = page.thumbnailWithBackground(of: pdfView.frame.size, for: .cropBox)
+            
+            let bounds = pageVisibleContentBounds[
+                PageVisibleContentKey(
+                    pageNumber: page.pageRef?.pageNumber ?? -1,
+                    readingDirection: pdfOptions.readingDirection,
+                    hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
+                    vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+                )
+            ]?.bounds ?? .zero
+            
+            let thumbImage = page.thumbnailWithBackground(of: pdfView.frame.size, for: .cropBox, by: bounds)
             blankView.image = thumbImage
         }
         
@@ -982,12 +995,18 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         blankView.backgroundColor = backgroundColor
         blankView.frame.size = pdfView.frame.size
         
+        blankActivityView.frame = CGRect(x: pdfView.frame.width/2, y: pdfView.frame.height/2, width: 50, height: 50)
+        blankActivityView.style = .large
+        blankActivityView.backgroundColor = .clear
+        blankActivityView.startAnimating()
+        
         clearBlankSubView()
     }
     
     func clearBlankSubView() {
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(200))) {
+        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(400))) {
             self.blankView.frame.size = .zero
+            self.blankActivityView.stopAnimating()
         }
     }
     

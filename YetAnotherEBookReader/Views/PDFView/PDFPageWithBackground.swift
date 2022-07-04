@@ -51,7 +51,7 @@ class PDFPageWithBackground : PDFPage {
         // print("context \(box.rawValue) \(context.height) \(context.width)")
     }
     
-    func thumbnailWithBackground(of size: CGSize, for box: PDFDisplayBox) -> UIImage {
+    func thumbnailWithBackground(of size: CGSize, for box: PDFDisplayBox, by bounds: CGRect) -> UIImage {
         let image = super.thumbnail(of: size, for: box)
         
         guard let fillColor = PDFPageWithBackground.fillColor,
