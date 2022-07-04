@@ -1758,7 +1758,7 @@ final class ModelData: ObservableObject {
                 }
             }
             
-            self.refreshShelfMetadata(with: serverIds)
+            self.refreshShelfMetadataV2(with: serverIds)
             
             if updateLibrary == true, autoUpdateOnly == false {
                 let ids = self.calibreServers.filter {
@@ -1817,6 +1817,8 @@ final class ModelData: ObservableObject {
                     //print("refreshShelfMetadata \(task) \(entry)")
                     
                     guard var book = self.booksInShelf[task.inShelfId] else { return nil }
+                          
+                    guard floor(book.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0) else { return nil }
                     
                     book.formats = entry.format_metadata.reduce(
                         into: book.formats
@@ -1842,9 +1844,112 @@ final class ModelData: ObservableObject {
                         self.updateBook(book: $0)
                     }
                     
-                    NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                    if books.isEmpty == false {
+                        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                    }
                 }
             }
+    }
+    
+    func refreshShelfMetadataV2(with serverIds: [String]) {
+        shelfRefreshCancellable?.cancel()
+        
+        shelfRefreshCancellable = booksInShelf.values
+            .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
+             .reduce(into: [CalibreLibrary: [String]]()) { partialResult, book in
+                 if partialResult[book.library] == nil {
+                     partialResult[book.library] = []
+                 }
+                 partialResult[book.library]?.append(book.id.description)
+             }
+             .compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1) }
+             .publisher
+             .flatMap { task in
+                self.calibreServerService.getBooksMetadata(task: task)
+            }
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .collect()
+            .eraseToAnyPublisher()
+            .sink(receiveCompletion: { completion in
+                
+            }, receiveValue: { tasks in
+                let decoder = JSONDecoder()
+                guard let realm = try? Realm(configuration: self.realmConf) else { return }
+                
+                var updated = 0
+                tasks.forEach { result in
+                    guard let data = result.data,
+                          let entries = try? decoder.decode([String:CalibreBookEntry?].self, from: data),
+                          let json = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
+                              print("getBookMetadataCancellable nildata \(result.library.name)")
+                              return
+                          }
+                    
+                    try? realm.write {
+                        result.books.forEach { id in
+                            guard let obj = realm.object(
+                                ofType: CalibreBookRealm.self,
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)) else { return }
+                            guard let entryOptional = entries[id],
+                                  let entry = entryOptional,
+                                  let root = json[id] as? NSDictionary else {
+                                      // null data, treat as delted, update lastSynced to lastModified to prevent further actions
+                                      obj.lastSynced = obj.lastModified
+                                      return
+                                  }
+                            
+                            guard floor(obj.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0) else { return }
+                            
+                            self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
+                            updated += 1
+                        }
+                    }
+                }
+                
+                if updated > 0 {
+                    NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                }
+            })
+//            .flatMap(calibreServerService.getMetadata(task:))
+//            .collect()
+//            .eraseToAnyPublisher()
+//            .sink { results in
+//                let books = results.compactMap { (task, entry) -> CalibreBook? in
+//                    //print("refreshShelfMetadata \(task) \(entry)")
+//
+//                    guard var book = self.booksInShelf[task.inShelfId] else { return nil }
+//
+//                    guard floor(book.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0) else { return nil }
+//
+//                    book.formats = entry.format_metadata.reduce(
+//                        into: book.formats
+//                    ) { result, format in
+//                        var formatInfo = result[format.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+//
+//                        formatInfo.serverSize = format.value.size
+//
+//                        let dateFormatter = ISO8601DateFormatter()
+//                        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+//                        if let mtime = dateFormatter.date(from: format.value.mtime) {
+//                            formatInfo.serverMTime = mtime
+//                        }
+//
+//                        result[format.key.uppercased()] = formatInfo
+//                    }
+//
+//                    return book
+//                }
+//
+//                DispatchQueue.main.async {
+//                    books.forEach {
+//                        self.updateBook(book: $0)
+//                    }
+//
+//                    if books.isEmpty == false {
+//                        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+//                    }
+//                }
+//            }
     }
     
     func refreshServerDSHelperConfiguration(with serverIds: [String]) {
