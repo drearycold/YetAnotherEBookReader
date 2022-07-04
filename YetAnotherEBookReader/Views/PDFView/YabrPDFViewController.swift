@@ -109,7 +109,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                     pdfView.go(to: PDFDestination(page: firstPage, at: .zero))
                 }
                 
-                let viewPosition = pageViewPositionHistory[curPageNum]?.point
+                let viewPosition = getPageViewPositionHistory(curPageNum)?.point
                 if viewPosition != nil {
                     pdfView.go(to: PDFDestination(page: curPage, at: viewPosition!))
                 } else {
@@ -481,7 +481,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         if pdfView.displayMode != .singlePage {
             pdfView.scaleFactor = pdfOptions.lastScale
             
-            if let pageViewPosition = pageViewPositionHistory[curPageNum],
+            if let pageViewPosition = getPageViewPositionHistory(curPageNum),
                pageViewPosition.scaler > 0,
                pageViewPosition.viewSize == pdfView.frame.size || pageViewPosition.viewSize == .zero {
                 let lastDest = PDFDestination(
@@ -569,7 +569,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         }
         print("\(#function) pageVisibleContentBounds.count=\(pageVisibleContentBounds.count)")
         
-        if let pageViewPosition = pageViewPositionHistory[curPageNum],
+        if let pageViewPosition = getPageViewPositionHistory(curPageNum),
            pageViewPosition.scaler > 0,
            pageViewPosition.viewSize == pdfView.frame.size {
             let lastDest = PDFDestination(
@@ -639,19 +639,22 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
         let stackViewFrameInPDF = pdfView.convert(stackView.frame, to: curPage)
         
+        let pageViewPositionHistory = getPageViewPositionHistory(curPageNum)
         let newDest = PDFDestination(
             page: curPage,
             at: CGPoint(
-                x: pageViewPositionHistory[curPageNum]?.point.x ??
+                x: pageViewPositionHistory?.point.x ??
                 (newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX),
-                y: pageViewPositionHistory[curPageNum]?.point.y ??
+                y: pageViewPositionHistory?.point.y ??
                 (newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)
             )
         )
         
-        print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory[curPageNum]?.point.x)")
+        print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory?.point.x)")
         
-        print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory[curPageNum]?.point.y)")
+        print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory?.point.y)")
+        
+        let initialDestPoint = pdfView.currentDestination!.point
         
         print("\(#function) BEFORE POINT curDestPoint=\(pdfView.currentDestination!.point) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         //            let bottomRight = PDFDestination(
@@ -671,13 +674,13 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         var afterPointX = pdfView.currentDestination!.point.x
         var afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
         
-        print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
+        print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
         let newDestForCompensation = PDFDestination(
             page: curPage,
             at: CGPoint(
                 x: newDest.point.x - (afterPointX - newDest.point.x),
-                y: newDest.point.y - (afterPointY - newDest.point.y)
+                y: newDest.point.y - (afterPointY - newDest.point.y) - (initialDestPoint.y < 0 ? initialDestPoint.y : 0)
             )
         )
         
@@ -685,11 +688,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         pdfView.go(to: newDestForCompensation)
         afterPointX = pdfView.currentDestination!.point.x
         afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
-        print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) newDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
+        print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
 
         print("\(#function) scaleFactor=\(pdfOptions.lastScale)")
-        
-        
     }
     
     func getThumbnailImageSize(boundsForCropBox: CGRect) -> CGSize {
@@ -1036,7 +1037,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         var position = [String : Any]()
         
         guard let curPageNum = pdfView.page(for: .zero, nearest: true)?.pageRef?.pageNumber,
-              let curPagePos = pageViewPositionHistory[curPageNum]
+              let curPagePos = getPageViewPositionHistory(curPageNum)
         else { return }
         
         position["pageNumber"] = curPageNum
@@ -1142,6 +1143,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                 viewSize: pdfView.frame.size
             )
         )
+    }
+    
+    func getPageViewPositionHistory(_ pageNum: Int) -> PageViewPosition? {
+        return self.pageViewPositionHistory[pageNum]
     }
 }
 
