@@ -55,8 +55,12 @@ final class ModelData: ObservableObject {
     @Published var filteredBookList = [Int32]()
     
     @Published var booksInShelf = [String: CalibreBook]()
-    let booksRefreshedPublisher = NotificationCenter.default.publisher(
-        for: .YABR_BooksRefreshed
+    let recentShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
+        for: .YABR_RecentShelfBooksRefreshed
+    ).eraseToAnyPublisher()
+    
+    let discoverShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
+        for: .YABR_DiscoverShelfBooksRefreshed
     ).eraseToAnyPublisher()
     
     let readingBookRemovedFromShelfPublisher = NotificationCenter.default.publisher(
@@ -375,7 +379,7 @@ final class ModelData: ObservableObject {
         
         self.reloadCustomFonts()
         
-        generateDiscovertShelf = booksRefreshedPublisher
+        generateDiscovertShelf = discoverShelfBooksRefreshedPublisher
             .subscribe(on: DispatchQueue.main)
             .receive(on: DispatchQueue.global(qos: .userInitiated))
             .sink(receiveValue: { output in
@@ -388,7 +392,8 @@ final class ModelData: ObservableObject {
                 }
             })
         
-        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed, object: Bool(true)))
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed, object: Bool(true)))
+        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
@@ -1265,7 +1270,8 @@ final class ModelData: ObservableObject {
             let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
         }
         
-        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
     }
     
     func removeFromShelf(inShelfId: String) {
@@ -1294,7 +1300,8 @@ final class ModelData: ObservableObject {
             }
         }
         
-        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
     }
     
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
@@ -1733,14 +1740,18 @@ final class ModelData: ObservableObject {
                 break
             }
         }, receiveValue: { results in
+            var serverReachableChanged = false
+            
             results.forEach { newServerInfo in
                 guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
                 serverInfo.probing = false
                 serverInfo.errorMsg = newServerInfo.errorMsg
 
                 if newServerInfo.libraryMap.isEmpty {
+                    serverReachableChanged = serverReachableChanged || (serverInfo.reachable != false)
                     serverInfo.reachable = false
                 } else {
+                    serverReachableChanged = serverReachableChanged || (serverInfo.reachable != newServerInfo.reachable)
                     serverInfo.reachable = newServerInfo.reachable
                     serverInfo.libraryMap = newServerInfo.libraryMap
                     serverInfo.defaultLibrary = newServerInfo.defaultLibrary
@@ -1758,7 +1769,7 @@ final class ModelData: ObservableObject {
                 }
             }
             
-            self.refreshShelfMetadataV2(with: serverIds)
+            self.refreshShelfMetadataV2(with: serverIds, serverReachableChanged: serverReachableChanged)
             
             if updateLibrary == true, autoUpdateOnly == false {
                 let ids = self.calibreServers.filter {
@@ -1845,33 +1856,44 @@ final class ModelData: ObservableObject {
                     }
                     
                     if books.isEmpty == false {
-                        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
                     }
                 }
             }
     }
     
-    func refreshShelfMetadataV2(with serverIds: [String]) {
+    func refreshShelfMetadataV2(with serverIds: [String], serverReachableChanged: Bool) {
         shelfRefreshCancellable?.cancel()
         
-        shelfRefreshCancellable = booksInShelf.values
+        let refreshTasks = booksInShelf.values
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
-             .reduce(into: [CalibreLibrary: [String]]()) { partialResult, book in
-                 if partialResult[book.library] == nil {
-                     partialResult[book.library] = []
-                 }
-                 partialResult[book.library]?.append(book.id.description)
-             }
-             .compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1) }
-             .publisher
-             .flatMap { task in
+            .reduce(into: [CalibreLibrary: [String]]()) { partialResult, book in
+                if partialResult[book.library] == nil {
+                    partialResult[book.library] = []
+                }
+                partialResult[book.library]?.append(book.id.description)
+            }
+            .compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1) }
+        
+        if serverReachableChanged && refreshTasks.isEmpty {
+            NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+            return
+        }
+        
+        shelfRefreshCancellable = refreshTasks.publisher
+            .flatMap { task in
                 self.calibreServerService.getBooksMetadata(task: task)
             }
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .collect()
             .eraseToAnyPublisher()
             .sink(receiveCompletion: { completion in
-                
+                switch completion {
+                case .finished:
+                    self.defaultLog.info("Refresh Finished")
+                case .failure(let error):
+                    self.defaultLog.info("Refresh Failure \(error.localizedDescription)")
+                }
             }, receiveValue: { tasks in
                 let decoder = JSONDecoder()
                 guard let realm = try? Realm(configuration: self.realmConf) else { return }
@@ -1902,12 +1924,13 @@ final class ModelData: ObservableObject {
                             
                             self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
                             updated += 1
+                            self.defaultLog.info("Refreshed \(obj.id) \(result.library.id)")
                         }
                     }
                 }
                 
-                if updated > 0 {
-                    NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                if updated > 0 || serverReachableChanged {
+                    NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
                 }
             })
 //            .flatMap(calibreServerService.getMetadata(task:))
@@ -2273,7 +2296,7 @@ final class ModelData: ObservableObject {
                 
                 self.trySendGetBooksMetadataTask(library: result.library)
                 
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
             } catch {

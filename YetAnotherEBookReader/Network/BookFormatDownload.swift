@@ -242,7 +242,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
             modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Failed, response=\(String(describing: task.response)) error=\(String(describing: error))")
         }
         
-        NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {

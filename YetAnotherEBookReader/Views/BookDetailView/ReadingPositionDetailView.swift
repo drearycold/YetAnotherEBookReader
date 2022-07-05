@@ -159,7 +159,7 @@ struct ReadingPositionDetailView: View {
                 _VM.modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: _VM.modelData.updatedReadingPosition)
                 
                 updatePosition()
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
             } ) {
             if let book = _VM.modelData.readingBook, let readerInfo = _VM.modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)

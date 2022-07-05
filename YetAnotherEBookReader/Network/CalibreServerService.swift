@@ -363,9 +363,9 @@ struct CalibreServerService {
             deviceMapDict.forEach { key, value in
                 let deviceName = key// as! String
                 
-                if deviceName == modelData.deviceName && modelData.getDeviceReadingPosition(book: book) != nil {
-                    //ignore server, trust local record
-                    return
+                if let oldPos = book.readPos.getPosition(deviceName) {
+                    guard deviceName != modelData.deviceName else { return }    //trust local record
+                    guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                 }
                 
                 var deviceReadingPosition = value
@@ -465,9 +465,9 @@ struct CalibreServerService {
             deviceMapDict.forEach { key, value in
                 let deviceName = key// as! String
                 
-                if deviceName == modelData.deviceName && readPos.getPosition(deviceName) != nil {
-                    //ignore server, trust local record
-                    return
+                if let oldPos = readPos.getPosition(deviceName) {
+                    guard deviceName != modelData.deviceName else { return }    //trust local record
+                    guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                 }
                 
                 var deviceReadingPosition = value

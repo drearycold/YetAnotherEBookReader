@@ -168,7 +168,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 //            self?.updateBookModel()
 //        }
         
-        updateAndReloadCancellable = modelData.booksRefreshedPublisher
+        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
             .subscribe(on: DispatchQueue.main)
             .receive(on: DispatchQueue.main)
             .sink { _ in
@@ -304,7 +304,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             guard let format = Format(rawValue: $0) else { return }
             let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
             if started {
-                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
             }
         }
     }

@@ -51,7 +51,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         bannerView.load(gadRequest)
         #endif
         
-        NotificationCenter.default.post(.init(name: .YABR_BooksRefreshed))
+        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfBooksRefreshed))
     }
 
     override func viewDidLoad() {

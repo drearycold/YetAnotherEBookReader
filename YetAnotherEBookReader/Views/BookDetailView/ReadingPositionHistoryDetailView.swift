@@ -125,7 +125,7 @@ struct ReadingPositionHistoryDetailView: View {
                                 
                                 modelData.updateCurrentPosition(alertDelegate: nil)
                                 
-                                NotificationCenter.default.post(Notification(name: .YABR_BooksRefreshed))
+                                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
                             }
                         ) {
                             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {

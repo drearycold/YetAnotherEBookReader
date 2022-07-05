@@ -88,7 +88,8 @@ struct FontInfo {
 }
 
 extension Notification.Name {
-    static let YABR_BooksRefreshed = Notification.Name("YABR.booksRefreshed")
+    static let YABR_RecentShelfBooksRefreshed = Notification.Name("YABR.recentShelfbooksRefreshed")
+    static let YABR_DiscoverShelfBooksRefreshed = Notification.Name("YABR.discoverShelfbooksRefreshed")
     static let YABR_ReadingBookRemovedFromShelf = Notification.Name("YABR.readingBookRemovedFromShelf")
     static let YABR_BookImported = Notification.Name("YABR.bookImported")
     static let YABR_BookReaderEnterBackground = Notification.Name("YABR.bookReaderEnterBackground")
