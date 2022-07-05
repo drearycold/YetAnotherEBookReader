@@ -392,8 +392,11 @@ final class ModelData: ObservableObject {
                 }
             })
         
-        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed, object: Bool(true)))
-        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
+        }
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
@@ -2581,7 +2584,7 @@ final class ModelData: ObservableObject {
                 book.readPos.getDevices().max { lhs, rhs in
                     lhs.lastProgress < rhs.lastProgress
                 }?.lastProgress ?? 0.0
-                return lastProgress > 5.0 && lastProgress < 99.0
+                return lastProgress > 5.0
             }
             .sorted { lb, rb in
                 lb.readPos.getDevices().max { lhs, rhs in
@@ -2620,6 +2623,11 @@ final class ModelData: ObservableObject {
             sectionName: "Reading",
             sectionId: "reading",
             sectionShelf: resultsWithReadPos
+                .filter {
+                    $0.readPos.getDevices().max { lhs, rhs in
+                        lhs.lastProgress < rhs.lastProgress
+                    }?.lastProgress ?? 0.0 < 95.0
+                }
                 .map { book in
                     ShelfModel(
                         bookCoverSource: book.coverURL?.absoluteString ?? ".",
@@ -2653,6 +2661,11 @@ final class ModelData: ObservableObject {
                     .prefix(limit)
                     .compactMap {
                         self.convert(bookRealm: $0)
+                    }
+                    .filter {
+                        $0.readPos.getDevices().max { lhs, rhs in
+                            lhs.lastProgress < rhs.lastProgress
+                        }?.lastProgress ?? 0.0 < 95.0
                     }
                     .map { book in
                         ShelfModel(
@@ -2693,6 +2706,11 @@ final class ModelData: ObservableObject {
                 .prefix(limit)
                 .compactMap {
                     self.convert(bookRealm: $0)
+                }
+                .filter {
+                    $0.readPos.getDevices().max { lhs, rhs in
+                        lhs.lastProgress < rhs.lastProgress
+                    }?.lastProgress ?? 0.0 < 95.0
                 }
                 .map { book in
                     ShelfModel(
