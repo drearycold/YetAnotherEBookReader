@@ -108,6 +108,13 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
             guard let path = request.path.removingPercentEncoding else { return GCDWebServerErrorResponse() }
             print("\(#function) GCDREQUEST path=\(path)")
             
+//            if path.hasSuffix("css") {
+//                return GCDWebServerDataResponse(text:
+//                """
+//                
+//                """)
+//            }
+            
             var pathSegs = path.split(separator: "/")
             guard pathSegs.count > 1 else { return GCDWebServerErrorResponse() }
             pathSegs.removeFirst()
