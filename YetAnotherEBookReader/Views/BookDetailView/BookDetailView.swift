@@ -632,7 +632,9 @@ struct BookDetailView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
         }
-        .sheet(isPresented: $presentingPreviewSheet) {
+        .sheet(isPresented: $presentingPreviewSheet, onDismiss: {
+            modelData.readerInfo = modelData.prepareBookReading(book: book)
+        }) {
             BookPreviewView(viewModel: previewViewModel)
         }
     }
