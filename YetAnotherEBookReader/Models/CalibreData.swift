@@ -603,6 +603,10 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         return false
     }
     
+    func isSameType(with other: BookDeviceReadingPosition) -> Bool {
+        return id == other.id && readerName == other.readerName
+    }
+    
     var epochByLocale: String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .short

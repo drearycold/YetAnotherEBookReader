@@ -20,7 +20,8 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         
         let updatedReadingPosition = modelData.updatedReadingPosition
         let originalPosition = readerInfo.position
-        guard updatedReadingPosition.isSameProgress(with: originalPosition) == false else { return }
+        guard updatedReadingPosition.isSameType(with: originalPosition),
+              updatedReadingPosition.isSameProgress(with: originalPosition) == false else { return }
         
         modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: updatedReadingPosition)
         modelData.updateCurrentPosition(alertDelegate: self)

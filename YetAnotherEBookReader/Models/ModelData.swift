@@ -105,7 +105,11 @@ final class ModelData: ObservableObject {
     }
     
     @Published var selectedPosition = ""
-    @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "")
+    @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "") {
+        didSet {
+            self.defaultLog.info("updatedReadingPosition=\(self.updatedReadingPosition.description)")
+        }
+    }
     let bookReaderClosedPublisher = NotificationCenter.default.publisher(
         for: .YABR_BookReaderClosed
     ).eraseToAnyPublisher()

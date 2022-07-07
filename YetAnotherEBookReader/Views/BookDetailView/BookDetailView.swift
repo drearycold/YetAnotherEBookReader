@@ -216,6 +216,7 @@ struct BookDetailView: View {
                 onDismiss: {
                     guard let book = modelData.readingBook,
                         let selectedPosition = modelData.readerInfo?.position,
+                        modelData.updatedReadingPosition.isSameType(with: selectedPosition),
                         modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false
                     else { return }
                     

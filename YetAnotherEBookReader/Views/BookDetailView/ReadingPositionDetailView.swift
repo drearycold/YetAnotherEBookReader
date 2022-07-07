@@ -154,6 +154,7 @@ struct ReadingPositionDetailView: View {
             onDismiss: {
                 guard let book = _VM.modelData.readingBook,
                     let selectedPosition = _VM.modelData.readerInfo?.position,
+                      _VM.modelData.updatedReadingPosition.isSameType(with: selectedPosition),
                       _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false else { return }
                 
                 _VM.modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: _VM.modelData.updatedReadingPosition)
