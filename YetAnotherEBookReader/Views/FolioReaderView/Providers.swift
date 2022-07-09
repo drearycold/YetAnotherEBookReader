@@ -59,8 +59,10 @@ class FolioReaderPreferenceRealm: Object {
     @objc dynamic var currentMediaOverlayStyle: Int = .min
     @objc dynamic var currentScrollDirection: Int = .min
     @objc dynamic var currentMenuIndex: Int = .min
+    @objc dynamic var currentVMarginLinked: Bool = true
     @objc dynamic var currentMarginTop: Int = .min
     @objc dynamic var currentMarginBottom: Int = .min
+    @objc dynamic var currentHMarginLinked: Bool = true
     @objc dynamic var currentMarginLeft: Int = .min
     @objc dynamic var currentMarginRight: Int = .min
     @objc dynamic var currentLetterSpacing: Int = .min
@@ -190,6 +192,14 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         return value(of: prefObj?.currentMarginTop, defaults: defaults)
     }
     
+    func preference(setCurrentVMarginLinked value: Bool) {
+        try? realm?.write { prefObj?.currentVMarginLinked = value }
+    }
+    
+    func preference(currentVMarginLinked defaults: Bool) -> Bool {
+        prefObj?.currentVMarginLinked ?? defaults
+    }
+    
     func preference(setCurrentMarginTop value: Int) {
         try? realm?.write { prefObj?.currentMarginTop = value }
     }
@@ -200,6 +210,14 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
     
     func preference(setCurrentMarginBottom value: Int) {
         try? realm?.write { prefObj?.currentMarginBottom = value }
+    }
+    
+    func preference(setCurrentHMarginLinked value: Bool) {
+        try? realm?.write { prefObj?.currentHMarginLinked = value }
+    }
+    
+    func preference(currentHMarginLinked defaults: Bool) -> Bool {
+        prefObj?.currentHMarginLinked ?? defaults
     }
     
     func preference(currentMarginLeft defaults: Int) -> Int {
