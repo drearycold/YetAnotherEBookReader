@@ -50,6 +50,15 @@ struct ReadingPositionDetailView: View {
                         Spacer()
                         Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
                     }
+                    HStack {
+                        Spacer()
+                        Text("CFI: \(_VM.position.cfi)")
+                    }
+                    HStack {
+                        Spacer()
+                        Text("EPOCH: \(_VM.position.epoch)")
+                    }
+                    
                     #endif
                 }
                 

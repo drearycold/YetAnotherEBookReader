@@ -523,6 +523,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var id: String = ""  //device name
     
     var readerName: String
+    
     var maxPage = 0
     var lastReadPage = 0
     var lastReadChapter = ""
@@ -546,6 +547,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         case furthestReadChapter
         case maxPage
         case lastPosition
+        case cfi
         case epoch
     }
     
@@ -589,6 +591,7 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         lastChapterProgress = other.lastChapterProgress
         lastProgress = other.lastProgress
         lastPosition = other.lastPosition
+        cfi = other.cfi
         epoch = other.epoch
     }
     

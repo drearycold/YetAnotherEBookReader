@@ -43,7 +43,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
         guard enabled else { return }
         
         server = UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)?.absoluteString
-        guard let server = server else { return }
+        guard server != nil else { return }
         
         self.toolbarItems = [
             UIBarButtonItem(
@@ -78,7 +78,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             let tagger = NLTagger(tagSchemes: [.lemma])
             tagger.string = word
             tagger.enumerateTags(in: word.startIndex..<word.endIndex, unit: .word, scheme: .lemma) { tag, tokenRange in
-                print("\(#function) word=\(word) tag=\(tag) tokenRange=\(tokenRange)")
+                print("\(#function) word=\(word) tag=\(String(describing: tag)) tokenRange=\(tokenRange)")
                 if let tagRaw = tag?.rawValue {
                     word = tagRaw
                     return true
@@ -115,7 +115,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
     }
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("\(#function) didFinish=\(navigation)")
+        print("\(#function) didFinish=\(String(describing: navigation))")
         if let url = webView.url,
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first(where: { $0.name == "word" })?.value {
             self.navigationItem.title = word
@@ -134,7 +134,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             names
             """
         ) { result, error in
-            print("\(#function) result=\(result) error=\(error)")
+            print("\(#function) result=\(String(describing: result)) error=\(error)")
             guard let array = result as? NSArray else { return }
             array.forEach {
                 guard let a = $0 as? NSDictionary else { return }
