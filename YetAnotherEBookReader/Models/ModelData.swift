@@ -2241,6 +2241,7 @@ final class ModelData: ObservableObject {
         )
         .sorted(byKeyPath: "lastModified", ascending: false)
         .map { $0.id }
+        .filter { self.librarySyncStatus[library.id]?.err.contains($0) == false }
         .prefix(256)
         
         guard chunk.isEmpty == false else {
@@ -2306,6 +2307,17 @@ final class ModelData: ObservableObject {
                 NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
+            } catch let DecodingError.keyNotFound(key, context) {
+                print("getBookMetadataCancellable decode keyNotFound \(result.library.name) \(key) \(context) \(result.data?.count ?? -1)")
+                if key.stringValue == "path",
+                   let firstCodingPath = context.codingPath.first,
+                   let bookId = Int32(firstCodingPath.stringValue), bookId > 0 {
+                    DispatchQueue.main.sync {
+                        self.librarySyncStatus[result.library.id]?.err.insert(bookId)
+                        self.librarySyncStatus[result.library.id]?.isUpd = false
+                    }
+                    self.trySendGetBooksMetadataTask(library: result.library)
+                }
             } catch {
                 print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
             }

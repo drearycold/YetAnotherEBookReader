@@ -450,6 +450,7 @@ struct CalibreSyncStatus {
     var cnt: Int? = nil
     var upd: Int? = nil
     var del = Set<Int32>()
+    var err = Set<Int32>()
 }
 
 struct BookReadingPosition {
