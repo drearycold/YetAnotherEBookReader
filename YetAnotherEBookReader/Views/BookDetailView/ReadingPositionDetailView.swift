@@ -52,7 +52,7 @@ struct ReadingPositionDetailView: View {
                     }
                     HStack {
                         Spacer()
-                        Text("CFI: \(_VM.position.cfi)")
+                        Text("CFI: \(_VM.position.cfi.replacingOccurrences(of: ";", with: ";\n"))").lineLimit(10)
                     }
                     HStack {
                         Spacer()
