@@ -572,6 +572,121 @@ class BookDeviceReadingPositionHistoryRealm: Object {
     }
 }
 
+class CalibreBookLastReadPositionRealm: Object {
+    @objc dynamic var device = ""
+    @objc dynamic var cfi = ""
+    @objc dynamic var epoch = 0.0
+    @objc dynamic var pos_frac = 0.0
+    
+    override static func primaryKey() -> String? {
+        return "device"
+    }
+}
+
+extension CalibreBookLastReadPositionEntry: Persistable {
+    public init(managedObject: CalibreBookLastReadPositionRealm) {
+        device = managedObject.device
+        cfi = managedObject.cfi
+        epoch = managedObject.epoch
+        pos_frac = managedObject.pos_frac
+    }
+    
+    public func managedObject() -> CalibreBookLastReadPositionRealm {
+        let obj = CalibreBookLastReadPositionRealm()
+        obj.device = device
+        obj.cfi = cfi
+        obj.epoch = epoch
+        obj.pos_frac = pos_frac
+        
+        return obj
+    }
+}
+
+extension BookDeviceReadingPosition {
+    public init?(managedObject: CalibreBookLastReadPositionRealm) {
+        guard let vndFirstRange = managedObject.cfi.range(of: ";vnd_"),
+              let vndEndRange = managedObject.cfi.range(of: "]", range: vndFirstRange.upperBound..<managedObject.cfi.endIndex)
+        else { return nil }
+        
+        
+        let vndParameters = managedObject.cfi[vndFirstRange.lowerBound..<vndEndRange.lowerBound]
+        
+        var parameters = [String: String]()
+        vndParameters.split(separator: ";").forEach { p in
+            guard let equalIndex = p.firstIndex(of: "=") else { return }
+            parameters[String(p[p.startIndex..<equalIndex])] = String(p[(p.index(after: equalIndex))..<p.endIndex])
+        }
+        
+        print("\(#function) cfi=\(managedObject.cfi) vndParameters=\(vndParameters) parameters=\(parameters)")
+        
+        guard let readerName = parameters["vnd_readerName"] else { return nil }
+        
+        self.id = managedObject.device
+        self.readerName = readerName
+        
+        if let vnd_maxPage = parameters["vnd_maxPage"], let maxPage = Int(vnd_maxPage) {
+            self.maxPage = maxPage
+        }
+        if let vnd_lastReadPage = parameters["vnd_lastReadPage"], let lastReadPage = Int(vnd_lastReadPage) {
+            self.lastReadPage = lastReadPage
+        }
+        if let vnd_lastReadChapter = parameters["vnd_lastReadChapter"] {
+            self.lastReadChapter = vnd_lastReadChapter
+        }
+        if let vnd_lastChapterProgress = parameters["vnd_lastChapterProgress"], let lastChapterProgress = Double(vnd_lastChapterProgress) {
+            self.lastChapterProgress = lastChapterProgress
+        }
+        if let vnd_lastProgress = parameters["vnd_lastProgress"], let lastProgress = Double(vnd_lastProgress) {
+            self.lastProgress = lastProgress
+        }
+        if let vnd_furthestReadPage = parameters["vnd_furthestReadPage"], let furthestReadPage = Int(vnd_furthestReadPage) {
+            self.furthestReadPage = furthestReadPage
+        }
+        if let vnd_furthestReadChapter = parameters["vnd_furthestReadChapter"] {
+            self.furthestReadChapter = vnd_furthestReadChapter
+        }
+        if let vnd_lastPosition = parameters["vnd_lastPosition"] {
+            let positions = vnd_lastPosition.split(separator: ".").compactMap{ Int($0) }
+            if positions.count == 3 {
+                self.lastPosition = positions
+            }
+        }
+        
+        self.cfi = String(managedObject.cfi[managedObject.cfi.startIndex..<vndFirstRange.lowerBound] + managedObject.cfi[vndEndRange.lowerBound..<managedObject.cfi.endIndex]).replacingOccurrences(of: "[]", with: "")
+        self.epoch = managedObject.epoch
+        
+    }
+    
+    func encodeEPUBCFI() -> String {
+        var parameters = [String: String]()
+        parameters["vnd_readerName"] = readerName
+        parameters["vnd_maxPage"] = maxPage.description
+        parameters["vnd_lastReadPage"] = lastReadPage.description
+        parameters["vnd_lastReadChapter"] = lastReadChapter
+        parameters["vnd_lastChapterProgress"] = lastChapterProgress.description
+        parameters["vnd_lastProgress"] = lastProgress.description
+        parameters["vnd_furthestReadPage"] = furthestReadPage.description
+        parameters["vnd_furthestReadChapter"] = furthestReadChapter
+        parameters["vnd_lastPosition"] = lastPosition.map { $0.description }.joined(separator: ".")
+        
+        let vndParameters = parameters.map {
+            "\($0.key)=\($0.value.replacingOccurrences(of: ",|;|=|\\[|\\]", with: ".", options: .regularExpression))"
+        }.joined(separator: ";")
+        
+        var cfi = cfi
+        if cfi.last == "]" {
+            var insertIndex = cfi.endIndex
+            _ = cfi.formIndex(&insertIndex, offsetBy: -1, limitedBy: cfi.startIndex)
+            cfi.insert(contentsOf: ";" + vndParameters, at: insertIndex)
+        } else {
+            cfi.insert(contentsOf: "[;\(vndParameters)]", at: cfi.index(before: cfi.endIndex))
+        }
+        
+        return cfi
+    }
+    
+}
+
 class CalibreServerDSReaderHelperRealm: Object {
     @objc dynamic var id: String?
     @objc dynamic var port: Int = 0

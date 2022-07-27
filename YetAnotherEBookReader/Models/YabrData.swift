@@ -45,6 +45,23 @@ enum ReaderType: String, CaseIterable, Identifiable {
     case ReadiumCBZ
     
     var id: String { self.rawValue }
+    
+    var format: Format {
+        switch self {
+        case .UNSUPPORTED:
+            return .UNKNOWN
+        case .YabrEPUB:
+            return .EPUB
+        case .YabrPDF:
+            return .PDF
+        case .ReadiumEPUB:
+            return .EPUB
+        case .ReadiumPDF:
+            return .PDF
+        case .ReadiumCBZ:
+            return .CBZ
+        }
+    }
 }
 
 struct ReaderInfo {

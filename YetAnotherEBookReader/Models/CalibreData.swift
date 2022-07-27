@@ -646,8 +646,10 @@ struct CalibreBooksTask {
     var library: CalibreLibrary
     var books: [String]
     var url: URL
+    var lastReadPositionUrl: URL
     var data: Data? = nil
     var response: URLResponse? = nil
+    var lastReadPositionsData: Data? = nil
 }
 
 struct CalibreBookFormatMetadataEntry: Codable {

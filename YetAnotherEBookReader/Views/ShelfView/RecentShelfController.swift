@@ -242,8 +242,11 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        guard modelData.readingBook != nil, modelData.readerInfo != nil else { return }
-
+        guard let book = modelData.readingBook,
+              let readerInfo = modelData.prepareBookReading(book: book) else { return }
+        
+        modelData.readerInfo = readerInfo
+        
         modelData.presentingEBookReaderFromShelf = true
     }
     

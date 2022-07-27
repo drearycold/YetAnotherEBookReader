@@ -844,23 +844,38 @@ struct CalibreServerService {
             url: endpointUrl)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [String]) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook]) -> CalibreBooksTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
+        
+        let bookIds = books.map{ $0.id.description }
+        
         var urlComponents = URLComponents()
         urlComponents.path = "/ajax/books/\(library.key)"
         urlComponents.queryItems = [
-            URLQueryItem(name: "ids", value: books.joined(separator: ","))
+            URLQueryItem(name: "ids", value: bookIds.joined(separator: ","))
         ]
         guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
             return nil
         }
         
+        let which = books.map {
+            let id = $0.id.description
+            return $0.formats.filter { $0.value.cached }.map { "\(id)-\($0.key)" }.joined(separator: "_")
+        }.joined(separator: "_")
+        
+        var lastReadPositionUrlComponents = URLComponents()
+        lastReadPositionUrlComponents.path = "/book-get-last-read-position/\(library.key)/\(which)"
+        guard let lastReadPositionEndpointUrl = lastReadPositionUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
         return CalibreBooksTask(
             library: library,
-            books: books,
-            url: endpointUrl
+            books: bookIds,
+            url: endpointUrl,
+            lastReadPositionUrl: lastReadPositionEndpointUrl
         )
     }
     
@@ -892,7 +907,17 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
-    func setLastReadPosition(book: CalibreBook, format: Format, position: BookDeviceReadingPosition) -> Int {
+    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        return urlSession(server: task.library.server).dataTaskPublisher(for: task.lastReadPositionUrl)
+            .map { result -> CalibreBooksTask in
+                var task = task
+                task.lastReadPositionsData = result.data
+                return task
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func setLastReadPosition(book: CalibreBook, format: Format, entry: CalibreBookLastReadPositionEntry) -> Int {
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
             return -1
         }
@@ -902,7 +927,6 @@ struct CalibreServerService {
             return -1
         }
         
-        let entry = CalibreBookLastReadPositionEntry(device: position.id, cfi: position.cfi, epoch: position.epoch, pos_frac: position.lastProgress / 100)
         guard let postData = try? JSONEncoder().encode(entry) else {
             return -2
         }
