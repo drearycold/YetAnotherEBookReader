@@ -755,6 +755,16 @@ struct CalibreBookAnnotationsResult: Codable {
     var annotations_map: [String: [CalibreBookAnnotationEntry]]
 }
 
+struct CalibreBookSetLastReadPositionTask {
+    let library: CalibreLibrary
+    let bookId: Int32
+    let format: Format
+    let entry: CalibreBookLastReadPositionEntry
+    var urlRequest: URLRequest
+    var urlResponse: URLResponse?
+    var data: Data?
+}
+
 struct CalibreCustomColumnInfo: Codable, Hashable {
     var label: String
     var name: String

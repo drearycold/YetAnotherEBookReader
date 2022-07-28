@@ -124,6 +124,9 @@ final class ModelData: ObservableObject {
     ).eraseToAnyPublisher()
     var bookReaderEnterActiveCancellable: AnyCancellable? = nil
     
+    var setLastReadPositionPassthrough = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
+    var setLastReadPositionCancellable: AnyCancellable? = nil
+    
     var readingBookInShelfId: String? = nil {
         didSet {
             guard let readingBookInShelfId = readingBookInShelfId else {
@@ -396,6 +399,8 @@ final class ModelData: ObservableObject {
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
+        registerSetLastReadPositionCancellable()
+        
         if mock {
             let library = calibreLibraries.first!.value
             
@@ -523,29 +528,7 @@ final class ModelData: ObservableObject {
                     self.updateBook(book: book)
                 }
                 
-                guard formatInfoNew.cached,
-                      let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
-                      let bookPrefRealm = try? Realm(configuration: bookPrefConfig) else { return }
-                
-                book.readPos.getDevices().forEach { position in
-                    guard let readerType = ReaderType(rawValue: position.readerName), readerType.format == format else { return }
-//                    position.encodeEPUBCFI()
-                    
-                    let object = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: position.id) ??
-                    CalibreBookLastReadPositionRealm()
-                    
-                    guard object.epoch < position.epoch || object.cfi.count < 3 else { return }
-                    
-                    try? bookPrefRealm.write {
-                        object.cfi = position.encodeEPUBCFI()
-                        object.pos_frac = position.lastProgress / 100
-                        object.epoch = position.epoch
-                        if object.device.isEmpty {
-                            object.device = position.id
-                            bookPrefRealm.add(object, update: .all)
-                        }
-                    }
-                }
+                readPosToLastReadPosition(book: book, format: format, formatInfo: formatInfoNew)
             }
             
             self.booksInShelf[book.inShelfId] = book
@@ -1543,7 +1526,9 @@ final class ModelData: ObservableObject {
             try? bookPrefRealm.write {
                 bookPrefRealm.add(positionEntry.managedObject(), update: .all)
             }
-            calibreServerService.setLastReadPosition(book: readingBook, format: readerInfo.format, entry: positionEntry)
+            if let task = self.calibreServerService.buildSetLastReadPositionTask(library: readingBook.library, bookId: readingBook.id, format: readerInfo.format, entry: positionEntry) {
+                self.setLastReadPositionPassthrough.send(task)
+            }
 
             let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
             
@@ -1959,6 +1944,10 @@ final class ModelData: ObservableObject {
                             self.defaultLog.info("Refreshed \(obj.id) \(result.library.id)")
                             
                             let newBook = self.convert(library: result.library, bookRealm: obj)
+                            newBook.formats.forEach {
+                                guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
+                                readPosToLastReadPosition(book: newBook, format: format, formatInfo: $0.value)
+                            }
                             DispatchQueue.main.async {
                                 self.booksInShelf[newBook.inShelfId] = newBook
                             }
@@ -1980,13 +1969,51 @@ final class ModelData: ObservableObject {
                               let bookPrefRealm = try? Realm(configuration: bookPrefConfig)
                         else { return }
                         
-                        $0.value.forEach { entry in
-                            guard (bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: entry.device)?.epoch ?? 0.0) < entry.epoch
-                            else { return }
+                        var devicesUpdated = Set<String>()
+                        $0.value.forEach { remoteEntry in
+                            let remoteObject = remoteEntry.managedObject()
+                            guard let remotePosition = BookDeviceReadingPosition(managedObject: remoteObject) else {
+                                //not recognisable
+                                return
+                            }
+                            
+                            guard let localObject = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: remoteEntry.device),
+                                  let localPosition = BookDeviceReadingPosition(managedObject: localObject)
+                            else {
+                                try? bookPrefRealm.write {
+                                    bookPrefRealm.add(remoteEntry.managedObject(), update: .modified)
+                                }
+                                devicesUpdated.insert(remoteEntry.device)
+                                return
+                            }
+                            
+                            guard localPosition.epoch < remotePosition.epoch else {
+                                if localPosition.epoch == remotePosition.epoch {
+                                    devicesUpdated.insert(remoteObject.device)
+                                }
+                                return
+                            }
                             
                             try? bookPrefRealm.write {
-                                bookPrefRealm.add(entry.managedObject(), update: .modified)
+                                bookPrefRealm.add(remoteObject, update: .modified)
                             }
+                            devicesUpdated.insert(remoteObject.device)
+                        }
+                        
+                        let objects = bookPrefRealm.objects(CalibreBookLastReadPositionRealm.self)
+                        objects.forEach {
+                            guard devicesUpdated.contains($0.device) == false,
+                                  BookDeviceReadingPosition(managedObject: $0) != nil else { return }
+                            
+                            guard let task = self.calibreServerService.buildSetLastReadPositionTask(
+                                library: result.library,
+                                bookId: bookId,
+                                format: format,
+                                entry: CalibreBookLastReadPositionEntry(managedObject: $0)
+                            ) else { return }
+                            
+                            
+                            self.setLastReadPositionPassthrough.send(task)
                         }
                     }
                 }
@@ -2377,6 +2404,19 @@ final class ModelData: ObservableObject {
                 print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
             }
         })
+    }
+    
+    func registerSetLastReadPositionCancellable() {
+        setLastReadPositionCancellable?.cancel()
+        setLastReadPositionCancellable = setLastReadPositionPassthrough
+            .eraseToAnyPublisher()
+            .flatMap { task in
+                return self.calibreServerService.setLastReadPositionByTask(task: task)
+            }
+            .subscribe(on: DispatchQueue.global())
+            .sink(receiveValue: { output in
+                print("\(#function) output=\(output)")
+            })
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {

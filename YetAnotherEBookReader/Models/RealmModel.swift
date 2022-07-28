@@ -604,7 +604,7 @@ extension CalibreBookLastReadPositionEntry: Persistable {
 
 extension BookDeviceReadingPosition {
     public init?(managedObject: CalibreBookLastReadPositionRealm) {
-        guard let vndFirstRange = managedObject.cfi.range(of: ";vndYabr_"),
+        guard let vndFirstRange = managedObject.cfi.range(of: ";vndYabr_") ?? managedObject.cfi.range(of: ";vnd_"),
               let vndEndRange = managedObject.cfi.range(of: "]", range: vndFirstRange.upperBound..<managedObject.cfi.endIndex)
         else { return nil }
         
@@ -619,33 +619,40 @@ extension BookDeviceReadingPosition {
         
         print("\(#function) cfi=\(managedObject.cfi) vndParameters=\(vndParameters) parameters=\(parameters)")
         
-        guard let readerName = parameters["vndYabr_readerName"] else { return nil }
+        guard let readerName = parameters["vndYabr_readerName"] ?? parameters["vnd_readerName"] else { return nil }
         
         self.id = managedObject.device
         self.readerName = readerName
         
-        if let vndYabr_maxPage = parameters["vndYabr_maxPage"], let maxPage = Int(vndYabr_maxPage) {
+        if let vndYabr_maxPage = parameters["vndYabr_maxPage"] ?? parameters["vnd_maxPage"], let maxPage = Int(vndYabr_maxPage) {
             self.maxPage = maxPage
         }
-        if let vndYabr_lastReadPage = parameters["vndYabr_lastReadPage"], let lastReadPage = Int(vndYabr_lastReadPage) {
+        if let vndYabr_lastReadPage = parameters["vndYabr_lastReadPage"] ?? parameters["vnd_lastReadPage"], let lastReadPage = Int(vndYabr_lastReadPage) {
             self.lastReadPage = lastReadPage
         }
-        if let vndYabr_lastReadChapter = parameters["vndYabr_lastReadChapter"] {
+        if let vndYabr_lastReadChapter = parameters["vndYabr_lastReadChapter"] ?? parameters["vnd_lastReadChapter"] {
             self.lastReadChapter = vndYabr_lastReadChapter
         }
-        if let vndYabr_lastChapterProgress = parameters["vndYabr_lastChapterProgress"], let lastChapterProgress = Double(vndYabr_lastChapterProgress) {
+        if let vndYabr_lastChapterProgress = parameters["vndYabr_lastChapterProgress"] ?? parameters["vnd_lastChapterProgress"], let lastChapterProgress = Double(vndYabr_lastChapterProgress) {
             self.lastChapterProgress = lastChapterProgress
         }
-        if let vndYabr_lastProgress = parameters["vndYabr_lastProgress"], let lastProgress = Double(vndYabr_lastProgress) {
+        if let vndYabr_lastProgress = parameters["vndYabr_lastProgress"] ?? parameters["vnd_lastProgress"], let lastProgress = Double(vndYabr_lastProgress) {
             self.lastProgress = lastProgress
         }
-        if let vndYabr_furthestReadPage = parameters["vndYabr_furthestReadPage"], let furthestReadPage = Int(vndYabr_furthestReadPage) {
+        if let vndYabr_furthestReadPage = parameters["vndYabr_furthestReadPage"] ?? parameters["vnd_furthestReadPage"], let furthestReadPage = Int(vndYabr_furthestReadPage) {
             self.furthestReadPage = furthestReadPage
         }
-        if let vndYabr_furthestReadChapter = parameters["vndYabr_furthestReadChapter"] {
+        if let vndYabr_furthestReadChapter = parameters["vndYabr_furthestReadChapter"] ?? parameters["vnd_furthestReadChapter"] {
             self.furthestReadChapter = vndYabr_furthestReadChapter
         }
-        if let vndYabr_lastPosition = parameters["vndYabr_lastPosition"] {
+        if let vndYabr_epoch = parameters["vndYabr_epoch"] ?? parameters["vnd_epoch"], let epoch = Double(vndYabr_epoch), epoch > 0.0 {
+            self.epoch = epoch
+        } else if managedObject.epoch > 0.0 {
+            self.epoch = managedObject.epoch
+        } else {
+            self.epoch = Date().timeIntervalSince1970
+        }
+        if let vndYabr_lastPosition = parameters["vndYabr_lastPosition"] ?? parameters["vnd_lastPosition"] {
             let positions = vndYabr_lastPosition.split(separator: ".").compactMap{ Int($0) }
             if positions.count == 3 {
                 self.lastPosition = positions
@@ -653,7 +660,6 @@ extension BookDeviceReadingPosition {
         }
         
         self.cfi = String(managedObject.cfi[managedObject.cfi.startIndex..<vndFirstRange.lowerBound] + managedObject.cfi[vndEndRange.lowerBound..<managedObject.cfi.endIndex]).replacingOccurrences(of: "[]", with: "")
-        self.epoch = managedObject.epoch
         
     }
     
@@ -668,6 +674,11 @@ extension BookDeviceReadingPosition {
         parameters["vndYabr_furthestReadPage"] = furthestReadPage.description
         parameters["vndYabr_furthestReadChapter"] = furthestReadChapter
         parameters["vndYabr_lastPosition"] = lastPosition.map { $0.description }.joined(separator: ".")
+        if epoch > 0.0 {
+            parameters["vndYabr_epoch"] = epoch.description
+        } else {
+            parameters["vndYabr_epoch"] = Date().timeIntervalSince1970.description
+        }
         
         let vndParameters = parameters.map {
             "\($0.key)=\($0.value.replacingOccurrences(of: ",|;|=|\\[|\\]|\\s", with: ".", options: .regularExpression))"
