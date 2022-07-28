@@ -604,7 +604,7 @@ extension CalibreBookLastReadPositionEntry: Persistable {
 
 extension BookDeviceReadingPosition {
     public init?(managedObject: CalibreBookLastReadPositionRealm) {
-        guard let vndFirstRange = managedObject.cfi.range(of: ";vnd_"),
+        guard let vndFirstRange = managedObject.cfi.range(of: ";vndYabr_"),
               let vndEndRange = managedObject.cfi.range(of: "]", range: vndFirstRange.upperBound..<managedObject.cfi.endIndex)
         else { return nil }
         
@@ -619,34 +619,34 @@ extension BookDeviceReadingPosition {
         
         print("\(#function) cfi=\(managedObject.cfi) vndParameters=\(vndParameters) parameters=\(parameters)")
         
-        guard let readerName = parameters["vnd_readerName"] else { return nil }
+        guard let readerName = parameters["vndYabr_readerName"] else { return nil }
         
         self.id = managedObject.device
         self.readerName = readerName
         
-        if let vnd_maxPage = parameters["vnd_maxPage"], let maxPage = Int(vnd_maxPage) {
+        if let vndYabr_maxPage = parameters["vndYabr_maxPage"], let maxPage = Int(vndYabr_maxPage) {
             self.maxPage = maxPage
         }
-        if let vnd_lastReadPage = parameters["vnd_lastReadPage"], let lastReadPage = Int(vnd_lastReadPage) {
+        if let vndYabr_lastReadPage = parameters["vndYabr_lastReadPage"], let lastReadPage = Int(vndYabr_lastReadPage) {
             self.lastReadPage = lastReadPage
         }
-        if let vnd_lastReadChapter = parameters["vnd_lastReadChapter"] {
-            self.lastReadChapter = vnd_lastReadChapter
+        if let vndYabr_lastReadChapter = parameters["vndYabr_lastReadChapter"] {
+            self.lastReadChapter = vndYabr_lastReadChapter
         }
-        if let vnd_lastChapterProgress = parameters["vnd_lastChapterProgress"], let lastChapterProgress = Double(vnd_lastChapterProgress) {
+        if let vndYabr_lastChapterProgress = parameters["vndYabr_lastChapterProgress"], let lastChapterProgress = Double(vndYabr_lastChapterProgress) {
             self.lastChapterProgress = lastChapterProgress
         }
-        if let vnd_lastProgress = parameters["vnd_lastProgress"], let lastProgress = Double(vnd_lastProgress) {
+        if let vndYabr_lastProgress = parameters["vndYabr_lastProgress"], let lastProgress = Double(vndYabr_lastProgress) {
             self.lastProgress = lastProgress
         }
-        if let vnd_furthestReadPage = parameters["vnd_furthestReadPage"], let furthestReadPage = Int(vnd_furthestReadPage) {
+        if let vndYabr_furthestReadPage = parameters["vndYabr_furthestReadPage"], let furthestReadPage = Int(vndYabr_furthestReadPage) {
             self.furthestReadPage = furthestReadPage
         }
-        if let vnd_furthestReadChapter = parameters["vnd_furthestReadChapter"] {
-            self.furthestReadChapter = vnd_furthestReadChapter
+        if let vndYabr_furthestReadChapter = parameters["vndYabr_furthestReadChapter"] {
+            self.furthestReadChapter = vndYabr_furthestReadChapter
         }
-        if let vnd_lastPosition = parameters["vnd_lastPosition"] {
-            let positions = vnd_lastPosition.split(separator: ".").compactMap{ Int($0) }
+        if let vndYabr_lastPosition = parameters["vndYabr_lastPosition"] {
+            let positions = vndYabr_lastPosition.split(separator: ".").compactMap{ Int($0) }
             if positions.count == 3 {
                 self.lastPosition = positions
             }
@@ -659,28 +659,39 @@ extension BookDeviceReadingPosition {
     
     func encodeEPUBCFI() -> String {
         var parameters = [String: String]()
-        parameters["vnd_readerName"] = readerName
-        parameters["vnd_maxPage"] = maxPage.description
-        parameters["vnd_lastReadPage"] = lastReadPage.description
-        parameters["vnd_lastReadChapter"] = lastReadChapter
-        parameters["vnd_lastChapterProgress"] = lastChapterProgress.description
-        parameters["vnd_lastProgress"] = lastProgress.description
-        parameters["vnd_furthestReadPage"] = furthestReadPage.description
-        parameters["vnd_furthestReadChapter"] = furthestReadChapter
-        parameters["vnd_lastPosition"] = lastPosition.map { $0.description }.joined(separator: ".")
+        parameters["vndYabr_readerName"] = readerName
+        parameters["vndYabr_maxPage"] = maxPage.description
+        parameters["vndYabr_lastReadPage"] = lastReadPage.description
+        parameters["vndYabr_lastReadChapter"] = lastReadChapter
+        parameters["vndYabr_lastChapterProgress"] = lastChapterProgress.description
+        parameters["vndYabr_lastProgress"] = lastProgress.description
+        parameters["vndYabr_furthestReadPage"] = furthestReadPage.description
+        parameters["vndYabr_furthestReadChapter"] = furthestReadChapter
+        parameters["vndYabr_lastPosition"] = lastPosition.map { $0.description }.joined(separator: ".")
         
         let vndParameters = parameters.map {
-            "\($0.key)=\($0.value.replacingOccurrences(of: ",|;|=|\\[|\\]", with: ".", options: .regularExpression))"
+            "\($0.key)=\($0.value.replacingOccurrences(of: ",|;|=|\\[|\\]|\\s", with: ".", options: .regularExpression))"
         }.joined(separator: ";")
         
         var cfi = cfi
-        if cfi.last == "]" {
-            var insertIndex = cfi.endIndex
-            _ = cfi.formIndex(&insertIndex, offsetBy: -1, limitedBy: cfi.startIndex)
-            cfi.insert(contentsOf: ";" + vndParameters, at: insertIndex)
-        } else {
-            cfi.insert(contentsOf: "[;\(vndParameters)]", at: cfi.index(before: cfi.endIndex))
+        if cfi.isEmpty || cfi == "/" {
+            let typeKey = (ReaderType(rawValue: readerName) ?? .UNSUPPORTED).format.rawValue.lowercased()
+            cfi = "\(typeKey)cfi(/\(lastReadPage*2))"
         }
+        
+        var insertIndex = cfi.endIndex
+        var insertFragment = "[;\(vndParameters)]"
+        if cfi.hasSuffix("])") {
+            insertIndex = cfi.index(cfi.endIndex, offsetBy: -2, limitedBy: cfi.startIndex) ?? cfi.startIndex
+            insertFragment = ";\(vndParameters)"
+        } else if cfi.hasSuffix(")") {
+            insertIndex = cfi.index(cfi.endIndex, offsetBy: -1, limitedBy: cfi.startIndex) ?? cfi.startIndex
+        } else {
+            //insert at end
+        }
+        cfi.insert(contentsOf: insertFragment, at: insertIndex)
+        
+        print("\(#function) cfi=\(cfi)")
         
         return cfi
     }

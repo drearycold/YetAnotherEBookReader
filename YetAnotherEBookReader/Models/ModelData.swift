@@ -522,6 +522,30 @@ final class ModelData: ObservableObject {
                     book.formats[formatRaw] = formatInfoNew
                     self.updateBook(book: book)
                 }
+                
+                guard formatInfoNew.cached,
+                      let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
+                      let bookPrefRealm = try? Realm(configuration: bookPrefConfig) else { return }
+                
+                book.readPos.getDevices().forEach { position in
+                    guard let readerType = ReaderType(rawValue: position.readerName), readerType.format == format else { return }
+//                    position.encodeEPUBCFI()
+                    
+                    let object = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: position.id) ??
+                    CalibreBookLastReadPositionRealm()
+                    
+                    guard object.epoch < position.epoch || object.cfi.count < 3 else { return }
+                    
+                    try? bookPrefRealm.write {
+                        object.cfi = position.encodeEPUBCFI()
+                        object.pos_frac = position.lastProgress / 100
+                        object.epoch = position.epoch
+                        if object.device.isEmpty {
+                            object.device = position.id
+                            bookPrefRealm.add(object, update: .all)
+                        }
+                    }
+                }
             }
             
             self.booksInShelf[book.inShelfId] = book
@@ -1933,6 +1957,11 @@ final class ModelData: ObservableObject {
                             self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
                             updated += 1
                             self.defaultLog.info("Refreshed \(obj.id) \(result.library.id)")
+                            
+                            let newBook = self.convert(library: result.library, bookRealm: obj)
+                            DispatchQueue.main.async {
+                                self.booksInShelf[newBook.inShelfId] = newBook
+                            }
                         }
                     }
                     
