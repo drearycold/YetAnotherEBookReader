@@ -2042,22 +2042,7 @@ final class ModelData: ObservableObject {
                             let realmConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
                             let folioBookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
                             let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
-                            
-                            //FIXME:
-                            let highlightResultFixed:[CalibreBookAnnotationEntry] = highlightResult.map {
-                                var result = $0
-                                let prefix = "/\($0.spineIndex * 2)"
-                                if $0.startCfi.hasPrefix(prefix) == false {
-                                    result.startCfi = prefix + $0.startCfi
-                                }
-                                if $0.endCfi.hasPrefix(prefix) == false {
-                                    result.endCfi = prefix + $0.endCfi
-                                }
-                                
-                                return result
-                            }
-                            
-                            highlightProvider.folioReaderHighlight(bookId: folioBookId, added: highlightResultFixed)
+                            highlightProvider.folioReaderHighlight(bookId: folioBookId, added: highlightResult)
                         }
                     }
                 }
