@@ -88,12 +88,12 @@ struct BookDetailView: View {
         .toolbar {
             toolbarContent()
         }
-        .onChange(of: downloadStatus) { value in
-            guard let book = modelData.readingBook else { return }
-            if downloadStatus == .DOWNLOADED {
-                modelData.addToShelf(book.inShelfId, shelfName: book.tags.first ?? "Unspecified")
-            }
-        }
+//        .onChange(of: downloadStatus) { value in
+//            guard let book = modelData.readingBook else { return }
+//            if downloadStatus == .DOWNLOADED {
+//                modelData.addToShelf(book.inShelfId, shelfName: book.tags.first ?? "Unspecified")
+//            }
+//        }
         .alert(item: $alertItem) { item in
             if item.id == "Delete" {
                 return Alert(
@@ -802,10 +802,10 @@ struct BookDetailView: View {
             _viewModel.listVM.positions = book.readPos.getDevices()
         }
         
-        modelData.calibreServerService.getAnnotations(
-            book: book,
-            formats: book.formats.keys.compactMap { Format(rawValue: $0) }
-        )
+//        modelData.calibreServerService.getAnnotations(
+//            book: book,
+//            formats: book.formats.keys.compactMap { Format(rawValue: $0) }
+//        )
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {

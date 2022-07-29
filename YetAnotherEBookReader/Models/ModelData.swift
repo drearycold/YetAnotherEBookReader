@@ -124,9 +124,6 @@ final class ModelData: ObservableObject {
     ).eraseToAnyPublisher()
     var bookReaderEnterActiveCancellable: AnyCancellable? = nil
     
-    var setLastReadPositionPassthrough = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
-    var setLastReadPositionCancellable: AnyCancellable? = nil
-    
     var readingBookInShelfId: String? = nil {
         didSet {
             guard let readingBookInShelfId = readingBookInShelfId else {
@@ -217,6 +214,12 @@ final class ModelData: ObservableObject {
 
     var getBooksMetadataSubject = PassthroughSubject<CalibreBooksTask, Never>()
     var getBooksMetadataCancellable: AnyCancellable?
+    
+    var setLastReadPositionSubject = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
+    var setLastReadPositionCancellable: AnyCancellable? = nil
+    
+    var updateAnnotationsSubject = PassthroughSubject<CalibreBookUpdateAnnotationsTask, Never>()
+    var updateAnnotationsCancellable: AnyCancellable? = nil
     
     @Published var librarySyncStatus = [String: CalibreSyncStatus]()
 
@@ -400,6 +403,7 @@ final class ModelData: ObservableObject {
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
         registerSetLastReadPositionCancellable()
+        registerUpdateAnnotationsCancellable()
         
         if mock {
             let library = calibreLibraries.first!.value
@@ -527,8 +531,6 @@ final class ModelData: ObservableObject {
                     book.formats[formatRaw] = formatInfoNew
                     self.updateBook(book: book)
                 }
-                
-                readPosToLastReadPosition(book: book, format: format, formatInfo: formatInfoNew)
             }
             
             self.booksInShelf[book.inShelfId] = book
@@ -1527,13 +1529,16 @@ final class ModelData: ObservableObject {
                 bookPrefRealm.add(positionEntry.managedObject(), update: .all)
             }
             if let task = self.calibreServerService.buildSetLastReadPositionTask(library: readingBook.library, bookId: readingBook.id, format: readerInfo.format, entry: positionEntry) {
-                self.setLastReadPositionPassthrough.send(task)
+                self.setLastReadPositionSubject.send(task)
             }
 
             let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
             
             let highlights = highlightProvider.folioReaderHighlight(bookId: bookId)
-            calibreServerService.updateAnnotations(book: readingBook, format: readerInfo.format, highlights: highlights)
+//            calibreServerService.updateAnnotations(book: readingBook, format: readerInfo.format, highlights: highlights)
+            if let task = self.calibreServerService.buildUpdateAnnotationsTask(library: readingBook.library, bookId: readingBook.id, format: readerInfo.format, highlights: highlights) {
+                self.updateAnnotationsSubject.send(task)
+            }
         }
         
         
@@ -1901,6 +1906,9 @@ final class ModelData: ObservableObject {
             .flatMap { task in
                 self.calibreServerService.getLastReadPosition(task: task)
             }
+            .flatMap { task in
+                self.calibreServerService.getAnnotations(task: task)
+            }
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .collect()
             .eraseToAnyPublisher()
@@ -1954,12 +1962,12 @@ final class ModelData: ObservableObject {
                         }
                     }
                     
-                    guard let data = result.lastReadPositionsData,
-                          let entries = try? decoder.decode([String:[CalibreBookLastReadPositionEntry]].self, from: data) else {
+                    guard let lastReadPositionData = result.lastReadPositionsData,
+                          let lastReadPositionEntries = try? decoder.decode([String:[CalibreBookLastReadPositionEntry]].self, from: lastReadPositionData) else {
                               return
                           }
                     
-                    entries.forEach {
+                    lastReadPositionEntries.forEach {
                         print("\(#function) CalibreBookLastReadPositionEntry \($0)")
                         let keySplit = $0.key.split(separator: ":")
                         guard keySplit.count == 2,
@@ -2013,7 +2021,43 @@ final class ModelData: ObservableObject {
                             ) else { return }
                             
                             
-                            self.setLastReadPositionPassthrough.send(task)
+                            self.setLastReadPositionSubject.send(task)
+                        }
+                    }
+                    
+                    guard let annotationsData = result.annotationsData,
+                          let annotationsEntries = try? decoder.decode([String: CalibreBookAnnotationsResult].self, from: annotationsData) else {
+                              return
+                          }
+                    
+                    annotationsEntries.forEach { entry in
+                        print("\(#function) annotationEntry=\(entry)")
+                        
+                        let keySplit = entry.key.split(separator: ":")
+                        guard keySplit.count == 2, let bookId = Int32(keySplit[0]), let format = Format(rawValue: String(keySplit[1])) else {
+                            return
+                        }
+                        
+                        if let highlightResult = entry.value.annotations_map["highlight"],
+                            let realmConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
+                            let folioBookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
+                            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+                            
+                            //FIXME:
+                            let highlightResultFixed:[CalibreBookAnnotationEntry] = highlightResult.map {
+                                var result = $0
+                                let prefix = "/\($0.spineIndex * 2)"
+                                if $0.startCfi.hasPrefix(prefix) == false {
+                                    result.startCfi = prefix + $0.startCfi
+                                }
+                                if $0.endCfi.hasPrefix(prefix) == false {
+                                    result.endCfi = prefix + $0.endCfi
+                                }
+                                
+                                return result
+                            }
+                            
+                            highlightProvider.folioReaderHighlight(bookId: folioBookId, added: highlightResultFixed)
                         }
                     }
                 }
@@ -2408,7 +2452,7 @@ final class ModelData: ObservableObject {
     
     func registerSetLastReadPositionCancellable() {
         setLastReadPositionCancellable?.cancel()
-        setLastReadPositionCancellable = setLastReadPositionPassthrough
+        setLastReadPositionCancellable = setLastReadPositionSubject
             .eraseToAnyPublisher()
             .flatMap { task in
                 return self.calibreServerService.setLastReadPositionByTask(task: task)
@@ -2417,6 +2461,41 @@ final class ModelData: ObservableObject {
             .sink(receiveValue: { output in
                 print("\(#function) output=\(output)")
             })
+    }
+    
+    func registerUpdateAnnotationsCancellable() {
+        updateAnnotationsCancellable?.cancel()
+        updateAnnotationsCancellable = updateAnnotationsSubject
+            .eraseToAnyPublisher()
+            .flatMap { task -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> in
+                self.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
+                return self.calibreServerService.updateAnnotationByTask(task: task)
+            }
+            .subscribe(on: DispatchQueue.global())
+            .sink(
+                receiveCompletion: { completion in
+                    print("updateAnnotations \(completion)")
+//                    switch completion {
+//                    case .finished:
+//                        self.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Empty Result")
+//                        break
+//                    case .failure(let error):
+//                        self.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
+//                        break
+//                    }
+                },
+                receiveValue: { task in
+//                    print("updateAnnotations count=\(results.count)")
+//                    results.forEach { result in
+//                        print("updateAnnotations \(result)")
+//                    }
+                    var logErrMsg = "Unknown"
+                    if let httpUrlResponse = task.urlResponse as? HTTPURLResponse {
+                        logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
+                    }
+                    self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
+                }
+            )
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {

@@ -871,11 +871,18 @@ struct CalibreServerService {
             return nil
         }
         
+        var annotationsUrlComponents = URLComponents()
+        annotationsUrlComponents.path = "/book-get-annotations/\(library.key)/\(which)"
+        guard let annotationsEndpointUrl = annotationsUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
         return CalibreBooksTask(
             library: library,
             books: bookIds,
-            url: endpointUrl,
-            lastReadPositionUrl: lastReadPositionEndpointUrl
+            metadataUrl: endpointUrl,
+            lastReadPositionUrl: lastReadPositionEndpointUrl,
+            annotationsUrl: annotationsEndpointUrl
         )
     }
     
@@ -897,7 +904,7 @@ struct CalibreServerService {
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
         return urlSession(server: task.library.server)
-            .dataTaskPublisher(for: task.url)
+            .dataTaskPublisher(for: task.metadataUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.data = result.data
@@ -912,6 +919,16 @@ struct CalibreServerService {
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.lastReadPositionsData = result.data
+                return task
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func getAnnotations(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        return urlSession(server: task.library.server).dataTaskPublisher(for: task.annotationsUrl)
+            .map { result -> CalibreBooksTask in
+                var task = task
+                task.annotationsData = result.data
                 return task
             }
             .eraseToAnyPublisher()
@@ -1056,6 +1073,49 @@ struct CalibreServerService {
             )
         
         return 0
+    }
+    
+    func buildUpdateAnnotationsTask(library: CalibreLibrary, bookId: Int32, format: Format, highlights: [CalibreBookAnnotationEntry]) -> CalibreBookUpdateAnnotationsTask? {
+        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
+            return nil
+        }
+        
+        var endpointURLComponent = URLComponents()
+        endpointURLComponent.path = "/book-update-annotations/\(library.key)/\(bookId)/\(format.rawValue)"
+        guard let endpointUrl = endpointURLComponent.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
+        let entry = ["\(bookId):\(format.rawValue)":highlights]
+        guard let postData = try? JSONEncoder().encode(entry) else {
+            return nil
+        }
+        
+        var urlRequest = URLRequest(url: endpointUrl)
+        urlRequest.httpMethod = "POST"
+        urlRequest.httpBody = postData
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        return CalibreBookUpdateAnnotationsTask(
+            library: library,
+            bookId: bookId,
+            format: format,
+            entry: entry,
+            urlRequest: urlRequest
+        )
+    }
+    
+    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> {
+        urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
+            .map { result -> CalibreBookUpdateAnnotationsTask in
+                var task = task
+                task.urlResponse = result.response
+                task.data = result.data
+                return task
+            }
+            .replaceError(with: task)
+            .eraseToAnyPublisher()
     }
     
     func updateAnnotations(book: CalibreBook, format: Format, highlights: [CalibreBookAnnotationEntry]) -> Int {

@@ -538,7 +538,7 @@ extension FolioReaderRealmHighlightProvider {
                     style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyle(object.type)],
                     timestamp: dateFormatter.string(from: object.date),
                     spineName: "TODO",
-                    spineIndex: object.page,
+                    spineIndex: object.page - 1,
                     tocFamilyTitles: ["TODO"]
                 )
             }
@@ -575,7 +575,7 @@ extension FolioReaderRealmHighlightProvider {
                 highlightRealm.contentPre = ""
                 highlightRealm.date = date
                 highlightRealm.highlightId = highlightId
-                highlightRealm.page = hl.spineIndex
+                highlightRealm.page = hl.spineIndex + 1
                 highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
                 highlightRealm.startOffset = 0
                 highlightRealm.endOffset = 0
@@ -588,6 +588,8 @@ extension FolioReaderRealmHighlightProvider {
                 }
             } else if let highlightRealm = results.first {
                 try? realm.write {
+                    highlightRealm.cfiStart = hl.startCfi
+                    highlightRealm.cfiEnd = hl.endCfi
                     highlightRealm.date = date
                     highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
                     highlightRealm.noteForHighlight = hl.notes

@@ -645,11 +645,13 @@ struct CalibreBookTask {
 struct CalibreBooksTask {
     var library: CalibreLibrary
     var books: [String]
-    var url: URL
+    var metadataUrl: URL
     var lastReadPositionUrl: URL
+    var annotationsUrl: URL
     var data: Data? = nil
     var response: URLResponse? = nil
     var lastReadPositionsData: Data? = nil
+    var annotationsData: Data? = nil
 }
 
 struct CalibreBookFormatMetadataEntry: Codable {
@@ -760,6 +762,17 @@ struct CalibreBookSetLastReadPositionTask {
     let bookId: Int32
     let format: Format
     let entry: CalibreBookLastReadPositionEntry
+    var urlRequest: URLRequest
+    var urlResponse: URLResponse?
+    var data: Data?
+}
+
+struct CalibreBookUpdateAnnotationsTask {
+    let library: CalibreLibrary
+    let bookId: Int32
+    let format: Format
+    let entry: [String : [CalibreBookAnnotationEntry]]
+    let startDatetime = Date()
     var urlRequest: URLRequest
     var urlResponse: URLResponse?
     var data: Data?
