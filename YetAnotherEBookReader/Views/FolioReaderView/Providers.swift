@@ -329,6 +329,7 @@ class FolioReaderHighlightRealm: Object {
     @objc open dynamic var noteForHighlight: String?
     @objc open dynamic var cfiStart: String?
     @objc open dynamic var cfiEnd: String?
+    @objc open dynamic var spineName: String?
 
     override open class func primaryKey()-> String {
         return "highlightId"
@@ -348,6 +349,7 @@ class FolioReaderHighlightRealm: Object {
         noteForHighlight = highlight.noteForHighlight
         cfiStart = highlight.cfiStart
         cfiEnd = highlight.cfiEnd
+        spineName = highlight.spineName
     }
     
     func toHighlight() -> Highlight {
@@ -366,6 +368,7 @@ class FolioReaderHighlightRealm: Object {
         highlight.noteForHighlight = noteForHighlight
         highlight.cfiStart = cfiStart
         highlight.cfiEnd = cfiEnd
+        highlight.spineName = spineName
         
         highlight.encodeContents()
         
@@ -464,7 +467,7 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
             predicate = NSPredicate(format: "bookId = %@ && page = %@", bookId, page)
         }
 
-        let highlights = realm.objects(FolioReaderHighlightRealm.self).filter(predicate).toArray(FolioReaderHighlightRealm.self).map {
+        let highlights:[Highlight] = realm.objects(FolioReaderHighlightRealm.self).filter(predicate).map {
             $0.toHighlight()
         }.sorted()
         print("highlight allByBookId \(highlights)")
@@ -478,7 +481,7 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
         
         guard let realm = realm else { return [] }
 
-        let highlights = realm.objects(FolioReaderHighlightRealm.self).toArray(FolioReaderHighlightRealm.self).map {
+        let highlights:[Highlight] = realm.objects(FolioReaderHighlightRealm.self).map {
             $0.toHighlight()
         }
         print("highlight all \(highlights)")
@@ -497,6 +500,7 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
         
             try realm.write {
                 highlightRealm.noteForHighlight = highlight.noteForHighlight
+                highlightRealm.date = Date()
             }
         } catch let error as NSError {
             print("Error on updateById: \(error)")
@@ -537,10 +541,11 @@ extension FolioReaderRealmHighlightProvider {
                     startCfi: cfiStart,
                     endCfi: cfiEnd,
                     highlightedText: object.content,
-                    style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyle(object.type)],
-                    spineName: "TODO",
+                    style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyleCalibre(object.type)],
+                    spineName: object.spineName,
                     spineIndex: object.page - 1,
-                    tocFamilyTitles: ["TODO"]
+                    tocFamilyTitles: ["TODO"],
+                    notes: object.noteForHighlight
                 )
             }
         print("highlight all \(highlights)")
@@ -581,22 +586,19 @@ extension FolioReaderRealmHighlightProvider {
                 highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                 highlightRealm.startOffset = 0
                 highlightRealm.endOffset = 0
-                highlightRealm.noteForHighlight = ""
+                highlightRealm.noteForHighlight = hl.notes
                 highlightRealm.cfiStart = hl.startCfi
                 highlightRealm.cfiEnd = hl.endCfi
+                highlightRealm.spineName = hl.spineName
                 
                 try? realm.write {
                     realm.add(highlightRealm, update: .all)
                 }
-            } else if let highlightRealm = results.first {
+            } else if let highlightRealm = results.first, highlightRealm.date < date {
                 try? realm.write {
-                    highlightRealm.page = spineIndex + 1
-                    highlightRealm.cfiStart = hl.startCfi
-                    highlightRealm.cfiEnd = hl.endCfi
                     highlightRealm.date = date
                     highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                     highlightRealm.noteForHighlight = hl.notes
-                    realm.add(highlightRealm, update: .modified)
                 }
             }
         }
