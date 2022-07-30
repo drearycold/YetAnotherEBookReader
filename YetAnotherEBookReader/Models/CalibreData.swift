@@ -719,18 +719,20 @@ struct CalibreBookEntry: Codable {
 }
 
 struct CalibreBookAnnotationEntry: Codable {
-    var uuid: String
     var type: String
-
-    var startCfi: String
-    var endCfi: String
-    var highlightedText: String
-    var style:[String:String]
     var timestamp: String
+    var uuid: String
 
-    var spineName: String
-    var spineIndex: Int
-    var tocFamilyTitles: [String]
+    var removed: Bool?
+
+    var startCfi: String?
+    var endCfi: String?
+    var highlightedText: String?
+    var style:[String:String]?
+
+    var spineName: String?
+    var spineIndex: Int?
+    var tocFamilyTitles: [String]?
     
     var notes: String?
     

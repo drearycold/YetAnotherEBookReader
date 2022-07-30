@@ -530,13 +530,14 @@ extension FolioReaderRealmHighlightProvider {
                       let cfiEnd = object.cfiEnd
                 else { return nil }
                 return CalibreBookAnnotationEntry(
-                    uuid: uuid,
                     type: "highlight",
+                    timestamp: dateFormatter.string(from: object.date),
+                    uuid: uuid,
+                    removed: false,
                     startCfi: cfiStart,
                     endCfi: cfiEnd,
                     highlightedText: object.content,
                     style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyle(object.type)],
-                    timestamp: dateFormatter.string(from: object.date),
                     spineName: "TODO",
                     spineIndex: object.page - 1,
                     tocFamilyTitles: ["TODO"]
@@ -559,7 +560,8 @@ extension FolioReaderRealmHighlightProvider {
         
         highlights.forEach { hl in
             guard let highlightId = uuidCalibreToFolio(hl.uuid),
-                  let date = dateFormatter.date(from: hl.timestamp)
+                  let date = dateFormatter.date(from: hl.timestamp),
+                  let spineIndex = hl.spineIndex
                   else { return }
             
             let results = realm.objects(FolioReaderHighlightRealm.self).filter(
@@ -575,8 +577,8 @@ extension FolioReaderRealmHighlightProvider {
                 highlightRealm.contentPre = ""
                 highlightRealm.date = date
                 highlightRealm.highlightId = highlightId
-                highlightRealm.page = hl.spineIndex + 1
-                highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
+                highlightRealm.page = spineIndex + 1
+                highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                 highlightRealm.startOffset = 0
                 highlightRealm.endOffset = 0
                 highlightRealm.noteForHighlight = ""
@@ -588,10 +590,11 @@ extension FolioReaderRealmHighlightProvider {
                 }
             } else if let highlightRealm = results.first {
                 try? realm.write {
+                    highlightRealm.page = spineIndex + 1
                     highlightRealm.cfiStart = hl.startCfi
                     highlightRealm.cfiEnd = hl.endCfi
                     highlightRealm.date = date
-                    highlightRealm.type = HighlightStyle.styleForClass(hl.style["which"] ?? "yellow").rawValue
+                    highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                     highlightRealm.noteForHighlight = hl.notes
                     realm.add(highlightRealm, update: .modified)
                 }
