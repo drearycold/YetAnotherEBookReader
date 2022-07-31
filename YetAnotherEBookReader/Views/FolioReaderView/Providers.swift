@@ -330,6 +330,7 @@ class FolioReaderHighlightRealm: Object {
     @objc open dynamic var cfiStart: String?
     @objc open dynamic var cfiEnd: String?
     @objc open dynamic var spineName: String?
+    open dynamic var tocFamilyTitles = List<String>()
 
     override open class func primaryKey()-> String {
         return "highlightId"
@@ -350,6 +351,8 @@ class FolioReaderHighlightRealm: Object {
         cfiStart = highlight.cfiStart
         cfiEnd = highlight.cfiEnd
         spineName = highlight.spineName
+        tocFamilyTitles.removeAll()
+        tocFamilyTitles.append(objectsIn: highlight.tocFamilyTitles)
     }
     
     func toHighlight() -> Highlight {
@@ -369,6 +372,8 @@ class FolioReaderHighlightRealm: Object {
         highlight.cfiStart = cfiStart
         highlight.cfiEnd = cfiEnd
         highlight.spineName = spineName
+        highlight.tocFamilyTitles.removeAll()
+        highlight.tocFamilyTitles.append(contentsOf: tocFamilyTitles)
         
         highlight.encodeContents()
         
@@ -544,7 +549,7 @@ extension FolioReaderRealmHighlightProvider {
                     style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyleCalibre(object.type)],
                     spineName: object.spineName,
                     spineIndex: object.page - 1,
-                    tocFamilyTitles: ["TODO"],
+                    tocFamilyTitles: object.tocFamilyTitles.map { $0 },
                     notes: object.noteForHighlight
                 )
             }
@@ -590,7 +595,9 @@ extension FolioReaderRealmHighlightProvider {
                 highlightRealm.cfiStart = hl.startCfi
                 highlightRealm.cfiEnd = hl.endCfi
                 highlightRealm.spineName = hl.spineName
-                
+                if let tocFamilyTitles = hl.tocFamilyTitles {
+                    highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+                }
                 try? realm.write {
                     realm.add(highlightRealm, update: .all)
                 }
