@@ -2025,25 +2025,30 @@ final class ModelData: ObservableObject {
                         }
                     }
                     
-                    guard let annotationsData = result.annotationsData,
-                          let annotationsEntries = try? decoder.decode([String: CalibreBookAnnotationsResult].self, from: annotationsData) else {
-                              return
-                          }
-                    
-                    annotationsEntries.forEach { entry in
-                        print("\(#function) annotationEntry=\(entry)")
+                    do {
+                        guard let annotationsData = result.annotationsData else { return }
+                        let annotationsEntries = try decoder.decode([String: CalibreBookAnnotationsResult].self, from: annotationsData)
                         
-                        let keySplit = entry.key.split(separator: ":")
-                        guard keySplit.count == 2, let bookId = Int32(keySplit[0]), let format = Format(rawValue: String(keySplit[1])) else {
-                            return
+                        annotationsEntries.forEach { entry in
+                            print("\(#function) annotationEntry=\(entry)")
+                            
+                            let keySplit = entry.key.split(separator: ":")
+                            guard keySplit.count == 2, let bookId = Int32(keySplit[0]), let format = Format(rawValue: String(keySplit[1])) else {
+                                return
+                            }
+                            
+                            if let highlightResult = entry.value.annotations_map["highlight"],
+                                let realmConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
+                                let folioBookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
+                                let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+                                highlightProvider.folioReaderHighlight(
+                                    bookId: folioBookId,
+                                    added: highlightResult
+                                )
+                            }
                         }
-                        
-                        if let highlightResult = entry.value.annotations_map["highlight"],
-                            let realmConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
-                            let folioBookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
-                            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
-                            highlightProvider.folioReaderHighlight(bookId: folioBookId, added: highlightResult)
-                        }
+                    } catch {
+                        print("\(#function) annotationEntry error=\(error)")
                     }
                 }
                 

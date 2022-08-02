@@ -316,6 +316,7 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
 }
 
 class FolioReaderHighlightRealm: Object {
+    @objc open dynamic var removed: Bool = false
     @objc open dynamic var bookId: String!
     @objc open dynamic var content: String!
     @objc open dynamic var contentPost: String!
@@ -332,7 +333,7 @@ class FolioReaderHighlightRealm: Object {
     @objc open dynamic var spineName: String?
     open dynamic var tocFamilyTitles = List<String>()
 
-    override open class func primaryKey()-> String {
+    override static func primaryKey()-> String? {
         return "highlightId"
     }
     
@@ -353,6 +354,7 @@ class FolioReaderHighlightRealm: Object {
         spineName = highlight.spineName
         tocFamilyTitles.removeAll()
         tocFamilyTitles.append(objectsIn: highlight.tocFamilyTitles)
+        removed = false
     }
     
     func toHighlight() -> Highlight {
@@ -414,103 +416,48 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
-        print("highlight removed \(highlightId)")
-        
-        guard let realm = realm else { return }
-        
-        do {
-            guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
-                    NSPredicate(format:"highlightId = %@", highlightId)
-            ).toArray(FolioReaderHighlightRealm.self).first else { return }
-            
-            try realm.write {
-                realm.delete(highlightRealm)
+        try? realm?.write {
+            if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
+                object.removed = true
+                object.date = Date()
             }
-        } catch let error as NSError {
-            print("Error on remove highlight by id: \(error)")
         }
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: HighlightStyle) {
-        print("highlight updated \(highlightId) \(style)")
-
-        guard let realm = realm else { return }
-        do {
-            guard let highlight = realm.objects(FolioReaderHighlightRealm.self).filter(
-                NSPredicate(format:"highlightId = %@", highlightId)
-            ).toArray(FolioReaderHighlightRealm.self).first else { return }
-            
-            try realm.write {
-                highlight.type = style.rawValue
-            }
-        } catch let error as NSError {
-            print("Error on updateById: \(error)")
+        try? realm?.write {
+            realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.type = style.rawValue
         }
-
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> Highlight? {
-        print("highlight getById \(highlightId)")
-
-        guard let realm = realm else { return nil }
-        
-        guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
-                NSPredicate(format:"highlightId = %@", highlightId)
-        ).toArray(FolioReaderHighlightRealm.self).first else { return nil }
-        
-        return highlightRealm.toHighlight()
-        
+        return realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.toHighlight()
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [Highlight] {
-        print("highlight allByBookId \(bookId) \(page ?? 0)")
-
-        guard let realm = realm else { return [] }
-
-        var predicate = NSPredicate(format: "bookId = %@", bookId)
+        var predicate = NSPredicate(format: "removed == false && bookId = %@", bookId)
         if let page = page {
-            predicate = NSPredicate(format: "bookId = %@ && page = %@", bookId, page)
+            predicate = NSPredicate(format: "removed == false && bookId = %@ && page = %@", bookId, page)
         }
 
-        let highlights:[Highlight] = realm.objects(FolioReaderHighlightRealm.self).filter(predicate).map {
-            $0.toHighlight()
-        }.sorted()
-        print("highlight allByBookId \(highlights)")
-        
-        return highlights
-        
+        return realm?.objects(FolioReaderHighlightRealm.self)
+            .filter(predicate)
+            .map { $0.toHighlight() } ?? []
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader) -> [Highlight] {
-        print("highlight all")
-        
-        guard let realm = realm else { return [] }
-
-        let highlights:[Highlight] = realm.objects(FolioReaderHighlightRealm.self).map {
-            $0.toHighlight()
-        }
-        print("highlight all \(highlights)")
-        
-        return highlights
+        return realm?.objects(FolioReaderHighlightRealm.self)
+            .filter(NSPredicate(format: "removed == false"))
+            .map { $0.toHighlight() } ?? []
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: Highlight) {
-        print("highlight saveNoteFor \(highlight)")
-
-        guard let realm = realm else { return }
-        do {
-            guard let highlightRealm = realm.objects(FolioReaderHighlightRealm.self).filter(
-                NSPredicate(format:"highlightId = %@", highlight.highlightId)
-            ).toArray(FolioReaderHighlightRealm.self).first else { return }
-        
-            try realm.write {
-                highlightRealm.noteForHighlight = highlight.noteForHighlight
-                highlightRealm.date = Date()
+        try? realm?.write {
+            if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlight.highlightId) {
+                object.noteForHighlight = highlight.noteForHighlight
+                object.date = Date()
             }
-        } catch let error as NSError {
-            print("Error on updateById: \(error)")
         }
-        
     }
 }
 
@@ -530,9 +477,8 @@ extension FolioReaderRealmHighlightProvider {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
         
-        let highlights = realm.objects(FolioReaderHighlightRealm.self)
+        let highlights:[CalibreBookAnnotationEntry] = realm.objects(FolioReaderHighlightRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookId))
-            .toArray(FolioReaderHighlightRealm.self)
             .compactMap { object -> CalibreBookAnnotationEntry? in
                 guard let uuid = uuidFolioToCalibre(object.highlightId),
                       let cfiStart = object.cfiStart,
@@ -542,7 +488,7 @@ extension FolioReaderRealmHighlightProvider {
                     type: "highlight",
                     timestamp: dateFormatter.string(from: object.date),
                     uuid: uuid,
-                    removed: false,
+                    removed: object.removed,
                     startCfi: cfiStart,
                     endCfi: cfiEnd,
                     highlightedText: object.content,
@@ -558,58 +504,65 @@ extension FolioReaderRealmHighlightProvider {
         return highlights
     }
     
+    // Used for syncing with calibre server
     func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationEntry]) {
         print("highlight added \(highlights)")
         
-        guard let realm = self.realm else {
-            return
-        }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-        
-        highlights.forEach { hl in
-            guard let highlightId = uuidCalibreToFolio(hl.uuid),
-                  let date = dateFormatter.date(from: hl.timestamp),
-                  let spineIndex = hl.spineIndex
-                  else { return }
+        try? realm?.write {
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
             
-            let results = realm.objects(FolioReaderHighlightRealm.self).filter(
-                    NSPredicate(format:"highlightId = %@", highlightId)
-            )
-            
-            if results.isEmpty {
-                let highlightRealm = FolioReaderHighlightRealm()
-
-                highlightRealm.bookId = bookId
-                highlightRealm.content = hl.highlightedText
-                highlightRealm.contentPost = ""
-                highlightRealm.contentPre = ""
-                highlightRealm.date = date
-                highlightRealm.highlightId = highlightId
-                highlightRealm.page = spineIndex + 1
-                highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
-                highlightRealm.startOffset = 0
-                highlightRealm.endOffset = 0
-                highlightRealm.noteForHighlight = hl.notes
-                highlightRealm.cfiStart = hl.startCfi
-                highlightRealm.cfiEnd = hl.endCfi
-                highlightRealm.spineName = hl.spineName
-                if let tocFamilyTitles = hl.tocFamilyTitles {
-                    highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+            highlights.forEach { hl in
+                guard hl.type == "highlight",
+                      let highlightId = uuidCalibreToFolio(hl.uuid),
+                      let date = dateFormatter.date(from: hl.timestamp)
+                else { return }
+                if hl.uuid == "54dCT6cLoomi4hlUFUoxAA" {
+                    print()
                 }
-                try? realm.write {
-                    realm.add(highlightRealm, update: .all)
+                guard hl.removed != true else {
+                    if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId), object.date <= date + 0.1 {
+                        object.removed = true
+                        object.date = date
+                    }
+                    return
                 }
-            } else if let highlightRealm = results.first, highlightRealm.date < date {
-                try? realm.write {
+                
+                guard let spineIndex = hl.spineIndex else { return }
+                
+                if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
+                    if object.date <= date + 0.1 {
+                        object.date = date
+                        object.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                        object.noteForHighlight = hl.notes
+                        object.removed = false
+                    }
+                } else {
+                    let highlightRealm = FolioReaderHighlightRealm()
+                    
+                    highlightRealm.bookId = bookId
+                    highlightRealm.content = hl.highlightedText
+                    highlightRealm.contentPost = ""
+                    highlightRealm.contentPre = ""
                     highlightRealm.date = date
+                    highlightRealm.highlightId = highlightId
+                    highlightRealm.page = spineIndex + 1
                     highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                    highlightRealm.startOffset = 0
+                    highlightRealm.endOffset = 0
                     highlightRealm.noteForHighlight = hl.notes
+                    highlightRealm.cfiStart = hl.startCfi
+                    highlightRealm.cfiEnd = hl.endCfi
+                    highlightRealm.spineName = hl.spineName
+                    if let tocFamilyTitles = hl.tocFamilyTitles {
+                        highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+                    }
+                    
+                    realm?.add(highlightRealm, update: .all)
                 }
             }
+
         }
-            
     }
     
 }

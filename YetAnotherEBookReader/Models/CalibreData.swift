@@ -751,6 +751,8 @@ struct CalibreBookAnnotationEntry: Codable {
         case tocFamilyTitles = "toc_family_titles"
         
         case notes
+        
+        case removed
     }
 }
 
