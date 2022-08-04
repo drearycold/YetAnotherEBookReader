@@ -461,12 +461,6 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
     }
 }
 
-extension Results {
-    func toArray<T>(_ ofType: T.Type) -> [T] {
-        return compactMap { $0 as? T }
-    }
-}
-
 extension FolioReaderRealmHighlightProvider {
     
     func folioReaderHighlight(bookId: String) -> [CalibreBookAnnotationEntry] {

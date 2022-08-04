@@ -1903,9 +1903,9 @@ final class ModelData: ObservableObject {
             .flatMap { task in
                 self.calibreServerService.getBooksMetadata(task: task)
             }
-            .flatMap { task in
-                self.calibreServerService.getLastReadPosition(task: task)
-            }
+//            .flatMap { task in
+//                self.calibreServerService.getLastReadPosition(task: task)
+//            }
             .flatMap { task in
                 self.calibreServerService.getAnnotations(task: task)
             }
@@ -1962,68 +1962,25 @@ final class ModelData: ObservableObject {
                         }
                     }
                     
-                    guard let lastReadPositionData = result.lastReadPositionsData,
-                          let lastReadPositionEntries = try? decoder.decode([String:[CalibreBookLastReadPositionEntry]].self, from: lastReadPositionData) else {
-                              return
-                          }
-                    
-                    lastReadPositionEntries.forEach {
-                        print("\(#function) CalibreBookLastReadPositionEntry \($0)")
-                        let keySplit = $0.key.split(separator: ":")
-                        guard keySplit.count == 2,
-                              let bookId = Int32(keySplit[0]),
-                              let format = Format(rawValue: String(keySplit[1])),
-                              let bookPrefConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
-                              let bookPrefRealm = try? Realm(configuration: bookPrefConfig)
-                        else { return }
-                        
-                        var devicesUpdated = Set<String>()
-                        $0.value.forEach { remoteEntry in
-                            let remoteObject = remoteEntry.managedObject()
-                            guard let remotePosition = BookDeviceReadingPosition(managedObject: remoteObject) else {
-                                //not recognisable
-                                return
-                            }
-                            
-                            guard let localObject = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: remoteEntry.device),
-                                  let localPosition = BookDeviceReadingPosition(managedObject: localObject)
-                            else {
-                                try? bookPrefRealm.write {
-                                    bookPrefRealm.add(remoteEntry.managedObject(), update: .modified)
-                                }
-                                devicesUpdated.insert(remoteEntry.device)
-                                return
-                            }
-                            
-                            guard localPosition.epoch < remotePosition.epoch else {
-                                if localPosition.epoch == remotePosition.epoch {
-                                    devicesUpdated.insert(remoteObject.device)
-                                }
-                                return
-                            }
-                            
-                            try? bookPrefRealm.write {
-                                bookPrefRealm.add(remoteObject, update: .modified)
-                            }
-                            devicesUpdated.insert(remoteObject.device)
-                        }
-                        
-                        let objects = bookPrefRealm.objects(CalibreBookLastReadPositionRealm.self)
-                        objects.forEach {
-                            guard devicesUpdated.contains($0.device) == false,
-                                  BookDeviceReadingPosition(managedObject: $0) != nil else { return }
-                            
-                            guard let task = self.calibreServerService.buildSetLastReadPositionTask(
-                                library: result.library,
-                                bookId: bookId,
-                                format: format,
-                                entry: CalibreBookLastReadPositionEntry(managedObject: $0)
-                            ) else { return }
-                            
-                            
-                            self.setLastReadPositionSubject.send(task)
-                        }
-                    }
+//                    guard let lastReadPositionData = result.lastReadPositionsData,
+//                          let lastReadPositionEntries = try? decoder.decode([String:[CalibreBookLastReadPositionEntry]].self, from: lastReadPositionData) else {
+//                              return
+//                          }
+//                    
+//                    lastReadPositionEntries.forEach {
+//                        print("\(#function) CalibreBookLastReadPositionEntry \($0)")
+//                        let keySplit = $0.key.split(separator: ":")
+//                        guard keySplit.count == 2,
+//                              let bookId = Int32(keySplit[0]),
+//                              let format = Format(rawValue: String(keySplit[1])),
+//                              let bookPrefConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
+//                              let bookPrefRealm = try? Realm(configuration: bookPrefConfig)
+//                        else { return }
+//                        
+//                        $0.value.forEach { remoteEntry in
+//                            
+//                        }
+//                    }
                     
                     do {
                         guard let annotationsData = result.annotationsData else { return }
@@ -2037,10 +1994,61 @@ final class ModelData: ObservableObject {
                                 return
                             }
                             
+                            guard let bookPrefConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format)
+                            else { return }
+                            
+                            if let bookPrefRealm = try? Realm(configuration: bookPrefConfig) {
+                                var devicesUpdated = Set<String>()
+
+                                entry.value.last_read_positions.forEach { remoteEntry in
+                                    let remoteObject = remoteEntry.managedObject()
+                                    guard let remotePosition = BookDeviceReadingPosition(managedObject: remoteObject) else {
+                                        //not recognisable
+                                        return
+                                    }
+                                    
+                                    guard let localObject = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: remoteEntry.device),
+                                          let localPosition = BookDeviceReadingPosition(managedObject: localObject)
+                                    else {
+                                        try? bookPrefRealm.write {
+                                            bookPrefRealm.add(remoteEntry.managedObject(), update: .modified)
+                                        }
+                                        devicesUpdated.insert(remoteEntry.device)
+                                        return
+                                    }
+                                    
+                                    guard localPosition.epoch < remotePosition.epoch else {
+                                        if localPosition.epoch == remotePosition.epoch {
+                                            devicesUpdated.insert(remoteObject.device)
+                                        }
+                                        return
+                                    }
+                                    
+                                    try? bookPrefRealm.write {
+                                        bookPrefRealm.add(remoteObject, update: .modified)
+                                    }
+                                    devicesUpdated.insert(remoteObject.device)
+                                }
+                                
+                                let objects = bookPrefRealm.objects(CalibreBookLastReadPositionRealm.self)
+                                objects.forEach {
+                                    guard devicesUpdated.contains($0.device) == false,
+                                          BookDeviceReadingPosition(managedObject: $0) != nil else { return }
+                                    
+                                    guard let task = self.calibreServerService.buildSetLastReadPositionTask(
+                                        library: result.library,
+                                        bookId: bookId,
+                                        format: format,
+                                        entry: CalibreBookLastReadPositionEntry(managedObject: $0)
+                                    ) else { return }
+                                    
+                                    self.setLastReadPositionSubject.send(task)
+                                }
+                            }
+                            
                             if let highlightResult = entry.value.annotations_map["highlight"],
-                                let realmConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format),
-                                let folioBookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent {
-                                let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+                               let folioBookId = bookPrefConfig.fileURL?.deletingPathExtension().lastPathComponent {
+                                let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
                                 highlightProvider.folioReaderHighlight(
                                     bookId: folioBookId,
                                     added: highlightResult
