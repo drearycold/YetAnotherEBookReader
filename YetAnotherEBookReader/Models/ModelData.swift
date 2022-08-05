@@ -1945,20 +1945,27 @@ final class ModelData: ObservableObject {
                                       return
                                   }
                             
-                            guard floor(obj.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0) else { return }
+                            let needProcess = floor(obj.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0)
+                            
+                            defer {
+                                let newBook = self.convert(library: result.library, bookRealm: obj)
+                                newBook.formats.forEach {
+                                    guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
+                                    readPosToLastReadPosition(book: newBook, format: format, formatInfo: $0.value)
+                                }
+                                
+                                if needProcess {
+                                    DispatchQueue.main.async {
+                                        self.booksInShelf[newBook.inShelfId] = newBook
+                                    }
+                                }
+                            }
+                            
+                            guard needProcess else { return }
                             
                             self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
                             updated += 1
                             self.defaultLog.info("Refreshed \(obj.id) \(result.library.id)")
-                            
-                            let newBook = self.convert(library: result.library, bookRealm: obj)
-                            newBook.formats.forEach {
-                                guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
-                                readPosToLastReadPosition(book: newBook, format: format, formatInfo: $0.value)
-                            }
-                            DispatchQueue.main.async {
-                                self.booksInShelf[newBook.inShelfId] = newBook
-                            }
                         }
                     }
                     
