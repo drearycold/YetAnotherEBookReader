@@ -22,6 +22,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     
     var folioReaderPreferenceProvider: FolioReaderPreferenceProvider?
     var folioReaderHighlightProvider: FolioReaderHighlightProvider?
+    var folioReaderLastReadPositionProvider: FolioReaderLastReadPositionProvider?
 
     let webServer = GCDWebServer()
     let dateFormatter = DateFormatter()

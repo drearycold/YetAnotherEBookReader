@@ -40,7 +40,15 @@ extension EpubFolioReaderContainer {
         }
     }
     
-    
+    func folioReaderLastReadPositionProvider(_ folioReader: FolioReader) -> FolioReaderLastReadPositionProvider {
+        if let provider = folioReaderLastReadPositionProvider {
+            return provider
+        } else {
+            let provider = FolioReaderDummyLastReadPositionProvider()
+            self.folioReaderLastReadPositionProvider = provider
+            return provider
+        }
+    }
 }
 
 class FolioReaderPreferenceRealm: Object {
@@ -72,6 +80,8 @@ class FolioReaderPreferenceRealm: Object {
     @objc dynamic var doClearClass: Bool = true
     @objc dynamic var styleOverride: Int = .min
     @objc dynamic var savedPosition: Data?
+    @objc dynamic var structuralStyle: Int = 0
+    @objc dynamic var structuralTocLevel: Int = 0
 }
 
 class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
@@ -306,6 +316,26 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         }
     }
     
+    func preference(structuralStyle defaults: Int) -> Int {
+        return prefObj?.structuralStyle ?? defaults
+    }
+    
+    func preference(setStructuralStyle value: Int) {
+        try? realm?.write {
+            prefObj?.structuralStyle = value
+        }
+    }
+    
+    func preference(structuralTocLevel defaults: Int) -> Int {
+        return prefObj?.structuralTocLevel ?? defaults
+    }
+    
+    func preference(setStructuralTocLevel value: Int) {
+        try? realm?.write {
+            prefObj?.structuralTocLevel = value
+        }
+    }
+    
     private func value(of: Int?, defaults: Int) -> Int {
         if let v = of, v != .min {
             return v
@@ -317,12 +347,12 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
 
 class FolioReaderHighlightRealm: Object {
     @objc open dynamic var removed: Bool = false
-    @objc open dynamic var bookId: String!
-    @objc open dynamic var content: String!
-    @objc open dynamic var contentPost: String!
-    @objc open dynamic var contentPre: String!
+    @objc open dynamic var bookId: String?
+    @objc open dynamic var content: String?
+    @objc open dynamic var contentPost: String?
+    @objc open dynamic var contentPre: String?
     @objc open dynamic var date: Date!
-    @objc open dynamic var highlightId: String!
+    @objc open dynamic var highlightId: String?
     @objc open dynamic var page: Int = 0
     @objc open dynamic var type: Int = 0
     @objc open dynamic var startOffset: Int = -1
@@ -474,7 +504,8 @@ extension FolioReaderRealmHighlightProvider {
         let highlights:[CalibreBookAnnotationEntry] = realm.objects(FolioReaderHighlightRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookId))
             .compactMap { object -> CalibreBookAnnotationEntry? in
-                guard let uuid = uuidFolioToCalibre(object.highlightId),
+                guard let highlightId = object.highlightId,
+                      let uuid = uuidFolioToCalibre(highlightId),
                       let cfiStart = object.cfiStart,
                       let cfiEnd = object.cfiEnd
                 else { return nil }
