@@ -22,7 +22,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     
     var folioReaderPreferenceProvider: FolioReaderPreferenceProvider?
     var folioReaderHighlightProvider: FolioReaderHighlightProvider?
-    var folioReaderLastReadPositionProvider: FolioReaderLastReadPositionProvider?
+    var folioReaderReadPositionProvider: FolioReaderReadPositionProvider?
 
     let webServer = GCDWebServer()
     let dateFormatter = DateFormatter()
@@ -31,11 +31,17 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     func open(bookReadingPosition: BookDeviceReadingPosition) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
-        var position = [String: Any]()
-        position["pageNumber"] = bookReadingPosition.lastPosition[0]
-        position["pageOffsetX"] = CGFloat(bookReadingPosition.lastPosition[1])
-        position["pageOffsetY"] = CGFloat(bookReadingPosition.lastPosition[2])
-        position["chapterProgress"] = CGFloat(bookReadingPosition.lastChapterProgress)
+        let position = FolioReaderReadPosition(
+            deviceId: modelData?.deviceName ?? UIDevice().name,
+            structuralStyle: self.folioReader.structuralStyle,
+            positionTrackingStyle: self.folioReader.structuralTrackingTocLevel,
+            structuralRootPageNumber: 0,    //TODO: XXX
+            pageNumber: bookReadingPosition.lastReadPage,
+            cfi: bookReadingPosition.cfi
+        )
+        position.pageOffset = CGPoint(x: bookReadingPosition.lastPosition[1], y: bookReadingPosition.lastPosition[2])
+        
+        position.chapterProgress = bookReadingPosition.lastChapterProgress
         
         readerConfig.savedPositionForCurrentBook = position
         
@@ -70,29 +76,17 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         
         guard let savedPosition = folioReader.savedPositionForCurrentBook else { return }
         
-        guard let pageNumber = savedPosition["pageNumber"] as? Int,
-              let pageOffsetX = savedPosition["pageOffsetX"] as? CGFloat,
-              let pageOffsetY = savedPosition["pageOffsetY"] as? CGFloat,
-              let chapterProgress = savedPosition["chapterProgress"] as? CGFloat,
-              let bookProgress = savedPosition["bookProgress"] as? CGFloat,
-              let chapterName = savedPosition["chapterName"] as? String
-        else {
-            return
-        }
+        updatedReadingPosition.lastChapterProgress = savedPosition.chapterProgress
+        updatedReadingPosition.lastProgress = savedPosition.bookProgress
+        updatedReadingPosition.lastReadChapter = savedPosition.chapterName
         
-        updatedReadingPosition.lastChapterProgress = chapterProgress
-        updatedReadingPosition.lastProgress = bookProgress
-        updatedReadingPosition.lastReadChapter = chapterName
+        updatedReadingPosition.lastPosition[0] = savedPosition.pageNumber
+        updatedReadingPosition.lastPosition[1] = Int(savedPosition.pageOffset.x.rounded())
+        updatedReadingPosition.lastPosition[2] = Int(savedPosition.pageOffset.y.rounded())
+        updatedReadingPosition.lastReadPage = savedPosition.pageNumber
+        updatedReadingPosition.maxPage = savedPosition.maxPage
         
-        updatedReadingPosition.lastPosition[0] = pageNumber
-        updatedReadingPosition.lastPosition[1] = Int(pageOffsetX.rounded())
-        updatedReadingPosition.lastPosition[2] = Int(pageOffsetY.rounded())
-        updatedReadingPosition.lastReadPage = pageNumber
-        updatedReadingPosition.maxPage = savedPosition["maxPage"] as? Int ?? 1
-        
-        if let cfi = savedPosition["cfi"] as? String {
-            updatedReadingPosition.cfi = cfi
-        }
+        updatedReadingPosition.cfi = savedPosition.cfi
         
         updatedReadingPosition.readerName = ReaderType.YabrEPUB.rawValue
         updatedReadingPosition.epoch = Date().timeIntervalSince1970

@@ -40,12 +40,17 @@ extension EpubFolioReaderContainer {
         }
     }
     
-    func folioReaderLastReadPositionProvider(_ folioReader: FolioReader) -> FolioReaderLastReadPositionProvider {
-        if let provider = folioReaderLastReadPositionProvider {
+    func folioReaderReadPositionProvider(_ folioReader: FolioReader) -> FolioReaderReadPositionProvider {
+        if let provider = folioReaderReadPositionProvider {
             return provider
         } else {
-            let provider = FolioReaderDummyLastReadPositionProvider()
-            self.folioReaderLastReadPositionProvider = provider
+            guard let book = modelData?.readingBook,
+                  let format = modelData?.readerInfo?.format,
+                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  else { return FolioReaderNaiveReadPositionProvider() }
+            let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
+            self.folioReaderReadPositionProvider = provider
+            
             return provider
         }
     }
@@ -590,4 +595,147 @@ extension FolioReaderRealmHighlightProvider {
         }
     }
     
+}
+
+class FolioReaderReadPositionRealm: Object {
+    @objc open dynamic var bookId: String?
+    @objc open dynamic var deviceId: String?
+    @objc open dynamic var structuralStyle: Int = FolioReaderStructuralStyle.atom.rawValue
+    @objc open dynamic var positionTrackingStyle: Int = FolioReaderPositionTrackingStyle.linear.rawValue
+    
+    /**
+     .atom: should be 0
+     .topic: should be equal to pageNumber
+     .bundle: top level book toc pageNumer
+     */
+    @objc open dynamic var structuralRootPageNumber: Int = 0
+    
+    @objc open dynamic var pageNumber: Int = 1   //counting from 1
+    @objc open dynamic var cfi: String?
+    
+    @objc open dynamic var maxPage: Int = 1
+    @objc open dynamic var pageOffsetX: Double = .zero
+    @objc open dynamic var pageOffsetY: Double = .zero
+    
+    @objc open dynamic var chapterProgress: Double = .zero
+    @objc open dynamic var chapterName: String = "Untitled Chapter"
+    @objc open dynamic var bookProgress: Double = .zero
+    
+    @objc open dynamic var epoch: Date = Date()
+    
+    @objc open dynamic var takePrecedence: Bool = false
+    
+    func fromReadPosition(_ position: FolioReaderReadPosition, bookId: String) {
+        self.bookId = bookId
+        self.deviceId = position.deviceId
+        self.structuralStyle = position.structuralStyle.rawValue
+        self.positionTrackingStyle = position.positionTrackingStyle.rawValue
+        self.structuralRootPageNumber = position.structuralRootPageNumber
+        
+        self.pageNumber = position.pageNumber
+        self.cfi = position.cfi
+        
+        self.maxPage = position.maxPage
+        self.pageOffsetX = position.pageOffset.x
+        self.pageOffsetY = position.pageOffset.y
+        
+        self.chapterProgress = position.chapterProgress
+        self.chapterName = position.chapterName
+        self.bookProgress = position.bookProgress
+        
+        self.epoch = position.epoch
+        
+        self.takePrecedence = position.takePrecedence
+    }
+    
+    func toReadPosition() -> FolioReaderReadPosition? {
+        guard let deviceId = deviceId,
+              let cfi = cfi,
+              let structuralStyle = FolioReaderStructuralStyle(rawValue: self.structuralStyle),
+              let positionTrackingStyle = FolioReaderPositionTrackingStyle(rawValue: self.positionTrackingStyle) else {
+            return nil
+        }
+
+        let position = FolioReaderReadPosition(deviceId: deviceId, structuralStyle: structuralStyle, positionTrackingStyle: positionTrackingStyle, structuralRootPageNumber: structuralRootPageNumber, pageNumber: pageNumber, cfi: cfi)
+        
+        position.maxPage = self.maxPage
+        position.pageOffset = CGPoint(x: self.pageOffsetX, y: self.pageOffsetY)
+        
+        position.chapterProgress = self.chapterProgress
+        position.chapterName = self.chapterName
+        position.bookProgress = self.bookProgress
+        
+        position.epoch = self.epoch
+        position.takePrecedence = self.takePrecedence
+        
+        return position
+    }
+}
+
+public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvider {
+    let realm: Realm?
+
+    init(realmConfig: Realm.Configuration) {
+        realm = try? Realm(configuration: realmConfig)
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
+        if let position = realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId)).sorted(byKeyPath: "epoch", ascending: false).first?.toReadPosition() {
+            return position
+        }
+        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).sorted(byKeyPath: "epoch", ascending: false).compactMap{ $0.toReadPosition() }.first
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
+        try? realm?.write {
+            if let existing = realm?.objects(FolioReaderReadPositionRealm.self)
+                .filter(NSPredicate(
+                    format: "bookId = %@ AND deviceId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    bookId,
+                    readPosition.deviceId,
+                    NSNumber(value: readPosition.structuralStyle.rawValue),
+                    NSNumber(value: readPosition.positionTrackingStyle.rawValue),
+                    NSNumber(value: readPosition.structuralRootPageNumber)
+                )),
+               existing.isEmpty == false {
+                existing.forEach {
+                    $0.fromReadPosition(readPosition, bookId: bookId)
+                }
+                
+            } else {
+                let object = FolioReaderReadPositionRealm()
+                object.fromReadPosition(readPosition, bookId: bookId)
+                realm?.add(object)
+            }
+        }
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
+        try? realm?.write {
+            if let existing = realm?.objects(FolioReaderReadPositionRealm.self)
+                .filter(NSPredicate(
+                    format: "bookId = %@ AND deviceId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    bookId,
+                    readPosition.deviceId,
+                    NSNumber(value: readPosition.structuralStyle.rawValue),
+                    NSNumber(value: readPosition.positionTrackingStyle.rawValue),
+                    NSNumber(value: readPosition.structuralRootPageNumber)
+                )),
+               existing.isEmpty == false {
+                realm?.delete(existing)
+            }
+        }
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
+        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND deviceId = %@", bookId, deviceId)).compactMap { $0.toReadPosition() } ?? []
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
+        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).compactMap { $0.toReadPosition() } ?? []
+    }
+    
+    public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
+        return realm?.objects(FolioReaderReadPositionRealm.self).compactMap { $0.toReadPosition() } ?? []
+    }
 }

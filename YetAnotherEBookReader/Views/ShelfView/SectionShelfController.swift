@@ -9,7 +9,6 @@
 import ShelfView
 import SwiftUI
 import Combine
-import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds

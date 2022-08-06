@@ -8,7 +8,6 @@
 import Foundation
 import OSLog
 import SwiftUI
-import RealmSwift
 import struct Kingfisher.KFImage
 
 enum DownloadStatus: String, CaseIterable, Identifiable {
