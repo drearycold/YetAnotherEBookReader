@@ -31,6 +31,9 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     func open(bookReadingPosition: BookDeviceReadingPosition) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
+        self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
+        self.folioReader.delegate = self
+        
         let position = FolioReaderReadPosition(
             deviceId: modelData?.deviceName ?? UIDevice().name,
             structuralStyle: self.folioReader.structuralStyle,
@@ -44,9 +47,6 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         position.chapterProgress = bookReadingPosition.lastChapterProgress
         
         readerConfig.savedPositionForCurrentBook = position
-        
-        self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
-        self.folioReader.delegate = self
         
         NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
         NotificationCenter.default.removeObserver(self, name: UIApplication.willTerminateNotification, object: nil)
