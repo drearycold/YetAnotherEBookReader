@@ -620,6 +620,7 @@ class FolioReaderReadPositionRealm: Object {
     @objc open dynamic var chapterProgress: Double = .zero
     @objc open dynamic var chapterName: String = "Untitled Chapter"
     @objc open dynamic var bookProgress: Double = .zero
+    @objc open dynamic var bundleProgress: Double = .zero
     
     @objc open dynamic var epoch: Date = Date()
     
@@ -642,6 +643,7 @@ class FolioReaderReadPositionRealm: Object {
         self.chapterProgress = position.chapterProgress
         self.chapterName = position.chapterName
         self.bookProgress = position.bookProgress
+        self.bundleProgress = position.bundleProgress
         
         self.epoch = position.epoch
         
@@ -664,6 +666,7 @@ class FolioReaderReadPositionRealm: Object {
         position.chapterProgress = self.chapterProgress
         position.chapterName = self.chapterName
         position.bookProgress = self.bookProgress
+        position.bundleProgress = self.bundleProgress
         
         position.epoch = self.epoch
         position.takePrecedence = self.takePrecedence

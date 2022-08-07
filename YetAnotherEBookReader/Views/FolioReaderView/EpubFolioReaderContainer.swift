@@ -77,7 +77,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         guard let savedPosition = folioReader.savedPositionForCurrentBook else { return }
         
         updatedReadingPosition.lastChapterProgress = savedPosition.chapterProgress
-        updatedReadingPosition.lastProgress = savedPosition.bookProgress
+        updatedReadingPosition.lastProgress = savedPosition.structuralStyle == .bundle ? savedPosition.bundleProgress : savedPosition.bookProgress
         updatedReadingPosition.lastReadChapter = savedPosition.chapterName
         
         updatedReadingPosition.lastPosition[0] = savedPosition.pageNumber
