@@ -686,6 +686,19 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
         return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).sorted(byKeyPath: "epoch", ascending: false).compactMap{ $0.toReadPosition() }.first
     }
     
+    public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
+        let objects = realm?.objects(FolioReaderReadPositionRealm.self)
+            .filter(NSPredicate(
+                format: "bookId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                bookId,
+                NSNumber(value: folioReader.structuralStyle.rawValue),
+                NSNumber(value: folioReader.structuralTrackingTocLevel.rawValue),
+                NSNumber(value: rootPageNumber)
+            ))
+        
+        return objects?.max(by: { $0.epoch < $1.epoch })?.toReadPosition()
+    }
+    
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
         try? realm?.write {
             if let existing = realm?.objects(FolioReaderReadPositionRealm.self)
