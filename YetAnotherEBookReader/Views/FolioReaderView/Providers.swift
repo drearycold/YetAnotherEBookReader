@@ -426,7 +426,7 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: Highlight, completion: Completion?) {
-        print("highlight added \(highlight)")
+//        print("highlight added \(highlight)")
         
         var error: NSError? = nil
         defer {
@@ -536,7 +536,7 @@ extension FolioReaderRealmHighlightProvider {
     
     // Used for syncing with calibre server
     func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationEntry]) {
-        print("highlight added \(highlights)")
+//        print("highlight added \(highlights)")
         
         try? realm?.write {
             let dateFormatter = ISO8601DateFormatter()

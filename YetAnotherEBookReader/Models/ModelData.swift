@@ -582,7 +582,7 @@ final class ModelData: ObservableObject {
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
         
-        print("populateLibraries \(calibreLibraries)")
+//        print("populateLibraries \(calibreLibraries)")
     }
     
     func populateLocalLibraryBooks() {
@@ -1994,7 +1994,7 @@ final class ModelData: ObservableObject {
                         let annotationsEntries = try decoder.decode([String: CalibreBookAnnotationsResult].self, from: annotationsData)
                         
                         annotationsEntries.forEach { entry in
-                            print("\(#function) annotationEntry=\(entry)")
+//                            print("\(#function) annotationEntry=\(entry)")
                             
                             let keySplit = entry.key.split(separator: ":")
                             guard keySplit.count == 2, let bookId = Int32(keySplit[0]), let format = Format(rawValue: String(keySplit[1])) else {
@@ -2250,7 +2250,7 @@ final class ModelData: ObservableObject {
                 self.librarySyncStatus[library.id]?.upd = bookNeedUpdateCount
                 self.librarySyncStatus[library.id]?.del.formUnion(bookDeleted)
                 
-                print("\(#function) finishSync \(library.id) \(self.librarySyncStatus[library.id].debugDescription)")
+//                print("\(#function) finishSync \(library.id) \(self.librarySyncStatus[library.id].debugDescription)")
             }
         }
         

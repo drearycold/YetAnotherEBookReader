@@ -617,7 +617,7 @@ extension BookDeviceReadingPosition {
             parameters[String(p[p.startIndex..<equalIndex])] = String(p[(p.index(after: equalIndex))..<p.endIndex])
         }
         
-        print("\(#function) cfi=\(managedObject.cfi) vndParameters=\(vndParameters) parameters=\(parameters)")
+//        print("\(#function) cfi=\(managedObject.cfi) vndParameters=\(vndParameters) parameters=\(parameters)")
         
         guard let readerName = parameters["vndYabr_readerName"] ?? parameters["vnd_readerName"] else { return nil }
         
@@ -702,7 +702,7 @@ extension BookDeviceReadingPosition {
         }
         cfi.insert(contentsOf: insertFragment, at: insertIndex)
         
-        print("\(#function) cfi=\(cfi)")
+//        print("\(#function) cfi=\(cfi)")
         
         return cfi
     }
