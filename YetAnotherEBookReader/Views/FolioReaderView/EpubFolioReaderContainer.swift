@@ -89,7 +89,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         updatedReadingPosition.cfi = savedPosition.cfi
         
         updatedReadingPosition.readerName = ReaderType.YabrEPUB.rawValue
-        updatedReadingPosition.epoch = Date().timeIntervalSince1970
+        updatedReadingPosition.epoch = savedPosition.epoch.timeIntervalSince1970
 
         modelData?.updatedReadingPosition = updatedReadingPosition
     }

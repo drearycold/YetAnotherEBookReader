@@ -46,9 +46,15 @@ extension EpubFolioReaderContainer {
         } else {
             guard let book = modelData?.readingBook,
                   let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  let realmConfig = getBookPreferenceConfig(book: book, format: format),
+                  let bookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent
                   else { return FolioReaderNaiveReadPositionProvider() }
             let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
+            
+            provider.realm?.objects(FolioReaderReadPositionRealm.self).compactMap { $0.toReadPosition() }.forEach { oldObject in
+                provider.folioReaderReadPosition(folioReader, bookId: bookId, set: oldObject, completion: nil)
+            }
+            
             self.folioReaderReadPositionProvider = provider
             
             return provider
@@ -372,7 +378,7 @@ class FolioReaderHighlightRealm: Object {
         return "highlightId"
     }
     
-    func fromHighlight(_ highlight: Highlight) {
+    func fromHighlight(_ highlight: FolioReaderHighlight) {
         bookId = highlight.bookId
         content = highlight.content
         contentPost = highlight.contentPost
@@ -392,8 +398,8 @@ class FolioReaderHighlightRealm: Object {
         removed = false
     }
     
-    func toHighlight() -> Highlight {
-        let highlight = Highlight()
+    func toHighlight() -> FolioReaderHighlight {
+        let highlight = FolioReaderHighlight()
         highlight.bookId = bookId
         highlight.content = content
         highlight.contentPost = contentPost
@@ -402,7 +408,7 @@ class FolioReaderHighlightRealm: Object {
         highlight.highlightId = highlightId
         highlight.page = page
         highlight.type = type
-        highlight.style = HighlightStyle.classForStyle(type)
+        highlight.style = FolioReaderHighlightStyle.classForStyle(type)
         highlight.startOffset = startOffset
         highlight.endOffset = endOffset
         highlight.noteForHighlight = noteForHighlight
@@ -425,7 +431,7 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
         realm = try? Realm(configuration: realmConfig)
     }
     
-    public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: Highlight, completion: Completion?) {
+    public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: FolioReaderHighlight, completion: Completion?) {
 //        print("highlight added \(highlight)")
         
         var error: NSError? = nil
@@ -459,17 +465,17 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
         }
     }
     
-    public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: HighlightStyle) {
+    public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: FolioReaderHighlightStyle) {
         try? realm?.write {
             realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.type = style.rawValue
         }
     }
 
-    public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> Highlight? {
+    public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> FolioReaderHighlight? {
         return realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.toHighlight()
     }
     
-    public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [Highlight] {
+    public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
         var predicate = NSPredicate(format: "removed == false && bookId = %@", bookId)
         if let page = page {
             predicate = NSPredicate(format: "removed == false && bookId = %@ && page = %@", bookId, page)
@@ -480,13 +486,13 @@ public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
             .map { $0.toHighlight() } ?? []
     }
 
-    public func folioReaderHighlight(_ folioReader: FolioReader) -> [Highlight] {
+    public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
         return realm?.objects(FolioReaderHighlightRealm.self)
             .filter(NSPredicate(format: "removed == false"))
             .map { $0.toHighlight() } ?? []
     }
     
-    public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: Highlight) {
+    public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
         try? realm?.write {
             if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlight.highlightId) {
                 object.noteForHighlight = highlight.noteForHighlight
@@ -522,7 +528,7 @@ extension FolioReaderRealmHighlightProvider {
                     startCfi: cfiStart,
                     endCfi: cfiEnd,
                     highlightedText: object.content,
-                    style: ["kind":"color", "type":"builtin", "which":HighlightStyle.classForStyleCalibre(object.type)],
+                    style: ["kind":"color", "type":"builtin", "which":FolioReaderHighlightStyle.classForStyleCalibre(object.type)],
                     spineName: object.spineName,
                     spineIndex: object.page - 1,
                     tocFamilyTitles: object.tocFamilyTitles.map { $0 },
@@ -563,7 +569,7 @@ extension FolioReaderRealmHighlightProvider {
                 if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
                     if object.date <= date + 0.1 {
                         object.date = date
-                        object.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                        object.type = FolioReaderHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                         object.noteForHighlight = hl.notes
                         object.removed = false
                     }
@@ -577,7 +583,7 @@ extension FolioReaderRealmHighlightProvider {
                     highlightRealm.date = date
                     highlightRealm.highlightId = highlightId
                     highlightRealm.page = spineIndex + 1
-                    highlightRealm.type = HighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                    highlightRealm.type = FolioReaderHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                     highlightRealm.startOffset = 0
                     highlightRealm.endOffset = 0
                     highlightRealm.noteForHighlight = hl.notes
@@ -597,6 +603,7 @@ extension FolioReaderRealmHighlightProvider {
     
 }
 
+@available(*, deprecated, message: "replaced by BookDeviceReadingPositionRealm")
 class FolioReaderReadPositionRealm: Object {
     @objc open dynamic var bookId: String?
     @objc open dynamic var deviceId: String?
@@ -620,6 +627,7 @@ class FolioReaderReadPositionRealm: Object {
     @objc open dynamic var chapterProgress: Double = .zero
     @objc open dynamic var chapterName: String = "Untitled Chapter"
     @objc open dynamic var bookProgress: Double = .zero
+    @objc open dynamic var bookName: String = ""
     @objc open dynamic var bundleProgress: Double = .zero
     
     @objc open dynamic var epoch: Date = Date()
@@ -643,6 +651,7 @@ class FolioReaderReadPositionRealm: Object {
         self.chapterProgress = position.chapterProgress
         self.chapterName = position.chapterName
         self.bookProgress = position.bookProgress
+        self.bookName = position.bookName
         self.bundleProgress = position.bundleProgress
         
         self.epoch = position.epoch
@@ -658,7 +667,14 @@ class FolioReaderReadPositionRealm: Object {
             return nil
         }
 
-        let position = FolioReaderReadPosition(deviceId: deviceId, structuralStyle: structuralStyle, positionTrackingStyle: positionTrackingStyle, structuralRootPageNumber: structuralRootPageNumber, pageNumber: pageNumber, cfi: cfi)
+        let position = FolioReaderReadPosition(
+            deviceId: deviceId,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber,
+            pageNumber: pageNumber,
+            cfi: cfi
+        )
         
         position.maxPage = self.maxPage
         position.pageOffset = CGPoint(x: self.pageOffsetX, y: self.pageOffsetY)
@@ -666,9 +682,63 @@ class FolioReaderReadPositionRealm: Object {
         position.chapterProgress = self.chapterProgress
         position.chapterName = self.chapterName
         position.bookProgress = self.bookProgress
+        position.bookName = self.bookName
         position.bundleProgress = self.bundleProgress
         
         position.epoch = self.epoch
+        position.takePrecedence = self.takePrecedence
+        
+        return position
+    }
+}
+
+extension BookDeviceReadingPositionRealm {
+    func fromFolioReaderReadPosition(_ position: FolioReaderReadPosition, bookId: String) {
+        self.bookId = bookId
+        self.id = position.deviceId
+        
+        self.readerName = ReaderType.YabrEPUB.rawValue
+        self.maxPage = position.maxPage
+        self.lastReadPage = position.pageNumber
+        self.lastReadChapter = position.chapterName
+        self.lastChapterProgress = position.chapterProgress
+        self.lastProgress = position.bookProgress
+        
+        self.lastPosition.removeAll()
+        self.lastPosition.append(objectsIn: [self.lastReadPage, Int(position.pageOffset.x), Int(position.pageOffset.y)])
+        
+        self.cfi = position.cfi
+        self.epoch = position.epoch.timeIntervalSince1970
+        
+        self.structuralStyle = position.structuralStyle.rawValue
+        self.structuralRootPageNumber = position.structuralRootPageNumber
+        self.positionTrackingStyle = position.positionTrackingStyle.rawValue
+        
+        self.lastReadBook = position.bookName
+        self.lastBundleProgress = position.bundleProgress
+        
+        self.takePrecedence = position.takePrecedence
+    }
+    
+    func toFolioReaderReadPosition() -> FolioReaderReadPosition? {
+        guard readerName == ReaderType.YabrEPUB.rawValue,
+              let structuralStyle = FolioReaderStructuralStyle(rawValue: self.structuralStyle),
+              let positionTrackingStyle = FolioReaderPositionTrackingStyle(rawValue: self.positionTrackingStyle) else {
+            return nil
+        }
+
+        let position = FolioReaderReadPosition(deviceId: id, structuralStyle: structuralStyle, positionTrackingStyle: positionTrackingStyle, structuralRootPageNumber: structuralRootPageNumber, pageNumber: lastReadPage, cfi: cfi)
+        
+        position.maxPage = self.maxPage
+        position.pageOffset = CGPoint(x: self.lastPosition[1], y: self.lastPosition[2])
+        
+        position.chapterProgress = self.lastChapterProgress
+        position.chapterName = self.lastReadChapter
+        position.bookProgress = self.lastProgress
+        position.bookName = self.lastReadBook
+        position.bundleProgress = self.lastBundleProgress
+        
+        position.epoch = Date(timeIntervalSince1970: self.epoch)
         position.takePrecedence = self.takePrecedence
         
         return position
@@ -683,14 +753,14 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
-        if let position = realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId)).sorted(byKeyPath: "epoch", ascending: false).first?.toReadPosition() {
+        if let position = realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId)).sorted(byKeyPath: "epoch", ascending: false).first?.toFolioReaderReadPosition() {
             return position
         }
-        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).sorted(byKeyPath: "epoch", ascending: false).compactMap{ $0.toReadPosition() }.first
+        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).sorted(byKeyPath: "epoch", ascending: false).compactMap{ $0.toFolioReaderReadPosition() }.first
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
-        let objects = realm?.objects(FolioReaderReadPositionRealm.self)
+        let objects = realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(
                 format: "bookId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
                 bookId,
@@ -699,14 +769,14 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
                 NSNumber(value: rootPageNumber)
             ))
         
-        return objects?.max(by: { $0.epoch < $1.epoch })?.toReadPosition()
+        return objects?.max(by: { $0.epoch < $1.epoch })?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
         try? realm?.write {
-            if let existing = realm?.objects(FolioReaderReadPositionRealm.self)
+            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
                 .filter(NSPredicate(
-                    format: "bookId = %@ AND deviceId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    format: "bookId = %@ AND id = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
                     bookId,
                     readPosition.deviceId,
                     NSNumber(value: readPosition.structuralStyle.rawValue),
@@ -715,12 +785,13 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
                 )),
                existing.isEmpty == false {
                 existing.forEach {
-                    $0.fromReadPosition(readPosition, bookId: bookId)
+                    guard $0.epoch < readPosition.epoch.timeIntervalSince1970 || $0.takePrecedence != readPosition.takePrecedence else { return }
+                    $0.fromFolioReaderReadPosition(readPosition, bookId: bookId)
                 }
                 
             } else {
-                let object = FolioReaderReadPositionRealm()
-                object.fromReadPosition(readPosition, bookId: bookId)
+                let object = BookDeviceReadingPositionRealm()
+                object.fromFolioReaderReadPosition(readPosition, bookId: bookId)
                 realm?.add(object)
             }
         }
@@ -728,9 +799,9 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
         try? realm?.write {
-            if let existing = realm?.objects(FolioReaderReadPositionRealm.self)
+            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
                 .filter(NSPredicate(
-                    format: "bookId = %@ AND deviceId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    format: "bookId = %@ AND id = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
                     bookId,
                     readPosition.deviceId,
                     NSNumber(value: readPosition.structuralStyle.rawValue),
@@ -744,14 +815,14 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
-        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND deviceId = %@", bookId, deviceId)).compactMap { $0.toReadPosition() } ?? []
+        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND id = %@", bookId, deviceId)).compactMap { $0.toFolioReaderReadPosition() } ?? []
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
-        return realm?.objects(FolioReaderReadPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).compactMap { $0.toReadPosition() } ?? []
+        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).compactMap { $0.toFolioReaderReadPosition() } ?? []
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
-        return realm?.objects(FolioReaderReadPositionRealm.self).compactMap { $0.toReadPosition() } ?? []
+        return realm?.objects(BookDeviceReadingPositionRealm.self).compactMap { $0.toFolioReaderReadPosition() } ?? []
     }
 }

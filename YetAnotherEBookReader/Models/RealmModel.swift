@@ -480,6 +480,7 @@ class CalibreActivityLogEntry: Object {
 }
 
 class BookDeviceReadingPositionRealm: Object {
+    @objc dynamic var bookId: String = .init()
     @objc dynamic var id = ""
     
     @objc dynamic var readerName = ""
@@ -495,6 +496,15 @@ class BookDeviceReadingPositionRealm: Object {
     let lastPosition = List<Int>()
     @objc dynamic var cfi = "/"
     @objc dynamic var epoch = 0.0
+    
+    @objc dynamic var takePrecedence: Bool = false
+    
+    //for non-linear book structure
+    @objc dynamic var structuralStyle: Int = .zero
+    @objc dynamic var structuralRootPageNumber: Int = 1
+    @objc dynamic var positionTrackingStyle: Int = .zero
+    @objc dynamic var lastReadBook = ""
+    @objc dynamic var lastBundleProgress: Double = .zero
     
     var epochByLocale: String {
         let dateFormatter = DateFormatter()
