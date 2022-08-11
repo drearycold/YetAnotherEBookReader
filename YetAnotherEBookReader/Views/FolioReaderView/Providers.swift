@@ -541,9 +541,10 @@ extension FolioReaderRealmHighlightProvider {
     }
     
     // Used for syncing with calibre server
-    func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationEntry]) {
+    func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationEntry]) -> Int {
 //        print("highlight added \(highlights)")
         
+        var pending = realm?.objects(FolioReaderHighlightRealm.self).count ?? 0
         try? realm?.write {
             let dateFormatter = ISO8601DateFormatter()
             dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
@@ -553,13 +554,18 @@ extension FolioReaderRealmHighlightProvider {
                       let highlightId = uuidCalibreToFolio(hl.uuid),
                       let date = dateFormatter.date(from: hl.timestamp)
                 else { return }
-                if hl.uuid == "54dCT6cLoomi4hlUFUoxAA" {
-                    print()
-                }
+                
                 guard hl.removed != true else {
-                    if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId), object.date <= date + 0.1 {
-                        object.removed = true
-                        object.date = date
+                    if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
+                        if object.date <= date + 0.1 {
+                            object.removed = true
+                            object.date = date
+                            pending -= 1
+                        } else if date <= object.date + 0.1 {
+                            
+                        } else {
+                            pending -= 1
+                        }
                     }
                     return
                 }
@@ -572,6 +578,11 @@ extension FolioReaderRealmHighlightProvider {
                         object.type = FolioReaderHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                         object.noteForHighlight = hl.notes
                         object.removed = false
+                        pending -= 1
+                    } else if date <= object.date + 0.1 {
+                        
+                    } else {
+                        pending -= 1
                     }
                 } else {
                     let highlightRealm = FolioReaderHighlightRealm()
@@ -599,6 +610,8 @@ extension FolioReaderRealmHighlightProvider {
             }
 
         }
+    
+        return pending
     }
     
 }

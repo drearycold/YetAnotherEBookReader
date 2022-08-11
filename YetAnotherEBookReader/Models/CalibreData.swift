@@ -396,7 +396,7 @@ struct CalibreBook {
         return tags.joined(separator: ", ")
     }
     var formats = [String: FormatInfo]()
-    var readPos = BookReadingPosition()
+    var readPos: BookReadingPosition
     
     var identifiers = [String: String]()
     
@@ -439,6 +439,11 @@ struct CalibreBook {
     var inShelf = false
     var inShelfName = ""
     
+    init(id: Int32, library: CalibreLibrary) {
+        self.id = id
+        self.library = library
+        self.readPos = BookReadingPosition(id: id, library: library)
+    }
 }
 
 struct CalibreSyncStatus {
@@ -453,7 +458,8 @@ struct CalibreSyncStatus {
     var err = Set<Int32>()
 }
 
-struct BookReadingPosition {
+/*
+struct BookReadingPositionLegacy {
     private var deviceMap = [String: BookDeviceReadingPosition]()
     private var devices = [BookDeviceReadingPosition]()
     
@@ -507,18 +513,24 @@ struct BookReadingPosition {
         }
     }
 }
+*/
 
-struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
-    static func == (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+struct BookDeviceReadingPositionLegacy : Hashable, Codable {
+    static func == (lhs: BookDeviceReadingPositionLegacy, rhs: BookDeviceReadingPositionLegacy) -> Bool {
         lhs.id == rhs.id
             && lhs.readerName == rhs.readerName
             && lhs.lastReadPage == rhs.lastReadPage
             && lhs.lastProgress == rhs.lastProgress
+            && lhs.structuralRootPageNumber == rhs.structuralRootPageNumber
     }
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
         hasher.combine(readerName)
+        hasher.combine(lastReadPage)
+        hasher.combine(structuralStyle)
+        hasher.combine(positionTrackingStyle)
+        hasher.combine(structuralRootPageNumber)
     }
     
     var id: String = ""  //device name
@@ -538,6 +550,144 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
     var cfi = "/"
     var epoch = 0.0     //timestamp
     
+    //for non-linear book structure
+    var structuralStyle: Int = .zero
+    var structuralRootPageNumber: Int = .zero
+    var positionTrackingStyle: Int = .zero
+    var lastReadBook: String = .init()
+    var lastBundleProgress: Double = .zero
+    
+    enum CodingKeys: String, CodingKey {
+        case readerName
+        case lastReadPage
+        case lastReadChapter
+        case lastChapterProgress
+        case lastProgress
+        case furthestReadPage
+        case furthestReadChapter
+        case maxPage
+        case lastPosition
+    }
+    
+    var description: String {
+        return """
+            \(id) with \(readerName):
+                Chapter: \(lastReadChapter), \(String(format: "%.2f", 100 - lastChapterProgress))% Left
+                Book: Page \(lastReadPage), \(String(format: "%.2f", 100 - lastProgress))% Left
+                (\(lastPosition[0]):\(lastPosition[1]):\(lastPosition[2]))
+            """
+    }
+    
+    static func < (lhs: BookDeviceReadingPositionLegacy, rhs: BookDeviceReadingPositionLegacy) -> Bool {
+        if lhs.lastReadPage < rhs.lastReadPage {
+            return true
+        } else if lhs.lastReadPage > rhs.lastReadPage {
+            return false
+        }
+        if lhs.lastChapterProgress < rhs.lastChapterProgress {
+            return true
+        } else if lhs.lastChapterProgress > rhs.lastChapterProgress {
+            return false
+        }
+        if lhs.lastProgress < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    static func << (lhs: BookDeviceReadingPositionLegacy, rhs: BookDeviceReadingPositionLegacy) -> Bool {
+        if (lhs.lastProgress + 10) < rhs.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    mutating func update(with other: BookDeviceReadingPosition) {
+        maxPage = other.maxPage
+        lastReadPage = other.lastReadPage
+        lastReadChapter = other.lastReadChapter
+        lastChapterProgress = other.lastChapterProgress
+        lastProgress = other.lastProgress
+        lastPosition = other.lastPosition
+        cfi = other.cfi
+        epoch = other.epoch
+    }
+    
+    func isSameProgress(with other: BookDeviceReadingPosition) -> Bool {
+        if id == other.id,
+            readerName == other.readerName,
+            lastReadPage == other.lastReadPage,
+            lastChapterProgress == other.lastChapterProgress,
+            lastProgress == other.lastProgress {
+            return true
+        }
+        return false
+    }
+    
+    func isSameType(with other: BookDeviceReadingPosition) -> Bool {
+        return id == other.id && readerName == other.readerName
+    }
+    
+    var epochByLocale: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+    
+    var epochLocaleLong: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .long
+        dateFormatter.timeStyle = .long
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+}
+
+
+struct BookDeviceReadingPosition : Hashable, Codable {
+    static func == (lhs: BookDeviceReadingPosition, rhs: BookDeviceReadingPosition) -> Bool {
+        lhs.id == rhs.id
+            && lhs.readerName == rhs.readerName
+            && lhs.lastReadPage == rhs.lastReadPage
+            && lhs.lastProgress == rhs.lastProgress
+            && lhs.structuralRootPageNumber == rhs.structuralRootPageNumber
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(readerName)
+        hasher.combine(lastReadPage)
+        hasher.combine(structuralStyle)
+        hasher.combine(positionTrackingStyle)
+        hasher.combine(structuralRootPageNumber)
+    }
+    
+    var id: String = ""  //device name
+    
+    var readerName: String
+    
+    var maxPage = 0
+    var lastReadPage = 0
+    var lastReadChapter = ""
+    /// range 0 - 100
+    var lastChapterProgress = 0.0
+    /// range 0 - 100
+    var lastProgress = 0.0
+    var furthestReadPage = 0
+    var furthestReadChapter = ""
+    var lastPosition = [0, 0, 0]
+    var cfi = "/"
+    var epoch = 0.0     //timestamp
+    
+    //for non-linear book structure
+    var structuralStyle: Int = .zero
+    var structuralRootPageNumber: Int = .zero
+    var positionTrackingStyle: Int = .zero
+    var lastReadBook: String = .init()
+    var lastBundleProgress: Double = .zero
+    
     enum CodingKeys: String, CodingKey {
         case readerName
         case lastReadPage
@@ -550,6 +700,12 @@ struct BookDeviceReadingPosition : Hashable, Codable, Identifiable {
         case lastPosition
         case cfi
         case epoch
+        
+        case structuralStyle
+        case structuralRootPageNumber
+        case positionTrackingStyle
+        case lastReadBook
+        case lastBundleProgress
     }
     
     var description: String {

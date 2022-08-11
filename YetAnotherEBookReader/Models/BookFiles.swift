@@ -8,6 +8,20 @@
 import Foundation
 import CryptoKit
 
+func getBookBaseUrl(id: Int32, library: CalibreLibrary) -> URL? {
+    guard let downloadBaseURL =
+        try? FileManager.default.url(for: .documentDirectory,
+                                in: .userDomainMask,
+                                appropriateFor: nil,
+                                create: false)
+            .appendingPathComponent("Downloaded Books", isDirectory: true) else { return nil }
+    try? FileManager.default.createDirectory(at: downloadBaseURL, withIntermediateDirectories: true, attributes: nil)
+    
+    guard FileManager.default.fileExists(atPath: downloadBaseURL.path) else { return nil }
+    
+    return downloadBaseURL.appendingPathComponent("\(library.key) - \(id)")
+}
+
 func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
     if book.library.server.isLocal {
         if let localBaseUrl = book.library.server.localBaseUrl,

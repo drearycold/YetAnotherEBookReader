@@ -18,7 +18,7 @@ class ReadingPositionListViewModel: ObservableObject {
     init(modelData: ModelData, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.modelData = modelData
         self.book = book
-        self.positions = book.readPos.getDevices()
+        self.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
     }
     
     func removePosition(_ deviceName: String) {

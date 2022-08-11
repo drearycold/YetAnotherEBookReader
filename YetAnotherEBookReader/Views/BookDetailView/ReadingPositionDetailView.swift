@@ -204,7 +204,7 @@ struct ReadingPositionDetailView: View {
         
         if let book = _VM.modelData.readingBook {
             _VM.listModel.book = book
-            _VM.listModel.positions = book.readPos.getDevices()
+            _VM.listModel.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
             if let position = book.readPos.getPosition(_VM.position.id) {
                 _VM.position = position
             }

@@ -408,36 +408,33 @@ final class ModelData: ObservableObject {
         if mock {
             let library = calibreLibraries.first!.value
             
-            var readPos = BookReadingPosition()
-            readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: ReaderType.YabrEPUB.rawValue, maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
-            
-            self.readingBook = CalibreBook(
-                id: 1,
-                library: library,
-                title: "Mock Title",
-                authors: ["Mock Author", "Mock Auther 2"],
-                comments: "<p>Mock Comment",
-                publisher: "Mock Publisher",
-                series: "Mock Series",
-                rating: 8,
-                size: 12345678,
-                pubDate: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
-                timestamp: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
-                lastModified: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
-                lastSynced: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
-                lastUpdated: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
-                tags: ["Mock"],
-                formats: ["EPUB" : FormatInfo(
-                            filename: "file:///mock",
-                            serverSize: 123456,
-                            serverMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
-                            cached: false, cacheSize: 123456,
-                            cacheMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000))
-                )],
-                readPos: readPos,
-                identifiers: [:],
-                inShelf: true,
-                inShelfName: "Default")
+            var book = CalibreBook(id: 1, library: library)
+            book.readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: ReaderType.YabrEPUB.rawValue, maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
+            self.readingBook = book
+//                title: "Mock Title",
+//                authors: ["Mock Author", "Mock Auther 2"],
+//                comments: "<p>Mock Comment",
+//                publisher: "Mock Publisher",
+//                series: "Mock Series",
+//                rating: 8,
+//                size: 12345678,
+//                pubDate: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
+//                timestamp: Date.init(timeIntervalSince1970: TimeInterval(1262275200)),
+//                lastModified: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+//                lastSynced: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+//                lastUpdated: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+//                tags: ["Mock"],
+//                formats: ["EPUB" : FormatInfo(
+//                            filename: "file:///mock",
+//                            serverSize: 123456,
+//                            serverMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000)),
+//                            cached: false, cacheSize: 123456,
+//                            cacheMTime: Date.init(timeIntervalSince1970: TimeInterval(1577808000))
+//                )],
+//                readPos: readPos,
+//                identifiers: [:],
+//                inShelf: true,
+//                inShelfName: "Default")
             self.booksInShelf[self.readingBook!.inShelfId] = self.readingBook
             
             cleanCalibreActivities(startDatetime: Date())
@@ -856,70 +853,7 @@ final class ModelData: ObservableObject {
     }
     
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
-        let formatsVer1 = bookRealm.formats().reduce(
-            into: [String: FormatInfo]()
-        ) { result, entry in
-            result[entry.key] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-        }
-//        let formatsVer2 = try? JSONSerialization.jsonObject(with: bookRealm.formatsData! as Data, options: []) as? [String: FormatInfo]
-        let decoder = JSONDecoder()
-        let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: bookRealm.formatsData as Data? ?? .init()))
-                ?? formatsVer1
-        
-        //print("CONVERT \(bookRealm.title) \(formatsVer1) \(formatsVer2)")
-        
-        var calibreBook = CalibreBook(
-            id: bookRealm.id,
-            library: library,
-            title: bookRealm.title,
-            comments: bookRealm.comments,
-            publisher: bookRealm.publisher,
-            series: bookRealm.series,
-            seriesIndex: bookRealm.seriesIndex,
-            rating: bookRealm.rating,
-            size: bookRealm.size,
-            pubDate: bookRealm.pubDate,
-            timestamp: bookRealm.timestamp,
-            lastModified: bookRealm.lastModified,
-            lastSynced: bookRealm.lastSynced,
-            lastUpdated: bookRealm.lastUpdated,
-            formats: formatsVer2,
-            readPos: bookRealm.readPos(),
-            inShelf: bookRealm.inShelf,
-            inShelfName: bookRealm.inShelfName)
-        if bookRealm.identifiersData != nil {
-            calibreBook.identifiers = bookRealm.identifiers()
-        }
-        if bookRealm.userMetaData != nil {
-            calibreBook.userMetadatas = bookRealm.userMetadatas()
-        }
-        if let authorFirst = bookRealm.authorFirst {
-            calibreBook.authors.append(authorFirst)
-        }
-        if let authorSecond = bookRealm.authorSecond {
-            calibreBook.authors.append(authorSecond)
-        }
-        if let authorThird = bookRealm.authorThird {
-            calibreBook.authors.append(authorThird)
-        }
-        calibreBook.authors.append(contentsOf: bookRealm.authorsMore)
-        
-        if let tagFirst = bookRealm.tagFirst {
-            calibreBook.tags.append(tagFirst)
-        }
-        if let tagSecond = bookRealm.tagSecond {
-            calibreBook.tags.append(tagSecond)
-        }
-        if let tagThird = bookRealm.tagThird {
-            calibreBook.tags.append(tagThird)
-        }
-        calibreBook.tags.append(contentsOf: bookRealm.tagsMore)
-        
-        if calibreBook.readPos.getDevices().count > 1 {
-            if let pos = calibreBook.readPos.getPosition(deviceName), pos.lastReadPage == 0 {
-                calibreBook.readPos.removePosition(deviceName)
-            }
-        }
+        let calibreBook = CalibreBook(managedObject: bookRealm, library: library)
         
         return calibreBook
     }
@@ -1102,59 +1036,9 @@ final class ModelData: ObservableObject {
     }
     
     func updateBookRealm(book: CalibreBook, realm: Realm) {
-        let bookRealm = CalibreBookRealm()
-        bookRealm.id = book.id
-        bookRealm.serverUrl = book.library.server.baseUrl
-        bookRealm.serverUsername = book.library.server.username
-        bookRealm.libraryName = book.library.name
-        bookRealm.title = book.title
-
-        var authors = book.authors
-        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
-        bookRealm.authorSecond = authors.popFirst()
-        bookRealm.authorThird = authors.popFirst()
-        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
-
-        bookRealm.comments = book.comments
-        bookRealm.publisher = book.publisher
-        bookRealm.series = book.series
-        bookRealm.seriesIndex = book.seriesIndex
-        bookRealm.rating = book.rating
-        bookRealm.size = book.size
-        bookRealm.pubDate = book.pubDate
-        bookRealm.timestamp = book.timestamp
-        bookRealm.lastModified = book.lastModified
-        bookRealm.lastSynced = book.lastSynced
-        bookRealm.lastUpdated = book.lastUpdated
-        
-        var tags = book.tags
-        bookRealm.tagFirst = tags.popFirst()
-        bookRealm.tagSecond = tags.popFirst()
-        bookRealm.tagThird = tags.popFirst()
-        bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
-
-        bookRealm.inShelf = book.inShelf
-        bookRealm.inShelfName = book.inShelfName
-        
-        do {
-            let encoder = JSONEncoder()
-            bookRealm.formatsData = try encoder.encode(book.formats) as NSData
-            
-            //bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
-            bookRealm.identifiersData = try JSONEncoder().encode(book.identifiers) as NSData
-            
-            bookRealm.userMetaData = try JSONSerialization.data(withJSONObject: book.userMetadatas, options: []) as NSData
-            
-            let deviceMapSerialize = try book.readPos.getCopy().compactMapValues { (value) throws -> Any? in
-                try JSONSerialization.jsonObject(with: JSONEncoder().encode(value))
-            }
-            bookRealm.readPosData = try JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
-            
-            try realm.write {
-                realm.add(bookRealm, update: .modified)
-            }
-        } catch {
-            print("updateBookRealm error=\(error.localizedDescription)")
+        let bookRealm = book.managedObject()
+        try? realm.write {
+            realm.add(bookRealm, update: .modified)
         }
     }
     
@@ -1510,10 +1394,11 @@ final class ModelData: ObservableObject {
         defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
         
-        readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
-        readingBook.lastModified = Date()
+        //TODO: drop readPos
+//        readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
+//        readingBook.lastModified = Date()
         
-        self.updateBook(book: readingBook)
+//        self.updateBook(book: readingBook)
         
         if let bookPrefConfig = getBookPreferenceConfig(book: readingBook, format: readerInfo.format),
            let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
@@ -1541,8 +1426,9 @@ final class ModelData: ObservableObject {
             }
         }
         
-        
-        if let pluginReadingPosition = calibreLibraries[readingBook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled() {
+        //TODO: drop readPos
+        if false,
+            let pluginReadingPosition = calibreLibraries[readingBook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled() {
             let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: pluginReadingPosition.readingPositionCN, alertDelegate: alertDelegate, success: nil)
             
             if ret != 0 {
@@ -2056,10 +1942,16 @@ final class ModelData: ObservableObject {
                             if let highlightResult = entry.value.annotations_map["highlight"],
                                let folioBookId = bookPrefConfig.fileURL?.deletingPathExtension().lastPathComponent {
                                 let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
-                                highlightProvider.folioReaderHighlight(
+                                let pending = highlightProvider.folioReaderHighlight(
                                     bookId: folioBookId,
                                     added: highlightResult
                                 )
+                                if pending > 0 {
+                                    let highlights = highlightProvider.folioReaderHighlight(bookId: folioBookId)
+                                    if let task = self.calibreServerService.buildUpdateAnnotationsTask(library: result.library, bookId: bookId, format: format, highlights: highlights) {
+                                        self.updateAnnotationsSubject.send(task)
+                                    }
+                                }
                             }
                         }
                     } catch {

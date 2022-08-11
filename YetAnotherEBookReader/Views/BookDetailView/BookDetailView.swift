@@ -351,11 +351,11 @@ struct BookDetailView: View {
             Button(action:{
                 if _viewModel.listVM == nil {
                     _viewModel.listVM = ReadingPositionListViewModel(
-                        modelData: modelData, book: book, positions: book.readPos.getDevices()
+                        modelData: modelData, book: book, positions: book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
                     )
                 } else {
                     _viewModel.listVM.book = book
-                    _viewModel.listVM.positions = book.readPos.getDevices()
+                    _viewModel.listVM.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
                 }
                 presentingReadPositionList = true
             }) {
@@ -589,7 +589,10 @@ struct BookDetailView: View {
         .sheet(isPresented: $presentingReadPositionList, onDismiss: {
             print("ReadingPositionListView dismiss \(book.readPos.getDevices().count) \(_viewModel.listVM.book.readPos.getDevices().count)")
             guard book.readPos.getDevices().count != _viewModel.listVM.book.readPos.getDevices().count else { return }
-            modelData.updateReadingPosition(book: _viewModel.listVM.book, alertDelegate: self)
+            //TODO: drop readPos
+            if false {
+                    modelData.updateReadingPosition(book: _viewModel.listVM.book, alertDelegate: self)
+            }
         }) {
             ReadingPositionListView(viewModel: _viewModel.listVM)
         }
@@ -794,11 +797,11 @@ struct BookDetailView: View {
     func initStates(book: CalibreBook) {
         if _viewModel.listVM == nil {
             _viewModel.listVM = ReadingPositionListViewModel(
-                modelData: modelData, book: book, positions: book.readPos.getDevices()
+                modelData: modelData, book: book, positions: book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
             )
         } else {
             _viewModel.listVM.book = book
-            _viewModel.listVM.positions = book.readPos.getDevices()
+            _viewModel.listVM.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
         }
         
 //        modelData.calibreServerService.getAnnotations(

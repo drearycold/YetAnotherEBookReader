@@ -354,26 +354,60 @@ struct CalibreServerService {
         //Parse Reading Position
         if let pluginReadingPosition = modelData.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
            let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
-           let readPosData = Data(base64Encoded: readPosString),
-           let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
-           //let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-           //let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
-           let deviceMapDict = readPosDictNew["deviceMap"] {
-            
-            deviceMapDict.forEach { key, value in
-                let deviceName = key// as! String
+           let readPosData = Data(base64Encoded: readPosString) {
+            if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
+               let deviceMapDict = readPosDictNew["deviceMap"] {
                 
-                if let oldPos = book.readPos.getPosition(deviceName) {
-                    guard deviceName != modelData.deviceName else { return }    //trust local record
-                    guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                deviceMapDict.forEach { key, value in
+                    let deviceName = key// as! String
+                    
+                    if let oldPos = book.readPos.getPosition(deviceName) {
+                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                    }
+                    
+                    var deviceReadingPosition = value
+                    deviceReadingPosition.id = deviceName
+                    
+                    book.readPos.updatePosition(deviceName, deviceReadingPosition)
+                    
+                    defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                 }
                 
-                var deviceReadingPosition = value
-                deviceReadingPosition.id = deviceName
+            } else if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPositionLegacy]].self, from: readPosData),
+                      let deviceMapDictNew = readPosDictNew["deviceMap"],
+                      let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+                      let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
                 
-                book.readPos.updatePosition(deviceName, deviceReadingPosition)
-                
-                defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                deviceMapDictNew.forEach { key, value in
+                    let deviceName = key// as! String
+                    
+                    if let oldPos = book.readPos.getPosition(deviceName) {
+                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                    }
+                    
+                    var deviceReadingPosition = BookDeviceReadingPosition(id: value.id, readerName: value.readerName, maxPage: value.maxPage, lastReadPage: value.lastReadPage, lastReadChapter: value.lastReadChapter, lastChapterProgress: value.lastChapterProgress, lastProgress: value.lastProgress, furthestReadPage: value.furthestReadPage, furthestReadChapter: value.furthestReadChapter, lastPosition: value.lastPosition, cfi: value.cfi, epoch: value.epoch, structuralStyle: value.structuralStyle, structuralRootPageNumber: value.structuralRootPageNumber, positionTrackingStyle: value.positionTrackingStyle, lastReadBook: value.lastReadBook, lastBundleProgress: value.lastBundleProgress)
+                    
+                    deviceReadingPosition.id = deviceName
+                    
+                    if let deviceReadingPositionDict = deviceMapDict[deviceName] as? [String: Any] {
+                        if let cfi = deviceReadingPositionDict["cfi"] as? String {
+                            deviceReadingPosition.cfi = cfi
+                        }
+                        deviceReadingPosition.epoch = deviceReadingPositionDict["epoch"] as? Double ?? .zero
+
+                        deviceReadingPosition.structuralStyle = deviceReadingPositionDict["structuralStyle"] as? Int ?? .zero
+                        deviceReadingPosition.structuralRootPageNumber = deviceReadingPositionDict["structuralRootPageNumber"] as? Int ?? .zero
+                        deviceReadingPosition.positionTrackingStyle = deviceReadingPositionDict["positionTrackingStyle"] as? Int ?? .zero
+                        deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
+                        deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
+                    }
+                    
+                    book.readPos.updatePosition(deviceName, deviceReadingPosition)
+                    
+                    defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                }
             }
         }
 
@@ -452,34 +486,71 @@ struct CalibreServerService {
             }
         }
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
-        var readPos = bookRealm.readPos()
+        var readPos = bookRealm.readPos(library: library)
         //Parse Reading Position
         if let pluginReadingPosition = modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
            let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
-           let readPosData = Data(base64Encoded: readPosString),
-           let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
-           //let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-           //let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
-           let deviceMapDict = readPosDictNew["deviceMap"] {
+           let readPosData = Data(base64Encoded: readPosString) {
             
-            deviceMapDict.forEach { key, value in
-                let deviceName = key// as! String
+            if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
+               let deviceMapDict = readPosDictNew["deviceMap"] {
                 
-                if let oldPos = readPos.getPosition(deviceName) {
-                    guard deviceName != modelData.deviceName else { return }    //trust local record
-                    guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                deviceMapDict.forEach { key, value in
+                    let deviceName = key// as! String
+                    
+                    if let oldPos = readPos.getPosition(deviceName) {
+                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                    }
+                    
+                    var deviceReadingPosition = value
+                    deviceReadingPosition.id = deviceName
+                    
+                    readPos.updatePosition(deviceName, deviceReadingPosition)
                 }
                 
-                var deviceReadingPosition = value
-                deviceReadingPosition.id = deviceName
                 
-                readPos.updatePosition(deviceName, deviceReadingPosition)
+            } else if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPositionLegacy]].self, from: readPosData),
+                      let deviceMapDictNew = readPosDictNew["deviceMap"],
+                      let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+                      let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
+                
+                deviceMapDictNew.forEach { key, value in
+                    let deviceName = key// as! String
+                    
+                    if let oldPos = readPos.getPosition(deviceName) {
+                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
+                    }
+                    
+                    var deviceReadingPosition = BookDeviceReadingPosition(id: value.id, readerName: value.readerName, maxPage: value.maxPage, lastReadPage: value.lastReadPage, lastReadChapter: value.lastReadChapter, lastChapterProgress: value.lastChapterProgress, lastProgress: value.lastProgress, furthestReadPage: value.furthestReadPage, furthestReadChapter: value.furthestReadChapter, lastPosition: value.lastPosition, cfi: value.cfi, epoch: value.epoch, structuralStyle: value.structuralStyle, structuralRootPageNumber: value.structuralRootPageNumber, positionTrackingStyle: value.positionTrackingStyle, lastReadBook: value.lastReadBook, lastBundleProgress: value.lastBundleProgress)
+                    
+                    deviceReadingPosition.id = deviceName
+                    
+                    if let deviceReadingPositionDict = deviceMapDict[deviceName] as? [String: Any] {
+                        if let cfi = deviceReadingPositionDict["cfi"] as? String {
+                            deviceReadingPosition.cfi = cfi
+                        }
+                        deviceReadingPosition.epoch = deviceReadingPositionDict["epoch"] as? Double ?? .zero
+                        
+                        deviceReadingPosition.structuralStyle = deviceReadingPositionDict["structuralStyle"] as? Int ?? .zero
+                        deviceReadingPosition.structuralRootPageNumber = deviceReadingPositionDict["structuralRootPageNumber"] as? Int ?? .zero
+                        deviceReadingPosition.positionTrackingStyle = deviceReadingPositionDict["positionTrackingStyle"] as? Int ?? .zero
+                        deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
+                        deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
+                    }
+                    
+                    readPos.updatePosition(deviceName, deviceReadingPosition)
+                }
             }
             
-            if let deviceMapSerialize = try? deviceMapDict.compactMapValues({ try JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) }) {
-                bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
-            }
         }
+        
+        let encoder = JSONEncoder()
+        let deviceMapSerialize = readPos.getCopy().compactMapValues { (value) -> Any? in
+            try? JSONSerialization.jsonObject(with: encoder.encode(value))
+        }
+        bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
         
         bookRealm.lastProgress = readPos.getDevices().max(by: { lbdrp, rbdrp in
             lbdrp.lastProgress < rbdrp.lastProgress

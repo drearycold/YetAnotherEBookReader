@@ -37,7 +37,7 @@ struct ReadingPositionHistoryView: View {
                 Section(
                     header: Text("Devices Latest")
                 ) {
-                    ForEach(positions, id: \.id) { position in
+                    ForEach(positions, id: \.hashValue) { position in
                         NavigationLink(
                             destination: ReadingPositionDetailView(
                                 viewModel: ReadingPositionDetailViewModel(
@@ -47,7 +47,11 @@ struct ReadingPositionHistoryView: View {
                             )
                         ) {
                             VStack(alignment: .leading) {
-                                Text("\(position.id)")
+                                HStack {
+                                    Text(position.id.description)
+                                    Spacer()
+                                    Text(position.lastReadChapter)
+                                }
                                 Text("\(String(format: "%.2f%%", position.lastProgress)), with \((modelData.formatOfReader(readerName: position.readerName) ?? Format.UNKNOWN).rawValue) by \(position.readerName)")
                                 if position.id == modelData.deviceName {
                                     Text("(Current Device)")
