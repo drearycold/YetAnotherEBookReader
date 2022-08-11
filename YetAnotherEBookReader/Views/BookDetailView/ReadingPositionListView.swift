@@ -18,7 +18,7 @@ struct ReadingPositionListView: View {
         NavigationView {
             VStack(alignment: .leading) {
                 List {
-                    ForEach(_positionViewModel.positions, id: \.id) { position in
+                    ForEach(_positionViewModel.positionsByLatestStyle(), id: \.hashValue) { position in
                         NavigationLink(
                             destination: ReadingPositionDetailView(
                                 viewModel: ReadingPositionDetailViewModel(
@@ -28,24 +28,43 @@ struct ReadingPositionListView: View {
                             )
                         ) {
                             VStack(alignment: .leading) {
-                                Text("\(position.id)")
-                                Text("\(String(format: "%.2f%%", position.lastProgress)), with \((_positionViewModel.modelData.formatOfReader(readerName: position.readerName) ?? Format.UNKNOWN).rawValue) by \(position.readerName)")
-                                if position.id == _positionViewModel.modelData.deviceName {
-                                    Text("(Current Device)")
+                                HStack {
+                                    Text(position.structuralStyle == 1 ? position.lastReadBook : position.lastReadChapter)
+                                    Spacer()
+                                    Text(position.id)
                                         .font(.caption)
-                                        .foregroundColor(Color(UIColor.systemRed))
+                                }
+                                HStack {
+                                    if position.structuralStyle == 1 {
+                                        Text(position.lastReadChapter)
+                                    }
+                                    Spacer()
+                                    Text("\(String(format: "%.2f%%", position.lastProgress)), with \((_positionViewModel.modelData.formatOfReader(readerName: position.readerName) ?? Format.UNKNOWN).rawValue) by \(position.readerName)")
+                                        .font(.caption)
+                                }
+                                HStack {
+                                    if position.id == _positionViewModel.modelData.deviceName {
+                                        Text("(Current Device)")
+                                            .font(.caption)
+                                            .foregroundColor(Color(UIColor.systemRed))
+                                    }
+                                    Spacer()
+                                    Text(position.epochByLocaleRelative)
                                 }
                             }
                         }
                     }
                     .onDelete(perform: { indexSet in
-                        let deviceNames = indexSet.reduce(into: [String]()) { result, index in
-                            result.append(_positionViewModel.book.readPos.getDevices()[index].id)
+                        let positionList = _positionViewModel.positionsByLatestStyle()
+                        let removePositions = indexSet.map {
+                            positionList[$0]
                         }
                         
-                        deviceNames.forEach { deviceName in
-                            _positionViewModel.removePosition(deviceName)
+                        removePositions.forEach {
+                            _positionViewModel.book.readPos.removePosition(position: $0)
                         }
+                        
+                        _positionViewModel.positions = _positionViewModel.book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
                     })
                     
                     if _positionViewModel.book.readPos.getPosition(_positionViewModel.modelData.deviceName) == nil {
