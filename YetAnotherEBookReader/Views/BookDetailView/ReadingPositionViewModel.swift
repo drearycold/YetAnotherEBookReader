@@ -13,12 +13,22 @@ class ReadingPositionListViewModel: ObservableObject {
     
     @Published var positions: [BookDeviceReadingPosition]
     
+    let bookPref: BookPreference
+    
     var modified = false
     
     init(modelData: ModelData, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.modelData = modelData
         self.book = book
         self.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+        
+        self.bookPref = .init(id: book.id, library: book.library)
+    }
+    
+    func positionsByLatestStyle() -> [BookDeviceReadingPosition] {
+        guard let latest = positions.first else { return [] }
+        
+        return positions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle }
     }
     
     func removePosition(_ deviceName: String) {

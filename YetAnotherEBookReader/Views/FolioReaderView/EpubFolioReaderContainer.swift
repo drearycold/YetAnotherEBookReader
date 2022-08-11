@@ -34,17 +34,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
         self.folioReader.delegate = self
         
-        let position = FolioReaderReadPosition(
-            deviceId: modelData?.deviceName ?? UIDevice().name,
-            structuralStyle: self.folioReader.structuralStyle,
-            positionTrackingStyle: self.folioReader.structuralTrackingTocLevel,
-            structuralRootPageNumber: 0,    //TODO: XXX
-            pageNumber: bookReadingPosition.lastReadPage,
-            cfi: bookReadingPosition.cfi
-        )
-        position.pageOffset = CGPoint(x: bookReadingPosition.lastPosition[1], y: bookReadingPosition.lastPosition[2])
-        
-        position.chapterProgress = bookReadingPosition.lastChapterProgress
+        let position = bookReadingPosition.managedObject().toFolioReaderReadPosition()
         
         readerConfig.savedPositionForCurrentBook = position
         

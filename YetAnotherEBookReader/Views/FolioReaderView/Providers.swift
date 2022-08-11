@@ -734,13 +734,18 @@ extension BookDeviceReadingPositionRealm {
     }
     
     func toFolioReaderReadPosition() -> FolioReaderReadPosition? {
-        guard readerName == ReaderType.YabrEPUB.rawValue,
-              let structuralStyle = FolioReaderStructuralStyle(rawValue: self.structuralStyle),
-              let positionTrackingStyle = FolioReaderPositionTrackingStyle(rawValue: self.positionTrackingStyle) else {
+        guard readerName == ReaderType.YabrEPUB.rawValue else {
             return nil
         }
 
-        let position = FolioReaderReadPosition(deviceId: id, structuralStyle: structuralStyle, positionTrackingStyle: positionTrackingStyle, structuralRootPageNumber: structuralRootPageNumber, pageNumber: lastReadPage, cfi: cfi)
+        let position = FolioReaderReadPosition(
+            deviceId: id,
+            structuralStyle: FolioReaderStructuralStyle(rawValue: structuralStyle) ?? .atom,
+            positionTrackingStyle: FolioReaderPositionTrackingStyle(rawValue: positionTrackingStyle) ?? .linear,
+            structuralRootPageNumber: structuralRootPageNumber,
+            pageNumber: lastReadPage,
+            cfi: cfi
+        )
         
         position.maxPage = self.maxPage
         position.pageOffset = CGPoint(x: self.lastPosition[1], y: self.lastPosition[2])

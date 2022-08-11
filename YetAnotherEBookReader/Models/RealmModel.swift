@@ -698,6 +698,24 @@ struct BookReadingPosition {
         }
     }
     
+    func removePosition(position: BookDeviceReadingPosition) {
+        try? realm?.write {
+            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
+                .filter(NSPredicate(
+                    format: "bookId = %@ AND id = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    bookPrefId,
+                    position.id,
+                    position.readerName,
+                    NSNumber(value: position.structuralStyle),
+                    NSNumber(value: position.positionTrackingStyle),
+                    NSNumber(value: position.structuralRootPageNumber)
+                )),
+               existing.isEmpty == false {
+                realm?.delete(existing)
+            }
+        }
+    }
+    
     func getCopy() -> [String: BookDeviceReadingPosition] {
         return get()?.reduce(into: [String: BookDeviceReadingPosition](), { partialResult, obj in
             if (partialResult[obj.id]?.epoch ?? Date.distantPast.timeIntervalSince1970) < obj.epoch {
@@ -719,6 +737,49 @@ struct BookReadingPosition {
     private func get() -> Results<BookDeviceReadingPositionRealm>? {
         return realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookPrefId))
+    }
+}
+
+struct BookPreference {
+    let id: Int32
+    let library: CalibreLibrary
+    let bookPrefId: String
+    
+    var realm: Realm?
+    
+    init(id: Int32, library: CalibreLibrary) {
+        self.id = id
+        self.library = library
+        bookPrefId = "\(library.key) - \(id)"
+        
+        realm = openRealm()
+    }
+    
+    func openRealm() -> Realm? {
+        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library),
+              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
+              let basePrefUrl = bookPrefConf.fileURL,
+              FileManager.default.fileExists(atPath: basePrefUrl.path)
+        else { return nil }
+        
+        return try? Realm(configuration: bookPrefConf)
+    }
+    
+    func getObject(for reader: ReaderType) -> Object? {
+        switch reader {
+        case .UNSUPPORTED:
+            return nil
+        case .YabrEPUB:
+            return realm?.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: bookPrefId + ".epub")
+        case .YabrPDF:
+            return realm?.object(ofType: PDFOptionsRealm.self, forPrimaryKey: Int(id))
+        case .ReadiumEPUB:
+            return nil
+        case .ReadiumPDF:
+            return nil
+        case .ReadiumCBZ:
+            return nil
+        }
     }
 }
 

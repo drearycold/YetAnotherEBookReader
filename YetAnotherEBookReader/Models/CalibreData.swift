@@ -775,6 +775,15 @@ struct BookDeviceReadingPosition : Hashable, Codable {
         return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
     }
     
+    var epochByLocaleRelative: String {
+        let dateFormatter = DateFormatter()
+        dateFormatter.doesRelativeDateFormatting = true
+        dateFormatter.dateStyle = .short
+        dateFormatter.timeStyle = .medium
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: Date(timeIntervalSince1970: epoch))
+    }
+    
     var epochLocaleLong: String {
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .long
