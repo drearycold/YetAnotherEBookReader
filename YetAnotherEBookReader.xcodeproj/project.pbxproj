@@ -2212,7 +2212,7 @@
 					"-ObjC",
 				);
 				OTHER_SWIFT_FLAGS = "";
-				"OTHER_SWIFT_FLAGS[arch=*]" = "-D DEBUG";
+				"OTHER_SWIFT_FLAGS[arch=*]" = "$(inherited) -D COCOAPODS -D DEBUG -D GAD_ENABLED";
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.drearycold.DSReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -2291,6 +2291,7 @@
 					"\"WebKit\"",
 					"-ObjC",
 				);
+				OTHER_SWIFT_FLAGS = "$(inherited) -D GAD_ENABLED";
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.drearycold.DSReader;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";

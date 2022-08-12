@@ -735,6 +735,8 @@ struct BookReadingPosition {
     }
     
     private func get() -> Results<BookDeviceReadingPositionRealm>? {
+        let realm = Thread.isMainThread ? self.realm : openRealm()
+        
         return realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookPrefId))
     }
