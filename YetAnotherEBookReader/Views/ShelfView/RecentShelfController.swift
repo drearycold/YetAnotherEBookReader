@@ -98,11 +98,14 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         //updateBookModel()
         #if canImport(GoogleMobileAds)
+        #if GAD_ENABLED
         guard gadRequestInitialized == false else { return }
         gadRequestInitialized = true
         let gadRequest = GADRequest()
-        gadRequest.scene = self.view.window?.windowScene
+//        gadRequest.scene = self.view.window?.windowScene
+        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
         bannerView.load(gadRequest)
+        #endif
         #endif
         
         
@@ -149,6 +152,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         bannerView.adSize = GADAdSizeBanner
+        
 
         view.addSubview(bannerView)
         

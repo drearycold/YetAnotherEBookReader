@@ -117,7 +117,9 @@ struct BookDetailView: View {
         VStack(alignment: .center) {
             
             #if canImport(GoogleMobileAds)
+            #if GAD_ENABLED
             Banner()
+            #endif
             #endif
             
             if isCompat {
@@ -156,7 +158,9 @@ struct BookDetailView: View {
             }
             
             #if canImport(GoogleMobileAds)
+            #if GAD_ENABLED
             Banner()
+            #endif
             #endif
             
             WebViewUI(

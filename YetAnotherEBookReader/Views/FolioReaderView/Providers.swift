@@ -51,7 +51,9 @@ extension EpubFolioReaderContainer {
                   else { return FolioReaderNaiveReadPositionProvider() }
             let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
             
-            provider.realm?.objects(FolioReaderReadPositionRealm.self).compactMap { $0.toReadPosition() }.forEach { oldObject in
+            provider.realm?.objects(FolioReaderReadPositionRealm.self)
+                .filter(NSPredicate(format: "maxPage > %@", NSNumber(1)))
+                .compactMap { $0.toReadPosition() }.forEach { oldObject in
                 provider.folioReaderReadPosition(folioReader, bookId: bookId, set: oldObject, completion: nil)
             }
             

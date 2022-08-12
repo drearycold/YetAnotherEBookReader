@@ -64,6 +64,8 @@ struct ReadingPositionListView: View {
                             _positionViewModel.book.readPos.removePosition(position: $0)
                         }
                         
+                        _positionViewModel.modelData.updateBook(book: _positionViewModel.book)
+                        
                         _positionViewModel.positions = _positionViewModel.book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
                     })
                     

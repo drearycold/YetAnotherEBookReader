@@ -43,11 +43,13 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         resizeSubviews(to: view.frame.size, to: traitCollection)
         
         #if canImport(GoogleMobileAds)
+        #if GAD_ENABLED
         guard gadRequestInitialized == false else { return }
         gadRequestInitialized = true
         let gadRequest = GADRequest()
         gadRequest.scene = self.view.window?.windowScene
         bannerView.load(gadRequest)
+        #endif
         #endif
         
         NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfBooksRefreshed))
