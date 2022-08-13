@@ -611,7 +611,7 @@ struct BookReadingPosition {
     let library: CalibreLibrary
     let bookPrefId: String
     
-    var realm: Realm?
+//    var realm: Realm?
     
     var isEmpty: Bool { get { get()?.isEmpty ?? true } }
     
@@ -620,7 +620,7 @@ struct BookReadingPosition {
         self.library = library
         bookPrefId = "\(library.key) - \(id)"
         
-        realm = openRealm()
+//        realm = openRealm()
     }
     
     func openRealm() -> Realm? {
@@ -634,7 +634,7 @@ struct BookReadingPosition {
     }
     
     func getPosition(_ deviceName: String) -> BookDeviceReadingPosition? {
-        let realm = Thread.isMainThread ? self.realm : openRealm()
+        let realm = openRealm()
         
         if let position = realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@ AND id= %@ AND takePrecedence = true", bookPrefId, deviceName))
@@ -655,9 +655,7 @@ struct BookReadingPosition {
     }
     
     mutating func updatePosition(_ deviceName: String, _ newPosition: BookDeviceReadingPosition) {
-        if realm == nil {
-            realm = openRealm()
-        }
+        let realm = openRealm()
         
         try? realm?.write {
             if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
@@ -689,6 +687,8 @@ struct BookReadingPosition {
     }
     
     func removePosition(_ deviceName: String) {
+        let realm = openRealm()
+        
         if let objs = realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@ and id = %@", bookPrefId, deviceName)),
            objs.isEmpty == false {
@@ -699,6 +699,8 @@ struct BookReadingPosition {
     }
     
     func removePosition(position: BookDeviceReadingPosition) {
+        let realm = openRealm()
+        
         try? realm?.write {
             if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
                 .filter(NSPredicate(
@@ -735,7 +737,7 @@ struct BookReadingPosition {
     }
     
     private func get() -> Results<BookDeviceReadingPositionRealm>? {
-        let realm = Thread.isMainThread ? self.realm : openRealm()
+        let realm = openRealm()
         
         return realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookPrefId))
