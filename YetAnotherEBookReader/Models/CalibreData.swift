@@ -437,7 +437,6 @@ struct CalibreBook {
     }
     
     var inShelf = false
-    var inShelfName = ""
     
     init(id: Int32, library: CalibreLibrary) {
         self.id = id

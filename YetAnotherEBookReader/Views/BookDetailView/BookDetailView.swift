@@ -87,12 +87,6 @@ struct BookDetailView: View {
         .toolbar {
             toolbarContent()
         }
-//        .onChange(of: downloadStatus) { value in
-//            guard let book = modelData.readingBook else { return }
-//            if downloadStatus == .DOWNLOADED {
-//                modelData.addToShelf(book.inShelfId, shelfName: book.tags.first ?? "Unspecified")
-//            }
-//        }
         .alert(item: $alertItem) { item in
             if item.id == "Delete" {
                 return Alert(
@@ -361,7 +355,7 @@ struct BookDetailView: View {
                     _viewModel.listVM.book = book
                     _viewModel.listVM.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
                 }
-                presentingReadPositionList = true
+                readingPositionHistoryViewPresenting = true
             }) {
                 if let readDateGR = book.readDateGRByLocale {
                     Image(systemName: "arrow.down.to.line")

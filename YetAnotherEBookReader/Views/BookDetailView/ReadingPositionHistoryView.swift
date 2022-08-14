@@ -32,46 +32,66 @@ struct ReadingPositionHistoryView: View {
                 BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
             }
             
-            if let positions = _positionViewModel?.positions,
-               positions.isEmpty == false {
-                Section(
-                    header: Text("Devices Latest")
-                ) {
-                    ForEach(positions, id: \.hashValue) { position in
-                        NavigationLink(
-                            destination: ReadingPositionDetailView(
-                                viewModel: ReadingPositionDetailViewModel(
-                                    modelData: modelData,
-                                    listModel: _positionViewModel!,
-                                    position: position)
-                            )
+            if let viewModel = _positionViewModel {
+                if viewModel.positions.isEmpty == false {
+                    ForEach(viewModel.positionsDeviceKeys(), id: \.self) { deviceId in
+                        Section(
+                            header: HStack {
+                                Text("On \(deviceId)")
+                                Spacer()
+                            }
                         ) {
-                            VStack(alignment: .leading) {
-                                HStack {
-                                    Text(position.id.description)
-                                    Spacer()
-                                    Text(position.lastReadChapter)
-                                }
-                                Text("\(String(format: "%.2f%%", position.lastProgress)), with \((modelData.formatOfReader(readerName: position.readerName) ?? Format.UNKNOWN).rawValue) by \(position.readerName)")
-                                if position.id == modelData.deviceName {
-                                    Text("(Current Device)")
-                                        .font(.caption)
-                                        .foregroundColor(Color(UIColor.systemRed))
+                            ForEach(viewModel.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
+                                NavigationLink(
+                                    destination: ReadingPositionDetailView(
+                                        viewModel: ReadingPositionDetailViewModel(
+                                            modelData: modelData,
+                                            listModel: _positionViewModel!,
+                                            position: position)
+                                    )
+                                ) {
+                                    row(position: position)
                                 }
                             }
                         }
                     }
+                } else {
+                    Button(action: {
+                        
+                    } ) {
+                        Text("Start Reading Now")
+                        
+                    }
+                    Text(getSavedUrl(book: viewModel.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
+                    Text(getBookBaseUrl(id: viewModel.book.id, library: viewModel.book.library, localFilename: viewModel.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
                 }
+            } else {
+                Text("Missing View Model")
             }
+            
+//            Section(header: Text("Local Activities")) {
+//                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
+//                    NavigationLink(
+//                        destination: ReadingPositionHistoryDetailView(
+//                            positionHistory: obj
+//                        ).environmentObject(modelData)
+//                    ) {
+//                        row(obj: obj)
+//                    }
+//                }
+//            }
             
             Section(header: Text("Local Activities")) {
                 ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
                     NavigationLink(
-                        destination: ReadingPositionHistoryDetailView(
-                            positionHistory: obj
-                        ).environmentObject(modelData)
+                        destination: ReadingPositionDetailView(
+                            viewModel: ReadingPositionDetailViewModel(
+                                modelData: modelData,
+                                listModel: _positionViewModel!,
+                                position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
+                        )
                     ) {
-                        row(obj: obj)
+                        row(position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
                     }
                 }
             }
@@ -81,33 +101,55 @@ struct ReadingPositionHistoryView: View {
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
             if let libraryId = libraryId, let bookId = bookId,
-                let library = modelData.calibreLibraries[libraryId],
-                let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
-                let book = modelData.convert(bookRealm: bookRealm) {
-                _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
+                let library = modelData.calibreLibraries[libraryId] {
+                
+                if let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
+                    let book = modelData.convert(bookRealm: bookRealm) {
+                    _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
+                } else if let book = modelData.readingBook {
+                    _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
+                }
             }
+            
+            
         }
         .navigationTitle("Reading History")
         .navigationBarTitleDisplayMode(.inline)
     }
     
     @ViewBuilder
+    private func row(position: BookDeviceReadingPosition) -> some View {
+        VStack(alignment: .leading) {
+            HStack {
+                if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
+                    Text(position.lastReadBook)
+                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastProgress / 100)) {
+                        Text("(\(percent))")
+                    }
+                } else {
+                    Text(position.lastReadChapter)
+                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
+                        Text("(\(percent))")
+                    }
+                }
+                Spacer()
+                Text(position.epochByLocaleRelative)
+            }
+            if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
+                HStack {
+                    Spacer()
+                    Text(position.lastReadChapter)
+                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
+                        Text("(\(percent))")
+                    }
+                }.font(.caption)
+            }
+        }
+    }
+    
+    @ViewBuilder
     private func row(obj: BookDeviceReadingPositionHistoryRealm) -> some View {
         VStack {
-//            HStack {
-//                if let libraryId = obj.libraryId,
-//                   let library = modelData.calibreLibraries[libraryId] {
-//                    if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
-//                        Text(book.title)
-//                    } else {
-//                        Text(library.name)
-//                    }
-//                } else {
-//                    Text("No Entity")
-//                }
-//                Spacer()
-//
-//            }
             HStack {
                 Text("\(obj.endPosition?.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Chapter Unknown")")
                 Spacer()
@@ -124,8 +166,12 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
 
     static var previews: some View {
-        ReadingPositionHistoryView(libraryId: "Default", bookId: 1)
+        if let book = modelData.readingBook {
+            NavigationView {
+                ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+            }
+            .navigationViewStyle(.stack)
             .environmentObject(modelData)
-        
+        }
     }
 }

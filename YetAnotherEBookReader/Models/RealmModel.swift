@@ -272,7 +272,6 @@ extension CalibreBook: Persistable {
         self.formats = formatsVer2
         self.readPos = managedObject.readPos(library: library)
         self.inShelf = managedObject.inShelf
-        self.inShelfName = managedObject.inShelfName
         
         if managedObject.identifiersData != nil {
             self.identifiers = managedObject.identifiers()
@@ -336,7 +335,6 @@ extension CalibreBook: Persistable {
         bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
 
         bookRealm.inShelf = self.inShelf
-        bookRealm.inShelfName = self.inShelfName
         
         let encoder = JSONEncoder()
         bookRealm.formatsData = try? encoder.encode(self.formats) as NSData
@@ -609,22 +607,25 @@ class CalibreActivityLogEntry: Object {
 struct BookReadingPosition {
     let id: Int32
     let library: CalibreLibrary
+    let localFilename: String?
+    
     let bookPrefId: String
     
 //    var realm: Realm?
     
     var isEmpty: Bool { get { get()?.isEmpty ?? true } }
     
-    init(id: Int32, library: CalibreLibrary) {
+    init(id: Int32, library: CalibreLibrary, localFilename: String? = nil) {
         self.id = id
         self.library = library
+        self.localFilename = localFilename
         bookPrefId = "\(library.key) - \(id)"
         
 //        realm = openRealm()
     }
     
     func openRealm() -> Realm? {
-        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library),
+        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
               let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
               let basePrefUrl = bookPrefConf.fileURL,
               FileManager.default.fileExists(atPath: basePrefUrl.path)

@@ -409,8 +409,35 @@ final class ModelData: ObservableObject {
             let library = calibreLibraries.first!.value
             
             var book = CalibreBook(id: 1, library: library)
-            book.readPos.updatePosition("Mock Device", BookDeviceReadingPosition(id: "Mock Device", readerName: ReaderType.YabrEPUB.rawValue, maxPage: 99, lastReadPage: 1, lastReadChapter: "Mock Last Chapter", lastChapterProgress: 5, lastProgress: 1, furthestReadPage: 98, furthestReadChapter: "Mock Furthest Chapter", lastPosition: [1,1,1]))
+            
+            book.title = "Mock Book Title"
+            
+            book.formats[Format.EPUB.rawValue] = .init(filename: book.title + ".epub", serverSize: 1024000, serverMTime: Date(timeIntervalSince1970: 1645495322), cached: true, cacheSize: 1024000, cacheMTime: Date(timeIntervalSince1970: 1645495322), manifest: nil)
+            if let bookSavedUrl = getSavedUrl(book: book, format: Format.EPUB),
+               FileManager.default.fileExists(atPath: bookSavedUrl.path) == false {
+                FileManager.default.createFile(atPath: bookSavedUrl.path, contents: String("EPUB").data(using: .utf8), attributes: nil)
+            }
+            book.readPos = BookReadingPosition(id: book.id, library: book.library, localFilename: book.title + ".epub")
+            
+            var position = BookDeviceReadingPosition(
+                id: self.deviceName,
+                readerName: ReaderType.YabrEPUB.rawValue,
+                maxPage: 99,
+                lastReadPage: 1,
+                lastReadChapter: "Mock Last Chapter",
+                lastChapterProgress: 5,
+                lastProgress: 1,
+                furthestReadPage: 98,
+                furthestReadChapter: "Mock Furthest Chapter",
+                lastPosition: [1,1,1]
+            )
+            position.epoch = 1645495322
+            
+            book.readPos.updatePosition(position.id, position)
+            
             self.readingBook = book
+            
+            
 //                title: "Mock Title",
 //                authors: ["Mock Author", "Mock Auther 2"],
 //                comments: "<p>Mock Comment",

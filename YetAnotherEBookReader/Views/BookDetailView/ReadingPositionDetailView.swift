@@ -23,82 +23,68 @@ struct ReadingPositionDetailView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .top) {
-                Spacer()
-                
-                Image(systemName: "laptopcomputer.and.iphone")
-                    .frame(minWidth: 32, minHeight: 24)
-                VStack(alignment: .leading) {
-                    Text("\(_VM.position.id) with \(_VM.position.readerName)")
-                    
-                    Text("Chapter: \(_VM.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))")
-                    
+        List {
+            Section(header: Text("Last Position") ) {
+                if _VM.position.structuralStyle == 1, _VM.position.lastReadBook.isEmpty == false {
                     HStack {
+                        Text("Book")
                         Spacer()
-                        Text("\(String(format: "%.2f%% Left", 100 - _VM.position.lastChapterProgress))")
+                        Text(_VM.position.lastReadBook)
                     }
-                    
-                    Text("Book: Page \(_VM.position.lastReadPage) / \(_VM.position.maxPage)")
-                    
-                    HStack {
-                        Spacer()
-                        Text("\(String(format: "%.2f%% Left", 100 - _VM.position.lastProgress))")
-                    }
-                    #if DEBUG
-                    HStack {
-                        Spacer()
-                        Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
-                    }
-                    HStack {
-                        Spacer()
-                        Text("CFI: \(_VM.position.cfi.replacingOccurrences(of: ";", with: ";\n"))").lineLimit(10)
-                    }
-                    HStack {
-                        Spacer()
-                        Text("EPOCH: \(_VM.position.epoch)")
-                    }
-                    
-                    #endif
                 }
-                
-                Spacer()
-            }.coordinateSpace(name: CoordinateSpace.named("INFO"))
+                HStack {
+                    Text("Section")
+                    Spacer()
+                    Text("\(_VM.position.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines))")
+                }
+                HStack {
+                    Text("Progress")
+                    Spacer()
+                    Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastChapterProgress / 100)) ?? "")
+                    Text("/")
+                    Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastProgress / 100)) ?? "")
+                }
+                HStack {
+                    Text("Time")
+                    Spacer()
+                    Text(_VM.dateFormatter.string(from: Date(timeIntervalSince1970: _VM.position.epoch)))
+                }
+            }
+
+#if DEBUG
+            Section(header: Text("Debug")) {
+                HStack {
+                    Text("Entry")
+                    Spacer()
+                    Text("\(_VM.position.lastReadPage) / \(_VM.position.maxPage)")
+                }
+                HStack {
+                    Text("Position")
+                    Spacer()
+                    Text("(\(_VM.position.lastPosition[0]):\(_VM.position.lastPosition[1]):\(_VM.position.lastPosition[2]))")
+                }
+                HStack {
+                    Text("CFI")
+                    Spacer()
+                    Text(_VM.position.cfi.replacingOccurrences(of: ";", with: ";\n")).lineLimit(10)
+                }
+                HStack {
+                    Text("Epoch")
+                    Spacer()
+                    Text(_VM.position.epoch.description)
+                }
+                if _VM.position.structuralStyle == 1, _VM.position.lastReadBook.isEmpty == false {
+                    HStack {
+                        Text("Bundle Progress")
+                        Spacer()
+                        Text(_VM.percentFormatter.string(from: NSNumber(value: _VM.position.lastBundleProgress / 100)) ?? "")
+                    }
+                }
+            }
+#endif
             
-            VStack {
-                Toggle("Override Format/Reader", isOn: $overrideToggle)
-                
+            Section(header: Text("Override Reader")) {
                 HStack {
-                    Text("Format")
-                        .font(.subheadline)
-                        .frame(minWidth: 40, alignment: .trailing)
-                    Picker("Format", selection: $_VM.selectedFormat) {
-                        ForEach(Format.allCases) { format in
-                            if _VM.listModel.book.formats[format.rawValue] != nil {
-                                Text(format.rawValue).tag(format)
-                            }
-                        }
-                    }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .onChange(of: _VM.selectedFormat) { newFormat in
-                        if newFormat == Format.UNKNOWN {
-                            return
-                        }
-                        print("selectedFormat \(newFormat.rawValue)")
-                        
-                        guard let readers = _VM.modelData.formatReaderMap[newFormat] else { return }
-                        _VM.selectedFormatReader = readers.reduce(into: readers.first!) {
-                            if $1.rawValue == _VM.position.readerName {
-                                $0 = $1
-                            }
-                        }
-                    }
-                }.disabled(!overrideToggle)
-                
-                HStack {
-                    Text("Reader")
-                        .font(.subheadline)
-                        .frame(minWidth: 40, alignment: .trailing)
                     Picker("Reader", selection: $_VM.selectedFormatReader) {
                         ForEach(ReaderType.allCases) { type in
                             if let types = _VM.modelData.formatReaderMap[_VM.selectedFormat],
@@ -108,56 +94,27 @@ struct ReadingPositionDetailView: View {
                         }
                     }
                     .pickerStyle(SegmentedPickerStyle())
-                }.disabled(!overrideToggle)
-                
-//                HStack {
-//                    Text("Start Page")
-//                    TextField("Start Page", text: $_VM.startPage)
-//                }
-                
-            }.padding(EdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8))
-            
-            HStack {
-                Spacer()
-                
-                Button(action: {
-                    guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue],
-                          formatInfo.cached else {
-                        alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(_VM.selectedFormat.rawValue) first")
-                        return
-                    }
-                    readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
-                }) {
-                    Text("Start Reading")
                 }
-                
-                Spacer()
             }
-            .padding(EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0))
-            .disabled(_VM.selectedFormat == Format.UNKNOWN || _VM.selectedFormatReader == ReaderType.UNSUPPORTED)
+            
+            Button(action: {
+                guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue],
+                      formatInfo.cached else {
+                    alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(_VM.selectedFormat.rawValue) first")
+                    return
+                }
+                readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
+            }) {
+                HStack {
+                    Spacer()
+                    Text("Continue Reading")
+                    Spacer()
+                }
+            }.disabled(_VM.listModel.book.formats[_VM.selectedFormat.rawValue]?.cached != true)
         }
-        .fixedSize(horizontal: true, vertical: false)
-        .alert(item: $alertItem) { item in
-            if item.id == "ForwardProgress" {
-                return Alert(title: Text("Confirm Forward Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    updatePosition()
-                }), secondaryButton: .cancel())
-            }
-            if item.id == "BackwardProgress" {
-                return Alert(title: Text("Confirm Backwards Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    updatePosition()
-                }), secondaryButton: .cancel())
-            }
-            if item.id == "ReadingPosition" {
-                return Alert(title: Text("Confirm Reading Progress"), message: Text(item.msg ?? ""), primaryButton: .destructive(Text("Confirm"), action: {
-                    guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue] else {
-                        return
-                    }
-                    readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
-                }), secondaryButton: .cancel())
-            }
-            return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
-        }
+        .navigationTitle(
+            Text("\(_VM.position.id) with \(_VM.position.readerName)")
+        )
         .fullScreenCover(
             isPresented: $presentingReadSheet,
             onDismiss: {
@@ -178,6 +135,7 @@ struct ReadingPositionDetailView: View {
                 Text("Nil Book")
             }
         }
+        
     }
     
     func readAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {
