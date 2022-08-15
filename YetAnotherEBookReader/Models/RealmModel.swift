@@ -634,21 +634,15 @@ struct BookReadingPosition {
         return try? Realm(configuration: bookPrefConf)
     }
     
+    /**
+     newest takePrecedence, newest first otherwise
+     */
     func getPosition(_ deviceName: String) -> BookDeviceReadingPosition? {
-        let realm = openRealm()
+        let objects = get()?.filter(NSPredicate(format: "id = %@", deviceName))
         
-        if let position = realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND id= %@ AND takePrecedence = true", bookPrefId, deviceName))
-            .sorted(byKeyPath: "epoch", ascending: false)
+        return objects?.filter(NSPredicate(format: "takePrecedence = true"))
             .map({ BookDeviceReadingPosition(managedObject: $0) })
-            .first {
-            return position
-        }
-        return realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookPrefId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-            .map({ BookDeviceReadingPosition(managedObject: $0) })
-            .first
+            .first ?? objects?.map({ BookDeviceReadingPosition(managedObject: $0) }).first
     }
     
     func addInitialPosition(_ deviceName: String, _ readerName: String) {
@@ -737,11 +731,15 @@ struct BookReadingPosition {
         }
     }
     
+    /**
+     sorted by epoch, newest first
+     */
     private func get() -> Results<BookDeviceReadingPositionRealm>? {
         let realm = openRealm()
         
         return realm?.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookPrefId))
+            .sorted(byKeyPath: "epoch", ascending: false)
     }
 }
 
