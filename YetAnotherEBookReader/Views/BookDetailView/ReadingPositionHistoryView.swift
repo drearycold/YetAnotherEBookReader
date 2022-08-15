@@ -21,81 +21,91 @@ struct ReadingPositionHistoryView: View {
     @State private var _positionViewModel: ReadingPositionListViewModel? = nil
     
     var body: some View {
-        List {
-            Section(
-                header: Text("Stats"),
-                footer: HStack {
-                    Spacer()
-                    Text("Of Last 7 Days: Max \(maxMinutes), Mean \(avgMinutes) (Min./Day)")
-                }
-            ) {
-                BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
-            }
+        VStack {
+            BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
+                .padding()
             
-            if let viewModel = _positionViewModel {
-                if viewModel.positions.isEmpty == false {
-                    ForEach(viewModel.positionsDeviceKeys(), id: \.self) { deviceId in
-                        Section(
-                            header: HStack {
-                                Text("On \(deviceId)")
-                                Spacer()
-                            }
-                        ) {
-                            ForEach(viewModel.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
-                                NavigationLink(
-                                    destination: ReadingPositionDetailView(
-                                        viewModel: ReadingPositionDetailViewModel(
-                                            modelData: modelData,
-                                            listModel: _positionViewModel!,
-                                            position: position)
-                                    )
-                                ) {
-                                    row(position: position)
+            List {
+//                Section(
+//                    header: Text("Stats"),
+//                    footer: HStack {
+//                        Spacer()
+//                        Text("Of Last 7 Days: Max \(maxMinutes), Mean \(avgMinutes) (Min./Day)")
+//                    }
+//                ) {
+//                    BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
+//                }
+                
+                if let viewModel = _positionViewModel {
+                    if viewModel.positions.isEmpty == false {
+                        ForEach(viewModel.positionsDeviceKeys(), id: \.self) { deviceId in
+                            Section(
+                                header: HStack {
+                                    Text("On \(deviceId)")
+                                    Spacer()
+                                    if deviceId == modelData.deviceName {
+                                        Text("This Device").foregroundColor(.red)
+                                    }
+                                }
+                            ) {
+                                ForEach(viewModel.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
+                                    NavigationLink(
+                                        destination: ReadingPositionDetailView(
+                                            viewModel: ReadingPositionDetailViewModel(
+                                                modelData: modelData,
+                                                listModel: _positionViewModel!,
+                                                position: position)
+                                        )
+                                    ) {
+                                        row(position: position)
+                                    }
                                 }
                             }
                         }
+                    } else {
+                        
+                        Button(action: {
+                            
+                        } ) {
+                            Text("Start Reading Now")
+                            
+                        }
+                        Text(getSavedUrl(book: viewModel.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
+                        Text(getBookBaseUrl(id: viewModel.book.id, library: viewModel.book.library, localFilename: viewModel.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
                     }
                 } else {
-                    Button(action: {
-                        
-                    } ) {
-                        Text("Start Reading Now")
-                        
-                    }
-                    Text(getSavedUrl(book: viewModel.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
-                    Text(getBookBaseUrl(id: viewModel.book.id, library: viewModel.book.library, localFilename: viewModel.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
+                    Text("Missing View Model")
                 }
-            } else {
-                Text("Missing View Model")
-            }
-            
-//            Section(header: Text("Local Activities")) {
-//                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-//                    NavigationLink(
-//                        destination: ReadingPositionHistoryDetailView(
-//                            positionHistory: obj
-//                        ).environmentObject(modelData)
-//                    ) {
-//                        row(obj: obj)
-//                    }
-//                }
-//            }
-            
-            Section(header: Text("Local Activities")) {
-                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-                    NavigationLink(
-                        destination: ReadingPositionDetailView(
-                            viewModel: ReadingPositionDetailViewModel(
-                                modelData: modelData,
-                                listModel: _positionViewModel!,
-                                position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
-                        )
-                    ) {
-                        row(position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
+                
+    //            Section(header: Text("Local Activities")) {
+    //                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
+    //                    NavigationLink(
+    //                        destination: ReadingPositionHistoryDetailView(
+    //                            positionHistory: obj
+    //                        ).environmentObject(modelData)
+    //                    ) {
+    //                        row(obj: obj)
+    //                    }
+    //                }
+    //            }
+                
+                Section(header: Text("Local Activities")) {
+                    ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
+                        NavigationLink(
+                            destination: ReadingPositionDetailView(
+                                viewModel: ReadingPositionDetailViewModel(
+                                    modelData: modelData,
+                                    listModel: _positionViewModel!,
+                                    position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
+                            )
+                        ) {
+                            row(position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
+                        }
                     }
                 }
             }
         }
+        
         .onAppear {
             readingStatistics = modelData.getReadingStatistics(bookId: bookId, libraryId: libraryId)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
@@ -133,7 +143,7 @@ struct ReadingPositionHistoryView: View {
                     }
                 }
                 Spacer()
-                Text(position.epochByLocaleRelative)
+                Text(position.epochByLocaleRelative).font(.caption)
             }
             if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
                 HStack {
