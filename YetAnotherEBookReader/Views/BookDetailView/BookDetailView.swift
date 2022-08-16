@@ -179,7 +179,8 @@ struct BookDetailView: View {
             Button(action: {
                 guard modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty else { return }
                 
-                if book.inShelf, modelData.readerInfo != nil {
+                if book.inShelf, let readerInfo = modelData.prepareBookReading(book: book) {
+                    modelData.readerInfo = readerInfo
                     presentingReadingSheet = true
                 } else {
                     //TODO prompt for formats
@@ -380,7 +381,7 @@ struct BookDetailView: View {
                 } else {
                     Text("No Reading History")
                 }
-            }
+            }.disabled(book.readPos.isEmpty)
         }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
             readingPositionHistoryViewPresenting = false
         }, content: {

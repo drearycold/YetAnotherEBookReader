@@ -63,7 +63,7 @@ struct ReadingPositionHistoryView: View {
                             }
                         }
                     } else {
-                        
+                        #if debug
                         Button(action: {
                             
                         } ) {
@@ -72,6 +72,7 @@ struct ReadingPositionHistoryView: View {
                         }
                         Text(getSavedUrl(book: viewModel.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
                         Text(getBookBaseUrl(id: viewModel.book.id, library: viewModel.book.library, localFilename: viewModel.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
+                        #endif
                     }
                 } else {
                     Text("Missing View Model")

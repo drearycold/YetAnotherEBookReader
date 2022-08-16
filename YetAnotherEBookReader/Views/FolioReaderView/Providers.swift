@@ -62,6 +62,16 @@ extension EpubFolioReaderContainer {
             return provider
         }
     }
+
+    func folioReaderBookmarkProvider(_ folioReader: FolioReader) -> FolioReaderBookmarkProvider {
+        if let provider = folioReaderBookmarkProvider {
+            return provider
+        } else {
+            let provider = FolioReaderNaiveBookmarkProvider()
+            self.folioReaderBookmarkProvider = provider
+            return provider
+        }
+    }
 }
 
 class FolioReaderPreferenceRealm: Object {
