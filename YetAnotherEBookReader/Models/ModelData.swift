@@ -1445,10 +1445,12 @@ final class ModelData: ObservableObject {
             }
 
             let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
-            
             let highlights = highlightProvider.folioReaderHighlight(bookId: bookId)
-//            calibreServerService.updateAnnotations(book: readingBook, format: readerInfo.format, highlights: highlights)
-            if let task = self.calibreServerService.buildUpdateAnnotationsTask(library: readingBook.library, bookId: readingBook.id, format: readerInfo.format, highlights: highlights) {
+            
+            let bookmarkProvider = FolioReaderRealmBookmarkProvider(realmConfig: bookPrefConfig)
+            let bookmarks = bookmarkProvider.folioReaderBookmark(bookId: bookId)
+            
+            if let task = self.calibreServerService.buildUpdateAnnotationsTask(library: readingBook.library, bookId: readingBook.id, format: readerInfo.format, highlights: highlights, bookmarks: bookmarks) {
                 self.updateAnnotationsSubject.send(task)
             }
         }
@@ -1903,10 +1905,11 @@ final class ModelData: ObservableObject {
 //                    }
                     
                     do {
-                        guard let annotationsData = result.annotationsData else { return }
-                        let annotationsEntries = try decoder.decode([String: CalibreBookAnnotationsResult].self, from: annotationsData)
+                        guard let annotationsData = result.annotationsData,
+                              let annotObjects = try JSONSerialization.jsonObject(with: annotationsData) as? [String: Any]
+                        else { return }
                         
-                        annotationsEntries.forEach { entry in
+                        annotObjects.forEach { entry in
 //                            print("\(#function) annotationEntry=\(entry)")
                             
                             let keySplit = entry.key.split(separator: ":")
@@ -1914,15 +1917,20 @@ final class ModelData: ObservableObject {
                                 return
                             }
                             
+                            guard let entryDict = entry.value as? [String: Any] else { return }
+                            
                             guard let bookPrefConfig = getBookPreferenceConfig(book: CalibreBook(id: bookId, library: result.library), format: format)
                             else { return }
                             
                             var bookReadPos = BookReadingPosition(id: bookId, library: result.library)
                             
-                            if let bookPrefRealm = try? Realm(configuration: bookPrefConfig) {
+                            if let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
+                               let lastReadPositionObjects = entryDict["last_read_positions"] as? [Any] {
                                 var devicesUpdated = [String:BookDeviceReadingPosition]()
 
-                                entry.value.last_read_positions.forEach { remoteEntry in
+                                lastReadPositionObjects.forEach { remoteAny in
+                                    guard let remoteData = try? JSONSerialization.data(withJSONObject: remoteAny),
+                                          let remoteEntry = try? decoder.decode(CalibreBookLastReadPositionEntry.self, from: remoteData) else { return }
                                     let remoteObject = remoteEntry.managedObject()
                                     guard let remotePosition = BookDeviceReadingPosition(managedObject: remoteObject) else {
                                         //not recognisable
@@ -1969,19 +1977,34 @@ final class ModelData: ObservableObject {
                                 }
                             }
                             
-                            if let highlightResult = entry.value.annotations_map["highlight"],
-                               let folioBookId = bookPrefConfig.fileURL?.deletingPathExtension().lastPathComponent {
+                            guard let annotationsMap = entryDict["annotations_map"] as? [String: Any],
+                                  let folioBookId = bookPrefConfig.fileURL?.deletingPathExtension().lastPathComponent else { return }
+                            
+                            var highlightPending = [CalibreBookAnnotationHighlightEntry]()
+                            var bookmarkPending = [CalibreBookAnnotationBookmarkEntry]()
+                            if let highlightAny = annotationsMap["highlight"] as? [[String:Any]],
+                               let highlightData = try? JSONSerialization.data(withJSONObject: highlightAny),
+                               let highlightResult = try? decoder.decode([CalibreBookAnnotationHighlightEntry].self, from: highlightData) {
                                 let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: bookPrefConfig)
-                                let pending = highlightProvider.folioReaderHighlight(
-                                    bookId: folioBookId,
-                                    added: highlightResult
-                                )
-                                if pending > 0 {
-                                    let highlights = highlightProvider.folioReaderHighlight(bookId: folioBookId)
-                                    if let task = self.calibreServerService.buildUpdateAnnotationsTask(library: result.library, bookId: bookId, format: format, highlights: highlights) {
-                                        self.updateAnnotationsSubject.send(task)
-                                    }
+                                if highlightProvider.folioReaderHighlight(bookId: folioBookId, added: highlightResult) > 0 {
+                                    highlightPending.append(contentsOf: highlightProvider.folioReaderHighlight(bookId: folioBookId))
                                 }
+                            }
+                            
+                            if let bookmarkAny = annotationsMap["bookmark"] as? [[String: Any]],
+                               let bookmarkData = try? JSONSerialization.data(withJSONObject: bookmarkAny),
+                               let bookmarkResult = try? decoder.decode([CalibreBookAnnotationBookmarkEntry].self, from: bookmarkData) {
+                                let bookmarkProvider = FolioReaderRealmBookmarkProvider(realmConfig: bookPrefConfig)
+                                if bookmarkProvider.folioReaderBookmark(bookId: folioBookId, added: bookmarkResult) > 0 {
+                                    bookmarkPending.append(contentsOf: bookmarkProvider.folioReaderBookmark(bookId: folioBookId))
+                                }
+                            }
+                             
+                            if highlightPending.isEmpty == false || bookmarkPending.isEmpty == false,
+                               let task = self.calibreServerService.buildUpdateAnnotationsTask(
+                                library: result.library, bookId: bookId, format: format, highlights: highlightPending, bookmarks: bookmarkPending
+                               ) {
+                                self.updateAnnotationsSubject.send(task)
                             }
                         }
                     } catch {

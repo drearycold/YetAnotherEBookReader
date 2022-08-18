@@ -1124,3 +1124,47 @@ extension CalibreLibraryDSReaderHelper: Persistable {
         return obj
     }
 }
+
+class BookBookmarkRealm: Object {
+    @objc dynamic var bookId: String = .init()
+    @objc dynamic var page: Int = .zero
+    
+    @objc dynamic var pos_type: String = .init()
+    @objc dynamic var pos: String = .init()
+    
+    @objc dynamic var title: String = .init()
+    @objc dynamic var date: Date = .init()
+    
+    dynamic var removed: Bool?
+}
+
+extension BookBookmark: Persistable {
+    public init(managedObject: BookBookmarkRealm) {
+        self.bookId = managedObject.bookId
+        self.page = managedObject.page
+        
+        self.pos_type = managedObject.pos_type
+        self.pos = managedObject.pos
+        
+        self.title = managedObject.title
+        self.date = managedObject.date
+        
+        self.removed = managedObject.removed
+    }
+    
+    public func managedObject() -> BookBookmarkRealm {
+        let obj = BookBookmarkRealm()
+        obj.bookId = self.bookId
+        obj.page = self.page
+        
+        obj.pos_type = self.pos_type
+        obj.pos = self.pos
+        
+        obj.title = self.title
+        obj.date = self.date
+        
+        obj.removed = self.removed
+        
+        return obj
+    }
+}

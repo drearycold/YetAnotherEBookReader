@@ -1146,7 +1146,7 @@ struct CalibreServerService {
         return 0
     }
     
-    func buildUpdateAnnotationsTask(library: CalibreLibrary, bookId: Int32, format: Format, highlights: [CalibreBookAnnotationEntry]) -> CalibreBookUpdateAnnotationsTask? {
+    func buildUpdateAnnotationsTask(library: CalibreLibrary, bookId: Int32, format: Format, highlights: [CalibreBookAnnotationHighlightEntry], bookmarks: [CalibreBookAnnotationBookmarkEntry]) -> CalibreBookUpdateAnnotationsTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
@@ -1157,8 +1157,19 @@ struct CalibreServerService {
             return nil
         }
         
-        let entry = ["\(bookId):\(format.rawValue)":highlights]
-        guard let postData = try? JSONEncoder().encode(entry) else {
+        let encoder = JSONEncoder()
+        var annotations = [Any]()
+        annotations.append(contentsOf: highlights.compactMap {
+            guard let data = try? encoder.encode($0) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data)
+        })
+        annotations.append(contentsOf: bookmarks.compactMap {
+            guard let data = try? encoder.encode($0) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data)
+        })
+        
+        let entry = ["\(bookId):\(format.rawValue)":annotations]
+        guard let postData = try? JSONSerialization.data(withJSONObject: entry) else {
             return nil
         }
         
@@ -1189,7 +1200,7 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
-    func updateAnnotations(book: CalibreBook, format: Format, highlights: [CalibreBookAnnotationEntry]) -> Int {
+    func updateAnnotations(book: CalibreBook, format: Format, highlights: [CalibreBookAnnotationHighlightEntry]) -> Int {
         guard highlights.isEmpty == false,
               var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
             return -1

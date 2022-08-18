@@ -792,6 +792,18 @@ struct BookDeviceReadingPosition : Hashable, Codable {
     }
 }
 
+struct BookBookmark {
+    let bookId: String
+    let page: Int
+    let pos_type: StringLiteralType
+    let pos: String
+    
+    var title: String
+    var date: Date
+    
+    var removed: Bool?
+}
+
 struct CalibreBookLastReadPositionEntry: Codable {
     var device: String = ""
     var cfi: String = ""
@@ -882,7 +894,7 @@ struct CalibreBookEntry: Codable {
     var category_urls: [String: [String: String]] = [:]
 }
 
-struct CalibreBookAnnotationEntry: Codable {
+struct CalibreBookAnnotationHighlightEntry: Codable {
     var type: String
     var timestamp: String
     var uuid: String
@@ -920,9 +932,32 @@ struct CalibreBookAnnotationEntry: Codable {
     }
 }
 
+struct CalibreBookAnnotationBookmarkEntry: Codable {
+    var type: String
+    var timestamp: String
+
+    var pos_type: String
+    var pos: String
+    
+    var title: String
+    
+    var removed: Bool?
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case timestamp
+
+        case pos_type
+        case pos
+        
+        case title
+        case removed
+    }
+}
+
 struct CalibreBookAnnotationsResult: Codable {
     var last_read_positions: [CalibreBookLastReadPositionEntry]
-    var annotations_map: [String: [CalibreBookAnnotationEntry]]
+    var annotations_map: [String: [CalibreBookAnnotationHighlightEntry]]
 }
 
 struct CalibreBookSetLastReadPositionTask {
@@ -939,7 +974,7 @@ struct CalibreBookUpdateAnnotationsTask {
     let library: CalibreLibrary
     let bookId: Int32
     let format: Format
-    let entry: [String : [CalibreBookAnnotationEntry]]
+    let entry: [String : [Any]]
     let startDatetime = Date()
     var urlRequest: URLRequest
     var urlResponse: URLResponse?
