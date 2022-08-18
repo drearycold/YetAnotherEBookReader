@@ -957,7 +957,12 @@ struct CalibreBookAnnotationBookmarkEntry: Codable {
 
 struct CalibreBookAnnotationsResult: Codable {
     var last_read_positions: [CalibreBookLastReadPositionEntry]
-    var annotations_map: [String: [CalibreBookAnnotationHighlightEntry]]
+    var annotations_map: CalibreBookAnnotationsMap
+}
+
+struct CalibreBookAnnotationsMap: Codable {
+    var bookmark: [CalibreBookAnnotationBookmarkEntry]?
+    var highlight: [CalibreBookAnnotationHighlightEntry]?
 }
 
 struct CalibreBookSetLastReadPositionTask {
