@@ -801,7 +801,7 @@ struct BookBookmark {
     var title: String
     var date: Date
     
-    var removed: Bool?
+    var removed: Bool
 }
 
 struct CalibreBookLastReadPositionEntry: Codable {

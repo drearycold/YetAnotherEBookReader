@@ -1135,7 +1135,7 @@ class BookBookmarkRealm: Object {
     @objc dynamic var title: String = .init()
     @objc dynamic var date: Date = .init()
     
-    dynamic var removed: Bool?
+    @objc dynamic var removed: Bool = false
 }
 
 extension BookBookmark: Persistable {

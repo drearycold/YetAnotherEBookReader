@@ -875,6 +875,8 @@ fileprivate extension BookBookmarkRealm {
         
         self.title = bookmark.title
         self.date = bookmark.date
+        
+        self.removed = false
     }
     
     func toFolioReaderBookmark() -> FolioReaderBookmark {
@@ -895,31 +897,43 @@ fileprivate extension BookBookmarkRealm {
 public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
     let realm: Realm?
 
+    let dateFormatter = ISO8601DateFormatter()
+
     init(realmConfig: Realm.Configuration) {
         self.realm = try? Realm(configuration: realmConfig)
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, added bookmark: FolioReaderBookmark, completion: Completion?) {
-        var error: NSError? = nil
+        var error: FolioReaderBookmarkError? = nil
         defer {
-            completion?(error)
+            completion?(error as NSError?)
         }
         
         guard let realm = self.realm else {
-            error = FolioReaderBookmarkError.runtimeError("Realm Provider Error") as NSError
+            error = FolioReaderBookmarkError.runtimeError("Realm Provider Error")
             return
         }
+        
+        guard let pos = bookmark.pos else {
+            error = FolioReaderBookmarkError.emptyError("")
+            return
+        }
+        
+        if let existing = folioReaderBookmark(folioReader, getBy: pos) {
+            error = FolioReaderBookmarkError.duplicateError(existing.title)
+            return
+        }
+        
         do {
-            let bookmarkRealm = BookBookmarkRealm()
-            
-            bookmarkRealm.fromFolioReaderBookmark(bookmark)
-            
             try realm.write {
+                let bookmarkRealm = BookBookmarkRealm()
+                bookmarkRealm.fromFolioReaderBookmark(bookmark)
                 realm.add(bookmarkRealm)
             }
         } catch let e as NSError {
             print("Error on persist highlight: \(e)")
-            error = FolioReaderBookmarkError.runtimeError("Realm Provider Error") as NSError
+            error = FolioReaderBookmarkError.runtimeError("Realm Provider Error")
         }
     }
     
@@ -930,7 +944,10 @@ public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
         }
         
         try? realm.write {
-            realm.delete(realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@", bookId, bookmarkPos)))
+            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos)).forEach {
+                $0.date = .init()
+                $0.removed = true
+            }
         }
     }
     
@@ -941,20 +958,21 @@ public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
         }
         
         try? realm.write {
-            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@", bookId, bookmarkPos)).forEach {
+            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos)).forEach {
+                $0.date = .init()
                 $0.title = title
             }
         }
     }
     
-    public func folioReaderBookmark(_ folioReader: FolioReader, getBy bookmarkTitle: String) -> FolioReaderBookmark? {
+    public func folioReaderBookmark(_ folioReader: FolioReader, getBy bookmarkPos: String) -> FolioReaderBookmark? {
         guard let realm = realm,
               let bookId = folioReader.readerConfig?.identifier else {
             return nil
         }
         
         return realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND title = %@", bookId, bookmarkTitle))
+            .filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos))
             .first?
             .toFolioReaderBookmark()
     }
@@ -964,12 +982,9 @@ public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
             return []
         }
         
-        var objects = realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-        
-        if let page = page {
-            objects = objects.filter(NSPredicate(format: "page = %@", page))
-        }
+        let objects = realm.objects(BookBookmarkRealm.self)
+            .filter(NSPredicate(format: "bookId = %@ AND removed != true", bookId))
+            .filter{ page == nil || $0.page == page?.intValue }
         
         return objects.map { $0.toFolioReaderBookmark() }
     }
@@ -1014,57 +1029,99 @@ extension FolioReaderRealmBookmarkProvider {
 //        print("highlight added \(highlights)")
         guard let realm = realm else { return 0 }
         
-        var pending = realm.objects(BookBookmarkRealm.self).count
-        try? realm.write {
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        let bookObjects = realm.objects(BookBookmarkRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookId))
+        
+        var pending = bookObjects
+            .reduce(into: Set<String>()) { partialResult, object in
+                partialResult.insert(object.pos)
+            }
+        
+        let bookmarksByPos = bookmarks.reduce(into: [String: [CalibreBookAnnotationBookmarkEntry]]()) { partialResult, entry in
+            guard entry.type == "bookmark",
+                  let date = dateFormatter.date(from: entry.timestamp)
+            else { return }
             
-            bookmarks.forEach { bm in
-                guard bm.type == "bookmark",
-                      let date = dateFormatter.date(from: bm.timestamp)
-                else { return }
+            if partialResult[entry.pos] != nil {
+                partialResult[entry.pos]?.append(entry)
+            } else {
+                partialResult[entry.pos] = [entry]
+            }
+        }.map { posEntry in
+            (key: posEntry.key, value: posEntry.value.sorted(by: { lhs, rhs in
+                (dateFormatter.date(from: lhs.timestamp) ?? .distantPast) > (dateFormatter.date(from: rhs.timestamp) ?? .distantPast)
+            }))
+        }
+        
+        try? realm.write {
+            bookmarksByPos.forEach { pos, entries in
+                guard let entryNewest = entries.first,
+                      let entryNewestDate = dateFormatter.date(from: entryNewest.timestamp) else { return }
                 
-                let objects = realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ and pos = %@", bookId, bm.pos))
-
-                if objects.isEmpty == false {
-                    objects.forEach { object in
-                        if object.date <= date + 0.1 {
-                            object.date = date
-                            object.title = bm.title
-                            object.removed = bm.removed
-                            pending -= 1
-                        } else if date <= object.date + 0.1 {
-                            //local is newer
-                        } else {
-                            pending -= 1
+                let objects = bookObjects
+                    .filter(NSPredicate(format: "pos = %@", pos))
+                    .sorted(byKeyPath: "date", ascending: false)
+                
+                let objectsVisible = objects.filter(NSPredicate(format: "removed != true"))
+                
+                if let objectNewest = objects.first {
+                    if objectNewest.date == entryNewestDate
+                        || (
+                            (objectNewest.date < entryNewestDate + 0.1)
+                            &&
+                            (entryNewestDate < objectNewest.date + 0.1)
+                        ) {
+                        //same date, ignore server one
+                        pending.remove(pos)
+                    } else if objectNewest.date < entryNewestDate + 0.1 {
+                        //server has newer entry, remove all local entries
+                        while( objectsVisible.isEmpty == false ) {
+                            objectsVisible.first?.date += 0.001
+                            objectsVisible.first?.removed = true
                         }
+                        pending.remove(pos)
+                    } else if entryNewestDate < objectNewest.date + 0.1 {
+                        //local has newer entry, ignore server one
+                    } else {
+                        //same date, ignore server one
+                        pending.remove(pos)
                     }
-                } else {
-                    let object = BookBookmarkRealm()
-                    object.bookId = bookId
-                    
-                    object.pos_type = bm.pos_type
-                    object.pos = bm.pos
-                    
-                    object.title = bm.title
-                    object.date = date
-                    
-                    guard object.pos_type == "epubcfi",
-                          object.pos.starts(with: "epubcfi(/") else { return }
-                    let firstStepStartIndex = object.pos.index(object.pos.startIndex, offsetBy: 9)
-                    guard let firstStepEndIndex = object.pos[firstStepStartIndex..<object.pos.endIndex].firstIndex(where: { elem in
-                           elem == "/" || elem == ")"
-                    }) else { return }
-                    
-                    guard let firstStep = Int(object.pos[firstStepStartIndex..<firstStepEndIndex]) else { return }
-                    object.page = firstStep / 2
-                    
-                    realm.add(object)
                 }
+                
+                guard objectsVisible.isEmpty,
+                      entryNewest.removed != true
+                else {
+                    // only insert newest visible entry
+                    // either local has no corresponding entry,
+                    // or we have removed all existing ones (which means they are older)
+                    return
+                }
+                
+                let object = BookBookmarkRealm()
+                object.bookId = bookId
+                
+                object.pos_type = entryNewest.pos_type
+                object.pos = entryNewest.pos
+                
+                object.title = entryNewest.title
+                object.date = entryNewestDate
+                object.removed = entryNewest.removed ?? false
+                
+                guard object.pos_type == "epubcfi",
+                      object.pos.starts(with: "epubcfi(/") else { return }
+                let firstStepStartIndex = object.pos.index(object.pos.startIndex, offsetBy: 9)
+                guard let firstStepEndIndex = object.pos[firstStepStartIndex..<object.pos.endIndex].firstIndex(where: { elem in
+                    elem == "/" || elem == ")"
+                }) else { return }
+                
+                guard let firstStep = Int(object.pos[firstStepStartIndex..<firstStepEndIndex]) else { return }
+                object.page = firstStep / 2
+                
+                realm.add(object)
             }
         }
     
-        return pending
+        return pending.count
     }
     
 }
