@@ -396,7 +396,7 @@ final class ModelData: ObservableObject {
         
         NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
         }
         

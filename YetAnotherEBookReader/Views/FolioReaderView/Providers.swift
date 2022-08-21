@@ -16,9 +16,10 @@ extension EpubFolioReaderContainer {
         } else {
             guard let book = modelData?.readingBook,
                   let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  let realmConfig = getBookPreferenceConfig(book: book, format: format),
+                  let profileRealmConfig = modelData?.realmConf
                   else { return FolioReaderDummyPreferenceProvider(folioReader) }
-            let preferenceProvider = FolioReaderRealmPreferenceProvider(folioReader, realmConfig: realmConfig)
+            let preferenceProvider = FolioReaderRealmPreferenceProvider(folioReader, realmConfig: realmConfig, profileRealmConfig: profileRealmConfig)
             self.folioReaderPreferenceProvider = preferenceProvider
             
             return preferenceProvider
@@ -87,46 +88,135 @@ class FolioReaderPreferenceRealm: Object {
     
     @objc dynamic var nightMode: Bool = false
     @objc dynamic var themeMode: Int = .min
+    
     @objc dynamic var currentFont: String?
     @objc dynamic var currentFontSize: String?
     @objc dynamic var currentFontWeight: String?
+    
     @objc dynamic var currentAudioRate: Int = .min
     @objc dynamic var currentHighlightStyle: Int = .min
     @objc dynamic var currentMediaOverlayStyle: Int = .min
+    
     @objc dynamic var currentScrollDirection: Int = .min
+    
     @objc dynamic var currentMenuIndex: Int = .min
+    
     @objc dynamic var currentVMarginLinked: Bool = true
     @objc dynamic var currentMarginTop: Int = .min
     @objc dynamic var currentMarginBottom: Int = .min
+    
     @objc dynamic var currentHMarginLinked: Bool = true
     @objc dynamic var currentMarginLeft: Int = .min
     @objc dynamic var currentMarginRight: Int = .min
+    
     @objc dynamic var currentLetterSpacing: Int = .min
     @objc dynamic var currentLineHeight: Int = .min
     @objc dynamic var currentTextIndent: Int = .min
+    
     @objc dynamic var doWrapPara: Bool = false
     @objc dynamic var doClearClass: Bool = true
+    
     @objc dynamic var styleOverride: Int = .min
-    @objc dynamic var savedPosition: Data?
     @objc dynamic var structuralStyle: Int = 0
     @objc dynamic var structuralTocLevel: Int = 0
+    
+    func copyFrom(src: FolioReaderPreferenceRealm) {
+        nightMode = src.nightMode
+        themeMode = src.themeMode
+        
+        currentFont = src.currentFont
+        currentFontSize = src.currentFontSize
+        currentFontWeight = src.currentFontWeight
+        
+        //skipping currentAudioRate
+        //skipping currentHighlightStyle
+        //skipping currentMediaOverlayStyle
+        
+        currentScrollDirection = src.currentScrollDirection
+        
+        //skipping currentMenuIndex
+        
+        currentVMarginLinked = src.currentVMarginLinked
+        currentMarginTop = src.currentMarginTop
+        currentMarginBottom = src.currentMarginBottom
+        
+        currentHMarginLinked = src.currentHMarginLinked
+        currentMarginLeft = src.currentMarginLeft
+        currentMarginRight = src.currentMarginRight
+        
+        currentLetterSpacing = src.currentLetterSpacing
+        currentLineHeight = src.currentLineHeight
+        currentTextIndent = src.currentTextIndent
+        
+        doWrapPara = src.doWrapPara
+        doClearClass = src.doClearClass
+        
+        //skipping styleOverride
+        //skipping structuralStyle
+        //skipping structuralTocLevel
+    }
 }
 
 class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
-    
     let folioReader: FolioReader
     
     let realm: Realm?
+    let profileRealm: Realm?
     
-    var prefObj: FolioReaderPreferenceRealm?
+    var prefObj: FolioReaderPreferenceRealm!
     
-    init(_ folioReader: FolioReader, realmConfig: Realm.Configuration) {
+    init(_ folioReader: FolioReader, realmConfig: Realm.Configuration, profileRealmConfig: Realm.Configuration) {
         self.folioReader = folioReader
         realm = try? Realm(configuration: realmConfig)
+        profileRealm = try? Realm(configuration: profileRealmConfig)
         
         guard let realm = realm else { return }
         
-        let id = folioReader.readerConfig?.identifier ?? "Default"
+        if let profileRealm = profileRealm,
+           profileRealm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default") == nil {
+            let defaultProfile = FolioReaderPreferenceRealm()
+            defaultProfile.id = "Default"
+            
+            defaultProfile.nightMode = false
+            defaultProfile.themeMode = FolioReaderThemeMode.serpia.rawValue
+            
+            defaultProfile.currentFont = "Georgia"
+            defaultProfile.currentFontSize = FolioReader.DefaultFontSize
+            defaultProfile.currentFontWeight = FolioReader.DefaultFontWeight
+            
+            //skipping currentAudioRate
+            //skipping currentHighlightStyle
+            //skipping currentMediaOverlayStyle
+            
+            //skipping currentScrollDirection
+            
+            //skipping currentMenuIndex
+            
+            defaultProfile.currentVMarginLinked = true
+            //defaultProfile.currentMarginTop
+            //defaultProfile.currentMarginBottom
+            
+            defaultProfile.currentHMarginLinked = true
+            //defaultProfile.currentMarginLeft
+            //defaultProfile.currentMarginRight
+            
+            defaultProfile.currentLetterSpacing = FolioReader.DefaultLetterSpacing
+            defaultProfile.currentLineHeight = FolioReader.DefaultLineHeight
+            defaultProfile.currentTextIndent = FolioReader.DefaultTextIndent
+            
+            defaultProfile.doWrapPara = false
+            defaultProfile.doClearClass = true
+            
+            //skipping styleOverride
+            //skipping structuralStyle
+            //skipping structuralTocLevel
+            
+            try? profileRealm.write {
+                profileRealm.add(defaultProfile)
+            }
+        }
+    
+        let id = folioReader.readerConfig?.identifier ?? "Unidentified"
         let id2 = id + ".epub"
         
         prefObj = realm.objects(FolioReaderPreferenceRealm.self).filter(
@@ -138,13 +228,31 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         if prefObj == nil {
             let newPrefObj = FolioReaderPreferenceRealm()
             newPrefObj.id = id
-            do {
-                try realm.write {
-                    realm.add(newPrefObj, update: .all)
-                }
-                prefObj = newPrefObj
-            } catch {
-
+            
+            if let defaultProfile = profileRealm?.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default") {
+                newPrefObj.copyFrom(src: defaultProfile)
+            }
+            
+            if newPrefObj.currentMarginTop == .min {
+                newPrefObj.currentMarginTop = folioReader.defaultMarginTop
+            }
+            if newPrefObj.currentMarginBottom == .min {
+                newPrefObj.currentMarginBottom = folioReader.defaultMarginBottom
+            }
+            if newPrefObj.currentMarginLeft == .min {
+                newPrefObj.currentMarginLeft = folioReader.defaultMarginLeft
+            }
+            if newPrefObj.currentMarginRight == .min {
+                newPrefObj.currentMarginRight = folioReader.defaultMarginRight
+            }
+            if newPrefObj.currentScrollDirection == .min {
+                newPrefObj.currentScrollDirection = folioReader.defaultScrollDirection.rawValue
+            }
+            
+            prefObj = newPrefObj
+            
+            try? realm.write {
+                realm.add(newPrefObj, update: .all)
             }
         }
     }
@@ -321,22 +429,6 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         }
     }
     
-    func preference(savedPosition defaults: [String : Any]?) -> [String : Any]? {
-        guard let data = prefObj?.savedPosition,
-              let dict = try? JSONSerialization.jsonObject(with: data, options: []) as? [String : Any] else {
-            return defaults
-        }
-        
-        return dict
-    }
-    
-    func preference(setSavedPosition value: [String : Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: value, options: []) else { return }
-        try? realm?.write {
-            prefObj?.savedPosition = data
-        }
-    }
-    
     func preference(styleOverride defaults: Int) -> Int {
         return prefObj?.styleOverride ?? defaults
     }
@@ -372,6 +464,56 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
             return v
         } else {
             return defaults
+        }
+    }
+    
+    func preference(loadProfile name: String) {
+        guard let profile = profileRealm?.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name)
+        else { return }
+        
+        try? realm?.write {
+            prefObj?.copyFrom(src: profile)
+        }
+    }
+    
+    func preference(saveProfile name: String) {
+        guard let prefObj = prefObj,
+              let profileRealm = profileRealm else {
+            return
+        }
+
+        var profile: FolioReaderPreferenceRealm!
+        profile = profileRealm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name)
+        if profile == nil {
+            profile = FolioReaderPreferenceRealm()
+            profile.id = name
+            try? profileRealm.write {
+                profileRealm.add(profile)
+            }
+        }
+        
+        try? profileRealm.write {
+            profile.copyFrom(src: prefObj)
+        }
+    }
+    
+    func preference(listProfile filter: String?) -> [String] {
+        return profileRealm?.objects(FolioReaderPreferenceRealm.self).filter {
+            filter == nil || $0.id.contains(filter!)
+        }.map {
+            $0.id
+        } ?? []
+    }
+    
+    func preference(removeProfile name: String) {
+        guard let profileRealm = profileRealm,
+              let object = profileRealm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name)
+        else {
+            return
+        }
+
+        try? profileRealm.write {
+            profileRealm.delete(object)
         }
     }
 }

@@ -238,7 +238,7 @@ struct BookDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 metadataIcon(systemName: "building.columns")
-                Text("\(book.library.name) @ Server \(book.library.server.name)")
+                Text("\(book.library.name) - \(book.id) @ Server \(book.library.server.name)")
             }
             HStack {
                 metadataIcon(systemName: "face.smiling")
