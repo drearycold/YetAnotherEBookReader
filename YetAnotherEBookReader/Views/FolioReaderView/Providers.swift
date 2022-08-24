@@ -99,7 +99,8 @@ class FolioReaderPreferenceRealm: Object {
     
     @objc dynamic var currentScrollDirection: Int = .min
     
-    @objc dynamic var currentMenuIndex: Int = .min
+    @objc dynamic var currentNavigationMenuIndex: Int = .min
+    @objc dynamic var currentAnnotationMenuIndex: Int = .min
     
     @objc dynamic var currentVMarginLinked: Bool = true
     @objc dynamic var currentMarginTop: Int = .min
@@ -329,12 +330,20 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         try? realm?.write { prefObj?.currentScrollDirection = value }
     }
     
-    func preference(currentMenuIndex defaults: Int) -> Int {
-        return value(of: prefObj?.currentMenuIndex, defaults: defaults)
+    func preference(currentNavigationMenuIndex defaults: Int) -> Int {
+        return value(of: prefObj?.currentNavigationMenuIndex, defaults: defaults)
     }
     
-    func preference(setCurrentMenuIndex value: Int) {
-        try? realm?.write { prefObj?.currentMenuIndex = value }
+    func preference(setCurrentNavigationMenuIndex value: Int) {
+        try? realm?.write { prefObj?.currentNavigationMenuIndex = value }
+    }
+    
+    func preference(currentAnnotationMenuIndex defaults: Int) -> Int {
+        return value(of: prefObj?.currentAnnotationMenuIndex, defaults: defaults)
+    }
+    
+    func preference(setCurrentAnnotationMenuIndex value: Int) {
+        try? realm?.write { prefObj?.currentAnnotationMenuIndex = value }
     }
     
     func preference(currentMarginTop defaults: Int) -> Int {
