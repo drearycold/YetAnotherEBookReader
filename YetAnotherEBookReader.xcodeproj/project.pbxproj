@@ -312,8 +312,6 @@
 		6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; platformFilter = ios; };
 		6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9C0265FF36600885D26 /* SwiftSoup.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */; platformFilter = ios; };
-		6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
 		E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; };
@@ -358,7 +356,6 @@
 				6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */,
 				2A6D881727550F6400A33771 /* RealmSwift.xcframework in Embed Frameworks */,
 				2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */,
-				6E76E9C1265FF36600885D26 /* SwiftSoup.xcframework in Embed Frameworks */,
 				2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */,
 				6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */,
 				2A6D881527550F6200A33771 /* Realm.xcframework in Embed Frameworks */,
@@ -636,7 +633,6 @@
 				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
 				2A0A0489271BFEE500589B87 /* AppTrackingTransparency.framework in Frameworks */,
 				2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */,
-				6E76E9C0265FF36600885D26 /* SwiftSoup.xcframework in Frameworks */,
 				2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */,
 				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				2A6D881427550F6100A33771 /* Realm.xcframework in Frameworks */,
