@@ -1054,9 +1054,9 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
         
         try? realm.write {
             if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
-                historyEntryFirst?.endPosition = nil
+                historyEntryFirst?.endPosition?.takePrecedence = true
             } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
-                historyEntryFirst?.endPosition = nil
+                historyEntryFirst?.endPosition?.takePrecedence = true
             } else {
                 let historyEntry = BookDeviceReadingPositionHistoryRealm()
                 historyEntry.bookId = bookId
@@ -1077,11 +1077,14 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
             NSPredicate(format: "bookId = %@", bookId)
         ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
         
-        guard historyEntry.endPosition == nil else { return }
+        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
         
         try? realm.write {
-            historyEntry.endPosition = .init()
+            if historyEntry.endPosition == nil {
+                historyEntry.endPosition = .init()
+            }
             historyEntry.endPosition?.fromFolioReaderReadPosition(readPosition, bookId: "\(bookId) - History")
+            historyEntry.endPosition?.takePrecedence = false
         }
     }
 }
