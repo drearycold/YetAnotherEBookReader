@@ -11,7 +11,7 @@ import SwiftUICharts
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
         
-    let libraryId: String?
+    let library: CalibreLibrary?
     let bookId: Int32?
     
     //model
@@ -19,6 +19,9 @@ struct ReadingPositionHistoryView: View {
     @State private var maxMinutes = 0
     @State private var avgMinutes = 0
     @State private var _positionViewModel: ReadingPositionListViewModel? = nil
+    @State private var booksHistory = [String: Double]()   //InShelfId to minutes
+    
+    let minutesFormatter = NumberFormatter()
     
     var body: some View {
         VStack {
@@ -75,54 +78,78 @@ struct ReadingPositionHistoryView: View {
                         #endif
                     }
                 } else {
+                    #if debug
                     Text("Missing View Model")
+                    #else
+                    EmptyView()
+                    #endif
                 }
                 
-    //            Section(header: Text("Local Activities")) {
-    //                ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-    //                    NavigationLink(
-    //                        destination: ReadingPositionHistoryDetailView(
-    //                            positionHistory: obj
-    //                        ).environmentObject(modelData)
-    //                    ) {
-    //                        row(obj: obj)
-    //                    }
-    //                }
-    //            }
-                
                 Section(header: Text("Local Activities")) {
-                    ForEach(modelData.listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId), id: \.self) { obj in
-                        NavigationLink(
-                            destination: ReadingPositionDetailView(
-                                viewModel: ReadingPositionDetailViewModel(
-                                    modelData: modelData,
-                                    listModel: _positionViewModel!,
-                                    position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
-                            )
-                        ) {
-                            row(position: BookDeviceReadingPosition(managedObject: obj.endPosition!))
+                    if let library = library, let bookId = bookId {
+                        ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId), id: \.self) { obj in
+                            NavigationLink(
+                                destination: ReadingPositionDetailView(
+                                    viewModel: ReadingPositionDetailViewModel(
+                                        modelData: modelData,
+                                        listModel: _positionViewModel!,
+                                        position: obj.endPosition!)
+                                )
+                            ) {
+                                row(position: obj.endPosition!)
+                            }
+                        }
+                    } else {
+                        ForEach(booksHistory.sorted(by: { $0.value > $1.value }), id: \.key) { inShelfId, minutes in
+                            if let book = modelData.booksInShelf[inShelfId],
+                               let minutesText = minutesFormatter.string(from: NSNumber(value: minutes)) {
+                                NavigationLink(
+                                    destination: ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                                ) {
+                                    HStack {
+                                        Text(book.title)
+                                        Spacer()
+                                        Text(minutesText)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        
         .onAppear {
-            readingStatistics = modelData.getReadingStatistics(bookId: bookId, libraryId: libraryId)
+            let limitDays = 7
+            let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
+            
+            let readingHistoryList = modelData.listBookDeviceReadingPositionHistory(bookId: bookId, startDateAfter: startDate)
+            
+            readingStatistics = modelData.getReadingStatistics(list: readingHistoryList, limitDays: limitDays)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
-            if let libraryId = libraryId, let bookId = bookId,
-                let library = modelData.calibreLibraries[libraryId] {
-                
+            
+            minutesFormatter.maximumFractionDigits = 1
+            minutesFormatter.minimumFractionDigits = 1
+            
+            if let library = library, let bookId = bookId {
                 if let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
-                    let book = modelData.convert(bookRealm: bookRealm) {
+                   let book = modelData.convert(bookRealm: bookRealm) {
                     _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
                 } else if let book = modelData.readingBook {
                     _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
                 }
             }
-            
-            
+            else {
+                self.booksHistory = readingHistoryList.reduce(into: [:], { partialResult, history in
+                    guard let library = modelData.calibreLibraries[history.libraryId] else { return }
+                    guard let endPosition = history.endPosition else { return }
+                    let inShelfId = CalibreBook(id: history.bookId, library: library).inShelfId
+                    let duration = endPosition.epoch - history.startDatetime.timeIntervalSince1970
+                    if duration > 0 {
+                        partialResult[inShelfId] = (partialResult[inShelfId] ?? 0.0) + (duration / 60.0)
+                    }
+                })
+            }
         }
         .navigationTitle("Reading History")
         .navigationBarTitleDisplayMode(.inline)
@@ -179,7 +206,7 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
     static var previews: some View {
         if let book = modelData.readingBook {
             NavigationView {
-                ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+                ReadingPositionHistoryView(library: book.library, bookId: book.id)
             }
             .navigationViewStyle(.stack)
             .environmentObject(modelData)

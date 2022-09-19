@@ -95,7 +95,7 @@ struct SettingsView: View {
             
             Section(header: Text("Options")) {
                 NavigationLink("Formats & Readers", destination: ReaderOptionsView())
-                NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(libraryId: nil, bookId: nil))
+                NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(library: nil, bookId: nil))
                 NavigationLink("Activity Logs", destination: ActivityList())
             }
             

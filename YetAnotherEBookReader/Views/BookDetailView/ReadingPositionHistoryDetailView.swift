@@ -10,7 +10,7 @@ import SwiftUI
 struct ReadingPositionHistoryDetailView: View {
     @EnvironmentObject var modelData: ModelData
 
-    let positionHistory: BookDeviceReadingPositionHistoryRealm
+    let positionHistory: BookDeviceReadingPositionHistory
     
     @State private var overrideToggle = false
     @State private var selectedFormat = Format.UNKNOWN
@@ -110,7 +110,7 @@ struct ReadingPositionHistoryDetailView: View {
                         Spacer()
                         
                         Button(action: {
-                            readAction(bookRealm: book, format: selectedFormat, reader: selectedFormatReader, positionRealm: position)
+                            readAction(bookRealm: book, format: selectedFormat, reader: selectedFormatReader, readingPosition: position)
                         }) {
                             Text("Start Reading")
                         }
@@ -157,7 +157,7 @@ struct ReadingPositionHistoryDetailView: View {
         .padding()
     }
     
-    private func updateSelectedFormatReader(position: BookDeviceReadingPositionRealm) {
+    private func updateSelectedFormatReader(position: BookDeviceReadingPosition) {
         if selectedFormat == Format.UNKNOWN {
             return
         }
@@ -171,11 +171,9 @@ struct ReadingPositionHistoryDetailView: View {
         }
     }
     
-    func readAction(bookRealm: CalibreBookRealm, format: Format, reader: ReaderType, positionRealm: BookDeviceReadingPositionRealm) {
+    func readAction(bookRealm: CalibreBookRealm, format: Format, reader: ReaderType, readingPosition: BookDeviceReadingPosition) {
         guard let book = modelData.convert(bookRealm: bookRealm),
               let bookFileUrl = getSavedUrl(book: book, format: format) else { return }
-        
-        let readingPosition = BookDeviceReadingPosition(managedObject: positionRealm)
         
         modelData.prepareBookReading(
             url: bookFileUrl,
@@ -190,7 +188,7 @@ struct ReadingPositionHistoryDetailView: View {
     }
 
     @ViewBuilder
-    private func positionDetailView(position: BookDeviceReadingPositionRealm) -> some View {
+    private func positionDetailView(position: BookDeviceReadingPosition) -> some View {
         HStack(alignment: .top) {
             Spacer()
             
@@ -244,6 +242,6 @@ struct ReadingPositionHistoryDetailView: View {
 
 struct ReadingPositionHistoryDetailView_Previews: PreviewProvider {
     static var previews: some View {
-        ReadingPositionHistoryDetailView(positionHistory: BookDeviceReadingPositionHistoryRealm())
+        ReadingPositionHistoryDetailView(positionHistory: BookDeviceReadingPositionHistory())
     }
 }

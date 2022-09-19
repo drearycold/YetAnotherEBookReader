@@ -99,10 +99,9 @@ struct ReadingPositionListView: View {
                         Text("Device History Positions")
                         ForEach(
                             _positionViewModel.modelData.listBookDeviceReadingPositionHistory(
-                                bookId: _positionViewModel.book.id,
-                                libraryId: _positionViewModel.book.library.id
-                            ).compactMap({ $0.endPosition })
-                            .compactMap({ BookDeviceReadingPosition(managedObject: $0) }),
+                                library: _positionViewModel.book.library,
+                                bookId: _positionViewModel.book.id
+                            ).compactMap({ $0.endPosition }),
                             id: \.epoch) { position in
                             NavigationLink(
                                 destination: ReadingPositionDetailView(

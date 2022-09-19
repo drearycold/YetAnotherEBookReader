@@ -878,8 +878,7 @@ extension BookDeviceReadingPosition: Persistable {
 }
 
 class BookDeviceReadingPositionHistoryRealm: Object {
-    @objc dynamic var bookId = Int32()
-    @objc dynamic var libraryId = ""
+    @objc dynamic var bookId: String = ""
     
     @objc dynamic var startDatetime = Date()
     @objc dynamic var startPosition: BookDeviceReadingPositionRealm?

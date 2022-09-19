@@ -12,6 +12,7 @@ import SwiftUI
 import OSLog
 import Kingfisher
 import ShelfView
+import FolioReaderKit
 
 import CryptoSwift
 #if canImport(R2Shared)
@@ -277,6 +278,24 @@ final class ModelData: ObservableObject {
                     migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
                         if let lastModified = oldObject?.value(forKey: "lastModified") {
                             newObject?.setValue(lastModified, forKey: "lastModified")
+                        }
+                    }
+                }
+                if oldSchemaVersion < 80 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
+                        if let bookId = oldObject?.value(forKey: "bookId") as? Int32 {
+                            if let libraryId = oldObject?.value(forKey: "libraryId") as? String,
+                               let libraryName = libraryId.components(separatedBy: " - ").last {
+                                newObject?.setValue("\(libraryName.replacingOccurrences(of: " ", with: "_")) - \(bookId)", forUndefinedKey: "bookId")
+                            } else {
+                                newObject?.setValue("Unknown - \(bookId)", forUndefinedKey: "bookId")
+                            }
+                        } else if let bookId = oldObject?.value(forKey: "bookId") as? String {
+                            let components = bookId.components(separatedBy: " - ")
+                            let newId = components.suffix(2).joined(separator: " - ")
+                            newObject?.setValue(newId, forUndefinedKey: "bookId")
+                        } else {
+                            print("\(oldObject?.value(forKey: "bookId"))")
                         }
                     }
                 }
@@ -2536,14 +2555,13 @@ final class ModelData: ObservableObject {
     }
     
     func logBookDeviceReadingPositionHistoryStart(book: CalibreBook, position: BookDeviceReadingPosition, startDatetime: Date) {
+        return;
+        
         activityDispatchQueue.async {
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
             
             let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
-                NSPredicate(format: "bookId = %@ AND libraryId = %@",
-                            NSNumber(value: book.id),
-                            book.library.id
-                           )
+                NSPredicate(format: "bookId = %@", "\(book.library.key) - \(book.id)")
             ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first
             
             try? realm.write {
@@ -2553,8 +2571,7 @@ final class ModelData: ObservableObject {
                     historyEntryFirst?.endPosition = nil
                 } else {
                     let historyEntry = BookDeviceReadingPositionHistoryRealm()
-                    historyEntry.bookId = book.id
-                    historyEntry.libraryId = book.library.id
+                    historyEntry.bookId = "\(book.library.key) - \(book.id)"
                     historyEntry.startDatetime = startDatetime
                     historyEntry.startPosition = position.managedObject()
                     realm.add(historyEntry)
@@ -2564,14 +2581,13 @@ final class ModelData: ObservableObject {
     }
     
     func logBookDeviceReadingPositionHistoryFinish(book: CalibreBook, endPosition: BookDeviceReadingPosition) {
+        return;
+        
         activityDispatchQueue.async {
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
             
             guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
-                NSPredicate(format: "bookId = %@ AND libraryId = %@",
-                            NSNumber(value: book.id),
-                            book.library.id
-                )
+                NSPredicate(format: "bookId = %@", "\(book.library.key) - \(book.id)")
             ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
             
             guard historyEntry.endPosition == nil else { return }
@@ -2582,19 +2598,14 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func listBookDeviceReadingPositionHistory(bookId: Int32? = nil, libraryId: String? = nil, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistoryRealm] {
+    func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
 
         var pred: NSPredicate? = nil
-        if let bookId = bookId, let libraryId = libraryId {
-            pred = NSPredicate(format: "bookId = %@ AND libraryId = %@",
-                               NSNumber(value: bookId), libraryId
-                   )
+        if let library = library, let bookId = bookId {
+            pred = NSPredicate(format: "bookId = %@", "\(library.key) - \(bookId)")
             if let startDateAfter = startDateAfter {
-                pred = NSPredicate(
-                    format: "bookId = %@ AND libraryId = %@ AND startDatetime >= %@",
-                    NSNumber(value: bookId), libraryId, startDateAfter as NSDate
-                )
+                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", bookId, startDateAfter as NSDate)
             }
         } else {
             if let startDateAfter = startDateAfter {
@@ -2611,13 +2622,99 @@ final class ModelData: ObservableObject {
         }
         results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
         print("\(#function) \(results.count)")
-        return results.map {$0}.filter { $0.endPosition != nil }
+        
+        var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
+            .compactMap { obj in
+                guard let startPosition = obj.startPosition,
+                      let endPosition = obj.endPosition
+                else { return nil }
+                
+                var result = BookDeviceReadingPositionHistory()
+                result.startDatetime = obj.startDatetime
+                
+                if let library = library, let bookId = bookId {
+                    result.libraryId = library.id
+                    result.bookId = bookId
+                } else {
+                    let bookIdComponents = obj.bookId.components(separatedBy: " - ")
+                    guard let bookIdInt = Int32(bookIdComponents.last ?? "") else { return nil }
+                    let libraryKey = bookIdComponents.dropLast().joined(separator: " - ")
+                    guard let libraryId = self.booksInShelf.values.filter({ $0.library.key == libraryKey && $0.id == bookIdInt }).first?.library.id
+                    else { return nil }
+                    
+                    result.bookId = bookIdInt
+                    result.libraryId = libraryId
+                }
+                
+                result.startPosition = BookDeviceReadingPosition(managedObject: startPosition)
+                result.endPosition = BookDeviceReadingPosition(managedObject: endPosition)
+                
+                return result
+            }
+        
+        if let library = library, let bookId = bookId {
+            let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
+            if let book = self.booksInShelf[bookInShelfId],
+               let realmConfig = getBookPreferenceConfig(book: book, format: Format.UNKNOWN) {
+                let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
+                let bookHistoryList = provider.folioReaderPositionHistory(FolioReader(), bookId: "\(library.key) - \(bookId)")
+                    .compactMap { obj -> BookDeviceReadingPositionHistory? in
+                        guard let startPosition = obj.startPosition,
+                              let endPosition = obj.endPosition
+                        else { return nil }
+                        
+                        var result = BookDeviceReadingPositionHistory()
+                        result.startDatetime = obj.startDatetime
+                        result.libraryId = library.id
+                        result.bookId = bookId
+                        
+                        let startPositionObject = BookDeviceReadingPositionRealm()
+                        startPositionObject.fromFolioReaderReadPosition(startPosition, bookId: "\(library.key) - \(bookId)")
+                        result.startPosition = BookDeviceReadingPosition(managedObject: startPositionObject)
+                        
+                        let endPositionObject = BookDeviceReadingPositionRealm()
+                        endPositionObject.fromFolioReaderReadPosition(endPosition, bookId: "\(library.key) - \(bookId)")
+                        result.endPosition = BookDeviceReadingPosition(managedObject: endPositionObject)
+                        
+                        return result
+                    }
+                historyList.append(contentsOf: bookHistoryList)
+                historyList.sort { $0.startDatetime > $1.startDatetime }
+            }
+        } else {
+            self.booksInShelf.forEach { bookInShelfId, book in
+                guard let realmConfig = getBookPreferenceConfig(book: book, format: Format.UNKNOWN) else { return }
+                 let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
+                let bookHistoryList = provider.folioReaderPositionHistory(FolioReader(), bookId: "\(book.library.key) - \(book.id)")
+                     .compactMap { obj -> BookDeviceReadingPositionHistory? in
+                         guard let startPosition = obj.startPosition,
+                               let endPosition = obj.endPosition
+                         else { return nil }
+                         
+                         var result = BookDeviceReadingPositionHistory()
+                         result.startDatetime = obj.startDatetime
+                         result.libraryId = book.library.id
+                         result.bookId = book.id
+                         
+                         let startPositionObject = BookDeviceReadingPositionRealm()
+                         startPositionObject.fromFolioReaderReadPosition(startPosition, bookId: "\(book.library.key) - \(book.id)")
+                         result.startPosition = BookDeviceReadingPosition(managedObject: startPositionObject)
+                         
+                         let endPositionObject = BookDeviceReadingPositionRealm()
+                         endPositionObject.fromFolioReaderReadPosition(endPosition, bookId: "\(book.library.key) - \(book.id)")
+                         result.endPosition = BookDeviceReadingPosition(managedObject: endPositionObject)
+                         
+                         return result
+                     }
+                 historyList.append(contentsOf: bookHistoryList)
+            }
+            historyList.sort { $0.startDatetime > $1.startDatetime }
+        }
+        
+        return historyList.removingDuplicates()
     }
     
-    func getReadingStatistics(bookId: Int32? = nil, libraryId: String? = nil, limitDays: Int = 7) -> [Double] {
-        let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
-        
-        let list = listBookDeviceReadingPositionHistory(bookId: bookId, libraryId: libraryId, startDateAfter: startDate)
+    func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
         let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
             guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
             let duration = epoch - history.startDatetime.timeIntervalSince1970

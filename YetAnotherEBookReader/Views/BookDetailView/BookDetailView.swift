@@ -387,7 +387,7 @@ struct BookDetailView: View {
         }, content: {
             NavigationView {
                 if let book = modelData.readingBook {
-                    ReadingPositionHistoryView(libraryId: book.library.id, bookId: book.id)
+                    ReadingPositionHistoryView(library: book.library, bookId: book.id)
                 } else {
                     Text("Unexpected Internal Error")
                 }

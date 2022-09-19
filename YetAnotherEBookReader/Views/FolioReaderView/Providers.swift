@@ -943,6 +943,16 @@ extension BookDeviceReadingPositionRealm {
     }
 }
 
+extension BookDeviceReadingPositionHistoryRealm {
+    func toFolioReaderReadPositionHistory() -> FolioReaderReadPositionHistory {
+        let history = FolioReaderReadPositionHistory()
+        history.startDatetime = self.startDatetime
+        history.startPosition = self.startPosition?.toFolioReaderReadPosition()
+        history.endPosition = self.endPosition?.toFolioReaderReadPosition()
+        return history
+    }
+}
+
 public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvider {
     let realm: Realm?
 
@@ -1022,6 +1032,57 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
     
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
         return realm?.objects(BookDeviceReadingPositionRealm.self).compactMap { $0.toFolioReaderReadPosition() } ?? []
+    }
+    
+    public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
+        return realm?.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookId))
+            .map { $0.toFolioReaderReadPositionHistory() } ?? []
+    }
+    
+    public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String, start readPosition: FolioReaderReadPosition) {
+        guard let realm = realm else {
+            return
+        }
+
+        let startDatetime = Date()
+        
+        let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookId))
+            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+            .first
+        
+        try? realm.write {
+            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
+                historyEntryFirst?.endPosition = nil
+            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
+                historyEntryFirst?.endPosition = nil
+            } else {
+                let historyEntry = BookDeviceReadingPositionHistoryRealm()
+                historyEntry.bookId = bookId
+                historyEntry.startDatetime = startDatetime
+                historyEntry.startPosition = .init()
+                historyEntry.startPosition?.fromFolioReaderReadPosition(readPosition, bookId: "\(bookId) - History")
+                realm.add(historyEntry)
+            }
+        }
+    }
+    
+    public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String, finish readPosition: FolioReaderReadPosition) {
+        guard let realm = realm else {
+            return
+        }
+
+        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
+            NSPredicate(format: "bookId = %@", bookId)
+        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
+        
+        guard historyEntry.endPosition == nil else { return }
+        
+        try? realm.write {
+            historyEntry.endPosition = .init()
+            historyEntry.endPosition?.fromFolioReaderReadPosition(readPosition, bookId: "\(bookId) - History")
+        }
     }
 }
 
