@@ -9,46 +9,46 @@ PODS:
     - ZFDragableModalTransition (~> 0.6)
     - ZIPFoundation (~> 0.9)
   - FontBlaster (5.3.0)
-  - Google-Mobile-Ads-SDK (9.9.0):
+  - Google-Mobile-Ads-SDK (9.10.0):
     - GoogleAppMeasurement (< 10.0, >= 7.0)
     - GoogleUserMessagingPlatform (>= 1.1)
-  - GoogleAppMeasurement (9.5.0):
-    - GoogleAppMeasurement/AdIdSupport (= 9.5.0)
+  - GoogleAppMeasurement (9.6.0):
+    - GoogleAppMeasurement/AdIdSupport (= 9.6.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
     - nanopb (< 2.30910.0, >= 2.30908.0)
-  - GoogleAppMeasurement/AdIdSupport (9.5.0):
-    - GoogleAppMeasurement/WithoutAdIdSupport (= 9.5.0)
+  - GoogleAppMeasurement/AdIdSupport (9.6.0):
+    - GoogleAppMeasurement/WithoutAdIdSupport (= 9.6.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
     - nanopb (< 2.30910.0, >= 2.30908.0)
-  - GoogleAppMeasurement/WithoutAdIdSupport (9.5.0):
+  - GoogleAppMeasurement/WithoutAdIdSupport (9.6.0):
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
     - nanopb (< 2.30910.0, >= 2.30908.0)
-  - GoogleUserMessagingPlatform (2.0.0)
-  - GoogleUtilities/AppDelegateSwizzler (7.7.0):
+  - GoogleUserMessagingPlatform (2.0.1)
+  - GoogleUtilities/AppDelegateSwizzler (7.8.0):
     - GoogleUtilities/Environment
     - GoogleUtilities/Logger
     - GoogleUtilities/Network
-  - GoogleUtilities/Environment (7.7.0):
+  - GoogleUtilities/Environment (7.8.0):
     - PromisesObjC (< 3.0, >= 1.2)
-  - GoogleUtilities/Logger (7.7.0):
+  - GoogleUtilities/Logger (7.8.0):
     - GoogleUtilities/Environment
-  - GoogleUtilities/MethodSwizzler (7.7.0):
+  - GoogleUtilities/MethodSwizzler (7.8.0):
     - GoogleUtilities/Logger
-  - GoogleUtilities/Network (7.7.0):
+  - GoogleUtilities/Network (7.8.0):
     - GoogleUtilities/Logger
     - "GoogleUtilities/NSData+zlib"
     - GoogleUtilities/Reachability
-  - "GoogleUtilities/NSData+zlib (7.7.0)"
-  - GoogleUtilities/Reachability (7.7.0):
+  - "GoogleUtilities/NSData+zlib (7.8.0)"
+  - GoogleUtilities/Reachability (7.8.0):
     - GoogleUtilities/Logger
   - Kingfisher (5.15.8):
     - Kingfisher/Core (= 5.15.8)
@@ -102,10 +102,10 @@ SPEC CHECKSUMS:
   AEXML: 1e255ecc6597212f97a7454a69ebd3ede64ac1cf
   FolioReaderKit: a3237ae2478142f2d4ff56883f1f6807fa4e427e
   FontBlaster: 941f89d735a29e1c7d24e7a90d3e16939ef1609a
-  Google-Mobile-Ads-SDK: 8822993da940ab920bad131b5bffce7eb3f62c6a
-  GoogleAppMeasurement: 6ee231473fbd75c11221dfce489894334024eead
-  GoogleUserMessagingPlatform: ab890ce5f6620f293a21b6bdd82e416a2c73aeca
-  GoogleUtilities: e0913149f6b0625b553d70dae12b49fc62914fd1
+  Google-Mobile-Ads-SDK: eb398023f0d97cdd259b171052f1eb433de00c87
+  GoogleAppMeasurement: 6de2b1a69e4326eb82ee05d138f6a5cb7311bcb1
+  GoogleUserMessagingPlatform: 5f8b30daf181805317b6b985bb51c1ff3beca054
+  GoogleUtilities: 1d20a6ad97ef46f67bbdec158ce00563a671ebb7
   Kingfisher: a3c03d702433fa6cfedabb2bddbe076fb8f2e902
   MenuItemKit: 1459920e984d823e1bcc858b7a964f94e6bfa0f6
   nanopb: b552cce312b6c8484180ef47159bc0f65a1f0431
