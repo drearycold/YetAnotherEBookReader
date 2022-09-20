@@ -1047,59 +1047,6 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
-    func setLastReadPosition(library: CalibreLibrary, bookId: Int32, format: Format, entry: CalibreBookLastReadPositionEntry) -> Int {
-        guard var endpointURLComponent = URLComponents(string: library.server.serverUrl) else {
-            return -1
-        }
-        
-        endpointURLComponent.path = "/book-set-last-read-position/\(library.key)/\(bookId)/\(format.rawValue)"
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
-        
-        guard let postData = try? JSONEncoder().encode(entry) else {
-            return -2
-        }
-        
-        var urlRequest = URLRequest(url: endpointUrl)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = postData
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        modelData.calibreServiceCancellable = urlSession(server: library.server, timeout: 60).dataTaskPublisher(for: urlRequest)
-            .tryMap { output in
-                print("setLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
-                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
-                }
-                
-                return output.data
-            }
-            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
-            .replaceError(with: [:])
-            .eraseToAnyPublisher()
-            .sink(
-                receiveCompletion: { completion in
-                    print("setLastReadPosition \(completion)")
-                    switch completion {
-                    case .finished:
-                        break
-                    case .failure(let error):
-                        fatalError(error.localizedDescription)
-                    }
-                },
-                receiveValue: { results in
-                    print("setLastReadPosition count=\(results.count)")
-                    results.forEach { result in
-                        print("setLastReadPosition \(result)")
-                    }
-                }
-            )
-        
-        return 0
-    }
-    
     func getLastReadPosition(book: CalibreBook, formats: [Format]) -> Int {
         guard formats.isEmpty == false,
               var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {

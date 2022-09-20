@@ -8,7 +8,6 @@
 import Foundation
 
 import PDFKit
-import FolioReaderKit
 
 class YabrPDFView: PDFView {
     let doubleTapLeftLabel = UILabel()

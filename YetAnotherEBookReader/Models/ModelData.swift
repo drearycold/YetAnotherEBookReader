@@ -12,7 +12,6 @@ import SwiftUI
 import OSLog
 import Kingfisher
 import ShelfView
-import FolioReaderKit
 
 import CryptoSwift
 #if canImport(R2Shared)
@@ -2598,14 +2597,17 @@ final class ModelData: ObservableObject {
         }
     }
     
-    func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
-        guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
+    /**
+     key: inShelfId
+     */
+    func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String:[BookDeviceReadingPositionHistory]] {
+        guard let realm = try? Realm(configuration: self.realmConf) else { return [:] }
 
         var pred: NSPredicate? = nil
         if let library = library, let bookId = bookId {
             pred = NSPredicate(format: "bookId = %@", "\(library.key) - \(bookId)")
             if let startDateAfter = startDateAfter {
-                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", bookId, startDateAfter as NSDate)
+                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", "\(library.key) - \(bookId)", startDateAfter as NSDate)
             }
         } else {
             if let startDateAfter = startDateAfter {
@@ -2624,94 +2626,32 @@ final class ModelData: ObservableObject {
         print("\(#function) \(results.count)")
         
         var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
-            .compactMap { obj in
-                guard let startPosition = obj.startPosition,
-                      let endPosition = obj.endPosition
-                else { return nil }
-                
-                var result = BookDeviceReadingPositionHistory()
-                result.startDatetime = obj.startDatetime
-                
-                if let library = library, let bookId = bookId {
-                    result.libraryId = library.id
-                    result.bookId = bookId
-                } else {
-                    let bookIdComponents = obj.bookId.components(separatedBy: " - ")
-                    guard let bookIdInt = Int32(bookIdComponents.last ?? "") else { return nil }
-                    let libraryKey = bookIdComponents.dropLast().joined(separator: " - ")
-                    guard let libraryId = self.booksInShelf.values.filter({ $0.library.key == libraryKey && $0.id == bookIdInt }).first?.library.id
-                    else { return nil }
-                    
-                    result.bookId = bookIdInt
-                    result.libraryId = libraryId
-                }
-                
-                result.startPosition = BookDeviceReadingPosition(managedObject: startPosition)
-                result.endPosition = BookDeviceReadingPosition(managedObject: endPosition)
-                
-                return result
-            }
+            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
         
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
-            if let book = self.booksInShelf[bookInShelfId],
-               let realmConfig = getBookPreferenceConfig(book: book, format: Format.UNKNOWN) {
-                let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
-                let bookHistoryList = provider.folioReaderPositionHistory(FolioReader(), bookId: "\(library.key) - \(bookId)")
-                    .compactMap { obj -> BookDeviceReadingPositionHistory? in
-                        guard let startPosition = obj.startPosition,
-                              let endPosition = obj.endPosition
-                        else { return nil }
-                        
-                        var result = BookDeviceReadingPositionHistory()
-                        result.startDatetime = obj.startDatetime
-                        result.libraryId = library.id
-                        result.bookId = bookId
-                        
-                        let startPositionObject = BookDeviceReadingPositionRealm()
-                        startPositionObject.fromFolioReaderReadPosition(startPosition, bookId: "\(library.key) - \(bookId)")
-                        result.startPosition = BookDeviceReadingPosition(managedObject: startPositionObject)
-                        
-                        let endPositionObject = BookDeviceReadingPositionRealm()
-                        endPositionObject.fromFolioReaderReadPosition(endPosition, bookId: "\(library.key) - \(bookId)")
-                        result.endPosition = BookDeviceReadingPosition(managedObject: endPositionObject)
-                        
-                        return result
-                    }
-                historyList.append(contentsOf: bookHistoryList)
-                historyList.sort { $0.startDatetime > $1.startDatetime }
+            if let book = self.booksInShelf[bookInShelfId] {
+                historyList.append(contentsOf: book.readPos.getHistory(startDateAfter: startDateAfter))
             }
         } else {
-            self.booksInShelf.forEach { bookInShelfId, book in
-                guard let realmConfig = getBookPreferenceConfig(book: book, format: Format.UNKNOWN) else { return }
-                 let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
-                let bookHistoryList = provider.folioReaderPositionHistory(FolioReader(), bookId: "\(book.library.key) - \(book.id)")
-                     .compactMap { obj -> BookDeviceReadingPositionHistory? in
-                         guard let startPosition = obj.startPosition,
-                               let endPosition = obj.endPosition
-                         else { return nil }
-                         
-                         var result = BookDeviceReadingPositionHistory()
-                         result.startDatetime = obj.startDatetime
-                         result.libraryId = book.library.id
-                         result.bookId = book.id
-                         
-                         let startPositionObject = BookDeviceReadingPositionRealm()
-                         startPositionObject.fromFolioReaderReadPosition(startPosition, bookId: "\(book.library.key) - \(book.id)")
-                         result.startPosition = BookDeviceReadingPosition(managedObject: startPositionObject)
-                         
-                         let endPositionObject = BookDeviceReadingPositionRealm()
-                         endPositionObject.fromFolioReaderReadPosition(endPosition, bookId: "\(book.library.key) - \(book.id)")
-                         result.endPosition = BookDeviceReadingPosition(managedObject: endPositionObject)
-                         
-                         return result
-                     }
-                 historyList.append(contentsOf: bookHistoryList)
+            self.booksInShelf.forEach {
+                historyList.append(contentsOf: $0.value.readPos.getHistory(startDateAfter: startDateAfter))
             }
-            historyList.sort { $0.startDatetime > $1.startDatetime }
         }
         
-        return historyList.removingDuplicates()
+        let idMap = booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
+            partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
+        }
+
+        return historyList.sorted(by:{ $0.startDatetime > $1.startDatetime }).removingDuplicates().reduce(into: [:]) { partialResult, history in
+            guard let inShelfId = idMap[history.bookId] else { return }
+            
+            if partialResult[inShelfId] == nil {
+                partialResult[inShelfId] = [history]
+            } else {
+                partialResult[inShelfId]?.append(history)
+            }
+        }
     }
     
     func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {

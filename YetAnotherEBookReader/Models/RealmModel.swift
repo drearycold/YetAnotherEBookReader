@@ -611,8 +611,6 @@ struct BookReadingPosition {
     
     let bookPrefId: String
     
-//    var realm: Realm?
-    
     var isEmpty: Bool { get { get()?.isEmpty ?? true } }
     
     init(id: Int32, library: CalibreLibrary, localFilename: String? = nil) {
@@ -620,8 +618,6 @@ struct BookReadingPosition {
         self.library = library
         self.localFilename = localFilename
         bookPrefId = "\(library.key) - \(id)"
-        
-//        realm = openRealm()
     }
     
     func openRealm() -> Realm? {
@@ -729,6 +725,19 @@ struct BookReadingPosition {
         return getDevices().filter {
             $0.readerName == reader.id
         }
+    }
+    
+    func getHistory(startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
+        guard let realm = openRealm() else { return [] }
+        
+        return realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter(
+                startDateAfter == nil
+                ? NSPredicate(format: "bookId = %@", bookPrefId)
+                : NSPredicate(format: "bookId = %@ AND startDatetime >= %@", bookPrefId, startDateAfter! as NSDate)
+            )
+            .filter { $0.endPosition != nil }
+            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
     }
     
     /**
@@ -897,6 +906,28 @@ class BookDeviceReadingPositionHistoryRealm: Object {
         dateFormatter.timeStyle = .long
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: startDatetime)
+    }
+}
+
+extension BookDeviceReadingPositionHistory: Persistable {
+    public init(managedObject: BookDeviceReadingPositionHistoryRealm) {
+        self.bookId = managedObject.bookId
+        self.startDatetime = managedObject.startDatetime
+        if let startPosition = managedObject.startPosition {
+            self.startPosition = .init(managedObject: startPosition)
+        }
+        if let endPosition = managedObject.endPosition {
+            self.endPosition = .init(managedObject: endPosition)
+        }
+    }
+    
+    public func managedObject() -> BookDeviceReadingPositionHistoryRealm {
+        let object = BookDeviceReadingPositionHistoryRealm()
+        object.bookId = self.bookId
+        object.startDatetime = self.startDatetime
+        object.startPosition = self.startPosition?.managedObject()
+        object.endPosition = self.endPosition?.managedObject()
+        return object
     }
 }
 

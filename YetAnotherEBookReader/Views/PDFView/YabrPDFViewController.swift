@@ -11,7 +11,6 @@ import UIKit
 import PDFKit
 import OSLog
 import SwiftUI
-import FolioReaderKit
 
 @available(macCatalyst 14.0, *)
 class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecognizerDelegate {

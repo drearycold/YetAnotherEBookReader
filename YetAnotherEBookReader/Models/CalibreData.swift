@@ -793,25 +793,22 @@ struct BookDeviceReadingPosition : Hashable, Codable {
 }
 
 struct BookDeviceReadingPositionHistory : Hashable, Codable {
-    var libraryId = ""
-    var bookId = Int32.zero
+    var bookId: String
     
     var startDatetime = Date()
     var startPosition: BookDeviceReadingPosition?
     var endPosition: BookDeviceReadingPosition?
     
     static func == (lhs: BookDeviceReadingPositionHistory, rhs: BookDeviceReadingPositionHistory) -> Bool {
-        lhs.libraryId == rhs.libraryId
-            && lhs.bookId == rhs.bookId
-//            && lhs.startPosition == rhs.startPosition
-            && lhs.endPosition == rhs.endPosition
+        lhs.bookId == rhs.bookId
+        && lhs.endPosition == rhs.endPosition
+        // && lhs.startPosition == rhs.startPosition
     }
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(libraryId)
         hasher.combine(bookId)
-//        hasher.combine(startPosition)
         hasher.combine(endPosition)
+        // hasher.combine(startPosition)
     }
 }
 

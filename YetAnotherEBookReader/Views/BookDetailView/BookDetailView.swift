@@ -53,11 +53,6 @@ struct BookDetailView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
-    @State private var presentingReadPositionList = false {
-        willSet { if newValue { modelData.presentingStack.append($presentingReadPositionList) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
-    }
-    
     @State private var activityListViewPresenting = false {
         willSet { if newValue { modelData.presentingStack.append($activityListViewPresenting) } }
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
@@ -584,16 +579,6 @@ struct BookDetailView: View {
                     
                 }
             }
-        }
-        .sheet(isPresented: $presentingReadPositionList, onDismiss: {
-            print("ReadingPositionListView dismiss \(book.readPos.getDevices().count) \(_viewModel.listVM.book.readPos.getDevices().count)")
-            guard book.readPos.getDevices().count != _viewModel.listVM.book.readPos.getDevices().count else { return }
-            //TODO: drop readPos
-            if false {
-                    modelData.updateReadingPosition(book: _viewModel.listVM.book, alertDelegate: self)
-            }
-        }) {
-            ReadingPositionListView(viewModel: _viewModel.listVM)
         }
     }
     

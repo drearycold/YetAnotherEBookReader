@@ -87,7 +87,7 @@ struct ReadingPositionHistoryView: View {
                 
                 Section(header: Text("Local Activities")) {
                     if let library = library, let bookId = bookId {
-                        ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId), id: \.self) { obj in
+                        ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? [], id: \.self) { obj in
                             NavigationLink(
                                 destination: ReadingPositionDetailView(
                                     viewModel: ReadingPositionDetailViewModel(
@@ -122,9 +122,9 @@ struct ReadingPositionHistoryView: View {
             let limitDays = 7
             let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
             
-            let readingHistoryList = modelData.listBookDeviceReadingPositionHistory(bookId: bookId, startDateAfter: startDate)
+            let readingHistoryList = modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDate)
             
-            readingStatistics = modelData.getReadingStatistics(list: readingHistoryList, limitDays: limitDays)
+            readingStatistics = modelData.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
             
@@ -140,13 +140,14 @@ struct ReadingPositionHistoryView: View {
                 }
             }
             else {
-                self.booksHistory = readingHistoryList.reduce(into: [:], { partialResult, history in
-                    guard let library = modelData.calibreLibraries[history.libraryId] else { return }
-                    guard let endPosition = history.endPosition else { return }
-                    let inShelfId = CalibreBook(id: history.bookId, library: library).inShelfId
-                    let duration = endPosition.epoch - history.startDatetime.timeIntervalSince1970
-                    if duration > 0 {
-                        partialResult[inShelfId] = (partialResult[inShelfId] ?? 0.0) + (duration / 60.0)
+                self.booksHistory = readingHistoryList.reduce(into: [:], { partialResult, entry in
+                    let inShelfId = entry.key
+                    entry.value.forEach {
+                        guard let endPosition = $0.endPosition else { return }
+                        let duration = endPosition.epoch - $0.startDatetime.timeIntervalSince1970
+                        if duration > 0 {
+                            partialResult[inShelfId] = (partialResult[inShelfId] ?? 0.0) + (duration / 60.0)
+                        }
                     }
                 })
             }
