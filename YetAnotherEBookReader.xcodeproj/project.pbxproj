@@ -1191,12 +1191,12 @@
 			children = (
 				2A270B24272F7E07006552A3 /* ActivityList.swift */,
 				2ABB914D261F1A47004AA7C0 /* BookDetailView.swift */,
-				2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */,
-				2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */,
 				2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */,
 				2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */,
 				2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */,
+				2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */,
 				2A264A4027311E8200C4CEFA /* ReadingPositionHistoryView.swift */,
+				2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */,
 			);
 			path = BookDetailView;
 			sourceTree = "<group>";

@@ -37,14 +37,14 @@ class ReadingPositionListViewModel: ObservableObject {
     func positionsByLatestStyle() -> [BookDeviceReadingPosition] {
         guard let latest = positions.first else { return [] }
         
-        return positions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle && $0.structuralRootPageNumber == latest.structuralRootPageNumber }
+        return positions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle }
     }
     
     func positionsByLatestStyle(deviceId: String) -> [BookDeviceReadingPosition] {
         let devicePositions = positions.filter({ $0.id == deviceId })
         guard let latest = devicePositions.first else { return [] }
         
-        return devicePositions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle && $0.structuralRootPageNumber == latest.structuralRootPageNumber }
+        return devicePositions.filter { $0.structuralStyle == latest.structuralStyle && $0.positionTrackingStyle == latest.positionTrackingStyle }
     }
     
     func positionsDeviceKeys() -> [String] {
