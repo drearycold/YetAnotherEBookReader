@@ -1220,7 +1220,7 @@ final class ModelData: ObservableObject {
         guard var book = booksInShelf[inShelfId] else { return }
         book.inShelf = false
 
-        updateBookRealm(book: book, realm: self.realm)
+        updateBookRealm(book: book, realm: (try? Realm(configuration: self.realmConf)) ?? self.realm)
         
         booksInShelf.removeValue(forKey: inShelfId)
         

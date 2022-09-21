@@ -120,7 +120,7 @@ struct ServerDetailView: View {
             updateLibraryList()
         })
         .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
+            ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
                     modelData.librarySyncStatus.filter {
                          $0.value.library.server.id == server.id && $0.value.del.count > 0
