@@ -39,6 +39,11 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                     yabrEPub.folioReader.saveReaderState {
                         yabrEPub.updateReadingPosition(yabrEPub.folioReader)
                         self.saveUpdatedReadingPosition()
+                        if let bookId = yabrEPub.folioReader.readerConfig?.identifier,
+                           let delegate = yabrEPub.folioReader.delegate?.folioReaderReadPositionProvider?(yabrEPub.folioReader),
+                           let position = yabrEPub.folioReader.savedPositionForCurrentBook {
+                            delegate.folioReaderPositionHistory?(yabrEPub.folioReader, bookId: bookId, finish: position)
+                        }
                     }
                 }
             case .YabrPDF:
@@ -62,7 +67,15 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
 
             guard let book = modelData.readingBook else { return }
             
-            modelData.logBookDeviceReadingPositionHistoryStart(book: book, position: modelData.updatedReadingPosition, startDatetime: Date())
+//            modelData.logBookDeviceReadingPositionHistoryStart(book: book, position: modelData.updatedReadingPosition, startDatetime: Date())
+            
+            if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {
+                if let bookId = yabrEPub.folioReader.readerConfig?.identifier,
+                   let delegate = yabrEPub.folioReader.delegate?.folioReaderReadPositionProvider?(yabrEPub.folioReader),
+                   let position = yabrEPub.folioReader.savedPositionForCurrentBook {
+                    delegate.folioReaderPositionHistory?(yabrEPub.folioReader, bookId: bookId, start: position)
+                }
+            }
         }
     }
     
