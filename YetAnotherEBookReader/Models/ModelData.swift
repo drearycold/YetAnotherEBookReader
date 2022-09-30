@@ -105,6 +105,8 @@ final class ModelData: ObservableObject {
     }
     
     @Published var selectedPosition = ""
+    
+    @available(*, deprecated, message: "use readPos")
     @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "") {
         didSet {
             self.defaultLog.info("updatedReadingPosition=\(self.updatedReadingPosition.description)")
@@ -113,6 +115,7 @@ final class ModelData: ObservableObject {
     let bookReaderClosedPublisher = NotificationCenter.default.publisher(
         for: .YABR_BookReaderClosed
     ).eraseToAnyPublisher()
+    var bookReaderClosedCancellable: AnyCancellable? = nil
     
     let bookReaderEnterBackgroundPublished = NotificationCenter.default.publisher(
         for: .YABR_BookReaderEnterBackground
@@ -422,6 +425,7 @@ final class ModelData: ObservableObject {
         
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
+        registerBookReaderClosedCancellable()
         
         if mock {
             let library = calibreLibraries.first!.value
@@ -1427,17 +1431,18 @@ final class ModelData: ObservableObject {
     }
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
-        guard var readingBook = self.readingBook else {
+        guard let readingBook = self.readingBook,
+              let updatedReadingPosition = getLatestReadingPosition(book: readingBook),
+              let readerInfo = self.readerInfo
+        else {
             return
         }
-        guard let readerInfo = self.readerInfo else {
-            return
-        }
-        let updatedReadingPosition = self.updatedReadingPosition
         
         defaultLog.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
         defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
+        
+        refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: false)
         
         //TODO: drop readPos
 //        readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
@@ -1445,7 +1450,8 @@ final class ModelData: ObservableObject {
         
 //        self.updateBook(book: readingBook)
         
-        if let bookPrefConfig = getBookPreferenceConfig(book: readingBook, format: readerInfo.format),
+        if false,   //replaced by calling refreshShelfMetadataV2
+           let bookPrefConfig = getBookPreferenceConfig(book: readingBook, format: readerInfo.format),
            let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
            let bookId = bookPrefConfig.fileURL?.deletingPathExtension().lastPathComponent {
             
@@ -1473,8 +1479,7 @@ final class ModelData: ObservableObject {
             }
         }
         
-        //TODO: drop readPos
-        if false,
+        if false,   //replace by mechanism of last_read_position
             let pluginReadingPosition = calibreLibraries[readingBook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled() {
             let ret = calibreServerService.updateBookReadingPosition(book: readingBook, columnName: pluginReadingPosition.readingPositionCN, alertDelegate: alertDelegate, success: nil)
             
@@ -2455,6 +2460,40 @@ final class ModelData: ObservableObject {
                     self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
                 }
             )
+    }
+    
+    func registerBookReaderClosedCancellable() {
+        bookReaderClosedCancellable?.cancel()
+        bookReaderClosedCancellable = bookReaderClosedPublisher.eraseToAnyPublisher()
+            .subscribe(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                //
+            }, receiveValue: { output in
+                guard let book = self.booksInShelf[output.object as? String ?? "__NO_ID__"]
+                else { return }
+                
+                self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: false)
+                
+                guard let updatedReadingPosition = book.readPos.getDevices().first,
+                      let lastPosition = output.userInfo?["lastPosition"] as? BookDeviceReadingPosition
+                else { return }
+                
+                if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
+                   let library = self.calibreLibraries[book.library.id],
+                   let goodreadsId = book.identifiers["goodreads"],
+                   let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = self.shouldAutoUpdateGoodreads(library: library),
+                   dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
+                    let connector = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+                    connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+                    
+                    if goodreadsSync.isEnabled(), goodreadsSync.readingProgressColumnName.count > 1 {
+                        self.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
+                            [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                        ])
+                    }
+                }
+                
+            })
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {

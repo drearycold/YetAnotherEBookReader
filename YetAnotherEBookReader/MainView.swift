@@ -107,6 +107,7 @@ struct MainView: View {
             }
         }
         .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
+            /*
             guard let book = modelData.readingBook,
                   let selectedPosition = modelData.readerInfo?.position,
                   modelData.updatedReadingPosition.isSameType(with: selectedPosition),
@@ -118,6 +119,7 @@ struct MainView: View {
             
             modelData.updateCurrentPosition(alertDelegate: nil)
             NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+            */
         }) {
             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)

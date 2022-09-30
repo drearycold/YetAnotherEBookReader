@@ -14,6 +14,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     }
     
     func saveUpdatedReadingPosition() {
+        /*
         guard let modelData = ModelData.shared else { return }
 
         guard let book = modelData.readingBook, let readerInfo = modelData.readerInfo else { return }
@@ -25,6 +26,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         
         modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: updatedReadingPosition)
         modelData.updateCurrentPosition(alertDelegate: self)
+        */
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -85,6 +87,17 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         ModelData.shared?.bookReaderEnterActiveCancellable?.cancel()
         ModelData.shared?.bookReaderEnterActiveCancellable = nil
         
-        NotificationCenter.default.post(.init(name: .YABR_BookReaderClosed))
+//        NotificationCenter.default.post(.init(name: .YABR_BookReaderClosed))
+        
+        guard let modelData = ModelData.shared,
+              let book = modelData.readingBook,
+              let readerInfo = modelData.readerInfo
+        else { return }
+        
+        NotificationCenter.default.post(
+            name: .YABR_BookReaderClosed,
+            object: book.inShelfId,
+            userInfo: ["lastPosition": readerInfo.position]
+        )
     }
 }

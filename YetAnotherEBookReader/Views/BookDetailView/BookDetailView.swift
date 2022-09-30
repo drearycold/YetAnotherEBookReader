@@ -207,6 +207,7 @@ struct BookDetailView: View {
             .fullScreenCover(
                 isPresented: $presentingReadingSheet,
                 onDismiss: {
+                    /*
                     guard let book = modelData.readingBook,
                         let selectedPosition = modelData.readerInfo?.position,
                         modelData.updatedReadingPosition.isSameType(with: selectedPosition),
@@ -217,6 +218,7 @@ struct BookDetailView: View {
                     
                     modelData.updateCurrentPosition(alertDelegate: self)
                     NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+                    */
                 } ) {
                 if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
                     YabrEBookReader(book: book, readerInfo: readerInfo)

@@ -651,6 +651,7 @@ struct CalibreServerService {
         return 0
     }
     
+    @available(*, deprecated, message: "replaced by book-set-last-read-position")
     func updateBookReadingPosition(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate?, success: (() -> Void)?) -> Int {
         guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
             return -1
