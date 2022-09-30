@@ -124,7 +124,11 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     }
 
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+        super.navigator(navigator, locationDidChange: locator)
+        
         print("EpubReadiumReaderContainerNavigatorDelegate \(locator)")
+        print("EpubReadiumReaderContainerNavigatorDelegate otherLocations=\(locator.locations.otherLocations)")
+        
         if let index = publication.readingOrder.firstIndex(withHREF: locator.href) {
             updatedReadingPosition.2["pageNumber"] = index + 1
         } else {
@@ -136,7 +140,22 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0
         updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
         
-        updatedReadingPosition.3 = locator.title ?? ""
+        if let title = locator.title {
+            updatedReadingPosition.3 = title
+        } else if let tocLink = publication.tableOfContents.firstDeep(withHREF: locator.href),
+                  let tocTitle = tocLink.title {
+            updatedReadingPosition.3 = tocTitle
+        } else {
+            updatedReadingPosition.3 = "Unknown Chapter"
+        }
+    }
+}
+
+fileprivate extension Array where Element == Link {
+    func firstDeep(withHREF href: String) -> Link? {
+        return first {
+            $0.href == href || URL(string: $0.href)?.path == href || $0.children.firstDeep(withHREF: href) != nil
+        }
     }
 }
 

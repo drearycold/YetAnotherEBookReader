@@ -113,12 +113,6 @@
 		2A6D881627550F6400A33771 /* RealmSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A2415362754C46A00FB9885 /* RealmSwift.xcframework */; platformFilter = ios; };
 		2A6D881727550F6400A33771 /* RealmSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A2415362754C46A00FB9885 /* RealmSwift.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */; };
-		2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */; platformFilter = ios; };
-		2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */; platformFilter = ios; };
-		2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; platformFilter = ios; };
-		2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2A73B8F926DC8890004B001D /* BookPreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A73B8F826DC8890004B001D /* BookPreference.swift */; };
 		2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A78A6312717D96000A81E53 /* BookImportPicker.swift */; };
 		2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8464F4269AE3EE000638B2 /* MDictView.swift */; };
@@ -260,7 +254,6 @@
 		2ADCD83426F4B96200FBAE11 /* LibraryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D6E2663CB55007DCA20 /* LibraryViewController.swift */; platformFilter = ios; };
 		2ADCD83526F4B96200FBAE11 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ABB9142261ED7E5004AA7C0 /* Constants.swift */; };
 		2ADCD83626F4B96200FBAE11 /* DSReaderHelperConnector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */; };
-		2ADCD84426F4B96200FBAE11 /* CryptoSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; };
 		2ADCD84B26F4B96200FBAE11 /* App.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107E112663CB96007DCA20 /* App.storyboard */; };
 		2ADCD84C26F4B96200FBAE11 /* 4.epub in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DC02663CB55007DCA20 /* 4.epub */; };
 		2ADCD84D26F4B96200FBAE11 /* PublicationMenuViewController.xib in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D732663CB55007DCA20 /* PublicationMenuViewController.xib */; };
@@ -284,7 +277,6 @@
 		2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AC3EC1F25BDBC11004A6633 /* Assets.xcassets */; };
 		2ADCD86026F4B96200FBAE11 /* PublicationMenuViewController.strings in Resources */ = {isa = PBXBuildFile; fileRef = 2A107D6C2663CB55007DCA20 /* PublicationMenuViewController.strings */; };
 		2ADCD86126F4B96200FBAE11 /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2A107DA12663CB55007DCA20 /* Outline.storyboard */; };
-		2ADCD86926F4B96200FBAE11 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		2AE26433274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */; };
 		2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD02675F680006E92E0 /* SettingsView.swift */; };
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
@@ -300,25 +292,11 @@
 		4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		61BB9B4B27B5540C21542AD4 /* Pods_YetAnotherEBookReaderTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 82B3A2CE2389D8DA08846A07 /* Pods_YetAnotherEBookReaderTests.framework */; };
 		6BE6DDB13475A85A1D94444B /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22BED5CB8454A86BCB647E0C /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */; };
-		6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; platformFilter = ios; };
-		6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; };
-		6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A4265FED1900885D26 /* Fuzi.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; platformFilter = ios; };
-		6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; platformFilter = ios; };
-		6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99D265FED1800885D26 /* Minizip.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; platformFilter = ios; };
-		6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E99E265FED1800885D26 /* SQLite.xcframework */; platformFilter = ios; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6E7733C026663D51008318C3 /* BookFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E7733BF26663D51008318C3 /* BookFiles.swift */; };
 		E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E715526A28000FB5003CB90C /* SwiftUICharts */; };
-		E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; };
-		E72B6144283336A7002EF889 /* ReadiumOPDS.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
 		E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5E280D39D9006E6901 /* YabrPDFView.swift */; };
 		E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */; };
-		E7CC4ECF283294B60094FF10 /* GCDWebServer.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; };
-		E7CC4ED0283294B60094FF10 /* GCDWebServer.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -345,18 +323,8 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				E7CC4ED0283294B60094FF10 /* GCDWebServer.xcframework in Embed Frameworks */,
-				E72B6144283336A7002EF889 /* ReadiumOPDS.xcframework in Embed Frameworks */,
-				2A73B8F326DB7BDF004B001D /* R2Streamer.xcframework in Embed Frameworks */,
-				6E76E9BB265FF35D00885D26 /* MBProgressHUD.xcframework in Embed Frameworks */,
-				6E76E9B1265FF35100885D26 /* CryptoSwift.xcframework in Embed Frameworks */,
-				6E76E9BF265FF36400885D26 /* SQLite.xcframework in Embed Frameworks */,
 				2A6D881727550F6400A33771 /* RealmSwift.xcframework in Embed Frameworks */,
-				2A73B8EF26DB7BDA004B001D /* R2Navigator.xcframework in Embed Frameworks */,
-				2A73B8F126DB7BDE004B001D /* R2Shared.xcframework in Embed Frameworks */,
-				6E76E9BD265FF36000885D26 /* Minizip.xcframework in Embed Frameworks */,
 				2A6D881527550F6200A33771 /* Realm.xcframework in Embed Frameworks */,
-				6E76E9B3265FF35300885D26 /* Fuzi.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -367,7 +335,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				2ADCD86926F4B96200FBAE11 /* CryptoSwift.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -385,24 +352,9 @@
 		2A0A782B26E8F65500F3C753 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		2A0A782D26E8F65500F3C753 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2A0A782E26E8F65500F3C753 /* YetAnotherEBookReader_for_macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YetAnotherEBookReader_for_macOS.entitlements; sourceTree = "<group>"; };
-		2A0A786326E8F6DF00F3C753 /* AEXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = AEXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786426E8F6DF00F3C753 /* FBLPromises.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FBLPromises.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786526E8F6DF00F3C753 /* FolioReaderKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FolioReaderKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786626E8F6DF00F3C753 /* FontBlaster.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FontBlaster.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0A786726E8F6DF00F3C753 /* GoogleAppMeasurement.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleAppMeasurement.xcframework; path = Pods/GoogleAppMeasurement/Frameworks/GoogleAppMeasurement.xcframework; sourceTree = "<group>"; };
 		2A0A786826E8F6DF00F3C753 /* GoogleMobileAds.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GoogleMobileAds.xcframework; path = "Pods/Google-Mobile-Ads-SDK/Frameworks/GoogleMobileAdsFramework-Current/GoogleMobileAds.xcframework"; sourceTree = "<group>"; };
-		2A0A786926E8F6DF00F3C753 /* GoogleUtilities.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = GoogleUtilities.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786A26E8F6DF00F3C753 /* Kingfisher.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Kingfisher.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786B26E8F6DF00F3C753 /* MenuItemKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = MenuItemKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786C26E8F6DF00F3C753 /* nanopb.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = nanopb.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A786F26E8F6DF00F3C753 /* realm-sync.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = "realm-sync.xcframework"; path = "Pods/Realm/core/realm-sync.xcframework"; sourceTree = "<group>"; };
-		2A0A787026E8F6DF00F3C753 /* Realm.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Realm.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A787126E8F6DF00F3C753 /* RealmSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RealmSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A787226E8F6DF00F3C753 /* ShelfView.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = ShelfView.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A787326E8F6DF00F3C753 /* ShelfView.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ShelfView.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2A0A787426E8F6DF00F3C753 /* SSZipArchive.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = SSZipArchive.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0A787526E8F6DF00F3C753 /* UserMessagingPlatform.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = UserMessagingPlatform.xcframework; path = Pods/GoogleUserMessagingPlatform/Frameworks/Release/UserMessagingPlatform.xcframework; sourceTree = "<group>"; };
-		2A0A787626E8F6DF00F3C753 /* ZFDragableModalTransition.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZFDragableModalTransition.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageWithBackground.swift; sourceTree = "<group>"; };
 		2A0EBA85267893740080BF5B /* Downloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Downloader.swift; sourceTree = "<group>"; };
 		2A107D412661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumEPUBViewController.swift; sourceTree = "<group>"; };
@@ -503,18 +455,12 @@
 		2A4787A027154E39009C8770 /* FontImportPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontImportPicker.swift; sourceTree = "<group>"; };
 		2A63F73F26C1136E00DB5E98 /* BookFormatDownload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFormatDownload.swift; sourceTree = "<group>"; };
 		2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDictViewUIVC.swift; sourceTree = "<group>"; };
-		2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Shared.xcframework; path = Carthage/Build/R2Shared.xcframework; sourceTree = "<group>"; };
-		2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ReadiumLCP.xcframework; path = Carthage/Build/ReadiumLCP.xcframework; sourceTree = "<group>"; };
-		2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Navigator.xcframework; path = Carthage/Build/R2Navigator.xcframework; sourceTree = "<group>"; };
-		2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = R2Streamer.xcframework; path = Carthage/Build/R2Streamer.xcframework; sourceTree = "<group>"; };
-		2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ReadiumOPDS.xcframework; path = Carthage/Build/ReadiumOPDS.xcframework; sourceTree = "<group>"; };
 		2A73B8F826DC8890004B001D /* BookPreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreference.swift; sourceTree = "<group>"; };
 		2A78A6312717D96000A81E53 /* BookImportPicker.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BookImportPicker.swift; sourceTree = "<group>"; };
 		2A8464F4269AE3EE000638B2 /* MDictView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MDictView.swift; sourceTree = "<group>"; };
 		2A84650D269AE555000638B2 /* MyFolioReaderCenterDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = MyFolioReaderCenterDelegate.swift; sourceTree = "<group>"; };
 		2A88D9AB275204F900372660 /* LibraryOptionsOverrideCustomColumnMappings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsOverrideCustomColumnMappings.swift; sourceTree = "<group>"; };
 		2A890570260076780072B580 /* YabrPDFOptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFOptionView.swift; sourceTree = "<group>"; };
-		2A8B6A5F26F97E3D004197D7 /* RealmSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RealmSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUIVC.swift; sourceTree = "<group>"; };
 		2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewUI.swift; sourceTree = "<group>"; };
 		2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFViewController.swift; sourceTree = "<group>"; };
@@ -561,20 +507,6 @@
 		2ADC45BD2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsCountPages.swift; sourceTree = "<group>"; };
 		2ADCD87626F4B96200FBAE11 /* YetAnotherEBookReader-Catalyst.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "YetAnotherEBookReader-Catalyst.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerOptionsDSReaderHelper.swift; sourceTree = "<group>"; };
-		2AEE912D26F4712800B012B0 /* AEXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = AEXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913026F4715700B012B0 /* ZFDragableModalTransition.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZFDragableModalTransition.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913726F471B800B012B0 /* Realm.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Realm.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913826F471B800B012B0 /* RealmSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RealmSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913926F471B800B012B0 /* ShelfView.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ShelfView.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913A26F471B800B012B0 /* SSZipArchive.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = SSZipArchive.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE913B26F471B800B012B0 /* ZFDragableModalTransition.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ZFDragableModalTransition.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914626F471CE00B012B0 /* AEXML.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = AEXML.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914726F471CE00B012B0 /* FBLPromises.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FBLPromises.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914826F471CE00B012B0 /* FolioReaderKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FolioReaderKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914926F471CE00B012B0 /* FontBlaster.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FontBlaster.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914A26F471CE00B012B0 /* Kingfisher.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Kingfisher.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE914B26F471CE00B012B0 /* MenuItemKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = MenuItemKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		2AEE915826F47B5300B012B0 /* Kingfisher.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Kingfisher.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AF53FD02675F680006E92E0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsView.swift; sourceTree = "<group>"; };
 		2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumPDFViewController.swift; sourceTree = "<group>"; };
@@ -588,25 +520,7 @@
 		5EC996F3A0D91B150367D231 /* Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests.release.xcconfig"; sourceTree = "<group>"; };
 		65090A9734F3ABD319A180C2 /* Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst.debug.xcconfig"; sourceTree = "<group>"; };
 		6CE6BDB7B6873ADC0FCB3E54 /* Pods-YetAnotherEBookReader.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReader.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader.debug.xcconfig"; sourceTree = "<group>"; };
-		6E1CDBC4266C69F000F49276 /* FolioReaderKit.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = FolioReaderKit.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MBProgressHUD.xcframework; path = Carthage/Build/MBProgressHUD.xcframework; sourceTree = "<group>"; };
-		6E76E99D265FED1800885D26 /* Minizip.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Minizip.xcframework; path = Carthage/Build/Minizip.xcframework; sourceTree = "<group>"; };
-		6E76E99E265FED1800885D26 /* SQLite.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SQLite.xcframework; path = Carthage/Build/SQLite.xcframework; sourceTree = "<group>"; };
-		6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = CryptoSwift.xcframework; path = Carthage/Build/CryptoSwift.xcframework; sourceTree = "<group>"; };
-		6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SwiftSoup.xcframework; path = Carthage/Build/SwiftSoup.xcframework; sourceTree = "<group>"; };
-		6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = KingfisherSwiftUI.xcframework; path = Carthage/Build/KingfisherSwiftUI.xcframework; sourceTree = "<group>"; };
-		6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ZIPFoundation.xcframework; path = Carthage/Build/ZIPFoundation.xcframework; sourceTree = "<group>"; };
-		6E76E9A3265FED1900885D26 /* Kingfisher.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Kingfisher.xcframework; path = Carthage/Build/Kingfisher.xcframework; sourceTree = "<group>"; };
-		6E76E9A4265FED1900885D26 /* Fuzi.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = Fuzi.xcframework; path = Carthage/Build/Fuzi.xcframework; sourceTree = "<group>"; };
-		6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GCDWebServer.xcframework; path = Carthage/Build/GCDWebServer.xcframework; sourceTree = "<group>"; };
 		6E7733BF26663D51008318C3 /* BookFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFiles.swift; sourceTree = "<group>"; };
-		6EBDDA9C266E0C45008E888D /* Realm.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = Realm.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		6EBDDA9D266E0C45008E888D /* RealmSwift.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RealmSwift.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		6EBDDAAC266E0F76008E888D /* MenuItemKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = MenuItemKit.xcframework; path = Carthage/Build/MenuItemKit.xcframework; sourceTree = "<group>"; };
-		6EBDDAB0266E0F98008E888D /* FontBlaster.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = FontBlaster.xcframework; path = Carthage/Build/FontBlaster.xcframework; sourceTree = "<group>"; };
-		6EBDDAB2266E0FB0008E888D /* AEXML.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = AEXML.xcframework; path = Carthage/Build/AEXML.xcframework; sourceTree = "<group>"; };
-		6EBDDAC2266E135E008E888D /* ZFDragableModalTransition.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = ZFDragableModalTransition.xcframework; path = Carthage/Build/ZFDragableModalTransition.xcframework; sourceTree = "<group>"; };
-		6EBDDAC6266E1580008E888D /* ShelfView.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = ShelfView.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		7FB9FA2063D4A24ED8477D46 /* Pods-YetAnotherEBookReaderTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-YetAnotherEBookReaderTests.debug.xcconfig"; path = "Target Support Files/Pods-YetAnotherEBookReaderTests/Pods-YetAnotherEBookReaderTests.debug.xcconfig"; sourceTree = "<group>"; };
 		82B3A2CE2389D8DA08846A07 /* Pods_YetAnotherEBookReaderTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReaderTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A3BD35FBC8C10AAFDF26BF4F /* Pods_YetAnotherEBookReader.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_YetAnotherEBookReader.framework; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -623,20 +537,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6E76E9BC265FF35F00885D26 /* Minizip.xcframework in Frameworks */,
-				6E76E9BE265FF36300885D26 /* SQLite.xcframework in Frameworks */,
-				6E76E9B2265FF35300885D26 /* Fuzi.xcframework in Frameworks */,
 				2A0A0489271BFEE500589B87 /* AppTrackingTransparency.framework in Frameworks */,
-				2A73B8F226DB7BDF004B001D /* R2Streamer.xcframework in Frameworks */,
-				2A73B8F026DB7BDE004B001D /* R2Shared.xcframework in Frameworks */,
-				6E76E9BA265FF35D00885D26 /* MBProgressHUD.xcframework in Frameworks */,
 				2A6D881427550F6100A33771 /* Realm.xcframework in Frameworks */,
-				E7CC4ECF283294B60094FF10 /* GCDWebServer.xcframework in Frameworks */,
 				2A6D881627550F6400A33771 /* RealmSwift.xcframework in Frameworks */,
-				6E76E9B0265FF35100885D26 /* CryptoSwift.xcframework in Frameworks */,
 				E715526B28000FB5003CB90C /* SwiftUICharts in Frameworks */,
-				2A73B8EE26DB7BDA004B001D /* R2Navigator.xcframework in Frameworks */,
-				E72B6143283336A7002EF889 /* ReadiumOPDS.xcframework in Frameworks */,
 				17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */,
 				4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */,
 				4C8D6A8BE24380426C1F893E /* (null) in Frameworks */,
@@ -664,7 +568,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2ADCD84426F4B96200FBAE11 /* CryptoSwift.xcframework in Frameworks */,
 				31E33B3BEA4691709AC9E3E9 /* Pods_YetAnotherEBookReader_Catalyst.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1222,62 +1125,9 @@
 				2A0A0488271BFEE500589B87 /* AppTrackingTransparency.framework */,
 				2A2415352754C46A00FB9885 /* Realm.xcframework */,
 				2A2415362754C46A00FB9885 /* RealmSwift.xcframework */,
-				2A8B6A5F26F97E3D004197D7 /* RealmSwift.framework */,
-				2AEE915826F47B5300B012B0 /* Kingfisher.framework */,
-				2AEE914626F471CE00B012B0 /* AEXML.framework */,
-				2AEE914726F471CE00B012B0 /* FBLPromises.framework */,
-				2AEE914826F471CE00B012B0 /* FolioReaderKit.framework */,
-				2AEE914926F471CE00B012B0 /* FontBlaster.framework */,
-				2AEE914A26F471CE00B012B0 /* Kingfisher.framework */,
-				2AEE914B26F471CE00B012B0 /* MenuItemKit.framework */,
-				2AEE913726F471B800B012B0 /* Realm.framework */,
-				2AEE913826F471B800B012B0 /* RealmSwift.framework */,
-				2AEE913926F471B800B012B0 /* ShelfView.framework */,
-				2AEE913A26F471B800B012B0 /* SSZipArchive.framework */,
-				2AEE913B26F471B800B012B0 /* ZFDragableModalTransition.framework */,
-				2AEE913026F4715700B012B0 /* ZFDragableModalTransition.framework */,
-				2AEE912D26F4712800B012B0 /* AEXML.framework */,
-				2A0A786326E8F6DF00F3C753 /* AEXML.framework */,
-				2A0A786426E8F6DF00F3C753 /* FBLPromises.framework */,
-				2A0A786526E8F6DF00F3C753 /* FolioReaderKit.framework */,
-				2A0A786626E8F6DF00F3C753 /* FontBlaster.framework */,
 				2A0A786726E8F6DF00F3C753 /* GoogleAppMeasurement.xcframework */,
 				2A0A786826E8F6DF00F3C753 /* GoogleMobileAds.xcframework */,
-				2A0A786926E8F6DF00F3C753 /* GoogleUtilities.framework */,
-				2A0A786A26E8F6DF00F3C753 /* Kingfisher.framework */,
-				2A0A786B26E8F6DF00F3C753 /* MenuItemKit.framework */,
-				2A0A786C26E8F6DF00F3C753 /* nanopb.framework */,
-				2A0A786F26E8F6DF00F3C753 /* realm-sync.xcframework */,
-				2A0A787026E8F6DF00F3C753 /* Realm.framework */,
-				2A0A787126E8F6DF00F3C753 /* RealmSwift.framework */,
-				2A0A787226E8F6DF00F3C753 /* ShelfView.bundle */,
-				2A0A787326E8F6DF00F3C753 /* ShelfView.framework */,
-				2A0A787426E8F6DF00F3C753 /* SSZipArchive.framework */,
 				2A0A787526E8F6DF00F3C753 /* UserMessagingPlatform.xcframework */,
-				2A0A787626E8F6DF00F3C753 /* ZFDragableModalTransition.framework */,
-				6EBDDAC6266E1580008E888D /* ShelfView.framework */,
-				6EBDDA9C266E0C45008E888D /* Realm.framework */,
-				6EBDDA9D266E0C45008E888D /* RealmSwift.framework */,
-				6E1CDBC4266C69F000F49276 /* FolioReaderKit.framework */,
-				2A73B8E626DB7BB0004B001D /* R2Navigator.xcframework */,
-				2A73B8E426DB7BB0004B001D /* R2Shared.xcframework */,
-				2A73B8E726DB7BB0004B001D /* R2Streamer.xcframework */,
-				2A73B8E526DB7BB0004B001D /* ReadiumLCP.xcframework */,
-				2A73B8E826DB7BB0004B001D /* ReadiumOPDS.xcframework */,
-				6EBDDAB2266E0FB0008E888D /* AEXML.xcframework */,
-				6E76E99F265FED1800885D26 /* CryptoSwift.xcframework */,
-				6EBDDAB0266E0F98008E888D /* FontBlaster.xcframework */,
-				6E76E9A4265FED1900885D26 /* Fuzi.xcframework */,
-				6E76E9A5265FED1900885D26 /* GCDWebServer.xcframework */,
-				6E76E9A3265FED1900885D26 /* Kingfisher.xcframework */,
-				6E76E9A1265FED1900885D26 /* KingfisherSwiftUI.xcframework */,
-				6E76E99C265FED1800885D26 /* MBProgressHUD.xcframework */,
-				6EBDDAAC266E0F76008E888D /* MenuItemKit.xcframework */,
-				6E76E99D265FED1800885D26 /* Minizip.xcframework */,
-				6E76E99E265FED1800885D26 /* SQLite.xcframework */,
-				6E76E9A0265FED1800885D26 /* SwiftSoup.xcframework */,
-				6EBDDAC2266E135E008E888D /* ZFDragableModalTransition.xcframework */,
-				6E76E9A2265FED1900885D26 /* ZIPFoundation.xcframework */,
 				A3BD35FBC8C10AAFDF26BF4F /* Pods_YetAnotherEBookReader.framework */,
 				55271F2BE92C4B4B9870FAEB /* Pods_YetAnotherEBookReader_Catalyst.framework */,
 				22BED5CB8454A86BCB647E0C /* Pods_YetAnotherEBookReader_YetAnotherEBookReaderUITests.framework */,
@@ -2141,7 +1991,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2221,7 +2071,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 83;
+				CURRENT_PROJECT_VERSION = 86;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

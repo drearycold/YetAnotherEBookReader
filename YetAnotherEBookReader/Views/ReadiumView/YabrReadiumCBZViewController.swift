@@ -69,7 +69,13 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
             updatedReadingPosition.1 = 1.0
         }
         
-        updatedReadingPosition.3 = locator.title ?? ""
+        if let title = locator.title {
+            updatedReadingPosition.3 = title
+        } else if let pageNumber = locator.locations.position {
+            updatedReadingPosition.3 = "Page \(pageNumber)"
+        } else {
+            updatedReadingPosition.3 = "Untitled Page"
+        }
     }
 }
 

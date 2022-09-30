@@ -50,6 +50,37 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0
         updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
         
-        updatedReadingPosition.3 = locator.title ?? ""
+        if let title = locator.title {
+            updatedReadingPosition.3 = title
+        } else if let fragment = locator.locations.fragments.first,
+                  let tocLink = publication.tableOfContents.firstDeep(withFRAGMENT: fragment),
+                  let tocTitle = tocLink.title {
+            updatedReadingPosition.3 = tocTitle
+        } else if let fragment = locator.locations.fragments.first,
+                  let locPageNumberValue = fragment.split(separator: "=").last,
+                  let locPageNumber = Int(locPageNumberValue),
+                    let tocLink = publication.tableOfContents.filter( { link in
+                        guard let tocFragmentIndex = link.href.firstIndex(of: "#"),
+                              let tocFragment = link.href[tocFragmentIndex..<link.href.endIndex] as Substring?,
+                              let pageNumberValue = tocFragment.split(separator: "=").last,
+                              let pageNumber = Int(pageNumberValue),
+                              pageNumber <= locPageNumber
+                        else { return false }
+                        
+                        return true
+                    }).last,
+                  let tocTitle = tocLink.title {
+            updatedReadingPosition.3 = tocTitle
+        } else {
+            updatedReadingPosition.3 = "Unknown Title"
+        }
+    }
+}
+
+fileprivate extension Array where Element == Link {
+    func firstDeep(withFRAGMENT fragment: String) -> Link? {
+        return first {
+            URL(string: $0.href)?.fragment == fragment || $0.children.firstDeep(withFRAGMENT: fragment) != nil
+        }
     }
 }

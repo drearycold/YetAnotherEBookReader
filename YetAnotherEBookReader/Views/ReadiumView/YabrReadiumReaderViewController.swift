@@ -352,6 +352,7 @@ class YabrReadiumReaderViewController:
 
     //MARK: - YabrReadingPositionMaintainer
     var readerType: ReaderType = .UNSUPPORTED
+    var readPos: BookReadingPosition?
     var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
     
     func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition {
@@ -369,10 +370,20 @@ class YabrReadiumReaderViewController:
         
         position.lastReadChapter = updatedReadingPosition.3
         position.readerName = readerType.rawValue
+        
+        position.cfi = ""
 
         position.epoch = Date().timeIntervalSince1970
+        
+        if let readPos = readPos {
+            updateReadingPosition(readPos: readPos, position: position)
+        }
         
         return position
     }
 
+    func updateReadingPosition(readPos: BookReadingPosition, position: BookDeviceReadingPosition) {
+        readPos.updatePosition(position.id, position)
+    }
+    
 }

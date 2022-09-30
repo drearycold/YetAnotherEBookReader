@@ -645,7 +645,7 @@ struct BookReadingPosition {
         //TODO: try doing nothing
     }
     
-    mutating func updatePosition(_ deviceName: String, _ newPosition: BookDeviceReadingPosition) {
+    func updatePosition(_ deviceName: String, _ newPosition: BookDeviceReadingPosition) {
         let realm = openRealm()
         
         try? realm?.write {

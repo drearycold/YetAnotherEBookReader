@@ -1,5 +1,12 @@
 PODS:
   - AEXML (4.6.1)
+  - CryptoSwift (1.5.1)
+  - DifferenceKit (1.3.0):
+    - DifferenceKit/Core (= 1.3.0)
+    - DifferenceKit/UIKitExtension (= 1.3.0)
+  - DifferenceKit/Core (1.3.0)
+  - DifferenceKit/UIKitExtension (1.3.0):
+    - DifferenceKit/Core
   - FolioReaderKit (2.0.0):
     - AEXML (~> 4.0)
     - FontBlaster (~> 5.0)
@@ -9,7 +16,11 @@ PODS:
     - ZFDragableModalTransition (~> 0.6)
     - ZIPFoundation (~> 0.9)
   - FontBlaster (5.3.0)
-  - Google-Mobile-Ads-SDK (9.10.0):
+  - Fuzi (3.1.3)
+  - GCDWebServer (3.7.3):
+    - GCDWebServer/Core (= 3.7.3)
+  - GCDWebServer/Core (3.7.3)
+  - Google-Mobile-Ads-SDK (9.11.0):
     - GoogleAppMeasurement (< 10.0, >= 7.0)
     - GoogleUserMessagingPlatform (>= 1.1)
   - GoogleAppMeasurement (9.6.0):
@@ -55,38 +66,78 @@ PODS:
   - Kingfisher/Core (5.15.8)
   - Kingfisher/SwiftUI (5.15.8):
     - Kingfisher/Core
+  - MBProgressHUD (1.2.0)
   - MenuItemKit (4.0.1)
+  - Minizip (1.0.0)
   - nanopb (2.30909.0):
     - nanopb/decode (= 2.30909.0)
     - nanopb/encode (= 2.30909.0)
   - nanopb/decode (2.30909.0)
   - nanopb/encode (2.30909.0)
   - PromisesObjC (2.1.1)
+  - R2Navigator (2.4.0):
+    - DifferenceKit (~> 1.0)
+    - R2Shared
+    - SwiftSoup (~> 2.0)
+  - R2Shared (2.4.0):
+    - Fuzi (~> 3.0)
+    - Minizip (~> 1.0)
+    - SwiftSoup (~> 2.0)
+  - R2Streamer (2.4.0):
+    - CryptoSwift (<= 1.5.1)
+    - Fuzi (~> 3.0)
+    - GCDWebServer (~> 3.0)
+    - Minizip (~> 1.0)
+    - R2Shared
+  - ReadiumLCP (2.4.0):
+    - CryptoSwift (<= 1.5.1)
+    - R2Shared
+    - SQLite.swift (~> 0.13)
+    - ZIPFoundation (<= 0.9.11)
+  - ReadiumOPDS (2.4.0):
+    - Fuzi (~> 3.0)
+    - R2Shared
   - ShelfView (2.0):
     - Kingfisher (~> 5.15)
+  - SQLite.swift (0.13.3):
+    - SQLite.swift/standard (= 0.13.3)
+  - SQLite.swift/standard (0.13.3)
   - SSZipArchive (2.4.3)
   - SwiftSoup (2.4.3)
   - ZFDragableModalTransition (0.6)
-  - ZIPFoundation (0.9.13)
+  - ZIPFoundation (0.9.11)
 
 DEPENDENCIES:
   - FolioReaderKit (from `../FolioReaderKit`)
+  - GCDWebServer (from `https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec`)
   - Google-Mobile-Ads-SDK
   - Kingfisher/SwiftUI (~> 5.0)
+  - MBProgressHUD (~> 1.2.0)
+  - R2Navigator (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumNavigator.podspec`)
+  - R2Shared (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumShared.podspec`)
+  - R2Streamer (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumStreamer.podspec`)
+  - ReadiumLCP (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec`)
+  - ReadiumOPDS (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec`)
   - ShelfView (from `../ShelfView-iOS`)
 
 SPEC REPOS:
   trunk:
     - AEXML
+    - CryptoSwift
+    - DifferenceKit
     - FontBlaster
+    - Fuzi
     - Google-Mobile-Ads-SDK
     - GoogleAppMeasurement
     - GoogleUserMessagingPlatform
     - GoogleUtilities
     - Kingfisher
+    - MBProgressHUD
     - MenuItemKit
+    - Minizip
     - nanopb
     - PromisesObjC
+    - SQLite.swift
     - SSZipArchive
     - SwiftSoup
     - ZFDragableModalTransition
@@ -95,27 +146,51 @@ SPEC REPOS:
 EXTERNAL SOURCES:
   FolioReaderKit:
     :path: "../FolioReaderKit"
+  GCDWebServer:
+    :podspec: https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec
+  R2Navigator:
+    :podspec: https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumNavigator.podspec
+  R2Shared:
+    :podspec: https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumShared.podspec
+  R2Streamer:
+    :podspec: https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumStreamer.podspec
+  ReadiumLCP:
+    :podspec: https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec
+  ReadiumOPDS:
+    :podspec: https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec
   ShelfView:
     :path: "../ShelfView-iOS"
 
 SPEC CHECKSUMS:
   AEXML: 1e255ecc6597212f97a7454a69ebd3ede64ac1cf
+  CryptoSwift: c4f2debceb38bf44c80659afe009f71e23e4a082
+  DifferenceKit: ab185c4d7f9cef8af3fcf593e5b387fb81e999ca
   FolioReaderKit: a3237ae2478142f2d4ff56883f1f6807fa4e427e
   FontBlaster: 941f89d735a29e1c7d24e7a90d3e16939ef1609a
-  Google-Mobile-Ads-SDK: eb398023f0d97cdd259b171052f1eb433de00c87
+  Fuzi: 4c10d6449c0b49a85cd75b13844c559c0fc71220
+  GCDWebServer: 72180d2f3be0bacb070ccda00cfcd4951f2886a7
+  Google-Mobile-Ads-SDK: e0322ce0f304126547185fa254dfe66ac66153d8
   GoogleAppMeasurement: 6de2b1a69e4326eb82ee05d138f6a5cb7311bcb1
   GoogleUserMessagingPlatform: 5f8b30daf181805317b6b985bb51c1ff3beca054
   GoogleUtilities: 1d20a6ad97ef46f67bbdec158ce00563a671ebb7
   Kingfisher: a3c03d702433fa6cfedabb2bddbe076fb8f2e902
+  MBProgressHUD: 3ee5efcc380f6a79a7cc9b363dd669c5e1ae7406
   MenuItemKit: 1459920e984d823e1bcc858b7a964f94e6bfa0f6
+  Minizip: 188cb3e39a1195c283ae03bf673d182596fefd0b
   nanopb: b552cce312b6c8484180ef47159bc0f65a1f0431
   PromisesObjC: ab77feca74fa2823e7af4249b8326368e61014cb
+  R2Navigator: 0e28e47559e98d4aed0f054763286cf47c545ca3
+  R2Shared: 78fdaf8b621e2299dc74c0404f47fe154253c98f
+  R2Streamer: fd3756bfbc3621dff7530a67e92bd0307fce0402
+  ReadiumLCP: 41466059cecbf78bee605b3b8cee830b42cf115b
+  ReadiumOPDS: 5a22056030668c03e8c7f8b90153c7049a74760c
   ShelfView: 31e93fdc09cf1b899b099bdcc7add5d706822cdb
+  SQLite.swift: 903bfa3bc9ab06345fdfbb578e34f47cfcf417da
   SSZipArchive: fe6a26b2a54d5a0890f2567b5cc6de5caa600aef
   SwiftSoup: 3384f2e618cfc1b3cbc7852c16692fe8de13fb8f
   ZFDragableModalTransition: 0d294eaaba6edfcb9839595de765f9ca06a4b524
-  ZIPFoundation: ae5b4b813d216d3bf0a148773267fff14bd51d37
+  ZIPFoundation: b1f0de4eed33e74a676f76e12559ab6b75990197
 
-PODFILE CHECKSUM: c0a62293f0986ca057d710b50184167de3edb077
+PODFILE CHECKSUM: 9cbd43a6cec4ab1fe3be1dc6c52214a896aacec7
 
 COCOAPODS: 1.11.3

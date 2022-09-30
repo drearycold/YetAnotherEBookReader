@@ -914,10 +914,6 @@ extension BookDeviceReadingPositionRealm {
     }
     
     func toFolioReaderReadPosition() -> FolioReaderReadPosition? {
-        guard readerName == ReaderType.YabrEPUB.rawValue else {
-            return nil
-        }
-
         let position = FolioReaderReadPosition(
             deviceId: id,
             structuralStyle: FolioReaderStructuralStyle(rawValue: structuralStyle) ?? .atom,
@@ -961,10 +957,20 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
-        if let position = realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId)).sorted(byKeyPath: "epoch", ascending: false).first?.toFolioReaderReadPosition() {
+        if let position = realm?.objects(BookDeviceReadingPositionRealm.self)
+            .filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId))
+            .sorted(byKeyPath: "epoch", ascending: false)
+            .first?
+            .toFolioReaderReadPosition()
+        {
             return position
         }
-        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).sorted(byKeyPath: "epoch", ascending: false).compactMap{ $0.toFolioReaderReadPosition() }.first
+        return realm?.objects(BookDeviceReadingPositionRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookId))
+            .sorted(byKeyPath: "epoch", ascending: false)
+            .compactMap{
+                $0.toFolioReaderReadPosition()
+            }.first
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {

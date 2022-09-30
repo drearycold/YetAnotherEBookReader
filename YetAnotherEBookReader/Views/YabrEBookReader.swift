@@ -109,6 +109,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     }() else { return }
                     
                     readerVC.readerType = bookReader
+                    readerVC.readPos = self.book.readPos
                     readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
                         systemItem: .close,
                         primaryAction: UIAction(
@@ -207,4 +208,6 @@ class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
 
 protocol YabrReadingPositionMaintainer {
     func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition
+
+    func updateReadingPosition(readPos: BookReadingPosition, position: BookDeviceReadingPosition)
 }
