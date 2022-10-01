@@ -97,6 +97,11 @@ PODS:
   - ReadiumOPDS (2.4.0):
     - Fuzi (~> 3.0)
     - R2Shared
+  - Realm (5.5.1):
+    - Realm/Headers (= 5.5.1)
+  - Realm/Headers (5.5.1)
+  - RealmSwift (5.5.1):
+    - Realm (= 5.5.1)
   - ShelfView (2.0):
     - Kingfisher (~> 5.15)
   - SQLite.swift (0.13.3):
@@ -118,6 +123,7 @@ DEPENDENCIES:
   - R2Streamer (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumStreamer.podspec`)
   - ReadiumLCP (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec`)
   - ReadiumOPDS (from `https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec`)
+  - RealmSwift (~> 5)
   - ShelfView (from `../ShelfView-iOS`)
 
 SPEC REPOS:
@@ -137,6 +143,8 @@ SPEC REPOS:
     - Minizip
     - nanopb
     - PromisesObjC
+    - Realm
+    - RealmSwift
     - SQLite.swift
     - SSZipArchive
     - SwiftSoup
@@ -184,6 +192,8 @@ SPEC CHECKSUMS:
   R2Streamer: fd3756bfbc3621dff7530a67e92bd0307fce0402
   ReadiumLCP: 41466059cecbf78bee605b3b8cee830b42cf115b
   ReadiumOPDS: 5a22056030668c03e8c7f8b90153c7049a74760c
+  Realm: c2ffe0667f9c98c9ba65f608ba85684d39826145
+  RealmSwift: 5a35c1c35c3e1925e6fcd092c881d5cc4a826bff
   ShelfView: 31e93fdc09cf1b899b099bdcc7add5d706822cdb
   SQLite.swift: 903bfa3bc9ab06345fdfbb578e34f47cfcf417da
   SSZipArchive: fe6a26b2a54d5a0890f2567b5cc6de5caa600aef
@@ -191,6 +201,6 @@ SPEC CHECKSUMS:
   ZFDragableModalTransition: 0d294eaaba6edfcb9839595de765f9ca06a4b524
   ZIPFoundation: b1f0de4eed33e74a676f76e12559ab6b75990197
 
-PODFILE CHECKSUM: 9cbd43a6cec4ab1fe3be1dc6c52214a896aacec7
+PODFILE CHECKSUM: e28aabb984dde11ae83fbfcb6e7b48cfefcf26cd
 
 COCOAPODS: 1.11.3

@@ -31,10 +31,12 @@ struct BookPreviewView: View {
             VStack {
                 YabrEBookReader(
                     book: _VM.book,
-                    url: _VM.url,
-                    format: _VM.format,
-                    reader: _VM.reader,
-                    position: _VM.modelData.getInitialReadingPosition(book: _VM.book, format: _VM.format, reader: _VM.reader)
+                    readerInfo: ReaderInfo(
+                        url: _VM.url,
+                        format: _VM.format,
+                        readerType: _VM.reader,
+                        position: _VM.modelData.getInitialReadingPosition(book: _VM.book, format: _VM.format, reader: _VM.reader)
+                    )
                 )
             }
             .tabItem {

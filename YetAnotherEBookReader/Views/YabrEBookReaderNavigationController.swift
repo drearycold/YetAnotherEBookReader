@@ -9,6 +9,23 @@ import Foundation
 import UIKit
 
 class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate {
+    var modelData: ModelData
+    
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
+    
+    init(modelData: ModelData, book: CalibreBook, readerInfo: ReaderInfo) {
+        self.modelData = modelData
+        self.book = book
+        self.readerInfo = readerInfo
+        
+        super.init(navigationBarClass: nil, toolbarClass: nil)
+    }
+    
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
     func alert(alertItem: AlertItem) {
         // pass
     }
@@ -27,15 +44,13 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: updatedReadingPosition)
         modelData.updateCurrentPosition(alertDelegate: self)
         */
+        
     }
     
     override func viewWillAppear(_ animated: Bool) {
-        guard let modelData = ModelData.shared,
-              let readerInfo = modelData.readerInfo else { return }
-        
         modelData.bookReaderEnterBackgroundCancellable?.cancel()
         modelData.bookReaderEnterBackgroundCancellable = modelData.bookReaderEnterBackgroundPublished.sink { _ in
-            switch readerInfo.readerType {
+            switch self.readerInfo.readerType {
             case .YabrEPUB:
                 if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {
                     yabrEPub.folioReader.saveReaderState {
@@ -55,7 +70,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                 }
             case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
                 if let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController() {
-                    modelData.updatedReadingPosition = yabrReadium.getUpdateReadingPosition(position: modelData.updatedReadingPosition)
+                    self.modelData.updatedReadingPosition = yabrReadium.getUpdateReadingPosition(position: self.modelData.updatedReadingPosition)
                     self.saveUpdatedReadingPosition()
                 }
             case .UNSUPPORTED:
@@ -65,10 +80,6 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         
         modelData.bookReaderEnterActiveCancellable?.cancel()
         modelData.bookReaderEnterActiveCancellable = modelData.bookReaderEnterActivePublished.sink { _ in
-            guard let modelData = ModelData.shared else { return }
-
-            guard let book = modelData.readingBook else { return }
-            
 //            modelData.logBookDeviceReadingPositionHistoryStart(book: book, position: modelData.updatedReadingPosition, startDatetime: Date())
             
             if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {

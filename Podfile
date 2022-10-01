@@ -18,10 +18,10 @@ pod 'R2Streamer', podspec: 'https://raw.githubusercontent.com/readium/swift-tool
 pod 'R2Navigator', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumNavigator.podspec'
 pod 'ReadiumOPDS', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec'
 pod 'ReadiumLCP', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec'
-
 pod 'GCDWebServer', podspec: 'https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec'
 
   pod 'MBProgressHUD', '~> 1.2.0'
+  pod 'RealmSwift', '~>5'
 
   target 'YetAnotherEBookReaderTests' do
     inherit! :search_paths
