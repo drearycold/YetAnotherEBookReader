@@ -1317,7 +1317,7 @@ final class ModelData: ObservableObject {
             removeFolioCache(book: newBook, format: format)
         }
         
-        refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: false)
+        refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
     }
     
     func clearCache(book: CalibreBook, format: Format) {
@@ -1442,7 +1442,7 @@ final class ModelData: ObservableObject {
         defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
         
-        refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: false)
+        refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
         
         //TODO: drop readPos
 //        readingBook.readPos.updatePosition(deviceName, updatedReadingPosition)
@@ -2472,7 +2472,7 @@ final class ModelData: ObservableObject {
                 guard let book = self.booksInShelf[output.object as? String ?? "__NO_ID__"]
                 else { return }
                 
-                self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: false)
+                self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
                 
                 guard let updatedReadingPosition = book.readPos.getDevices().first,
                       let lastPosition = output.userInfo?["lastPosition"] as? BookDeviceReadingPosition
@@ -2670,11 +2670,11 @@ final class ModelData: ObservableObject {
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
             if let book = self.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: book.readPos.getHistory(startDateAfter: startDateAfter))
+                historyList.append(contentsOf: book.readPos.sessions(list: startDateAfter))
             }
         } else {
             self.booksInShelf.forEach {
-                historyList.append(contentsOf: $0.value.readPos.getHistory(startDateAfter: startDateAfter))
+                historyList.append(contentsOf: $0.value.readPos.sessions(list: startDateAfter))
             }
         }
         

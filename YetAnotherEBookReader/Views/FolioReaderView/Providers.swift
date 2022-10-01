@@ -1046,6 +1046,7 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
             .map { $0.toFolioReaderReadPositionHistory() } ?? []
     }
     
+    /*
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String, start readPosition: FolioReaderReadPosition) {
         guard let realm = realm else {
             return
@@ -1093,6 +1094,7 @@ public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvid
             historyEntry.endPosition?.takePrecedence = false
         }
     }
+     */
 }
 
 fileprivate extension BookBookmarkRealm {

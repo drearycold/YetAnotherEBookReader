@@ -1090,6 +1090,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
             ModelData.shared?.updatedReadingPosition = updatedReadingPosition
+            //FIXME: 
+            ModelData.shared?.readingBook?.readPos.updatePosition(updatedReadingPosition.id, updatedReadingPosition)
         }
             
 //            modelData?.updateCurrentPosition(progress: progress, position: position)

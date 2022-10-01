@@ -727,7 +727,7 @@ struct BookReadingPosition {
         }
     }
     
-    func getHistory(startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
+    func sessions(list startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
         guard let realm = openRealm() else { return [] }
         
         return realm.objects(BookDeviceReadingPositionHistoryRealm.self)
@@ -738,6 +738,50 @@ struct BookReadingPosition {
             )
             .filter { $0.endPosition != nil }
             .map { BookDeviceReadingPositionHistory(managedObject: $0) }
+    }
+    
+    func session(start readPosition: BookDeviceReadingPosition) -> Date? {
+        guard let realm = openRealm() else { return nil }
+        
+        let startDatetime = Date()
+        
+        let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookPrefId))
+            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+            .first
+        
+        try? realm.write {
+            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
+                historyEntryFirst?.endPosition?.takePrecedence = true
+            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
+                historyEntryFirst?.endPosition?.takePrecedence = true
+            } else {
+                let historyEntry = BookDeviceReadingPositionHistoryRealm()
+                historyEntry.bookId = bookPrefId
+                historyEntry.startDatetime = startDatetime
+                historyEntry.startPosition = readPosition.managedObject()
+                historyEntry.startPosition?.bookId = "\(bookPrefId) - History"
+                realm.add(historyEntry)
+            }
+        }
+        
+        return startDatetime
+    }
+    
+    func session(end readPosition: BookDeviceReadingPosition) {
+        guard let realm = openRealm() else { return }
+        
+        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
+            NSPredicate(format: "bookId = %@", bookPrefId)
+        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
+        
+        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
+        
+        try? realm.write {
+            historyEntry.endPosition = readPosition.managedObject()
+            historyEntry.endPosition?.bookId = "\(bookPrefId) - History"
+            historyEntry.endPosition?.takePrecedence = false
+        }
     }
     
     /**

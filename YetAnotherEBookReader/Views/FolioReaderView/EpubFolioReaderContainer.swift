@@ -56,22 +56,22 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         initializeWebServer()
         readerConfig.serverPort = Int(webServer.port)
         
-        if let bookId = readerConfig.identifier,
-           let savedPosition = readerConfig.savedPositionForCurrentBook,
-           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
-            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, start: savedPosition)
-        }
+//        if let bookId = readerConfig.identifier,
+//           let savedPosition = readerConfig.savedPositionForCurrentBook,
+//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
+//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, start: savedPosition)
+//        }
     }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
         updateReadingPosition(folioReader)
         webServer.stop()
         
-        if let bookId = readerConfig.identifier,
-           let savedPosition = folioReader.savedPositionForCurrentBook,
-           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
-            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, finish: savedPosition)
-        }
+//        if let bookId = readerConfig.identifier,
+//           let savedPosition = folioReader.savedPositionForCurrentBook,
+//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
+//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, finish: savedPosition)
+//        }
     }
     
     func updateReadingPosition(_ folioReader: FolioReader) {
