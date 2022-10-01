@@ -20,11 +20,16 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     
     let moduleDelegate = YabrEBookReaderModuleDelegate()
     
+    let errorViewController = UIViewController()
+    let errorLabel = UILabel()
+    
     @EnvironmentObject var modelData: ModelData
     
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
         self.readerInfo = readerInfo
+        
+        errorViewController.view.addSubview(errorLabel)
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
@@ -122,13 +127,19 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             let pdfViewController = YabrPDFViewController()
-            let ret = pdfViewController.open(pdfURL: readerInfo.url, position: readerInfo.position)
+            var metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo)
+            if modelData.getCustomDictViewer().0 {
+                metaSource.dictViewer = ("Lookup", MDictViewContainer())
+            }
+            pdfViewController.yabrPDFMetaSource = metaSource
+            let ret = pdfViewController.open()
             if ret == 0 {
                 nav.pushViewController(pdfViewController, animated: false)
-                return nav
             } else {
-                
+                errorLabel.text = "Fail to open PDF, code=\(ret)"
+                nav.pushViewController(errorViewController, animated: false)
             }
+            return nav
         }
         
         if readerInfo.format == Format.EPUB {

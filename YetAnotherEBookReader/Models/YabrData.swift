@@ -65,6 +65,7 @@ enum ReaderType: String, CaseIterable, Identifiable {
 }
 
 struct ReaderInfo {
+    let deviceName: String
     let url: URL
     let format: Format
     let readerType: ReaderType

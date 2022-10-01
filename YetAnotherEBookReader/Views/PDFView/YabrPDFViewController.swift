@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 import UIKit
 import PDFKit
 import OSLog
@@ -17,8 +16,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     let pdfView = YabrPDFView()
     let blankView = UIImageView()
     let blankActivityView = UIActivityIndicatorView()
-    
-    let mDictView = MDictViewContainer()
     
     let logger = Logger()
     
@@ -36,6 +33,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     
     let thumbImageView = UIImageView()
     let thumbController = UIViewController()
+    
+    var yabrPDFMetaSource: YabrPDFMetaSource?
     
     var pdfOptions = PDFOptions() {
         didSet {
@@ -130,9 +129,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     
     var pageVisibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
     
-    var realm: Realm?
-    
-    func open(pdfURL: URL, position: BookDeviceReadingPosition) -> Int {
+    func open() -> Int {
+        guard let pdfURL = yabrPDFMetaSource?.yabrPDFURL(self) else { return -1 }
+        
         logger.info("pdfURL: \(pdfURL.absoluteString)")
         logger.info("Exist: \(FileManager.default.fileExists(atPath: pdfURL.path))")
         
@@ -146,24 +145,20 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         pdfView.displayDirection = PDFDisplayDirection.horizontal
         pdfView.interpolationQuality = PDFInterpolationQuality.high
         
-        if let config = getBookPreferenceConfig(bookFileURL: pdfURL) {
-            realm = try? Realm(configuration: config)
-            if let pdfOptionsRealm = realm?.objects(PDFOptionsRealm.self).first {
-                self.pdfOptions = PDFOptions(managedObject: pdfOptionsRealm)
-            }
+        if let pdfOptions = yabrPDFMetaSource?.yabrPDFOptions(self) {
+            self.pdfOptions = pdfOptions
         }
         
-        self.pdfOptions.id = ModelData.shared?.readingBook?.id ?? 0
-        self.pdfOptions.libraryName = ModelData.shared?.readingBook?.library.name ?? ""
+        if let position = yabrPDFMetaSource?.yabrPDFReadPosition(self) {
+            let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
         
-        let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
-        
-        pageViewPositionHistory.removeAll()
-        
-        pageViewPositionHistory[intialPageNum] = PageViewPosition(
-            scaler: pdfOptions.lastScale,
-            point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
-        )
+            pageViewPositionHistory.removeAll()
+            
+            pageViewPositionHistory[intialPageNum] = PageViewPosition(
+                scaler: pdfOptions.lastScale,
+                point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
+            )
+        }
         
         return 0
     }
@@ -377,9 +372,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         
         self.view = pdfView
 
-        if ModelData.shared?.getCustomDictViewer().0 ?? false {     // if enabled
-            UIMenuController.shared.menuItems = [UIMenuItem(title: "MDict", action: #selector(lookupMDict))]
-            mDictView.loadViewIfNeeded()
+        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) {
+            UIMenuController.shared.menuItems = [UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction))]
+            dictViewer.1.loadViewIfNeeded()
         } else {
             UIMenuController.shared.menuItems = []
         }
@@ -452,7 +447,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     }
     
     @objc private func handlePageChange(notification: Notification) {
-        var titleLabel = ModelData.shared?.readingBook?.title
+        var titleLabel = yabrPDFMetaSource?.yabrPDFReadPosition(self)?.lastReadChapter
         guard let curPage = pdfView.currentPage else { return }
 
         if var outlineRoot = pdfView.document?.outlineRoot {
@@ -1077,7 +1072,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             }
         }
         
-        if var updatedReadingPosition = ModelData.shared?.updatedReadingPosition {
+        if var updatedReadingPosition = yabrPDFMetaSource?.yabrPDFReadPosition(self) {
             updatedReadingPosition.lastPosition[0] = curPageNum
             updatedReadingPosition.lastPosition[1] = Int(curPagePos.point.x.rounded())
             updatedReadingPosition.lastPosition[2] = Int((curPagePos.point.y).rounded())
@@ -1089,18 +1084,10 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
-            ModelData.shared?.updatedReadingPosition = updatedReadingPosition
-            //FIXME: 
-            ModelData.shared?.readingBook?.readPos.updatePosition(updatedReadingPosition.id, updatedReadingPosition)
+            yabrPDFMetaSource?.yabrPDFReadPosition(self, update: updatedReadingPosition)
         }
             
-//            modelData?.updateCurrentPosition(progress: progress, position: position)
-        
-        let pdfOptionsRealm = pdfOptions.managedObject()
-        try? realm?.write {
-            realm?.add(pdfOptionsRealm, update: .all)
-        }
-        
+        yabrPDFMetaSource?.yabrPDFOptions(self, update: pdfOptions)
     }
     
 //    @objc func lookupStarDict() {
@@ -1110,17 +1097,18 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //            self.present(starDictView, animated: true, completion: nil)
 //        }
 //    }
-    @objc func lookupMDict() {
-        if let s = pdfView.currentSelection?.string {
-            print("\(#function) word=\(s)")
-            mDictView.title = s
-            
-            let nav = UINavigationController(rootViewController: mDictView)
-            nav.setNavigationBarHidden(false, animated: false)
-            nav.setToolbarHidden(false, animated: false)
-            
-            self.present(nav, animated: true, completion: nil)
-        }
+    @objc func dictViewerAction() {
+        guard let s = pdfView.currentSelection?.string,
+              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) else { return }
+        
+        print("\(#function) word=\(s)")
+        dictViewer.1.title = s
+        
+        let nav = UINavigationController(rootViewController: dictViewer.1)
+        nav.setNavigationBarHidden(false, animated: false)
+        nav.setToolbarHidden(false, animated: false)
+        
+        self.present(nav, animated: true, completion: nil)
     }
     
     func updatePageViewPositionHistory() {
@@ -1176,4 +1164,18 @@ extension YabrPDFViewController: PDFDocumentDelegate {
     }
     
     
+}
+
+protocol YabrPDFMetaSource {
+    func yabrPDFURL(_ viewController: YabrPDFViewController) -> URL?
+    
+    func yabrPDFReadPosition(_ viewController: YabrPDFViewController) -> BookDeviceReadingPosition?
+    
+    func yabrPDFReadPosition(_ viewController: YabrPDFViewController, update readPosition: BookDeviceReadingPosition)
+    
+    func yabrPDFOptions(_ viewController: YabrPDFViewController) -> PDFOptions?
+    
+    func yabrPDFOptions(_ viewController: YabrPDFViewController, update options: PDFOptions)
+    
+    func yabrPDFDictViewer(_ viewController: YabrPDFViewController) -> (String, UIViewController)?
 }

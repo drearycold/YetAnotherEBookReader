@@ -32,6 +32,7 @@ struct BookPreviewView: View {
                 YabrEBookReader(
                     book: _VM.book,
                     readerInfo: ReaderInfo(
+                        deviceName: _VM.modelData.deviceName,
                         url: _VM.url,
                         format: _VM.format,
                         readerType: _VM.reader,

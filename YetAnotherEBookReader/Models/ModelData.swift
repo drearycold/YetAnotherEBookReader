@@ -1593,11 +1593,12 @@ final class ModelData: ObservableObject {
             return nil
         }
         
-        return ReaderInfo(url: savedURL, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
+        return ReaderInfo(deviceName: deviceName, url: savedURL, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
         let readerInfo = ReaderInfo(
+            deviceName: deviceName,
             url: url,
             format: format,
             readerType: readerType,
