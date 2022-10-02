@@ -42,6 +42,8 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)
         
+        var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+        
         updatedReadingPosition.2["pageNumber"] = locator.locations.position
         updatedReadingPosition.2["maxPage"] = self.publication.positionsByReadingOrder.first?.count ?? 1
 
@@ -74,6 +76,8 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
         } else {
             updatedReadingPosition.3 = "Unknown Title"
         }
+        
+        self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
     }
 }
 

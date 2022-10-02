@@ -98,14 +98,14 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                         }
                     }() else { return }
                     
-                    readerVC.readerType = self.readerInfo.readerType
-                    readerVC.readPos = self.book.readPos
+                    readerVC.readiumMetaSource = YabrEBookReaderReadiumMetaSource(book: self.book, readerInfo: self.readerInfo)
                     readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
                         systemItem: .close,
                         primaryAction: UIAction(
-                            handler: { [self] _ in
-                                modelData.updatedReadingPosition = readerVC.getUpdateReadingPosition(position: modelData.updatedReadingPosition)
-                                
+                            handler: { action in
+                                if let locator = readerVC.navigator.currentLocation {
+                                    readerVC.navigator(readerVC.navigator, locationDidChange: locator)
+                                }
                                 readerVC.dismiss(animated: true, completion: nil)
                             }
                         )
@@ -201,10 +201,4 @@ class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
     }
     
     
-}
-
-protocol YabrReadingPositionMaintainer {
-    func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition
-
-    func updateReadingPosition(readPos: BookReadingPosition, position: BookDeviceReadingPosition)
 }

@@ -27,9 +27,9 @@ import WebKit
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class YabrReadiumReaderViewController:
-    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate, YabrReadingPositionMaintainer{
+    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate {
     
-    weak var moduleDelegate: ReaderFormatModuleDelegate?
+    var moduleDelegate: ReaderFormatModuleDelegate?
     
     let navigator: UIViewController & Navigator
     let publication: Publication
@@ -164,6 +164,7 @@ class YabrReadiumReaderViewController:
     // MARK: - Outlines
 
     @objc func presentOutline() {
+        print("\(#function) moduleDelegate=\(moduleDelegate)")
         moduleDelegate?.presentOutline(of: publication, delegate: self, from: self)
     }
     
@@ -350,40 +351,14 @@ class YabrReadiumReaderViewController:
         navigator.go(to: location)
     }
 
-    //MARK: - YabrReadingPositionMaintainer
-    var readerType: ReaderType = .UNSUPPORTED
-    var readPos: BookReadingPosition?
-    var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
-    
-    func getUpdateReadingPosition(position: BookDeviceReadingPosition) -> BookDeviceReadingPosition {
-        guard readerType != .UNSUPPORTED else { return position }
-        
-        var position = position
-        position.lastChapterProgress = updatedReadingPosition.0 * 100
-        position.lastProgress = updatedReadingPosition.1 * 100
-        
-        position.lastReadPage = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-        position.maxPage = updatedReadingPosition.2["maxPage"] as? Int ?? 1
-        position.lastPosition[0] = updatedReadingPosition.2["pageNumber"] as? Int ?? 1
-        position.lastPosition[1] = updatedReadingPosition.2["pageOffsetX"] as? Int ?? 0
-        position.lastPosition[2] = updatedReadingPosition.2["pageOffsetY"] as? Int ?? 0
-        
-        position.lastReadChapter = updatedReadingPosition.3
-        position.readerName = readerType.rawValue
-        
-        position.cfi = ""
+    //MARK: - YabrReadiumMetaSource
+    var readiumMetaSource: YabrReadiumMetaSource? = nil
+}
 
-        position.epoch = Date().timeIntervalSince1970
-        
-        if let readPos = readPos {
-            updateReadingPosition(readPos: readPos, position: position)
-        }
-        
-        return position
-    }
-
-    func updateReadingPosition(readPos: BookReadingPosition, position: BookDeviceReadingPosition) {
-        readPos.updatePosition(position.id, position)
-    }
+protocol YabrReadiumMetaSource {
+    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController) -> BookDeviceReadingPosition?
     
+    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController, update readPosition: (Double, Double, [String: Any], String))
+    
+    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UIViewController)?
 }

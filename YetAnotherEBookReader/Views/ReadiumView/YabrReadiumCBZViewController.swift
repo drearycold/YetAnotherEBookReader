@@ -59,6 +59,8 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)
         
+        var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+        
         updatedReadingPosition.2["pageNumber"] = locator.locations.position
         updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
         updatedReadingPosition.2["pageOffsetX"] = 0
@@ -76,6 +78,8 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         } else {
             updatedReadingPosition.3 = "Untitled Page"
         }
+        
+        self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
     }
 }
 

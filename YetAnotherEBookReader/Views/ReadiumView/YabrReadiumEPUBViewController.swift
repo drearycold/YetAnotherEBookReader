@@ -129,6 +129,8 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         print("EpubReadiumReaderContainerNavigatorDelegate \(locator)")
         print("EpubReadiumReaderContainerNavigatorDelegate otherLocations=\(locator.locations.otherLocations)")
         
+        var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+        
         if let index = publication.readingOrder.firstIndex(withHREF: locator.href) {
             updatedReadingPosition.2["pageNumber"] = index + 1
         } else {
@@ -148,6 +150,8 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         } else {
             updatedReadingPosition.3 = "Unknown Chapter"
         }
+        
+        self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
     }
 }
 

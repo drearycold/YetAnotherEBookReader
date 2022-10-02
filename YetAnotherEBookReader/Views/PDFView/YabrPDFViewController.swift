@@ -115,12 +115,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                 } else {
                     pdfView.go(to: curPage)
                 }
-                
-                if pdfOptions.pageMode == .Page {
-                    pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
-                } else {
-                    pdfView.pageTapDisable()
-                }
+            }
+            
+            if pdfOptions.pageMode == .Page {
+                pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+            } else {
+                pdfView.pageTapDisable()
             }
         }
     }
@@ -420,13 +420,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         if destPageIndex == 0 {
             self.handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
-    }
-
-    override func viewDidDisappear(_ animated: Bool) {
-        updatePageViewPositionHistory()
-        updateReadingProgress()
-        
-        super.viewDidDisappear(animated)
     }
     
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -1081,10 +1074,13 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             updatedReadingPosition.lastChapterProgress = chapterProgress
             updatedReadingPosition.lastProgress = bookProgress
             updatedReadingPosition.lastReadChapter = chapterName
+            updatedReadingPosition.lastReadBook = pdfView.document?.title ?? "Unknown Title"
             updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
             yabrPDFMetaSource?.yabrPDFReadPosition(self, update: updatedReadingPosition)
+            
+            print("\(#function) updatedReadingPosition=\(updatedReadingPosition)")
         }
             
         yabrPDFMetaSource?.yabrPDFOptions(self, update: pdfOptions)
