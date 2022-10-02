@@ -40,7 +40,6 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         nav.modelData = modelData
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         nav.navigationBar.isTranslucent = false
-        nav.setToolbarHidden(false, animated: true)
 
 //        #if canImport(R2Shared)
         if (readerInfo.format == Format.EPUB && readerInfo.readerType == ReaderType.ReadiumEPUB)
@@ -106,12 +105,14 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                                 if let locator = readerVC.navigator.currentLocation {
                                     readerVC.navigator(readerVC.navigator, locationDidChange: locator)
                                 }
+                                (readerVC as? YabrReadiumEPUBViewController)?.epubNavigator.userSettings.save()
                                 readerVC.dismiss(animated: true, completion: nil)
                             }
                         )
                     )
                     readerVC.moduleDelegate = moduleDelegate
-
+                    
+                    nav.setToolbarHidden(true, animated: false)
                     nav.pushViewController(readerVC, animated: false)
                 } catch {
                     print(error)
@@ -139,6 +140,8 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                 errorLabel.text = "Fail to open PDF, code=\(ret)"
                 nav.pushViewController(errorViewController, animated: false)
             }
+            
+            nav.setToolbarHidden(false, animated: true)
             return nav
         }
         

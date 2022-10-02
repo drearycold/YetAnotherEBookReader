@@ -84,8 +84,6 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
     override open func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        
-        epubNavigator.userSettings.save()
     }
 
     override func makeNavigationBarButtons() -> [UIBarButtonItem] {

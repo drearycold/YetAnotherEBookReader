@@ -37,8 +37,6 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         super.viewDidLoad()
         
         view.backgroundColor = .black
-
-        navigationController?.setToolbarHidden(true, animated: false)
     }
     
     override var currentBookmark: Bookmark? {
