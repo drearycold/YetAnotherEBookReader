@@ -26,7 +26,7 @@ struct YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         var readPosition = readPosition
         readPosition.id = readerInfo.deviceName
         readPosition.readerName = readerInfo.readerType.rawValue
-        book.readPos.updatePosition(readPosition.id, readPosition)
+        book.readPos.updatePosition(readPosition)
     }
     
     func yabrPDFOptions(_ viewController: YabrPDFViewController) -> PDFOptions? {
@@ -82,7 +82,7 @@ struct YabrEBookReaderReadiumMetaSource: YabrReadiumMetaSource {
 
         position.epoch = Date().timeIntervalSince1970
         
-        book.readPos.updatePosition(position.id, position)
+        book.readPos.updatePosition(position)
     }
     
     func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UIViewController)? {

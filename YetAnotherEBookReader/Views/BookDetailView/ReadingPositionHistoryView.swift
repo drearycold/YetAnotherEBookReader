@@ -160,6 +160,10 @@ struct ReadingPositionHistoryView: View {
     private func row(position: BookDeviceReadingPosition) -> some View {
         VStack(alignment: .leading) {
             HStack {
+                Text(position.readerName)
+                Spacer()
+            }.font(.caption)
+            HStack {
                 if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
                     Text(position.lastReadBook)
                     if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastProgress / 100)) {
@@ -174,31 +178,19 @@ struct ReadingPositionHistoryView: View {
                 Spacer()
                 Text(position.epochByLocaleRelative).font(.caption)
             }
-            if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
-                HStack {
-                    Spacer()
+            
+            HStack {
+                Spacer()
+                if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
                     Text(position.lastReadChapter)
                     if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
                         Text("(\(percent))")
                     }
-                }.font(.caption)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func row(obj: BookDeviceReadingPositionHistoryRealm) -> some View {
-        VStack {
-            HStack {
-                Text("\(obj.endPosition?.lastReadChapter.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Chapter Unknown")")
-                Spacer()
-                Text("\(String(format: "%.2f%% Left", 100 - (obj.endPosition?.lastProgress ?? 0.0)))")
-            }.font(.title3)
-            HStack {
-                Text(obj.endPosition?.epochByLocale ?? "End Unknown")
+                }
             }.font(.caption)
         }
     }
+
 }
 
 struct ReadingPositionHistoryView_Previews: PreviewProvider {

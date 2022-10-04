@@ -31,10 +31,9 @@ extension EpubFolioReaderContainer {
             return highlightProvider
         } else {
             guard let book = modelData?.readingBook,
-                  let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  let readerInfo = modelData?.readerInfo
                   else { return FolioReaderDummyHighlightProvider() }
-            let highlightProvider = FolioReaderRealmHighlightProvider(realmConfig: realmConfig)
+            let highlightProvider = FolioReaderYabrHighlightProvider(book: book, readerInfo: readerInfo)
             self.folioReaderHighlightProvider = highlightProvider
             
             return highlightProvider
@@ -46,18 +45,9 @@ extension EpubFolioReaderContainer {
             return provider
         } else {
             guard let book = modelData?.readingBook,
-                  let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format),
-                  let bookId = realmConfig.fileURL?.deletingPathExtension().lastPathComponent
+                  let readerInfo = modelData?.readerInfo
                   else { return FolioReaderNaiveReadPositionProvider() }
-            let provider = FolioReaderRealmReadPositionProvider(realmConfig: realmConfig)
-            
-            provider.realm?.objects(FolioReaderReadPositionRealm.self)
-                .filter(NSPredicate(format: "maxPage > %@", NSNumber(1)))
-                .compactMap { $0.toReadPosition() }.forEach { oldObject in
-                provider.folioReaderReadPosition(folioReader, bookId: bookId, set: oldObject, completion: nil)
-            }
-            
+            let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
             self.folioReaderReadPositionProvider = provider
             
             return provider
@@ -69,10 +59,9 @@ extension EpubFolioReaderContainer {
             return bookmarkProvider
         } else {
             guard let book = modelData?.readingBook,
-                  let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format)
+                  let readerInfo = modelData?.readerInfo
                   else { return FolioReaderNaiveBookmarkProvider() }
-            let bookmarkProvider = FolioReaderRealmBookmarkProvider(realmConfig: realmConfig)
+            let bookmarkProvider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
             self.folioReaderBookmarkProvider = bookmarkProvider
             
             return bookmarkProvider
@@ -536,6 +525,7 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
     }
 }
 
+@available(*, deprecated, message: "replaced by BookHighlightRealm")
 class FolioReaderHighlightRealm: Object {
     @objc open dynamic var removed: Bool = false
     @objc open dynamic var bookId: String?
@@ -604,196 +594,101 @@ class FolioReaderHighlightRealm: Object {
     }
 }
 
-public class FolioReaderRealmHighlightProvider: FolioReaderHighlightProvider {
-    let realm: Realm?
-
-    init(realmConfig: Realm.Configuration) {
-        realm = try? Realm(configuration: realmConfig)
+public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
+    
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.book = book
+        self.readerInfo = readerInfo
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: FolioReaderHighlight, completion: Completion?) {
 //        print("highlight added \(highlight)")
         
-        var error: NSError? = nil
+//        var error: NSError? = nil
         defer {
-            completion?(error)
+            completion?(nil)
         }
         
-        guard let realm = self.realm else {
-            error = NSError(domain: "Realm Error", code: -1, userInfo: nil)
-            return
-        }
-        do {
-            let highlightRealm = FolioReaderHighlightRealm()
-            highlightRealm.fromHighlight(highlight)
-            
-            try realm.write {
-                realm.add(highlightRealm, update: .all)
-            }
-        } catch let e as NSError {
-            print("Error on persist highlight: \(e)")
-            error = e
-        }
+        book.readPos.highlight(added: highlight.toBookHighlight())
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
-        try? realm?.write {
-            if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
-                object.removed = true
-                object.date = Date()
-            }
-        }
+        book.readPos.highlight(removedId: highlightId)
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: FolioReaderHighlightStyle) {
-        try? realm?.write {
-            realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.type = style.rawValue
-        }
+        book.readPos.highlight(updateById: highlightId, type: style.rawValue)
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> FolioReaderHighlight? {
-        return realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId)?.toHighlight()
+        book.readPos.highlight(getById: highlightId)?.toFolioReaderHighlight()
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
-        var predicate = NSPredicate(format: "removed == false && bookId = %@", bookId)
-        if let page = page {
-            predicate = NSPredicate(format: "removed == false && bookId = %@ && page = %@", bookId, page)
+        book.readPos.highlights(allByBookId: bookId, andPage: page).map {
+            $0.toFolioReaderHighlight()
         }
-
-        return realm?.objects(FolioReaderHighlightRealm.self)
-            .filter(predicate)
-            .map { $0.toHighlight() } ?? []
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
-        return realm?.objects(FolioReaderHighlightRealm.self)
-            .filter(NSPredicate(format: "removed == false"))
-            .map { $0.toHighlight() } ?? []
+        book.readPos.highlights().map { $0.toFolioReaderHighlight() }
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
-        try? realm?.write {
-            if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlight.highlightId) {
-                object.noteForHighlight = highlight.noteForHighlight
-                object.date = Date()
-            }
-        }
+        book.readPos.highlights(saveNoteFor: highlight.highlightId, with: highlight.noteForHighlight)
     }
 }
 
-extension FolioReaderRealmHighlightProvider {
-    
-    func folioReaderHighlight(bookId: String) -> [CalibreBookAnnotationHighlightEntry] {
-        print("highlight all")
+fileprivate extension BookHighlight {
+    func toFolioReaderHighlight() -> FolioReaderHighlight {
+        let highlight = FolioReaderHighlight()
+        highlight.bookId = bookId
+        highlight.highlightId = highlightId
         
-        guard let realm = realm else { return [] }
+        highlight.page = page
+        highlight.startOffset = startOffset
+        highlight.endOffset = endOffset
         
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        highlight.date = date
+        highlight.type = type
+        highlight.noteForHighlight = note
         
-        let highlights:[CalibreBookAnnotationHighlightEntry] = realm.objects(FolioReaderHighlightRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-            .compactMap { object -> CalibreBookAnnotationHighlightEntry? in
-                guard let highlightId = object.highlightId,
-                      let uuid = uuidFolioToCalibre(highlightId),
-                      let cfiStart = object.cfiStart,
-                      let cfiEnd = object.cfiEnd
-                else { return nil }
-                return CalibreBookAnnotationHighlightEntry(
-                    type: "highlight",
-                    timestamp: dateFormatter.string(from: object.date),
-                    uuid: uuid,
-                    removed: object.removed,
-                    startCfi: cfiStart,
-                    endCfi: cfiEnd,
-                    highlightedText: object.content,
-                    style: ["kind":"color", "type":"builtin", "which":FolioReaderHighlightStyle.classForStyleCalibre(object.type)],
-                    spineName: object.spineName,
-                    spineIndex: object.page - 1,
-                    tocFamilyTitles: object.tocFamilyTitles.map { $0 },
-                    notes: object.noteForHighlight
-                )
-            }
-        print("highlight all \(highlights)")
+        highlight.tocFamilyTitles.append(contentsOf: tocFamilyTitles)
+        highlight.content = content
+        highlight.contentPost = contentPost
+        highlight.contentPre = contentPre
         
-        return highlights
+        highlight.cfiStart = cfiStart
+        highlight.cfiEnd = cfiEnd
+        highlight.spineName = spineName
+        
+        return highlight
     }
-    
-    // Used for syncing with calibre server
-    func folioReaderHighlight(bookId: String, added highlights: [CalibreBookAnnotationHighlightEntry]) -> Int {
-//        print("highlight added \(highlights)")
-        
-        var pending = realm?.objects(FolioReaderHighlightRealm.self).count ?? 0
-        try? realm?.write {
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-            
-            highlights.forEach { hl in
-                guard hl.type == "highlight",
-                      let highlightId = uuidCalibreToFolio(hl.uuid),
-                      let date = dateFormatter.date(from: hl.timestamp)
-                else { return }
-                
-                guard hl.removed != true else {
-                    if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
-                        if object.date <= date + 0.1 {
-                            object.removed = true
-                            object.date = date
-                            pending -= 1
-                        } else if date <= object.date + 0.1 {
-                            
-                        } else {
-                            pending -= 1
-                        }
-                    }
-                    return
-                }
-                
-                guard let spineIndex = hl.spineIndex else { return }
-                
-                if let object = realm?.object(ofType: FolioReaderHighlightRealm.self, forPrimaryKey: highlightId) {
-                    if object.date <= date + 0.1 {
-                        object.date = date
-                        object.type = FolioReaderHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
-                        object.noteForHighlight = hl.notes
-                        object.removed = false
-                        pending -= 1
-                    } else if date <= object.date + 0.1 {
-                        
-                    } else {
-                        pending -= 1
-                    }
-                } else {
-                    let highlightRealm = FolioReaderHighlightRealm()
-                    
-                    highlightRealm.bookId = bookId
-                    highlightRealm.content = hl.highlightedText
-                    highlightRealm.contentPost = ""
-                    highlightRealm.contentPre = ""
-                    highlightRealm.date = date
-                    highlightRealm.highlightId = highlightId
-                    highlightRealm.page = spineIndex + 1
-                    highlightRealm.type = FolioReaderHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
-                    highlightRealm.startOffset = 0
-                    highlightRealm.endOffset = 0
-                    highlightRealm.noteForHighlight = hl.notes
-                    highlightRealm.cfiStart = hl.startCfi
-                    highlightRealm.cfiEnd = hl.endCfi
-                    highlightRealm.spineName = hl.spineName
-                    if let tocFamilyTitles = hl.tocFamilyTitles {
-                        highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
-                    }
-                    
-                    realm?.add(highlightRealm, update: .all)
-                }
-            }
+}
 
-        }
-    
-        return pending
+fileprivate extension FolioReaderHighlight {
+    func toBookHighlight() -> BookHighlight {
+        BookHighlight(
+            bookId: bookId,
+            highlightId: highlightId,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            page: page,
+            startOffset: startOffset,
+            endOffset: endOffset,
+            date: date,
+            type: type,
+            note: noteForHighlight,
+            tocFamilyTitles: tocFamilyTitles,
+            content: content,
+            contentPost: contentPost,
+            contentPre: contentPre,
+            cfiStart: cfiStart,
+            cfiEnd: cfiEnd,
+            spineName: spineName
+        )
     }
-    
 }
 
 @available(*, deprecated, message: "replaced by BookDeviceReadingPositionRealm")
@@ -939,7 +834,58 @@ extension BookDeviceReadingPositionRealm {
     }
 }
 
-extension BookDeviceReadingPositionHistoryRealm {
+extension BookDeviceReadingPosition {
+    func toFolioReaderReadPosition() -> FolioReaderReadPosition {
+        let position = FolioReaderReadPosition(
+            deviceId: id,
+            structuralStyle: FolioReaderStructuralStyle(rawValue: structuralStyle) ?? .atom,
+            positionTrackingStyle: FolioReaderPositionTrackingStyle(rawValue: positionTrackingStyle) ?? .linear,
+            structuralRootPageNumber: structuralRootPageNumber,
+            pageNumber: lastReadPage,
+            cfi: cfi
+        )
+        
+        position.maxPage = self.maxPage
+        position.pageOffset = CGPoint(x: self.lastPosition[1], y: self.lastPosition[2])
+        
+        position.chapterProgress = self.lastChapterProgress
+        position.chapterName = self.lastReadChapter
+        position.bookProgress = self.lastProgress
+        position.bookName = self.lastReadBook
+        position.bundleProgress = self.lastBundleProgress
+        
+        position.epoch = Date(timeIntervalSince1970: self.epoch)
+        position.takePrecedence = false
+        
+        return position
+    }
+}
+
+extension FolioReaderReadPosition {
+    func toBookDeviceReadingPosition() -> BookDeviceReadingPosition {
+        return BookDeviceReadingPosition(
+            id: self.deviceId,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            maxPage: self.maxPage,
+            lastReadPage: self.pageNumber,
+            lastReadChapter: self.chapterName,
+            lastChapterProgress: self.chapterProgress,
+            lastProgress: self.bookProgress,
+            furthestReadPage: 0,
+            furthestReadChapter: "",
+            lastPosition: [self.pageNumber, Int(self.pageOffset.x), Int(self.pageOffset.y)],
+            cfi: self.cfi,
+            epoch: self.epoch.timeIntervalSince1970,
+            structuralStyle: self.structuralStyle.rawValue,
+            structuralRootPageNumber: self.structuralRootPageNumber,
+            positionTrackingStyle: self.positionTrackingStyle.rawValue,
+            lastReadBook: self.bookName,
+            lastBundleProgress: self.bundleProgress
+        )
+    }
+}
+
+extension BookDeviceReadingPositionHistory {
     func toFolioReaderReadPositionHistory() -> FolioReaderReadPositionHistory {
         let history = FolioReaderReadPositionHistory()
         history.startDatetime = self.startDatetime
@@ -949,168 +895,63 @@ extension BookDeviceReadingPositionHistoryRealm {
     }
 }
 
-public class FolioReaderRealmReadPositionProvider: FolioReaderReadPositionProvider {
-    let realm: Realm?
-
-    init(realmConfig: Realm.Configuration) {
-        realm = try? Realm(configuration: realmConfig)
+public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvider {
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
+    
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.book = book
+        self.readerInfo = readerInfo
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
-        if let position = realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND takePrecedence = true", bookId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-            .first?
-            .toFolioReaderReadPosition()
-        {
-            return position
-        }
-        return realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-            .compactMap{
-                $0.toFolioReaderReadPosition()
-            }.first
+        guard book.readPos.bookPrefId == bookId else { return nil }
+        
+        return book.readPos.getPosition(nil)?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
-        let objects = realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(
-                format: "bookId = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                bookId,
-                NSNumber(value: folioReader.structuralStyle.rawValue),
-                NSNumber(value: folioReader.structuralTrackingTocLevel.rawValue),
-                NSNumber(value: rootPageNumber)
-            ))
-        
-        return objects?.max(by: { $0.epoch < $1.epoch })?.toFolioReaderReadPosition()
+        guard book.readPos.bookPrefId == bookId else { return nil }
+
+        return book.readPos.getDevices(by: ReaderType.YabrEPUB).first?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
-        try? realm?.write {
-            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
-                .filter(NSPredicate(
-                    format: "bookId = %@ AND id = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                    bookId,
-                    readPosition.deviceId,
-                    NSNumber(value: readPosition.structuralStyle.rawValue),
-                    NSNumber(value: readPosition.positionTrackingStyle.rawValue),
-                    NSNumber(value: readPosition.structuralRootPageNumber)
-                )),
-               existing.isEmpty == false {
-                existing.forEach {
-                    guard $0.epoch < readPosition.epoch.timeIntervalSince1970 || $0.takePrecedence != readPosition.takePrecedence else { return }
-                    $0.fromFolioReaderReadPosition(readPosition, bookId: bookId)
-                }
-                
-            } else {
-                let object = BookDeviceReadingPositionRealm()
-                object.fromFolioReaderReadPosition(readPosition, bookId: bookId)
-                realm?.add(object)
-            }
-        }
+        guard book.readPos.bookPrefId == bookId else { return }
+        
+        book.readPos.updatePosition(readPosition.toBookDeviceReadingPosition())
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
-        try? realm?.write {
-            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
-                .filter(NSPredicate(
-                    format: "bookId = %@ AND id = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                    bookId,
-                    readPosition.deviceId,
-                    NSNumber(value: readPosition.structuralStyle.rawValue),
-                    NSNumber(value: readPosition.positionTrackingStyle.rawValue),
-                    NSNumber(value: readPosition.structuralRootPageNumber)
-                )),
-               existing.isEmpty == false {
-                realm?.delete(existing)
-            }
-        }
+        guard book.readPos.bookPrefId == bookId else { return }
+        
+        book.readPos.removePosition(position: readPosition.toBookDeviceReadingPosition())
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
-        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@ AND id = %@", bookId, deviceId)).compactMap { $0.toFolioReaderReadPosition() } ?? []
+        
+        return folioReaderReadPosition(folioReader, allByBookId: bookId).filter { $0.deviceId == deviceId }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
-        return realm?.objects(BookDeviceReadingPositionRealm.self).filter(NSPredicate(format: "bookId = %@", bookId)).compactMap { $0.toFolioReaderReadPosition() } ?? []
+        guard book.readPos.bookPrefId == bookId else { return [] }
+        
+        return book.readPos.getDevices().map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
-        return realm?.objects(BookDeviceReadingPositionRealm.self).compactMap { $0.toFolioReaderReadPosition() } ?? []
+        return book.readPos.getDevices().map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
-        return realm?.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-            .map { $0.toFolioReaderReadPositionHistory() } ?? []
+        guard book.readPos.bookPrefId == bookId else { return [] }
+        
+        return book.readPos.sessions(list: nil).map { $0.toFolioReaderReadPositionHistory() }
     }
     
-    /*
-    public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String, start readPosition: FolioReaderReadPosition) {
-        guard let realm = realm else {
-            return
-        }
-
-        let startDatetime = Date()
-        
-        let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-            .first
-        
-        try? realm.write {
-            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else {
-                let historyEntry = BookDeviceReadingPositionHistoryRealm()
-                historyEntry.bookId = bookId
-                historyEntry.startDatetime = startDatetime
-                historyEntry.startPosition = .init()
-                historyEntry.startPosition?.fromFolioReaderReadPosition(readPosition, bookId: "\(bookId) - History")
-                realm.add(historyEntry)
-            }
-        }
-    }
-    
-    public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String, finish readPosition: FolioReaderReadPosition) {
-        guard let realm = realm else {
-            return
-        }
-
-        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
-            NSPredicate(format: "bookId = %@", bookId)
-        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
-        
-        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
-        
-        try? realm.write {
-            if historyEntry.endPosition == nil {
-                historyEntry.endPosition = .init()
-            }
-            historyEntry.endPosition?.fromFolioReaderReadPosition(readPosition, bookId: "\(bookId) - History")
-            historyEntry.endPosition?.takePrecedence = false
-        }
-    }
-     */
 }
 
-fileprivate extension BookBookmarkRealm {
-    func fromFolioReaderBookmark(_ bookmark: FolioReaderBookmark) {
-        self.bookId = bookmark.bookId
-        self.page = bookmark.page
-        
-        self.pos_type = bookmark.pos_type ?? ""
-        self.pos = bookmark.pos ?? ""
-        
-        self.title = bookmark.title
-        self.date = bookmark.date
-        
-        self.removed = false
-    }
-    
+fileprivate extension BookBookmark {
     func toFolioReaderBookmark() -> FolioReaderBookmark {
         let bookmark = FolioReaderBookmark()
         bookmark.bookId = self.bookId
@@ -1126,14 +967,32 @@ fileprivate extension BookBookmarkRealm {
     }
 }
 
-public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
-    let realm: Realm?
+fileprivate extension FolioReaderBookmark {
+    func toBookBookmark() -> BookBookmark? {
+        guard let pos_type = self.pos_type,
+              let pos = self.pos
+        else { return nil }
+        
+        let bookmark = BookBookmark(
+            bookId: self.bookId,
+            page: self.page,
+            pos_type: pos_type,
+            pos: pos,
+            title: self.title,
+            date: self.date,
+            removed: false
+        )
+        return bookmark
+    }
+}
 
-    let dateFormatter = ISO8601DateFormatter()
+public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
 
-    init(realmConfig: Realm.Configuration) {
-        self.realm = try? Realm(configuration: realmConfig)
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.book = book
+        self.readerInfo = readerInfo
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, added bookmark: FolioReaderBookmark, completion: Completion?) {
@@ -1142,218 +1001,43 @@ public class FolioReaderRealmBookmarkProvider: FolioReaderBookmarkProvider {
             completion?(error as NSError?)
         }
         
-        guard let realm = self.realm else {
-            error = FolioReaderBookmarkError.runtimeError("Realm Provider Error")
-            return
-        }
-        
-        guard let pos = bookmark.pos else {
+        guard let bookBookmark = bookmark.toBookBookmark() else {
             error = FolioReaderBookmarkError.emptyError("")
             return
         }
         
-        if let existing = folioReaderBookmark(folioReader, getBy: pos) {
-            error = FolioReaderBookmarkError.duplicateError(existing.title)
-            return
-        }
-        
-        do {
-            try realm.write {
-                let bookmarkRealm = BookBookmarkRealm()
-                bookmarkRealm.fromFolioReaderBookmark(bookmark)
-                realm.add(bookmarkRealm)
-            }
-        } catch let e as NSError {
-            print("Error on persist highlight: \(e)")
+        let result = book.readPos.bookmarks(added: bookBookmark)
+        switch result.0 {
+        case 0:
+            error = nil
+        case -1:
             error = FolioReaderBookmarkError.runtimeError("Realm Provider Error")
+        case -2:
+            error = FolioReaderBookmarkError.duplicateError(result.1 ?? "No Title")
+        case -3:
+            error = FolioReaderBookmarkError.runtimeError(result.1 ?? "Realm Provider Error")
+        default:
+            error = FolioReaderBookmarkError.runtimeError(result.1 ?? "Unknown Error")
         }
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, removed bookmarkPos: String) {
-        guard let realm = realm,
-              let bookId = folioReader.readerConfig?.identifier else {
-            return
-        }
-        
-        try? realm.write {
-            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos)).forEach {
-                $0.date = .init()
-                $0.removed = true
-            }
-        }
+        book.readPos.bookmarks(removed: bookmarkPos)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, updated bookmarkPos: String, title: String) {
-        guard let realm = realm,
-              let bookId = folioReader.readerConfig?.identifier else {
-            return
-        }
-        
-        try? realm.write {
-            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos)).forEach {
-                $0.date = .init()
-                $0.title = title
-            }
-        }
+        book.readPos.bookmarks(updated: bookmarkPos, title: title)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, getBy bookmarkPos: String) -> FolioReaderBookmark? {
-        guard let realm = realm,
-              let bookId = folioReader.readerConfig?.identifier else {
-            return nil
-        }
-        
-        return realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookId, bookmarkPos))
-            .first?
-            .toFolioReaderBookmark()
+        return book.readPos.bookmarks(getBy: bookmarkPos)?.toFolioReaderBookmark()
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderBookmark] {
-        guard let realm = realm else {
-            return []
-        }
-        
-        let objects = realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND removed != true", bookId))
-            .filter{ page == nil || $0.page == page?.intValue }
-        
-        return objects.map { $0.toFolioReaderBookmark() }
+        return book.readPos.bookmarks(andPage: page).map { $0.toFolioReaderBookmark() }
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader) -> [FolioReaderBookmark] {
-        guard let realm = realm else {
-            return []
-        }
-        return realm.objects(BookBookmarkRealm.self).map { $0.toFolioReaderBookmark() }
+        return book.readPos.bookmarks(list: nil).map { $0.toFolioReaderBookmark() }
     }
-}
-
-extension FolioReaderRealmBookmarkProvider {
-    
-    func folioReaderBookmark(bookId: String) -> [CalibreBookAnnotationBookmarkEntry] {
-        print("bookmark all")
-        
-        guard let realm = realm else { return [] }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-        
-        let bookmarks:[CalibreBookAnnotationBookmarkEntry] = realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-            .compactMap { object -> CalibreBookAnnotationBookmarkEntry? in
-                return CalibreBookAnnotationBookmarkEntry(
-                    type: "bookmark",
-                    timestamp: dateFormatter.string(from: object.date),
-                    pos_type: object.pos_type,
-                    pos: object.pos,
-                    title: object.title,
-                    removed: object.removed
-                )
-            }
-        print("bookmark all \(bookmarks)")
-        
-        return bookmarks
-    }
-    
-    // Used for syncing with calibre server
-    func folioReaderBookmark(bookId: String, added bookmarks: [CalibreBookAnnotationBookmarkEntry]) -> Int {
-//        print("highlight added \(highlights)")
-        guard let realm = realm else { return 0 }
-        
-        let bookObjects = realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookId))
-        
-        var pending = bookObjects
-            .reduce(into: Set<String>()) { partialResult, object in
-                partialResult.insert(object.pos)
-            }
-        
-        let bookmarksByPos = bookmarks.reduce(into: [String: [CalibreBookAnnotationBookmarkEntry]]()) { partialResult, entry in
-            guard entry.type == "bookmark",
-                  let date = dateFormatter.date(from: entry.timestamp)
-            else { return }
-            
-            if partialResult[entry.pos] != nil {
-                partialResult[entry.pos]?.append(entry)
-            } else {
-                partialResult[entry.pos] = [entry]
-            }
-        }.map { posEntry in
-            (key: posEntry.key, value: posEntry.value.sorted(by: { lhs, rhs in
-                (dateFormatter.date(from: lhs.timestamp) ?? .distantPast) > (dateFormatter.date(from: rhs.timestamp) ?? .distantPast)
-            }))
-        }
-        
-        try? realm.write {
-            bookmarksByPos.forEach { pos, entries in
-                guard let entryNewest = entries.first,
-                      let entryNewestDate = dateFormatter.date(from: entryNewest.timestamp) else { return }
-                
-                let objects = bookObjects
-                    .filter(NSPredicate(format: "pos = %@", pos))
-                    .sorted(byKeyPath: "date", ascending: false)
-                
-                let objectsVisible = objects.filter(NSPredicate(format: "removed != true"))
-                
-                if let objectNewest = objects.first {
-                    if objectNewest.date == entryNewestDate
-                        || (
-                            (objectNewest.date < entryNewestDate + 0.1)
-                            &&
-                            (entryNewestDate < objectNewest.date + 0.1)
-                        ) {
-                        //same date, ignore server one
-                        pending.remove(pos)
-                    } else if objectNewest.date < entryNewestDate + 0.1 {
-                        //server has newer entry, remove all local entries
-                        while( objectsVisible.isEmpty == false ) {
-                            objectsVisible.first?.date += 0.001
-                            objectsVisible.first?.removed = true
-                        }
-                        pending.remove(pos)
-                    } else if entryNewestDate < objectNewest.date + 0.1 {
-                        //local has newer entry, ignore server one
-                    } else {
-                        //same date, ignore server one
-                        pending.remove(pos)
-                    }
-                }
-                
-                guard objectsVisible.isEmpty,
-                      entryNewest.removed != true
-                else {
-                    // only insert newest visible entry
-                    // either local has no corresponding entry,
-                    // or we have removed all existing ones (which means they are older)
-                    return
-                }
-                
-                let object = BookBookmarkRealm()
-                object.bookId = bookId
-                
-                object.pos_type = entryNewest.pos_type
-                object.pos = entryNewest.pos
-                
-                object.title = entryNewest.title
-                object.date = entryNewestDate
-                object.removed = entryNewest.removed ?? false
-                
-                guard object.pos_type == "epubcfi",
-                      object.pos.starts(with: "epubcfi(/") else { return }
-                let firstStepStartIndex = object.pos.index(object.pos.startIndex, offsetBy: 9)
-                guard let firstStepEndIndex = object.pos[firstStepStartIndex..<object.pos.endIndex].firstIndex(where: { elem in
-                    elem == "/" || elem == ")"
-                }) else { return }
-                
-                guard let firstStep = Int(object.pos[firstStepStartIndex..<firstStepEndIndex]) else { return }
-                object.page = firstStep / 2
-                
-                realm.add(object)
-            }
-        }
-    
-        return pending.count
-    }
-    
 }

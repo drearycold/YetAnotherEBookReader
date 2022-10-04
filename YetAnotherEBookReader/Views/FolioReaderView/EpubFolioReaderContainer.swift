@@ -35,7 +35,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         self.yabrFolioReaderPageDelegate = YabrFolioReaderPageDelegate(readerConfig: self.readerConfig)
         self.folioReader.delegate = self
         
-        let position = bookReadingPosition.managedObject().toFolioReaderReadPosition()
+        let position = bookReadingPosition.toFolioReaderReadPosition()
         
         readerConfig.savedPositionForCurrentBook = position
         

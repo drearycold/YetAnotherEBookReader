@@ -369,7 +369,7 @@ struct CalibreServerService {
                     var deviceReadingPosition = value
                     deviceReadingPosition.id = deviceName
                     
-                    book.readPos.updatePosition(deviceName, deviceReadingPosition)
+                    book.readPos.updatePosition(deviceReadingPosition)
                     
                     defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                 }
@@ -404,7 +404,7 @@ struct CalibreServerService {
                         deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
                     }
                     
-                    book.readPos.updatePosition(deviceName, deviceReadingPosition)
+                    book.readPos.updatePosition(deviceReadingPosition)
                     
                     defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                 }
@@ -506,7 +506,7 @@ struct CalibreServerService {
                     var deviceReadingPosition = value
                     deviceReadingPosition.id = deviceName
                     
-                    readPos.updatePosition(deviceName, deviceReadingPosition)
+                    readPos.updatePosition(deviceReadingPosition)
                 }
                 
                 
@@ -540,7 +540,7 @@ struct CalibreServerService {
                         deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
                     }
                     
-                    readPos.updatePosition(deviceName, deviceReadingPosition)
+                    readPos.updatePosition(deviceReadingPosition)
                 }
             }
             
@@ -788,27 +788,6 @@ struct CalibreServerService {
         return 0
     }
     
-    /// read-modify-write version
-    func updateBookReadingPositionNew(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate, success: (() -> Void)?) -> Int {
-        
-        guard let task = buildMetadataTask(book: book) else { return -1 }
-        
-        modelData.calibreServiceCancellable = getMetadataNew(task: task)
-            .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { _ in
-                
-            }, receiveValue: { (task, data, urlResponse) in
-                guard var newBook = handleLibraryBookOne(oldbook: book, json: data) else { return }
-                guard let newPosition = book.readPos.getPosition(modelData.deviceName) else { return }
-                newBook.readPos.updatePosition(modelData.deviceName, newPosition)
-                modelData.updateBook(book: newBook)
-                
-                _ = updateBookReadingPosition(book: newBook, columnName: columnName, alertDelegate: alertDelegate, success: success)
-            })
-
-        return 0
-    }
-
     func getProtectionSpace(server: CalibreServer, port: Int?) -> URLProtectionSpace? {
         guard server.username.count > 0 && server.password.count > 0,
               let url = getServerUrlByReachability(server: server),

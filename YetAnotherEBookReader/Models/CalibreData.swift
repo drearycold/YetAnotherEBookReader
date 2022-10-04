@@ -396,7 +396,7 @@ struct CalibreBook {
         return tags.joined(separator: ", ")
     }
     var formats = [String: FormatInfo]()
-    var readPos: BookReadingPosition
+    var readPos: BookAnnotation
     
     var identifiers = [String: String]()
     
@@ -441,7 +441,7 @@ struct CalibreBook {
     init(id: Int32, library: CalibreLibrary) {
         self.id = id
         self.library = library
-        self.readPos = BookReadingPosition(id: id, library: library)
+        self.readPos = BookAnnotation(id: id, library: library)
     }
 }
 
@@ -792,6 +792,57 @@ struct BookDeviceReadingPosition : Hashable, Codable {
     }
 }
 
+extension BookAnnotation {
+    func positions(added lastReadPositions: [CalibreBookLastReadPositionEntry]) -> [CalibreBookLastReadPositionEntry] {
+        guard let realm = realm else { return .init() }
+        
+        var devicesUpdated = [String:BookDeviceReadingPosition]()
+        var tasks = [CalibreBookLastReadPositionEntry]()
+        
+        lastReadPositions.forEach { remoteEntry in
+            let remoteObject = remoteEntry.managedObject()
+            guard let remotePosition = BookDeviceReadingPosition(managedObject: remoteObject) else {
+                //not recognisable
+                return
+            }
+            
+            guard let localObject = realm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: remoteEntry.device),
+                  let localPosition = BookDeviceReadingPosition(managedObject: localObject)
+            else {
+                try? realm.write {
+                    realm.add(remoteEntry.managedObject(), update: .modified)
+                }
+                devicesUpdated[remoteEntry.device] = remotePosition
+                return
+            }
+            
+            guard localPosition.epoch < remotePosition.epoch else {
+                if localPosition.epoch == remotePosition.epoch {
+                    devicesUpdated[remoteEntry.device] = remotePosition
+                }
+                return
+            }
+            
+            try? realm.write {
+                realm.add(remoteObject, update: .modified)
+            }
+            devicesUpdated[remoteEntry.device] = remotePosition
+        }
+        
+        let objects = realm.objects(CalibreBookLastReadPositionRealm.self)
+        objects.forEach {
+            if let position = devicesUpdated[$0.device] {
+                self.updatePosition(position)
+            } else {
+                tasks.append(CalibreBookLastReadPositionEntry(managedObject: $0))
+            }
+        }
+        
+        return tasks
+    }
+    
+}
+
 struct BookDeviceReadingPositionHistory : Hashable, Codable {
     var bookId: String
     
@@ -815,13 +866,111 @@ struct BookDeviceReadingPositionHistory : Hashable, Codable {
 struct BookBookmark {
     let bookId: String
     let page: Int
-    let pos_type: StringLiteralType
+    let pos_type: String
     let pos: String
     
     var title: String
     var date: Date
     
     var removed: Bool
+}
+
+struct BookHighlight {
+    var removed: Bool = false
+    
+    let bookId: String
+    let highlightId: String
+    let readerName: String
+    
+    let page: Int
+    let startOffset: Int
+    let endOffset: Int
+    
+    var date: Date
+    var type: Int
+    var note: String?
+    
+    let tocFamilyTitles: [String]
+    let content: String
+    let contentPost: String
+    let contentPre: String
+    
+    // MARK: EPUB Specific
+    let cfiStart: String?
+    let cfiEnd: String?
+    let spineName: String?
+    
+    var contentEncoded: String? {
+        content.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+    }
+    var contentPreEncoded: String? {
+        contentPre.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+    }
+    var contentPostEncoded: String? {
+        contentPost.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+    }
+}
+
+enum BookHighlightStyle: Int, CaseIterable, Identifiable {
+    case yellow
+    case green
+    case blue
+    case pink
+    case underline
+
+    var id: Int {
+        self.rawValue
+    }
+    
+    public init () {
+        // Default style is `.yellow`
+        self = .yellow
+    }
+    
+    /**
+     Return HighlightStyle for CSS class.
+     */
+    public static func styleForClass(_ className: String) -> BookHighlightStyle {
+        switch className {
+        case "highlight-yellow": return .yellow
+        case "highlight-green": return .green
+        case "highlight-blue": return .blue
+        case "highlight-pink": return .pink
+        case "highlight-underline": return .underline
+        case "yellow": return .yellow
+        case "green": return .green
+        case "blue": return .blue
+        case "pink": return .pink
+        case "underline": return .underline
+        default: return .yellow
+        }
+    }
+
+    /**
+     Return CSS class for HighlightStyle.
+     */
+    public static func classForStyle(_ style: Int) -> String {
+        let enumStyle = (BookHighlightStyle(rawValue: style) ?? BookHighlightStyle())
+        switch enumStyle {
+        case .yellow: return "highlight-yellow"
+        case .green: return "highlight-green"
+        case .blue: return "highlight-blue"
+        case .pink: return "highlight-pink"
+        case .underline: return "highlight-underline"
+        }
+    }
+
+    public static func classForStyleCalibre(_ style: Int) -> String {
+        let enumStyle = (BookHighlightStyle(rawValue: style) ?? BookHighlightStyle())
+        switch enumStyle {
+        case .yellow: return "yellow"
+        case .green: return "green"
+        case .blue: return "blue"
+        case .pink: return "pink"
+        case .underline: return "underline"
+        }
+    }
+
 }
 
 struct CalibreBookLastReadPositionEntry: Codable {
@@ -952,6 +1101,113 @@ struct CalibreBookAnnotationHighlightEntry: Codable {
     }
 }
 
+// Used for syncing with calibre server
+extension BookAnnotation {
+    func highlights(added highlights: [CalibreBookAnnotationHighlightEntry]) -> Int {
+        guard let realm = realm else { return 0 }
+        
+        var pending = realm.objects(BookHighlightRealm.self).count
+        try? realm.write {
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+            
+            highlights.forEach { hl in
+                guard hl.type == "highlight",
+                      let highlightId = uuidCalibreToFolio(hl.uuid),
+                      let date = dateFormatter.date(from: hl.timestamp)
+                else { return }
+                
+                guard hl.removed != true else {
+                    if let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId) {
+                        if object.date <= date + 0.1 {
+                            object.removed = true
+                            object.date = date
+                            pending -= 1
+                        } else if date <= object.date + 0.1 {
+                            
+                        } else {
+                            pending -= 1
+                        }
+                    }
+                    return
+                }
+                
+                guard let spineIndex = hl.spineIndex else { return }
+                
+                if let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId) {
+                    if object.date <= date + 0.1 {
+                        object.date = date
+                        object.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                        object.note = hl.notes
+                        object.removed = false
+                        pending -= 1
+                    } else if date <= object.date + 0.1 {
+                        
+                    } else {
+                        pending -= 1
+                    }
+                } else {
+                    let highlightRealm = BookHighlightRealm()
+                    
+                    highlightRealm.bookId = bookPrefId
+                    highlightRealm.content = hl.highlightedText ?? "Unspecified"
+                    highlightRealm.contentPost = ""
+                    highlightRealm.contentPre = ""
+                    highlightRealm.date = date
+                    highlightRealm.highlightId = highlightId
+                    highlightRealm.page = spineIndex + 1
+                    highlightRealm.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                    highlightRealm.startOffset = 0
+                    highlightRealm.endOffset = 0
+                    highlightRealm.note = hl.notes
+                    highlightRealm.cfiStart = hl.startCfi
+                    highlightRealm.cfiEnd = hl.endCfi
+                    highlightRealm.spineName = hl.spineName
+                    if let tocFamilyTitles = hl.tocFamilyTitles {
+                        highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+                    }
+                    
+                    realm.add(highlightRealm, update: .all)
+                }
+            }
+
+        }
+    
+        return pending
+    }
+}
+
+extension BookHighlight {
+    func toCalibreBookAnnotationHighlightEntry() -> CalibreBookAnnotationHighlightEntry? {
+        guard let uuid = uuidFolioToCalibre(highlightId),
+              let readerType = ReaderType(rawValue: readerName)
+        else { return nil }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        switch readerType {
+        case .YabrEPUB:
+            return CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: date),
+                uuid: uuid,
+                removed: removed,
+                startCfi: cfiStart,
+                endCfi: cfiEnd,
+                highlightedText: content,
+                style: ["kind":"color", "type":"builtin", "which": BookHighlightStyle.classForStyleCalibre(type)],
+                spineName: spineName,
+                spineIndex: page - 1,
+                tocFamilyTitles: tocFamilyTitles.map { $0 },
+                notes: note
+            )
+        default:
+            return nil
+        }
+    }
+}
+
 struct CalibreBookAnnotationBookmarkEntry: Codable {
     var type: String
     var timestamp: String
@@ -972,6 +1228,126 @@ struct CalibreBookAnnotationBookmarkEntry: Codable {
         
         case title
         case removed
+    }
+}
+
+extension BookAnnotation {
+    func bookmarks(added bookmarks: [CalibreBookAnnotationBookmarkEntry]) -> Int {
+        guard let realm = realm else { return 0 }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        let bookObjects = realm.objects(BookBookmarkRealm.self)
+            .filter(NSPredicate(format: "bookId = %@", bookPrefId))
+        
+        var pending = bookObjects
+            .reduce(into: Set<String>()) { partialResult, object in
+                partialResult.insert(object.pos)
+            }
+        
+        let bookmarksByPos = bookmarks.reduce(into: [String: [CalibreBookAnnotationBookmarkEntry]]()) { partialResult, entry in
+            guard entry.type == "bookmark",
+                  dateFormatter.date(from: entry.timestamp) != nil
+            else { return }
+            
+            if partialResult[entry.pos] != nil {
+                partialResult[entry.pos]?.append(entry)
+            } else {
+                partialResult[entry.pos] = [entry]
+            }
+        }.map { posEntry in
+            (key: posEntry.key, value: posEntry.value.sorted(by: { lhs, rhs in
+                (dateFormatter.date(from: lhs.timestamp) ?? .distantPast) > (dateFormatter.date(from: rhs.timestamp) ?? .distantPast)
+            }))
+        }
+        
+        try? realm.write {
+            bookmarksByPos.forEach { pos, entries in
+                guard let entryNewest = entries.first,
+                      let entryNewestDate = dateFormatter.date(from: entryNewest.timestamp) else { return }
+                
+                let objects = bookObjects
+                    .filter(NSPredicate(format: "pos = %@", pos))
+                    .sorted(byKeyPath: "date", ascending: false)
+                
+                let objectsVisible = objects.filter(NSPredicate(format: "removed != true"))
+                
+                if let objectNewest = objects.first {
+                    if objectNewest.date == entryNewestDate
+                        || (
+                            (objectNewest.date < entryNewestDate + 0.1)
+                            &&
+                            (entryNewestDate < objectNewest.date + 0.1)
+                        ) {
+                        //same date, ignore server one
+                        pending.remove(pos)
+                    } else if objectNewest.date < entryNewestDate + 0.1 {
+                        //server has newer entry, remove all local entries
+                        while( objectsVisible.isEmpty == false ) {
+                            objectsVisible.first?.date += 0.001
+                            objectsVisible.first?.removed = true
+                        }
+                        pending.remove(pos)
+                    } else if entryNewestDate < objectNewest.date + 0.1 {
+                        //local has newer entry, ignore server one
+                    } else {
+                        //same date, ignore server one
+                        pending.remove(pos)
+                    }
+                }
+                
+                guard objectsVisible.isEmpty,
+                      entryNewest.removed != true
+                else {
+                    // only insert newest visible entry
+                    // either local has no corresponding entry,
+                    // or we have removed all existing ones (which means they are older)
+                    return
+                }
+                
+                let object = BookBookmarkRealm()
+                object.bookId = bookPrefId
+                
+                object.pos_type = entryNewest.pos_type
+                object.pos = entryNewest.pos
+                
+                object.title = entryNewest.title
+                object.date = entryNewestDate
+                object.removed = entryNewest.removed ?? false
+                
+                guard object.pos_type == "epubcfi",
+                      object.pos.starts(with: "epubcfi(/") else { return }
+                let firstStepStartIndex = object.pos.index(object.pos.startIndex, offsetBy: 9)
+                guard let firstStepEndIndex = object.pos[firstStepStartIndex..<object.pos.endIndex].firstIndex(where: { elem in
+                    elem == "/" || elem == ")"
+                }) else { return }
+                
+                guard let firstStep = Int(object.pos[firstStepStartIndex..<firstStepEndIndex]) else { return }
+                object.page = firstStep / 2
+                
+                realm.add(object)
+            }
+        }
+    
+        return pending.count
+    }
+}
+
+extension BookBookmark {
+    static let dateFormatter = ISO8601DateFormatter()
+    
+    func toCalibreBookAnnotationBookmarkEntry() -> CalibreBookAnnotationBookmarkEntry {
+        BookBookmark.dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        return CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: BookBookmark.dateFormatter.string(from: date),
+            pos_type: pos_type,
+            pos: pos,
+            title: title,
+            removed: removed
+        )
     }
 }
 

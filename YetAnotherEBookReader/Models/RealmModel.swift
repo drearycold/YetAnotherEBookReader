@@ -169,8 +169,8 @@ class CalibreBookRealm: Object {
         return (try? JSONSerialization.jsonObject(with: userMetaData, options: []) as? [String:Any]) ?? [:]
     }
     
-    func readPos(library: CalibreLibrary) -> BookReadingPosition {
-        var readPos = BookReadingPosition(id: id, library: library)
+    func readPos(library: CalibreLibrary) -> BookAnnotation {
+        let readPos = BookAnnotation(id: id, library: library)
         
         let readPosObject = try? JSONSerialization.jsonObject(with: readPosData as Data? ?? Data(), options: [])
         let readPosDict = readPosObject as! NSDictionary? ?? NSDictionary()
@@ -215,7 +215,7 @@ class CalibreBookRealm: Object {
             deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
             deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
             
-            readPos.updatePosition(deviceName, deviceReadingPosition)
+            readPos.updatePosition(deviceReadingPosition)
         }
         return readPos
     }
@@ -241,7 +241,7 @@ extension CalibreBook: Persistable {
     internal init(managedObject: CalibreBookRealm) {
         self.id = 0
         self.library = .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: "")
-        self.readPos = BookReadingPosition(id: id, library: library)
+        self.readPos = BookAnnotation(id: id, library: library)
     }
     
     public init(managedObject: CalibreBookRealm, library: CalibreLibrary) {
@@ -601,201 +601,6 @@ class CalibreActivityLogEntry: Object {
     }
 }
 
-/**
- realm backed
- */
-struct BookReadingPosition {
-    let id: Int32
-    let library: CalibreLibrary
-    let localFilename: String?
-    
-    let bookPrefId: String
-    
-    var isEmpty: Bool { get { get()?.isEmpty ?? true } }
-    
-    init(id: Int32, library: CalibreLibrary, localFilename: String? = nil) {
-        self.id = id
-        self.library = library
-        self.localFilename = localFilename
-        bookPrefId = "\(library.key) - \(id)"
-    }
-    
-    func openRealm() -> Realm? {
-        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
-              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
-              let basePrefUrl = bookPrefConf.fileURL,
-              FileManager.default.fileExists(atPath: basePrefUrl.path)
-        else { return nil }
-        
-        return try? Realm(configuration: bookPrefConf)
-    }
-    
-    /**
-     newest takePrecedence, newest first otherwise
-     */
-    func getPosition(_ deviceName: String) -> BookDeviceReadingPosition? {
-        let objects = get()?.filter(NSPredicate(format: "id = %@", deviceName))
-        
-        return objects?.filter(NSPredicate(format: "takePrecedence = true"))
-            .map({ BookDeviceReadingPosition(managedObject: $0) })
-            .first ?? objects?.map({ BookDeviceReadingPosition(managedObject: $0) }).first
-    }
-    
-    func addInitialPosition(_ deviceName: String, _ readerName: String) {
-        //TODO: try doing nothing
-    }
-    
-    func updatePosition(_ deviceName: String, _ newPosition: BookDeviceReadingPosition) {
-        let realm = openRealm()
-        
-        try? realm?.write {
-            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
-                .filter(NSPredicate(
-                    format: "bookId = %@ AND id = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                    bookPrefId,
-                    newPosition.id,
-                    NSNumber(value: newPosition.structuralStyle),
-                    NSNumber(value: newPosition.positionTrackingStyle),
-                    NSNumber(value: newPosition.structuralRootPageNumber)
-                )),
-               existing.isEmpty == false {
-                let existingCount = existing.count
-                let oldObjs = existing.filter { $0.epoch < newPosition.epoch }
-                let oldobjsCount = oldObjs.count
-                realm?.delete(oldObjs)
-                
-                if oldobjsCount == existingCount {
-                    let obj = newPosition.managedObject()
-                    obj.bookId = bookPrefId
-                    realm?.add(obj)
-                }
-            } else {
-                let obj = newPosition.managedObject()
-                obj.bookId = bookPrefId
-                realm?.add(obj)
-            }
-        }
-    }
-    
-    func removePosition(_ deviceName: String) {
-        let realm = openRealm()
-        
-        if let objs = realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ and id = %@", bookPrefId, deviceName)),
-           objs.isEmpty == false {
-            try? realm?.write {
-                realm?.delete(objs)
-            }
-        }
-    }
-    
-    func removePosition(position: BookDeviceReadingPosition) {
-        let realm = openRealm()
-        
-        try? realm?.write {
-            if let existing = realm?.objects(BookDeviceReadingPositionRealm.self)
-                .filter(NSPredicate(
-                    format: "bookId = %@ AND id = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                    bookPrefId,
-                    position.id,
-                    position.readerName,
-                    NSNumber(value: position.structuralStyle),
-                    NSNumber(value: position.positionTrackingStyle),
-                    NSNumber(value: position.structuralRootPageNumber)
-                )),
-               existing.isEmpty == false {
-                realm?.delete(existing)
-            }
-        }
-    }
-    
-    func getCopy() -> [String: BookDeviceReadingPosition] {
-        return get()?.reduce(into: [String: BookDeviceReadingPosition](), { partialResult, obj in
-            if (partialResult[obj.id]?.epoch ?? Date.distantPast.timeIntervalSince1970) < obj.epoch {
-                partialResult[obj.id] = BookDeviceReadingPosition(managedObject: obj)
-            }
-        }) ?? [:]
-    }
-    
-    func getDevices() -> [BookDeviceReadingPosition] {
-        return get()?.map { BookDeviceReadingPosition(managedObject: $0) } ?? []
-    }
-    
-    func getDevices(by reader: ReaderType) -> [BookDeviceReadingPosition] {
-        return getDevices().filter {
-            $0.readerName == reader.id
-        }
-    }
-    
-    func sessions(list startDateAfter: Date? = nil) -> [BookDeviceReadingPositionHistory] {
-        guard let realm = openRealm() else { return [] }
-        
-        return realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(
-                startDateAfter == nil
-                ? NSPredicate(format: "bookId = %@", bookPrefId)
-                : NSPredicate(format: "bookId = %@ AND startDatetime >= %@", bookPrefId, startDateAfter! as NSDate)
-            )
-            .filter { $0.endPosition != nil }
-            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
-    }
-    
-    func session(start readPosition: BookDeviceReadingPosition) -> Date? {
-        guard let realm = openRealm() else { return nil }
-        
-        let startDatetime = Date()
-        
-        let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookPrefId))
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-            .first
-        
-        try? realm.write {
-            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else {
-                let historyEntry = BookDeviceReadingPositionHistoryRealm()
-                historyEntry.bookId = bookPrefId
-                historyEntry.startDatetime = startDatetime
-                historyEntry.startPosition = readPosition.managedObject()
-                historyEntry.startPosition?.bookId = "\(bookPrefId) - History"
-                realm.add(historyEntry)
-            }
-        }
-        
-        return startDatetime
-    }
-    
-    func session(end readPosition: BookDeviceReadingPosition) {
-        guard let realm = openRealm() else { return }
-        
-        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self).filter(
-            NSPredicate(format: "bookId = %@", bookPrefId)
-        ).sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)]).first else { return }
-        
-        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
-        
-        try? realm.write {
-            historyEntry.endPosition = readPosition.managedObject()
-            historyEntry.endPosition?.bookId = "\(bookPrefId) - History"
-            historyEntry.endPosition?.takePrecedence = false
-        }
-    }
-    
-    /**
-     sorted by epoch, newest first
-     */
-    private func get() -> Results<BookDeviceReadingPositionRealm>? {
-        let realm = openRealm()
-        
-        return realm?.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@", bookPrefId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-    }
-}
-
 struct BookPreference {
     let id: Int32
     let library: CalibreLibrary
@@ -926,6 +731,12 @@ extension BookDeviceReadingPosition: Persistable {
         obj.lastReadBook = lastReadBook
         obj.lastBundleProgress = lastBundleProgress
         
+        return obj
+    }
+    
+    public func managedObject(bookId: String) -> BookDeviceReadingPositionRealm {
+        let obj = managedObject()
+        obj.bookId = bookId
         return obj
     }
 }
@@ -1135,6 +946,121 @@ extension BookDeviceReadingPosition {
         return cfi
     }
     
+}
+
+class BookHighlightRealm: Object {
+    @objc open dynamic var removed: Bool = false
+    
+    @objc open dynamic var bookId: String = ""
+    @objc open dynamic var highlightId: String = ""
+    @objc open dynamic var readerName: String = ""
+    
+    @objc open dynamic var page: Int = 0
+    @objc open dynamic var startOffset: Int = -1
+    @objc open dynamic var endOffset: Int = -1
+    
+    @objc open dynamic var date: Date = .init()
+    @objc open dynamic var type: Int = 0
+    @objc open dynamic var note: String?
+    
+    open dynamic var tocFamilyTitles = List<String>()
+    @objc open dynamic var content: String = ""
+    @objc open dynamic var contentPost: String = ""
+    @objc open dynamic var contentPre: String = ""
+    
+    // MARK: EPUB Specific
+    @objc open dynamic var cfiStart: String?
+    @objc open dynamic var cfiEnd: String?
+    @objc open dynamic var spineName: String?
+    
+    override static func primaryKey()-> String? {
+        return "highlightId"
+    }
+}
+
+extension BookHighlight: Persistable {
+    init(managedObject: BookHighlightRealm) {
+        removed = managedObject.removed
+        
+        bookId = managedObject.bookId
+        highlightId = managedObject.highlightId
+        readerName = managedObject.readerName
+        
+        page = managedObject.page
+        startOffset = managedObject.startOffset
+        endOffset = managedObject.endOffset
+        
+        date = managedObject.date
+        type = managedObject.type
+        note = managedObject.note
+        
+        tocFamilyTitles = managedObject.tocFamilyTitles.map { $0 }
+        content = managedObject.content
+        contentPost = managedObject.contentPost
+        contentPre = managedObject.contentPre
+        
+        cfiStart = managedObject.cfiStart
+        cfiEnd = managedObject.cfiEnd
+        spineName = managedObject.spineName
+    }
+    
+    func managedObject() -> BookHighlightRealm {
+        let managedObject = BookHighlightRealm()
+        managedObject.removed = removed
+        
+        managedObject.bookId = bookId
+        managedObject.highlightId = highlightId
+        managedObject.readerName = readerName
+        
+        managedObject.page = page
+        managedObject.startOffset = startOffset
+        managedObject.endOffset = endOffset
+        
+        managedObject.date = date
+        managedObject.type = type
+        managedObject.note = note
+        
+        managedObject.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+        managedObject.content = content
+        managedObject.contentPost = contentPost
+        managedObject.contentPre = contentPre
+        
+        managedObject.cfiStart = cfiStart
+        managedObject.cfiEnd = cfiEnd
+        managedObject.spineName = spineName
+        
+        return managedObject
+    }
+}
+
+extension FolioReaderHighlightRealm {
+    func toBookHighlightRealm(readerName: String) -> BookHighlightRealm? {
+        guard let bookId = bookId, let highlightId = highlightId else { return nil }
+        
+        let managedObject = BookHighlightRealm()
+        managedObject.bookId = bookId
+        managedObject.highlightId = highlightId
+        managedObject.readerName = readerName
+        
+        managedObject.page = page
+        managedObject.startOffset = startOffset
+        managedObject.endOffset = endOffset
+        
+        managedObject.date = date
+        managedObject.type = type
+        managedObject.note = noteForHighlight
+        
+        managedObject.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+        managedObject.content = content ?? ""
+        managedObject.contentPost = contentPost ?? ""
+        managedObject.contentPre = contentPre ?? ""
+        
+        managedObject.cfiStart = cfiStart
+        managedObject.cfiEnd = cfiEnd
+        managedObject.spineName = spineName
+        
+        return managedObject
+    }
 }
 
 class CalibreServerDSReaderHelperRealm: Object {
