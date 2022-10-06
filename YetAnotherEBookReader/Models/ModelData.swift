@@ -1902,7 +1902,7 @@ final class ModelData: ObservableObject {
                             }
                             
                             if book.readPos.bookmarks(added: entry.value.annotations_map.bookmark ?? []) > 0 {
-                                let bookmarks = book.readPos.bookmarks(list: nil).map { $0.toCalibreBookAnnotationBookmarkEntry() }
+                                let bookmarks = book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
                                 bookmarkPending.append(contentsOf: bookmarks)
                             }
                              

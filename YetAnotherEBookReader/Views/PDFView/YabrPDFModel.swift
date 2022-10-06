@@ -141,3 +141,22 @@ struct PageVisibleContentValue {
     let thumbImage: UIImage?
     var lastUsed = Date()
 }
+
+struct PDFBookmark {
+    let page: Int
+    let offset: CGPoint
+    
+    var title: String
+    var date: Date
+}
+
+struct PDFHighlight {
+    let page: Int
+    let offset: CGPoint
+    
+    var type: Int
+    var content: String
+    var note: String?
+    var date: Date
+
+}

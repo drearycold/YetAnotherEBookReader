@@ -242,10 +242,15 @@ extension BookAnnotation {
 
 //MARK: Bookmark
 extension BookAnnotation {
-    func bookmarks(list startDateAfter: Date? = nil) -> [BookBookmark] {
+    func bookmarks(excludeRemoved: Bool = true) -> [BookBookmark] {
         guard let realm = realm else { return [] }
 
-        return realm.objects(BookBookmarkRealm.self).map { BookBookmark(managedObject: $0) }
+        var results = realm.objects(BookBookmarkRealm.self)
+        if excludeRemoved {
+            results = results.filter(NSPredicate(format: "removed == false"))
+        }
+        
+        return results.map { BookBookmark(managedObject: $0) }
     }
     
     func bookmarks(andPage page: NSNumber?) -> [BookBookmark] {

@@ -1038,6 +1038,6 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader) -> [FolioReaderBookmark] {
-        return book.readPos.bookmarks(list: nil).map { $0.toFolioReaderBookmark() }
+        return book.readPos.bookmarks().map { $0.toFolioReaderBookmark() }
     }
 }

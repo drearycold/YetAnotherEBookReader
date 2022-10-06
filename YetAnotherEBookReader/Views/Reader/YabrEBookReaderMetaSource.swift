@@ -7,29 +7,62 @@
 
 import Foundation
 import UIKit
+import PDFKit
 import RealmSwift
 
-struct YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
+class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     var dictViewer: (String, UIViewController)? = nil
     
-    func yabrPDFURL(_ viewController: YabrPDFViewController) -> URL? {
+    var refText: String?
+    
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.book = book
+        self.readerInfo = readerInfo
+    }
+    
+    func yabrPDFURL(_ view: YabrPDFView?) -> URL? {
         return readerInfo.url
     }
     
-    func yabrPDFReadPosition(_ viewController: YabrPDFViewController) -> BookDeviceReadingPosition? {
+    func yabrPDFDocument(_ view: YabrPDFView?) -> PDFDocument? {
+        return view?.document
+    }
+    
+    func yabrPDFNavigate(_ view: YabrPDFView?, pageNumber: Int, offset: CGPoint) {
+        guard let page = view?.document?.page(at: pageNumber - 1)
+        else { return }
+        
+        view?.go(to: PDFDestination(page: page, at: offset))
+    }
+    
+    func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination) {
+        view?.go(to: destination)
+    }
+    
+    func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline? {
+        guard let pdfDocument = yabrPDFDocument(view),
+              let pdfPage = pdfDocument.page(at: page),
+              let pdfPageSelection = pdfPage.selection(for: pdfPage.bounds(for: .mediaBox)),
+              pdfPageSelection.selectionsByLine().isEmpty == false
+        else { return nil }
+        
+        return pdfDocument.outlineItem(for: pdfPageSelection)
+    }
+    
+    func yabrPDFReadPosition(_ view: YabrPDFView?) -> BookDeviceReadingPosition? {
         return readerInfo.position
     }
     
-    func yabrPDFReadPosition(_ viewController: YabrPDFViewController, update readPosition: BookDeviceReadingPosition) {
+    func yabrPDFReadPosition(_ view: YabrPDFView?, update readPosition: BookDeviceReadingPosition) {
         var readPosition = readPosition
         readPosition.id = readerInfo.deviceName
         readPosition.readerName = readerInfo.readerType.rawValue
         book.readPos.updatePosition(readPosition)
     }
     
-    func yabrPDFOptions(_ viewController: YabrPDFViewController) -> PDFOptions? {
+    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
         guard let config = getBookPreferenceConfig(bookFileURL: readerInfo.url),
               let realm = try? Realm(configuration: config),
               let pdfOptionsRealm = realm.objects(PDFOptionsRealm.self).first
@@ -38,7 +71,7 @@ struct YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         return PDFOptions(managedObject: pdfOptionsRealm)
     }
     
-    func yabrPDFOptions(_ viewController: YabrPDFViewController, update options: PDFOptions) {
+    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
         guard let config = getBookPreferenceConfig(bookFileURL: readerInfo.url),
               let realm = try? Realm(configuration: config)
         else { return }
@@ -48,8 +81,92 @@ struct YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         }
     }
     
-    func yabrPDFDictViewer(_ viewController: YabrPDFViewController) -> (String, UIViewController)? {
+    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UIViewController)? {
         return dictViewer
+    }
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {
+        return book.readPos.bookmarks().compactMap { $0.toPDFBookmark() }
+    }
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
+        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        else { return }
+        
+        book.readPos.bookmarks(added: bookBookmark)
+    }
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
+        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        else { return }
+        
+        book.readPos.bookmarks(removed: bookBookmark.pos)
+    }
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight] {
+        return book.readPos.highlights().compactMap { $0.toPDFHighlight() }
+    }
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
+        
+    }
+    
+    func yabrPDFReferenceText(_ view: YabrPDFView?) -> String? {
+        return refText
+    }
+    
+    func yabrPDFReferenceText(_ view: YabrPDFView?, set refText: String?) {
+        self.refText = refText
+    }
+    
+    func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T {
+        yabrPDFOptions(view)?.themeMode == .dark ? f : l
+    }
+    
+    
+}
+
+extension BookBookmark {
+    static let PDFBookmarkPosType = "yabrpdf"
+    
+    struct PDFBookmarkPos: Codable {
+        var page: Int
+        var offset: CGPoint
+    }
+    
+    init?(bookId: String, pdfBookmark: PDFBookmark) {
+        guard let posData = try? JSONEncoder().encode(PDFBookmarkPos(page: pdfBookmark.page, offset: pdfBookmark.offset)),
+              let pos = String(data: posData, encoding: .utf8)
+        else { return nil }
+        
+        self.bookId = bookId
+        self.page = pdfBookmark.page
+        self.pos_type = BookBookmark.PDFBookmarkPosType
+        self.pos = pos
+        
+        self.title = pdfBookmark.title
+        self.date = pdfBookmark.date
+        
+        self.removed = false
+    }
+    
+    func toPDFBookmark() -> PDFBookmark? {
+        guard self.pos_type == BookBookmark.PDFBookmarkPosType else { return nil }
+        guard let posData = self.pos.data(using: .utf8),
+            let pos = try? JSONDecoder().decode(PDFBookmarkPos.self, from: posData)
+        else { return nil }
+        
+        return PDFBookmark(page: self.page, offset: pos.offset, title: self.title, date: self.date)
+    }
+}
+
+extension BookHighlight {
+    init?(bookId: String, pdfHighlight: PDFHighlight) {
+        return nil
+    }
+    
+    func toPDFHighlight() -> PDFHighlight? {
+        return PDFHighlight(page: self.page, offset: .zero, type: self.type, content: self.content, note: self.note, date: self.date)
     }
 }
 

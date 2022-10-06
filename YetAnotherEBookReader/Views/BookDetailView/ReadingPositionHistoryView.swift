@@ -6,7 +6,9 @@
 //
 
 import SwiftUI
+#if canImport(SwiftUICharts)
 import SwiftUICharts
+#endif
 
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
@@ -25,9 +27,10 @@ struct ReadingPositionHistoryView: View {
     
     var body: some View {
         VStack {
+            #if canImport(SwiftUICharts)
             BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
                 .padding()
-            
+            #endif
             List {
 //                Section(
 //                    header: Text("Stats"),

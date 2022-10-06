@@ -130,7 +130,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     var pageVisibleContentBounds: [PageVisibleContentKey: PageVisibleContentValue] = [:]
     
     func open() -> Int {
-        guard let pdfURL = yabrPDFMetaSource?.yabrPDFURL(self) else { return -1 }
+        guard let pdfURL = yabrPDFMetaSource?.yabrPDFURL(pdfView) else { return -1 }
         
         logger.info("pdfURL: \(pdfURL.absoluteString)")
         logger.info("Exist: \(FileManager.default.fileExists(atPath: pdfURL.path))")
@@ -145,11 +145,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         pdfView.displayDirection = PDFDisplayDirection.horizontal
         pdfView.interpolationQuality = PDFInterpolationQuality.high
         
-        if let pdfOptions = yabrPDFMetaSource?.yabrPDFOptions(self) {
+        if let pdfOptions = yabrPDFMetaSource?.yabrPDFOptions(pdfView) {
             self.pdfOptions = pdfOptions
         }
         
-        if let position = yabrPDFMetaSource?.yabrPDFReadPosition(self) {
+        if let position = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
             let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
         
             pageViewPositionHistory.removeAll()
@@ -244,12 +244,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         
         navigationItem.setLeftBarButtonItems([
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
-            UIBarButtonItem(title: "Zoom Out", image: UIImage(systemName: "minus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
-                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) / 1.1
-            })),
-            UIBarButtonItem(title: "Zoom In", image: UIImage(systemName: "plus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
-                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) * 1.1
-            })),
+            UIBarButtonItem(title: "List", image: UIImage(systemName: "line.3.horizontal"), primaryAction: UIAction(handler: { action in
+                let pageController = YabrPDFAnnotationPageVC()
+                
+                pageController.yabrPDFView = self.pdfView
+                pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
+                
+                let nav = UINavigationController(rootViewController: pageController)
+                if let fillColor = PDFPageWithBackground.fillColor {
+                    nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
+                }
+                
+                self.present(nav, animated: true)
+            }))
+//            UIBarButtonItem(title: "Zoom Out", image: UIImage(systemName: "minus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
+//                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) / 1.1
+//            })),
+//            UIBarButtonItem(title: "Zoom In", image: UIImage(systemName: "plus.magnifyingglass"), primaryAction: UIAction(handler: { (UIAction) in
+//                self.pdfView.scaleFactor = (self.pdfView.scaleFactor ) * 1.1
+//            })),
         ], animated: true)
         
         navigationItem.setRightBarButtonItems([
@@ -372,7 +385,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         
         self.view = pdfView
 
-        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) {
+        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
             UIMenuController.shared.menuItems = [UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction))]
             dictViewer.1.loadViewIfNeeded()
         } else {
@@ -440,7 +453,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     }
     
     @objc private func handlePageChange(notification: Notification) {
-        var titleLabel = yabrPDFMetaSource?.yabrPDFReadPosition(self)?.lastReadChapter
+        var titleLabel = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView)?.lastReadChapter
         guard let curPage = pdfView.currentPage else { return }
 
         if var outlineRoot = pdfView.document?.outlineRoot {
@@ -1065,7 +1078,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             }
         }
         
-        if var updatedReadingPosition = yabrPDFMetaSource?.yabrPDFReadPosition(self) {
+        if var updatedReadingPosition = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
             updatedReadingPosition.lastPosition[0] = curPageNum
             updatedReadingPosition.lastPosition[1] = Int(curPagePos.point.x.rounded())
             updatedReadingPosition.lastPosition[2] = Int((curPagePos.point.y).rounded())
@@ -1078,12 +1091,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             
-            yabrPDFMetaSource?.yabrPDFReadPosition(self, update: updatedReadingPosition)
+            yabrPDFMetaSource?.yabrPDFReadPosition(pdfView, update: updatedReadingPosition)
             
             print("\(#function) updatedReadingPosition=\(updatedReadingPosition)")
         }
             
-        yabrPDFMetaSource?.yabrPDFOptions(self, update: pdfOptions)
+        yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
     }
     
 //    @objc func lookupStarDict() {
@@ -1095,7 +1108,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //    }
     @objc func dictViewerAction() {
         guard let s = pdfView.currentSelection?.string,
-              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) else { return }
+              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
         
         print("\(#function) word=\(s)")
         dictViewer.1.title = s
@@ -1163,15 +1176,39 @@ extension YabrPDFViewController: PDFDocumentDelegate {
 }
 
 protocol YabrPDFMetaSource {
-    func yabrPDFURL(_ viewController: YabrPDFViewController) -> URL?
+    func yabrPDFURL(_ view: YabrPDFView?) -> URL?
     
-    func yabrPDFReadPosition(_ viewController: YabrPDFViewController) -> BookDeviceReadingPosition?
+    func yabrPDFDocument(_ view: YabrPDFView?) -> PDFDocument?
     
-    func yabrPDFReadPosition(_ viewController: YabrPDFViewController, update readPosition: BookDeviceReadingPosition)
+    func yabrPDFNavigate(_ view: YabrPDFView?, pageNumber: Int, offset: CGPoint)
     
-    func yabrPDFOptions(_ viewController: YabrPDFViewController) -> PDFOptions?
+    func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination)
+
+    func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline?
     
-    func yabrPDFOptions(_ viewController: YabrPDFViewController, update options: PDFOptions)
+    func yabrPDFReadPosition(_ view: YabrPDFView?) -> BookDeviceReadingPosition?
     
-    func yabrPDFDictViewer(_ viewController: YabrPDFViewController) -> (String, UIViewController)?
+    func yabrPDFReadPosition(_ view: YabrPDFView?, update readPosition: BookDeviceReadingPosition)
+    
+    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions?
+    
+    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions)
+    
+    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UIViewController)?
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark]
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark)
+    
+    func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark)
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight]
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight)
+    
+    func yabrPDFReferenceText(_ view: YabrPDFView?) -> String?
+
+    func yabrPDFReferenceText(_ view: YabrPDFView?, set refText: String?)
+    
+    func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T
 }
