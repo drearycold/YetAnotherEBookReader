@@ -973,6 +973,9 @@ class BookHighlightRealm: Object {
     @objc open dynamic var cfiEnd: String?
     @objc open dynamic var spineName: String?
     
+    // MARK: PDF Specific
+    @objc open dynamic var ranges: String?
+    
     override static func primaryKey()-> String? {
         return "highlightId"
     }
@@ -989,6 +992,7 @@ extension BookHighlight: Persistable {
         page = managedObject.page
         startOffset = managedObject.startOffset
         endOffset = managedObject.endOffset
+        ranges = managedObject.ranges
         
         date = managedObject.date
         type = managedObject.type
@@ -1015,6 +1019,7 @@ extension BookHighlight: Persistable {
         managedObject.page = page
         managedObject.startOffset = startOffset
         managedObject.endOffset = endOffset
+        managedObject.ranges = ranges
         
         managedObject.date = date
         managedObject.type = type

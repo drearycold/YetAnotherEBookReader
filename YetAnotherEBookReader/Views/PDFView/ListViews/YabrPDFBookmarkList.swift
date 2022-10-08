@@ -28,13 +28,12 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
         else { return }
         
         sectionBookmarks = bookmarks.reduce(into: [:]) { partialResult, bookmark in
-            let sectionKey = self.yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: bookmark.page)?.destination?.page?.pageRef?.pageNumber ?? bookmark.page
+            let sectionKey = self.yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: bookmark.pos.page)?.destination?.page?.pageRef?.pageNumber ?? bookmark.pos.page
             
             if partialResult[sectionKey] != nil {
                 partialResult[sectionKey]?.append(bookmark)
                 partialResult[sectionKey]?.sort(by: {
-                    if $0.page != $1.page { return $0.page < $1.page }
-                    return $0.offset.y < $1.offset.y
+                    $0.pos < $1.pos
                 })
             } else {
                 partialResult[sectionKey] = [bookmark]
@@ -157,7 +156,7 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
         guard let bookmark = sectionBookmarks[sections[indexPath.section]]?[indexPath.row]
         else { return }
         
-        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: bookmark.page, offset: bookmark.offset)
+        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: bookmark.pos.page, offset: bookmark.pos.offset)
         
         self.dismiss(animated: true)
     }
@@ -198,8 +197,7 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
         yabrPDFMetaSource?.yabrPDFBookmarks(
             yabrPDFView,
             update: PDFBookmark(
-                page: pageNumber,
-                offset: destination.point,
+                pos: PDFBookmark.Location(page: pageNumber, offset: destination.point),
                 title: yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: pageNumber)?.label ?? "Page \(pageNumber)",
                 date: Date()
             )

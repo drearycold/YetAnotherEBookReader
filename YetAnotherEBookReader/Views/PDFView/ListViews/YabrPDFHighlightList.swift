@@ -26,11 +26,14 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
         else { return }
         
         sectionHighlights = highlights.reduce(into: [:]) { partialResult, highlight in
-            let sectionKey = self.yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: highlight.page)?.destination?.page?.pageRef?.pageNumber ?? highlight.page
+            guard let highlightFirstPage = highlight.pos.first?.page else { return }
+            let sectionKey = self.yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: highlightFirstPage)?.destination?.page?.pageRef?.pageNumber ?? highlightFirstPage
             
             if partialResult[sectionKey] != nil {
                 partialResult[sectionKey]?.append(highlight)
-                partialResult[sectionKey]?.sort(by: { $0.page < $1.page })
+                partialResult[sectionKey]?.sort(by: {
+                    ($0.pos.first?.page ?? 0) < ($1.pos.first?.page ?? 0)
+                })
             } else {
                 partialResult[sectionKey] = [highlight]
             }
@@ -134,17 +137,16 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
             return 0.0
         }
 
-        return 60 + (highlight.note != nil ? 40 : 0)
+        return 80 + (highlight.note != nil ? 40 : 0)
     }
 
     // MARK: - Table view delegate
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        guard let yabrPDFView = yabrPDFView,
-              let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
+        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
         else { return }
         
-        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: highlight.page, offset: highlight.offset)
+//        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: highlight.page, offset: highlight.offset)
     }
 
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
@@ -153,9 +155,11 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
             else { return }
 
             //TODO: remove
+            yabrPDFMetaSource?.yabrPDFHighlights(yabrPDFView, remove: highlight)
+            yabrPDFView?.removeHighlight(highlight: highlight)
             
             sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
-            if sectionHighlights[sections[indexPath.section]]?.isEmpty == true {
+            if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
                 sectionHighlights.removeValue(forKey: sections[indexPath.section])
                 sections.remove(at: indexPath.section)
             }

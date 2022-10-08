@@ -686,7 +686,8 @@ fileprivate extension FolioReaderHighlight {
             contentPre: contentPre,
             cfiStart: cfiStart,
             cfiEnd: cfiEnd,
-            spineName: spineName
+            spineName: spineName,
+            ranges: nil
         )
     }
 }

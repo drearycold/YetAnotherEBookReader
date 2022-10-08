@@ -143,20 +143,35 @@ struct PageVisibleContentValue {
 }
 
 struct PDFBookmark {
-    let page: Int
-    let offset: CGPoint
+    struct Location: Codable, Comparable {
+        var page: Int
+        var offset: CGPoint
+        
+        static func < (lhs: PDFBookmark.Location, rhs: PDFBookmark.Location) -> Bool {
+            if lhs.page != rhs.page { return lhs.page < rhs.page }
+            return lhs.offset.y < rhs.offset.y
+        }
+    }
+    
+    let pos: Location
     
     var title: String
     var date: Date
 }
 
 struct PDFHighlight {
-    let page: Int
-    let offset: CGPoint
+    struct PageLocation: Codable {
+        var page: Int
+        var ranges: [NSRange]
+    }
+    
+    var uuid: UUID
+    var pos: [PageLocation]
     
     var type: Int
     var content: String
     var note: String?
     var date: Date
 
+    
 }

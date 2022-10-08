@@ -108,7 +108,17 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
+        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        else { return }
         
+        book.readPos.highlight(added: bookHighlight)
+    }
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
+        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        else { return }
+        
+        book.readPos.highlight(removedId: bookHighlight.highlightId)
     }
     
     func yabrPDFReferenceText(_ view: YabrPDFView?) -> String? {
@@ -129,18 +139,13 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
 extension BookBookmark {
     static let PDFBookmarkPosType = "yabrpdf"
     
-    struct PDFBookmarkPos: Codable {
-        var page: Int
-        var offset: CGPoint
-    }
-    
     init?(bookId: String, pdfBookmark: PDFBookmark) {
-        guard let posData = try? JSONEncoder().encode(PDFBookmarkPos(page: pdfBookmark.page, offset: pdfBookmark.offset)),
+        guard let posData = try? JSONEncoder().encode(pdfBookmark.pos),
               let pos = String(data: posData, encoding: .utf8)
         else { return nil }
         
         self.bookId = bookId
-        self.page = pdfBookmark.page
+        self.page = pdfBookmark.pos.page
         self.pos_type = BookBookmark.PDFBookmarkPosType
         self.pos = pos
         
@@ -153,20 +158,50 @@ extension BookBookmark {
     func toPDFBookmark() -> PDFBookmark? {
         guard self.pos_type == BookBookmark.PDFBookmarkPosType else { return nil }
         guard let posData = self.pos.data(using: .utf8),
-            let pos = try? JSONDecoder().decode(PDFBookmarkPos.self, from: posData)
+              let pos = try? JSONDecoder().decode(PDFBookmark.Location.self, from: posData)
         else { return nil }
         
-        return PDFBookmark(page: self.page, offset: pos.offset, title: self.title, date: self.date)
+        return PDFBookmark(pos: pos, title: self.title, date: self.date)
     }
 }
 
 extension BookHighlight {
     init?(bookId: String, pdfHighlight: PDFHighlight) {
-        return nil
+        guard let posData = try? JSONEncoder().encode(pdfHighlight.pos),
+              let pos = String(data: posData, encoding: .utf8)
+        else { return nil }
+        
+        self.bookId = bookId
+        self.readerName = ReaderType.YabrPDF.rawValue
+        self.highlightId = pdfHighlight.uuid.uuidString
+        
+        self.page = pdfHighlight.pos.first?.page ?? 1
+        self.startOffset = 0
+        self.endOffset = 0
+        self.ranges = pos
+        
+        self.date = pdfHighlight.date
+        self.type = pdfHighlight.type
+        self.note = pdfHighlight.note
+        
+        self.tocFamilyTitles = []
+        self.content = pdfHighlight.content
+        self.contentPre = ""
+        self.contentPost = ""
+        
+        self.cfiStart = "/\((pdfHighlight.pos.first?.page ?? 1) * 2)"
+        self.cfiEnd = "/\((pdfHighlight.pos.last?.page ?? 1) * 2)"
+        self.spineName = nil
     }
     
     func toPDFHighlight() -> PDFHighlight? {
-        return PDFHighlight(page: self.page, offset: .zero, type: self.type, content: self.content, note: self.note, date: self.date)
+        guard self.readerName == ReaderType.YabrPDF.rawValue,
+              let uuid = UUID(uuidString: self.highlightId),
+              let posData = self.ranges?.data(using: .utf8),
+              let pos = try? JSONDecoder().decode([PDFHighlight.PageLocation].self, from: posData)
+        else { return nil }
+        
+        return PDFHighlight(uuid: uuid, pos: pos, type: self.type, content: self.content, note: self.note, date: self.date)
     }
 }
 

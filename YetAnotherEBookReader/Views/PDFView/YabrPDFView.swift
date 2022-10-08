@@ -26,6 +26,8 @@ class YabrPDFView: PDFView {
     var pageNextButton: UIButton?
     var pagePrevButton: UIButton?
     
+    var highlights = [UUID: [PDFAnnotation]]()
+    
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         print("\(#function) \(action.description)")
         if action.description == "selectAll:" {
@@ -249,5 +251,42 @@ class YabrPDFView: PDFView {
             }
         }
     }
+}
+
+// MARK: Highlights
+extension YabrPDFView {
+    func injectHighlight(highlight: PDFHighlight) {
+        highlight.pos.forEach { highlightPageLocation in
+            guard let highlightPage = self.document?.page(at: highlightPageLocation.page - 1)
+            else { return }
+            highlightPageLocation.ranges.forEach { highlightPageRange in
+                guard let highlightSelection = self.document?.selection(from: highlightPage, atCharacterIndex: highlightPageRange.lowerBound, to: highlightPage, atCharacterIndex: highlightPageRange.upperBound)
+                else { return }
+                
+                highlightSelection.selectionsByLine().forEach { hightlightSelectionByLine in
+                    let annotation = PDFAnnotation(
+                        bounds: hightlightSelectionByLine.bounds(for: highlightPage),
+                        forType: .highlight,
+                        withProperties: nil
+                    )
+                    highlightPage.addAnnotation(annotation)
+                    
+                    if highlights[highlight.uuid] == nil {
+                        highlights[highlight.uuid] = []
+                    }
+                    highlights[highlight.uuid]?.append(annotation)
+                }
+            }
+        }
+    }
     
+    func removeHighlight(highlight: PDFHighlight) {
+        guard let annotations = highlights[highlight.uuid] else { return }
+        
+        annotations.forEach { annotation in
+            annotation.page?.removeAnnotation(annotation)
+        }
+        
+        highlights.removeValue(forKey: highlight.uuid)
+    }
 }

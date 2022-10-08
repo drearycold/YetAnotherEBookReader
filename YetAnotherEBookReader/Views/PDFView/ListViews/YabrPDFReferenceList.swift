@@ -86,7 +86,7 @@ class YabrPDFReferenceList: YabrPDFTableViewController {
         guard let bookmark = sectionBookmarks[sections[indexPath.section]]?[indexPath.row]
         else { return }
         
-        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: bookmark.page, offset: bookmark.offset)
+        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: bookmark.pos.page, offset: bookmark.pos.offset)
     }
 
     // MARK: - Handle rotation transition

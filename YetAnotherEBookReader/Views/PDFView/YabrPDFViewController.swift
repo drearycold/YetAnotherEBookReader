@@ -385,17 +385,25 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         
         self.view = pdfView
 
+        let highlightMenuItem = UIMenuItem(title: "Highlight", action: #selector(highlightAction))
+        
         if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
-            UIMenuController.shared.menuItems = [UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction))]
+            let dictViewerMenuItem = UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction))
+            UIMenuController.shared.menuItems = [highlightMenuItem, dictViewerMenuItem]
             dictViewer.1.loadViewIfNeeded()
         } else {
-            UIMenuController.shared.menuItems = []
+            UIMenuController.shared.menuItems = [highlightMenuItem]
+        }
+        
+        yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
+            pdfView.injectHighlight(highlight: highlight)
         }
         
         print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
         stackView.frame = self.navigationController?.toolbar.frame ?? .zero
         
         pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
+        
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -1120,6 +1128,28 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         self.present(nav, animated: true, completion: nil)
     }
     
+    @objc func highlightAction() {
+        guard let currentSelection = pdfView.currentSelection else { return }
+        
+        var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
+        currentSelection.pages.forEach { selectionPage in
+            guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
+            var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
+            for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
+                let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
+                pdfHighlightPage.ranges.append(selectionPageRange)
+            }
+            pdfHighlightPageLocations.append(pdfHighlightPage)
+        }
+        
+        let pdfHighlight = PDFHighlight(uuid: .init(), pos: pdfHighlightPageLocations, type: 0, content: currentSelection.string ?? "No Content", date: .init())
+        
+        yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
+        pdfView.injectHighlight(highlight: pdfHighlight)
+        
+        print("\(#function) currentSelection=\(currentSelection)")
+    }
+    
     func updatePageViewPositionHistory() {
         guard let pagePoint = getPagePoint() else { return }
         
@@ -1205,6 +1235,8 @@ protocol YabrPDFMetaSource {
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight]
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight)
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight)
     
     func yabrPDFReferenceText(_ view: YabrPDFView?) -> String?
 

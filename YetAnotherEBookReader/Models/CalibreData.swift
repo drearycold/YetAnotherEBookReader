@@ -883,7 +883,7 @@ struct BookHighlight {
     let highlightId: String
     let readerName: String
     
-    let page: Int
+    let page: Int   //starts from 1
     let startOffset: Int
     let endOffset: Int
     
@@ -900,6 +900,9 @@ struct BookHighlight {
     let cfiStart: String?
     let cfiEnd: String?
     let spineName: String?
+    
+    // MARK: PDF Specific
+    let ranges: String?
     
     var contentEncoded: String? {
         content.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
@@ -1092,6 +1095,7 @@ struct CalibreBookAnnotationHighlightEntry: Codable {
 
     var removed: Bool?
 
+    var ranges: String?     //for PDF
     var startCfi: String?
     var endCfi: String?
     var highlightedText: String?
@@ -1118,6 +1122,7 @@ struct CalibreBookAnnotationHighlightEntry: Codable {
         case tocFamilyTitles = "toc_family_titles"
         
         case notes
+        case ranges
         
         case removed
     }
@@ -1181,6 +1186,7 @@ extension BookAnnotation {
                     highlightRealm.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
                     highlightRealm.startOffset = 0
                     highlightRealm.endOffset = 0
+                    highlightRealm.ranges = hl.ranges
                     highlightRealm.note = hl.notes
                     highlightRealm.cfiStart = hl.startCfi
                     highlightRealm.cfiEnd = hl.endCfi
@@ -1209,12 +1215,13 @@ extension BookHighlight {
         dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
         
         switch readerType {
-        case .YabrEPUB:
+        case .YabrEPUB, .YabrPDF:
             return CalibreBookAnnotationHighlightEntry(
                 type: "highlight",
                 timestamp: dateFormatter.string(from: date),
                 uuid: uuid,
                 removed: removed,
+                ranges: ranges,
                 startCfi: cfiStart,
                 endCfi: cfiEnd,
                 highlightedText: content,
