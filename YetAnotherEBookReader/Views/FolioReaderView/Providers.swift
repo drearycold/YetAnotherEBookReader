@@ -627,13 +627,13 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
-        book.readPos.highlights(allByBookId: bookId, andPage: page).map {
+        book.readPos.highlights(allByBookId: bookId, andPage: page).compactMap {
             $0.toFolioReaderHighlight()
         }
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
-        book.readPos.highlights().map { $0.toFolioReaderHighlight() }
+        book.readPos.highlights().compactMap { $0.toFolioReaderHighlight() }
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
@@ -642,7 +642,10 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
 }
 
 fileprivate extension BookHighlight {
-    func toFolioReaderHighlight() -> FolioReaderHighlight {
+    func toFolioReaderHighlight() -> FolioReaderHighlight? {
+        guard readerName.isEmpty || readerName == ReaderType.YabrEPUB.rawValue
+        else { return nil }
+        
         let highlight = FolioReaderHighlight()
         highlight.bookId = bookId
         highlight.highlightId = highlightId

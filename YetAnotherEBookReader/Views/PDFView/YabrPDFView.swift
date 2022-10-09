@@ -22,19 +22,46 @@ class YabrPDFView: PDFView {
 
     var doubleTapGestureRecognizer: UITapGestureRecognizer?
     var singleTapGestureRecognizer: UITapGestureRecognizer?
+    var highlightTapGestureRecognizer: UITapGestureRecognizer?
+
+    var viewController: YabrPDFViewController?
+    var yabrPDFMetaSource: YabrPDFMetaSource? {
+        viewController?.yabrPDFMetaSource
+    }
     
     var pageNextButton: UIButton?
     var pagePrevButton: UIButton?
     
-    var highlights = [UUID: [PDFAnnotation]]()
+    fileprivate var highlights = [UUID: [HighlightValue]]()
+    fileprivate var highlightTapped: UUID?
+    fileprivate var highlightIsEditing = false
     
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        print("\(#function) \(action.description)")
         if action.description == "selectAll:" {
             return false
         }
+        if self.highlightTapped != nil {
+            if action.description == "copy:" && highlightIsEditing {
+                return false
+            }
+            if action.description == "deleteHighlightAction"  {
+                return true
+            }
+            if action.description == "_translate:" {
+                return false
+            }
+            if action.description == "_lookup:" {
+                return false
+            }
+            if action.description == "_define:" {
+                return false
+            }
+        }
         
-        return super.canPerformAction(action, withSender: sender)
+        let could = super.canPerformAction(action, withSender: sender)
+        print("\(#function) \(could) \(action.description)")
+        
+        return could
     }
     
     override func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
@@ -115,6 +142,13 @@ class YabrPDFView: PDFView {
         singleTapGestureRecognizer.delaysTouchesEnded = true
         addGestureRecognizer(singleTapGestureRecognizer)
         self.singleTapGestureRecognizer = singleTapGestureRecognizer
+        
+        let highlightTapGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(highlightTappedGesture(sender:)))
+        highlightTapGestureRecognizer.numberOfTapsRequired = 1
+        highlightTapGestureRecognizer.delegate = self
+        highlightTapGestureRecognizer.delaysTouchesEnded = true
+        addGestureRecognizer(highlightTapGestureRecognizer)
+        self.highlightTapGestureRecognizer = highlightTapGestureRecognizer
     }
     
     func pageTapPreview(navBarHeight: CGFloat, hMarginAutoScaler: Double) {
@@ -251,42 +285,251 @@ class YabrPDFView: PDFView {
             }
         }
     }
+    
+    @objc private func highlightTappedGesture(sender: UITapGestureRecognizer) {
+        self.highlightTapped = nil
+        self.highlightIsEditing = false
+        UIMenuController.shared.menuItems = buildDefaultMenuItems()
+        
+        if sender.state == .ended {
+            let tapLocation = sender.location(in: self)
+            
+            let tappedHighlightValues = highlights.reduce(into: [HighlightValue]()) { partialResult, entry in
+                entry.value.forEach { highlightValue in
+                    if highlightValue.annotations.filter ({
+                        guard let page = $0.page else { return false }
+                        let pageLocation = self.convert(tapLocation, to: page)
+                        return $0.bounds.contains(pageLocation)
+                    }).isEmpty == false {
+                        partialResult.append(highlightValue)
+                    }
+                }
+            }
+            
+            print("\(#function) tappedHighlightValues=\(tappedHighlightValues)")
+            
+            if let tappedHighlightValue = tappedHighlightValues.first,
+               let tappedAnnotation = tappedHighlightValue.annotations.first,
+               let tappedUUIDString = tappedAnnotation.value(forAnnotationKey: .highlightId) as? String,
+               let tappedUUID = UUID(uuidString: tappedUUIDString),
+               let tappedHighlightValue = highlights[tappedUUID],
+               let tappedAnnotationFirst = tappedHighlightValue.first?.annotations.first,
+               let page = tappedAnnotationFirst.page {
+                self.highlightTapped = tappedUUID
+                UIMenuController.shared.menuItems = buildHighlightMenuItems()
+                UIMenuController.shared.showMenu(from: self, rect: self.convert(tappedAnnotationFirst.bounds, from: page))
+            } else if UIMenuController.shared.isMenuVisible {
+                UIMenuController.shared.hideMenu()
+            } else if self.currentSelection != nil {
+                self.clearSelection()
+            }
+        }
+    }
+    
+    @objc override func copy(_ sender: Any?) {
+        if let highlightTapped = highlightTapped,
+           let highlightValueArray = highlights[highlightTapped] {
+            UIPasteboard.general.string = highlightValueArray.compactMap { $0.selection.string }.joined(separator: " ")
+            self.highlightTapped = nil
+        } else {
+            super.copy(sender)
+        }
+    }
+    
+    @objc func dictViewerAction() {
+        guard let s = self.currentSelection?.string,
+              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) else { return }
+        
+        print("\(#function) word=\(s)")
+        dictViewer.1.title = s
+        
+        let nav = UINavigationController(rootViewController: dictViewer.1)
+        nav.setNavigationBarHidden(false, animated: false)
+        nav.setToolbarHidden(false, animated: false)
+        
+        viewController?.present(nav, animated: true, completion: nil)
+    }
+    
+    @objc func highlightAction() {
+        if let highlightTapped = highlightTapped {
+            
+        } else {
+            guard let currentSelection = self.currentSelection else { return }
+            
+            var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
+            currentSelection.pages.forEach { selectionPage in
+                guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
+                var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
+                for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
+                    let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
+                    pdfHighlightPage.ranges.append(selectionPageRange)
+                }
+                pdfHighlightPageLocations.append(pdfHighlightPage)
+            }
+            
+            let pdfHighlight = PDFHighlight(uuid: .init(), pos: pdfHighlightPageLocations, type: 0, content: currentSelection.string ?? "No Content", date: .init())
+            
+            yabrPDFMetaSource?.yabrPDFHighlights(self, update: pdfHighlight)
+            self.injectHighlight(highlight: pdfHighlight)
+            
+            print("\(#function) currentSelection=\(currentSelection)")
+        }
+    }
+    
+    @objc func selectHighlightAction() {
+        guard let highlightTapped = highlightTapped,
+              let highlightValueArray = highlights[highlightTapped] else {
+            return
+        }
+
+        let tappedSelection = PDFSelection(document: self.document!)
+        tappedSelection.add(highlightValueArray.map { $0.selection})
+        self.setCurrentSelection(tappedSelection, animate: false)
+        
+        if let page = tappedSelection.pages.first {
+            UIMenuController.shared.hideMenu()
+            UIMenuController.shared.showMenu(from: self, rect: self.convert(tappedSelection.bounds(for: page), from: page))
+        }
+    }
+    
+    @objc func modifyHighlightAction(_ sender: Any?) {
+        guard let highlightTapped = highlightTapped,
+              let highlightValueArray = highlights[highlightTapped] else {
+            return
+        }
+
+        if let selection = highlightValueArray.first?.selection,
+            let page = selection.pages.first {
+            UIMenuController.shared.hideMenu()
+            UIMenuController.shared.menuItems = buildHighlightModifyMenuItems()
+            highlightIsEditing = true
+            UIMenuController.shared.showMenu(from: self, rect: self.convert(selection.bounds(for: page), from: page))
+        }
+    }
+}
+
+extension BookHighlightStyle {
+    var pdfAnnotationSubtype: (PDFAnnotationSubtype, UIColor) {
+        switch self {
+        case .underline:
+            return (.underline, .systemRed)
+        case .yellow:
+            return (.highlight, .systemYellow)
+        case .green:
+            return (.highlight, .systemGreen)
+        case .blue:
+            return (.highlight, .systemBlue)
+        case .pink:
+            return (.highlight, .systemPink)
+        }
+    }
 }
 
 // MARK: Highlights
 extension YabrPDFView {
     func injectHighlight(highlight: PDFHighlight) {
         highlight.pos.forEach { highlightPageLocation in
-            guard let highlightPage = self.document?.page(at: highlightPageLocation.page - 1)
+            guard let highlightPage = self.document?.page(at: highlightPageLocation.page - 1),
+                  let highlightSubtype = BookHighlightStyle(rawValue: highlight.type)?.pdfAnnotationSubtype
             else { return }
+            
+            if highlights[highlight.uuid] == nil {
+                highlights[highlight.uuid] = []
+            }
+            
             highlightPageLocation.ranges.forEach { highlightPageRange in
                 guard let highlightSelection = self.document?.selection(from: highlightPage, atCharacterIndex: highlightPageRange.lowerBound, to: highlightPage, atCharacterIndex: highlightPageRange.upperBound)
                 else { return }
                 
+                var highlightValue = HighlightValue(selection: highlightSelection)
+                
                 highlightSelection.selectionsByLine().forEach { hightlightSelectionByLine in
                     let annotation = PDFAnnotation(
                         bounds: hightlightSelectionByLine.bounds(for: highlightPage),
-                        forType: .highlight,
-                        withProperties: nil
+                        forType: highlightSubtype.0,
+                        withProperties: [PDFAnnotationKey.highlightId: highlight.uuid.uuidString]
                     )
-                    highlightPage.addAnnotation(annotation)
+                    annotation.color = highlightSubtype.1
                     
-                    if highlights[highlight.uuid] == nil {
-                        highlights[highlight.uuid] = []
-                    }
-                    highlights[highlight.uuid]?.append(annotation)
+                    highlightPage.addAnnotation(annotation)
+                    highlightValue.annotations.append(annotation)
                 }
+                highlights[highlight.uuid]?.append(highlightValue)
             }
+            
         }
     }
     
-    func removeHighlight(highlight: PDFHighlight) {
-        guard let annotations = highlights[highlight.uuid] else { return }
+    func modifyHighlightStyle(highlightId: UUID, type: BookHighlightStyle) {
+        guard var highlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightId)
+        else { return }
         
-        annotations.forEach { annotation in
+        self.removeHighlight(highlight: highlight)
+        
+        highlight.type = type.rawValue
+        highlight.date = .init()
+        
+        self.yabrPDFMetaSource?.yabrPDFHighlights(self, update: highlight)
+        self.injectHighlight(highlight: highlight)
+    }
+    
+    func removeHighlight(highlight: PDFHighlight) {
+        guard let highlightValue = highlights.removeValue(forKey: highlight.uuid) else { return }
+        
+        highlightValue.flatMap { $0.annotations }.forEach { annotation in
             annotation.page?.removeAnnotation(annotation)
         }
-        
-        highlights.removeValue(forKey: highlight.uuid)
     }
+    
+    func buildDefaultMenuItems() -> [UIMenuItem] {
+        var menuItems = [UIMenuItem(title: "Highlight", action: #selector(highlightAction))]
+        
+        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(self) {
+            menuItems.append(UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction)))
+            dictViewer.1.loadViewIfNeeded()
+        }
+        
+        return menuItems
+    }
+    
+    func buildHighlightMenuItems() -> [UIMenuItem] {
+        var menuItems = [UIMenuItem]()
+        
+        menuItems.append(UIMenuItem(title: "Select", action: #selector(selectHighlightAction)))
+        menuItems.append(UIMenuItem(title: "Modify", action: #selector(modifyHighlightAction)))
+        
+        return menuItems
+    }
+    
+    func buildHighlightModifyMenuItems() -> [UIMenuItem] {
+        guard let highlightTapped = self.highlightTapped else { return [] }
+        
+        var menuItems = BookHighlightStyle.allCases.map { style in
+            UIMenuItem(
+                title: style.description,
+                image: nil,
+                action: { _ in
+                    self.modifyHighlightStyle(highlightId: highlightTapped, type: style)
+                }
+            )
+        }
+        
+        menuItems.append(UIMenuItem(title: "Delete", image: nil, action: { _ in
+            if let pdfHighlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightTapped) {
+                self.yabrPDFMetaSource?.yabrPDFHighlights(self, remove: pdfHighlight)
+            }
+        }))
+        
+        return menuItems
+    }
+}
+
+extension PDFAnnotationKey {
+    
+    public static let highlightId: PDFAnnotationKey = .init(rawValue: "/HID")
+}
+
+fileprivate struct HighlightValue {
+    let selection: PDFSelection
+    var annotations: [PDFAnnotation] = []
 }

@@ -107,6 +107,10 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         return book.readPos.highlights().compactMap { $0.toPDFHighlight() }
     }
     
+    func yabrPDFHighlights(_ view: YabrPDFView?, getById highlightId: UUID) -> PDFHighlight? {
+        return book.readPos.highlight(getById: highlightId.uuidString)?.toPDFHighlight()
+    }
+    
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
         guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
         else { return }
@@ -119,6 +123,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         else { return }
         
         book.readPos.highlight(removedId: bookHighlight.highlightId)
+        view?.removeHighlight(highlight: highlight)
     }
     
     func yabrPDFReferenceText(_ view: YabrPDFView?) -> String? {
@@ -195,7 +200,7 @@ extension BookHighlight {
     }
     
     func toPDFHighlight() -> PDFHighlight? {
-        guard self.readerName == ReaderType.YabrPDF.rawValue,
+        guard readerName.isEmpty || readerName == ReaderType.YabrPDF.rawValue,
               let uuid = UUID(uuidString: self.highlightId),
               let posData = self.ranges?.data(using: .utf8),
               let pos = try? JSONDecoder().decode([PDFHighlight.PageLocation].self, from: posData)

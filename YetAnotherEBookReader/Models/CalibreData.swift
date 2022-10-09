@@ -926,6 +926,21 @@ enum BookHighlightStyle: Int, CaseIterable, Identifiable {
         self.rawValue
     }
     
+    var description: String {
+        switch self {
+        case .yellow:
+            return "Yellow"
+        case .green:
+            return "Green"
+        case .blue:
+            return "Blue"
+        case .pink:
+            return "Pink"
+        case .underline:
+            return "Underline"
+        }
+    }
+    
     public init () {
         // Default style is `.yellow`
         self = .yellow

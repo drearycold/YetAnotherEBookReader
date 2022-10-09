@@ -140,7 +140,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         pdfDoc.delegate = self
         logger.info("pdfDoc: \(pdfDoc.majorVersion) \(pdfDoc.minorVersion)")
         pdfView.document = pdfDoc
-
+        pdfView.viewController? = self
+        
         pdfView.displayMode = PDFDisplayMode.singlePage
         pdfView.displayDirection = PDFDisplayDirection.horizontal
         pdfView.interpolationQuality = PDFInterpolationQuality.high
@@ -382,18 +383,20 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //        singleTapRightLabel.addGestureRecognizer(singleTapRightGestureRecognizer)
 
         pdfView.delegate = self
+        pdfView.viewController = self
         
-        self.view = pdfView
+        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        
+        self.view.addSubview(pdfView)
+        
+        NSLayoutConstraint.activate([
+            pdfView.topAnchor.constraint(equalTo: self.view.topAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor),
+            pdfView.leftAnchor.constraint(equalTo: self.view.leftAnchor),
+            pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
+        ])
 
-        let highlightMenuItem = UIMenuItem(title: "Highlight", action: #selector(highlightAction))
-        
-        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
-            let dictViewerMenuItem = UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction))
-            UIMenuController.shared.menuItems = [highlightMenuItem, dictViewerMenuItem]
-            dictViewer.1.loadViewIfNeeded()
-        } else {
-            UIMenuController.shared.menuItems = [highlightMenuItem]
-        }
+        UIMenuController.shared.menuItems = pdfView.buildDefaultMenuItems()
         
         yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
             pdfView.injectHighlight(highlight: highlight)
@@ -1114,41 +1117,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //            self.present(starDictView, animated: true, completion: nil)
 //        }
 //    }
-    @objc func dictViewerAction() {
-        guard let s = pdfView.currentSelection?.string,
-              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
-        
-        print("\(#function) word=\(s)")
-        dictViewer.1.title = s
-        
-        let nav = UINavigationController(rootViewController: dictViewer.1)
-        nav.setNavigationBarHidden(false, animated: false)
-        nav.setToolbarHidden(false, animated: false)
-        
-        self.present(nav, animated: true, completion: nil)
-    }
-    
-    @objc func highlightAction() {
-        guard let currentSelection = pdfView.currentSelection else { return }
-        
-        var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
-        currentSelection.pages.forEach { selectionPage in
-            guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
-            var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
-            for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
-                let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
-                pdfHighlightPage.ranges.append(selectionPageRange)
-            }
-            pdfHighlightPageLocations.append(pdfHighlightPage)
-        }
-        
-        let pdfHighlight = PDFHighlight(uuid: .init(), pos: pdfHighlightPageLocations, type: 0, content: currentSelection.string ?? "No Content", date: .init())
-        
-        yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
-        pdfView.injectHighlight(highlight: pdfHighlight)
-        
-        print("\(#function) currentSelection=\(currentSelection)")
-    }
     
     func updatePageViewPositionHistory() {
         guard let pagePoint = getPagePoint() else { return }
@@ -1233,6 +1201,8 @@ protocol YabrPDFMetaSource {
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark)
     
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight]
+    
+    func yabrPDFHighlights(_ view: YabrPDFView?, getById highlightId: UUID) -> PDFHighlight?
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight)
     

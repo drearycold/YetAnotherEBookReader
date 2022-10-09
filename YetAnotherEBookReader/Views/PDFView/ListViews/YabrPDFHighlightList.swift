@@ -156,7 +156,6 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
 
             //TODO: remove
             yabrPDFMetaSource?.yabrPDFHighlights(yabrPDFView, remove: highlight)
-            yabrPDFView?.removeHighlight(highlight: highlight)
             
             sectionHighlights[sections[indexPath.section]]?.remove(at: indexPath.row)
             if sectionHighlights[sections[indexPath.section]]?.isEmpty == true, sections.count > 1 {
