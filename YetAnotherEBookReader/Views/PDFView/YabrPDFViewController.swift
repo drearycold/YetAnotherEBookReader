@@ -12,7 +12,7 @@ import OSLog
 import SwiftUI
 
 @available(macCatalyst 14.0, *)
-class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecognizerDelegate {
+class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pdfView = YabrPDFView()
     let blankView = UIImageView()
     let blankActivityView = UIActivityIndicatorView()
@@ -115,10 +115,17 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                 } else {
                     pdfView.go(to: curPage)
                 }
+                
+                if pdfOptions.pageMode == .Page {
+                    pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                } else {
+                    pdfView.pageTapDisable()
+                }
             }
             
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                self.pageVisibleContentBounds.removeAll()
+                pdfView.pageTapResize(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
                 pdfView.pageTapDisable()
             }
@@ -140,7 +147,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         pdfDoc.delegate = self
         logger.info("pdfDoc: \(pdfDoc.majorVersion) \(pdfDoc.minorVersion)")
         pdfView.document = pdfDoc
-        pdfView.viewController? = self
         
         pdfView.displayMode = PDFDisplayMode.singlePage
         pdfView.displayDirection = PDFDisplayDirection.horizontal
@@ -279,7 +285,7 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                     ))
                     
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
-                    optionViewController.preferredContentSize = CGSize(width:340, height:600)
+                    optionViewController.preferredContentSize = CGSize(width:340, height:700)
                     optionViewController.modalPresentationStyle = .popover
                     optionViewController.popoverPresentationController?.barButtonItem = self.navigationItem.rightBarButtonItems?[1]
                     
@@ -289,72 +295,11 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         ], animated: true)
         self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
         
-        var tableOfContents = [UIMenuElement]()
-        
-        if let pdfDoc = pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
-            while outlineRoot.numberOfChildren == 1 {
-                outlineRoot = outlineRoot.child(at: 0)!
-            }
-            for i in (0..<outlineRoot.numberOfChildren) {
-                tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
-                tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { (action) in
-                    guard let dest = outlineRoot.child(at: i)?.destination,
-                          let curPage = self.pdfView.currentPage
-                    else { return }
-                    
-                    var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
-                    if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
-                       let curPageSelectionText = curPageSelection.string,
-                       curPageSelectionText.count > 5,
-                       var curPageOutlineItem = pdfDoc.outlineItem(for: curPageSelection) {
-                        
-                        print("\(curPageSelectionText)")
-                        while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
-                            curPageOutlineItem = curPageOutlineItem.parent!
-                        }
-                        lastHistoryLabel += " of \(curPageOutlineItem.label!)"
-                    }
-                    
-                    var historyItems = self.historyMenu.children
-                    historyItems.append(UIAction(title: lastHistoryLabel) { (action) in
-                        var children = self.historyMenu.children
-                        if let index = children.firstIndex(of: action) {
-                            children.removeLast(children.count - index)
-                            self.historyMenu = self.historyMenu.replacingChildren(children)
-                            let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(children)
-                            self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
-                            self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
-                            if children.isEmpty {
-                                self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
-                            }
-                        }
-                        if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                            self.addBlankSubView(page: curPage)
-                        }
-                        self.pdfView.go(to: curPage)
-                    })
-                    
-                    self.historyMenu = self.historyMenu.replacingChildren(historyItems)
-                    let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(historyItems)
-                    self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
-                    self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
-                    self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
-                        
-                    if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
-                        self.addBlankSubView(page: dest.page)
-                    }
-                    self.pdfView.go(to: dest)
-                })
-                
-            }
-        }
-        
-        let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
+        buildTocList()
         
         titleInfoButton.setTitle("Title", for: .normal)
         titleInfoButton.contentHorizontalAlignment = .center
         titleInfoButton.showsMenuAsPrimaryAction = true
-        titleInfoButton.menu = navContentsMenu
         titleInfoButton.frame = CGRect(x:0, y:0, width: navigationController?.navigationBar.frame.width ?? 600 / 2, height: 40)
         
         navigationItem.titleView = titleInfoButton
@@ -383,7 +328,6 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 //        singleTapRightLabel.addGestureRecognizer(singleTapRightGestureRecognizer)
 
         pdfView.delegate = self
-        pdfView.viewController = self
         
         pdfView.translatesAutoresizingMaskIntoConstraints = false
         
@@ -405,6 +349,13 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
         stackView.frame = self.navigationController?.toolbar.frame ?? .zero
         
+        
+        blankView.contentMode = .scaleAspectFill
+        blankView.addSubview(blankActivityView)
+        pdfView.addSubview(blankView)
+        
+        blankView.layer.compositingFilter = "darkenBlendMode"
+        
         pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
         
     }
@@ -417,14 +368,9 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
-        blankView.contentMode = .scaleAspectFill
-        blankView.addSubview(blankActivityView)
-        
         if pdfOptions.pageMode == .Page {
             pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
         }
-        pdfView.addSubview(blankView)
-        
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
         if let page = pdfView.document?.page(at: destPageIndex) {
@@ -459,6 +405,76 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                 pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
                 pdfView.pageTapDisable()
+            }
+        }
+    }
+    
+    func buildTocList() {
+        DispatchQueue.global(qos: .utility).async {
+            var tableOfContents = [UIMenuElement]()
+            
+            if let pdfDoc = self.pdfView.document, var outlineRoot = pdfDoc.outlineRoot {
+                while outlineRoot.numberOfChildren == 1 {
+                    outlineRoot = outlineRoot.child(at: 0)!
+                }
+                for i in (0..<outlineRoot.numberOfChildren) {
+                    self.tocList.append((outlineRoot.child(at: i)?.label ?? "Label at \(i)", outlineRoot.child(at: i)?.destination?.page?.pageRef?.pageNumber ?? 1))
+                    tableOfContents.append(UIAction(title: outlineRoot.child(at: i)?.label ?? "Label at \(i)") { (action) in
+                        guard let dest = outlineRoot.child(at: i)?.destination,
+                              let curPage = self.pdfView.currentPage
+                        else { return }
+                        
+                        var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
+                        if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
+                           let curPageSelectionText = curPageSelection.string,
+                           curPageSelectionText.count > 5,
+                           var curPageOutlineItem = pdfDoc.outlineItem(for: curPageSelection) {
+                            
+                            print("\(curPageSelectionText)")
+                            while( curPageOutlineItem.parent != nil && curPageOutlineItem.parent != outlineRoot) {
+                                curPageOutlineItem = curPageOutlineItem.parent!
+                            }
+                            lastHistoryLabel += " of \(curPageOutlineItem.label!)"
+                        }
+                        
+                        var historyItems = self.historyMenu.children
+                        historyItems.append(UIAction(title: lastHistoryLabel) { (action) in
+                            var children = self.historyMenu.children
+                            if let index = children.firstIndex(of: action) {
+                                children.removeLast(children.count - index)
+                                self.historyMenu = self.historyMenu.replacingChildren(children)
+                                let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(children)
+                                self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
+                                self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                                if children.isEmpty {
+                                    self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
+                                }
+                            }
+                            if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                                self.addBlankSubView(page: curPage)
+                            }
+                            self.pdfView.go(to: curPage)
+                        })
+                        
+                        self.historyMenu = self.historyMenu.replacingChildren(historyItems)
+                        let newMenu = self.navigationItem.rightBarButtonItems?.first?.menu?.replacingChildren(historyItems)
+                        self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
+                        self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
+                        self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
+                            
+                        if dest.page?.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
+                            self.addBlankSubView(page: dest.page)
+                        }
+                        self.pdfView.go(to: dest)
+                    })
+                    
+                }
+            }
+            
+            let navContentsMenu = UIMenu(title: "Contents", children: tableOfContents)
+            
+            DispatchQueue.main.async {
+                self.titleInfoButton.menu = navContentsMenu
             }
         }
     }
@@ -653,20 +669,30 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
         let stackViewFrameInPDF = pdfView.convert(stackView.frame, to: curPage)
         
-        let pageViewPositionHistory = getPageViewPositionHistory(curPageNum)
-        let newDest = PDFDestination(
-            page: curPage,
-            at: CGPoint(
-                x: pageViewPositionHistory?.point.x ??
-                (newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX),
-                y: pageViewPositionHistory?.point.y ??
-                (newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)
-            )
+        var newDestPoint = CGPoint(
+            x: newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
+            y: newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
         )
         
-        print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory?.point.x)")
+        if let pageViewPositionHistory = getPageViewPositionHistory(curPageNum) {
+            if pageViewPositionHistory.point.x.isNaN == false {
+                newDestPoint.x = pageViewPositionHistory.point.x
+            }
+            if pageViewPositionHistory.point.y.isNaN == false {
+                newDestPoint.y = pageViewPositionHistory.point.y
+            }
+            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory.point.x)")
+            print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory.point.y)")
+        } else {
+            print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX)")
+            print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)")
+        }
         
-        print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory?.point.y)")
+        let newDest = PDFDestination(
+            page: curPage,
+            at: newDestPoint
+        )
+        
         
         let initialDestPoint = pdfView.currentDestination!.point
         
@@ -791,7 +817,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                     data: data,
                     ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
                 )
-                break
+                leading.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.width)
+                trailing.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.width)
             case .TtB_RtL:
                 leading  = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -825,12 +852,14 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
                     data: data,
                     ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1)
                 )
+                top.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.height)
+                bottom.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.height)
                 break
             }
             
         }
         
-        print("\(#function) white border \(top) \(bottom) \(leading) \(trailing)")
+        print("\(#function) white border page=\(pdfPage.pageRef!.pageNumber) \(top) \(bottom) \(leading) \(trailing)")
         
         UIGraphicsBeginImageContextWithOptions(imageMediaBox.size, false, CGFloat.zero)
         imageMediaBox.draw(at: CGPoint.zero)
@@ -987,8 +1016,8 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
     func addBlankSubView(page: PDFPage?) {
         let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor.init(gray: 1.0, alpha: 1.0))
         
-        if let page = page as? PDFPageWithBackground {
-            
+        if blankView.layer.compositingFilter == nil,
+           let page = page as? PDFPageWithBackground {
             let bounds = pageVisibleContentBounds[
                 PageVisibleContentKey(
                     pageNumber: page.pageRef?.pageNumber ?? -1,
@@ -1035,6 +1064,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
             }
             if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
                 self.pageViewPositionHistory[pageNum]?.scaler = 0
+                switch pdfOptions.readingDirection {
+                case .LtR_TtB:
+                    self.pageViewPositionHistory[pageNum]?.point.x = .nan
+                case .TtB_RtL:
+                    self.pageViewPositionHistory[pageNum]?.point.y = .nan
+                }
             }
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
@@ -1060,7 +1095,12 @@ class YabrPDFViewController: UIViewController, PDFViewDelegate, UIGestureRecogni
 
         updateReadingProgress()
         
-        self.dismiss(animated: true, completion: nil)
+        
+        self.dismiss(animated: true) {
+            self.pdfView.document = nil
+            self.yabrPDFMetaSource = nil
+            self.tocList.removeAll()
+        }
     }
     
     func updateReadingProgress() {
@@ -1169,8 +1209,12 @@ extension YabrPDFViewController: PDFDocumentDelegate {
     func classForPage() -> AnyClass {
         return PDFPageWithBackground.self
     }
-    
-    
+}
+
+extension YabrPDFViewController: PDFViewDelegate {
+    func pdfViewParentViewController() -> UIViewController {
+        return self
+    }
 }
 
 protocol YabrPDFMetaSource {

@@ -61,6 +61,7 @@ struct PDFOptions: Equatable {
     var vMarginAutoScaler = CGFloat(5.0)
     var hMarginDetectStrength = CGFloat(2.0)
     var vMarginDetectStrength = CGFloat(2.0)
+    var marginOffset = CGFloat(0.0)
     var lastScale = CGFloat(1.0)
     var rememberInPagePosition = true
 }
@@ -77,6 +78,7 @@ class PDFOptionsRealm: Object {
     @objc dynamic var vMarginAutoScaler = 5.0
     @objc dynamic var hMarginDetectStrength = 2.0
     @objc dynamic var vMarginDetectStrength = 2.0
+    @objc dynamic var marginOffset = 0.0
     @objc dynamic var lastScale = 1.0
     @objc dynamic var rememberInPagePosition = true
     
@@ -98,6 +100,7 @@ extension PDFOptions: Persistable {
         self.vMarginAutoScaler = managedObject.vMarginAutoScaler
         self.hMarginDetectStrength = managedObject.hMarginDetectStrength
         self.vMarginDetectStrength = managedObject.vMarginDetectStrength
+        self.marginOffset = managedObject.marginOffset
         self.lastScale = managedObject.lastScale
         self.rememberInPagePosition = managedObject.rememberInPagePosition
     }
@@ -116,6 +119,7 @@ extension PDFOptions: Persistable {
         obj.vMarginAutoScaler = self.vMarginAutoScaler
         obj.hMarginDetectStrength = self.hMarginDetectStrength
         obj.vMarginDetectStrength = self.vMarginDetectStrength
+        obj.marginOffset = self.marginOffset
         obj.lastScale = self.lastScale
         obj.rememberInPagePosition = self.rememberInPagePosition
         

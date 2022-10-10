@@ -17,16 +17,15 @@ class YabrPDFView: PDFView {
     let labelTextColor = UIColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 0.9)
     let labelDoubleBackgroundColor = UIColor(red: 0.7, green: 0.7, blue: 0.7, alpha: 0.9).cgColor
     let labelSingleBackgroundColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9).cgColor
-    let labelHiddenColor = UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 0.02)
+    let labelHiddenColor = UIColor(red: 0.02, green: 0.02, blue: 0.02, alpha: 0.01)
     let labelDisabledColor = UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.0)
 
     var doubleTapGestureRecognizer: UITapGestureRecognizer?
     var singleTapGestureRecognizer: UITapGestureRecognizer?
     var highlightTapGestureRecognizer: UITapGestureRecognizer?
 
-    var viewController: YabrPDFViewController?
     var yabrPDFMetaSource: YabrPDFMetaSource? {
-        viewController?.yabrPDFMetaSource
+        (delegate?.pdfViewParentViewController?() as? YabrPDFViewController)?.yabrPDFMetaSource
     }
     
     var pageNextButton: UIButton?
@@ -152,43 +151,9 @@ class YabrPDFView: PDFView {
     }
     
     func pageTapPreview(navBarHeight: CGFloat, hMarginAutoScaler: Double) {
-        let pdfViewHeight = self.frame.height
-        var doubleTapWidth = self.frame.width * hMarginAutoScaler / 100.0
-        if doubleTapWidth < 50.0 {
-            doubleTapWidth = 50.0
-        }
-        if doubleTapWidth > 100.0 {
-            doubleTapWidth = 100.0
-        }
-        var singleTapWidth = self.frame.width * hMarginAutoScaler / 50.0
-        if singleTapWidth < doubleTapWidth * 2 {
-            singleTapWidth = doubleTapWidth * 2
-        }
-        if singleTapWidth > doubleTapWidth * 2 {
-            singleTapWidth = doubleTapWidth * 2
-        }
-        let singleTapHeight = self.frame.height * 0.15
+        pageTapResize(navBarHeight: navBarHeight, hMarginAutoScaler: hMarginAutoScaler)
+        
         let textFont = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 16 : 12, weight: .regular)
-        doubleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1 - navBarHeight),
-            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
-        )
-        
-        doubleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - doubleTapWidth, y: pdfViewHeight * 0.1 - navBarHeight),
-            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
-        )
-        
-        singleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight - navBarHeight - singleTapHeight),
-            size: CGSize(width: singleTapWidth, height: singleTapHeight)
-        )
-        
-        singleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - singleTapWidth, y: pdfViewHeight - navBarHeight - singleTapHeight),
-            size: CGSize(width: singleTapWidth, height: singleTapHeight)
-        )
-        
         UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
 //            doubleTapLeftLabel.becomeFirstResponder()
             doubleTapLeftLabel.font = textFont
@@ -227,6 +192,45 @@ class YabrPDFView: PDFView {
                 singleTapRightLabel.layer.backgroundColor = labelHiddenColor.cgColor
             }
         }
+    }
+    
+    func pageTapResize(navBarHeight: CGFloat, hMarginAutoScaler: Double) {
+        let pdfViewHeight = self.frame.height
+        var doubleTapWidth = self.frame.width * (hMarginAutoScaler - 5) / 100.0
+        if doubleTapWidth < 50.0 {
+            doubleTapWidth = 50.0
+        }
+        if doubleTapWidth > 100.0 {
+            doubleTapWidth = 100.0
+        }
+        var singleTapWidth = self.frame.width * (hMarginAutoScaler - 5) / 50.0
+        if singleTapWidth < doubleTapWidth * 2 {
+            singleTapWidth = doubleTapWidth * 2
+        }
+        if singleTapWidth > doubleTapWidth * 2 {
+            singleTapWidth = doubleTapWidth * 2
+        }
+        let singleTapHeight = self.frame.height * 0.15
+        doubleTapLeftLabel.frame = CGRect(
+            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1 - navBarHeight),
+            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
+        )
+        
+        doubleTapRightLabel.frame = CGRect(
+            origin: CGPoint(x: self.frame.width - doubleTapWidth, y: pdfViewHeight * 0.1 - navBarHeight),
+            size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
+        )
+        
+        singleTapLeftLabel.frame = CGRect(
+            origin: CGPoint(x: 0, y: pdfViewHeight - navBarHeight - singleTapHeight),
+            size: CGSize(width: singleTapWidth, height: singleTapHeight)
+        )
+        
+        singleTapRightLabel.frame = CGRect(
+            origin: CGPoint(x: self.frame.width - singleTapWidth, y: pdfViewHeight - navBarHeight - singleTapHeight),
+            size: CGSize(width: singleTapWidth, height: singleTapHeight)
+        )
+        
     }
     
     func pageTapDisable() {
@@ -347,7 +351,7 @@ class YabrPDFView: PDFView {
         nav.setNavigationBarHidden(false, animated: false)
         nav.setToolbarHidden(false, animated: false)
         
-        viewController?.present(nav, animated: true, completion: nil)
+        delegate?.pdfViewParentViewController?().present(nav, animated: true, completion: nil)
     }
     
     @objc func highlightAction() {

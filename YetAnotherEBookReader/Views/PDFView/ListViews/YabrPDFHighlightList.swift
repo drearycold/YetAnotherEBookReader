@@ -143,10 +143,13 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
     // MARK: - Table view delegate
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row]
+        guard let highlight = sectionHighlights[sections[indexPath.section]]?[indexPath.row],
+              let page = highlight.pos.first?.page,
+              let pdfPage = yabrPDFView?.document?.page(at: page - 1)
         else { return }
         
-//        yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, pageNumber: highlight.page, offset: highlight.offset)
+        yabrPDFView?.go(to: pdfPage)
+        self.dismiss(animated: true)
     }
 
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {

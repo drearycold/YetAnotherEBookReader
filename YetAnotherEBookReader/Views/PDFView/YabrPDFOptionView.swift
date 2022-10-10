@@ -77,6 +77,7 @@ struct PDFOptionView: View {
                 }
                 
                 Divider()
+                
                 Group {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Top/Bottom Content Detect Strength")
@@ -90,10 +91,8 @@ struct PDFOptionView: View {
                             Text("Left/Right Content Detect Strength")
                         }
                     }
-                }
-                Divider()
-
-                Group {
+                    
+                    Divider()
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Horizontal Margin")
@@ -105,6 +104,12 @@ struct PDFOptionView: View {
                         Text("Vertical Margin")
                         Slider(value: $pdfOptions.vMarginAutoScaler, in: 0...20, step: 1, minimumValueLabel: Text("0%"), maximumValueLabel: Text("20%")) {
                             Text("V Margin")
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Margin Offset")
+                        Slider(value: $pdfOptions.marginOffset, in: -10...10, step: 1, minimumValueLabel: Text("-10%"), maximumValueLabel: Text("10%")) {
+                            Text("Margin Offset")
                         }
                     }
                 }
