@@ -9,6 +9,7 @@
 import UIKit
 
 internal let kReuseCellIdentifier = "io.github.drearycold.DSReader.Cell.ReuseIdentifier"
+internal let kReuseHeaderFooterIdentifier = "io.github.drearycold.DSReader.Cell.ReuseHeaderFooterIdentifier"
 
 class YabrPDFAnnotationPageVC: UIPageViewController {
     var yabrPDFView: YabrPDFView?
@@ -59,6 +60,7 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
         segmentedControl = UISegmentedControl(items: segmentedControlItems)
         segmentedControl.addTarget(self, action: #selector(YabrPDFAnnotationPageVC.didSwitchMenu(_:)), for: UIControl.Event.valueChanged)
         segmentedControl.selectedSegmentIndex = index
+        
         self.navigationItem.titleView = segmentedControl
 
         self.delegate = self
@@ -81,8 +83,13 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
         self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "Close", style: .plain, target: self, action: #selector(dismiss))
         
         if let fillColor = PDFPageWithBackground.fillColor {
-            self.navigationController?.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
+            segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
         }
+        
+        if let textColor = chapterViewController.textColor {
+            segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
+        }
+
     }
 
     override func viewWillAppear(_ animated: Bool) {

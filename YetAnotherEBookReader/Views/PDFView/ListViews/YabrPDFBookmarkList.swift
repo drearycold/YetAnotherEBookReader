@@ -10,7 +10,6 @@ import UIKit
 import PDFKit
 
 class YabrPDFBookmarkList: YabrPDFTableViewController {
-    fileprivate var sections = [Int]()
     fileprivate var sectionBookmarks = [Int: [PDFBookmark]]()   //Page to Bookmark
 
     fileprivate var editingBookmark: IndexPath?
@@ -63,29 +62,10 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
     
     // MARK: - Table view data source
 
-    override func numberOfSections(in tableView: UITableView) -> Int {
-        return sections.count
-    }
-
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return sectionBookmarks[sections[section]]?.count ?? 0
     }
 
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        let pageNumber = sections[section]
-        var titleFrags = [String]()
-        var pdfOutline = yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: pageNumber)
-        while let label = pdfOutline?.label {
-            titleFrags.append(label)
-            pdfOutline = pdfOutline?.parent
-        }
-        if titleFrags.isEmpty {
-            titleFrags.append("Page \(pageNumber)")
-        }
-        
-        return "  " + titleFrags.reversed().joined(separator: ", ")
-    }
-    
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> YabrPDFBookmarkListCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFBookmarkListCell
 

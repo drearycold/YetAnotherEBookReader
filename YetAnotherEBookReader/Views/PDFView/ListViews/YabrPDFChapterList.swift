@@ -72,7 +72,15 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         
         let indentCount = max(outlineLevel - 1, 0)
         cell.indexLabel.text = Array.init(repeating: " ", count: indentCount * 2).joined() + (outline.label?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "No Label")
+        cell.indexLabel.textColor = textColor
 
+        if let pageNumber = outline.destination?.page?.pageRef?.pageNumber {
+            cell.pageLabel.text = "p. \(pageNumber)"
+        } else {
+            cell.pageLabel.text = ""
+        }
+        cell.pageLabel.textColor = .darkGray
+        
         // TODO: Mark current reading chapter
         
         cell.layoutMargins = UIEdgeInsets.zero
@@ -80,6 +88,10 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         cell.contentView.backgroundColor = isSection ? UIColor(white: 0.7, alpha: 0.1) : UIColor.clear
         cell.backgroundColor = UIColor.clear
         return cell
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        return 0.0
     }
 
     // MARK: - Table view delegate

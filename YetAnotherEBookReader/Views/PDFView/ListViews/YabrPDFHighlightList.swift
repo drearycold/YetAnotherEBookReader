@@ -9,14 +9,12 @@
 import UIKit
 
 class YabrPDFHighlightList: YabrPDFTableViewController {
-    fileprivate var sections = [Int]()
     fileprivate var sectionHighlights = [Int: [PDFHighlight]]()
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
         self.tableView.register(YabrPDFHighlightListCell.self, forCellReuseIdentifier: kReuseCellIdentifier)
-//        self.tableView.register(UITableViewHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: kReuseHeaderFooterIdentifier)
         
         loadItems()
     }
@@ -50,31 +48,10 @@ class YabrPDFHighlightList: YabrPDFTableViewController {
     
     // MARK: - Table view data source
 
-    override func numberOfSections(in tableView: UITableView) -> Int {
-        return sections.count
-    }
-
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return sectionHighlights[sections[section]]?.count ?? 0
     }
 
-    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-        guard let yabrPDFView = yabrPDFView else { return nil }
-        
-        let pageNumber = sections[section]
-        var titleFrags = [String]()
-        var pdfOutline = yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: pageNumber)
-        while let label = pdfOutline?.label {
-            titleFrags.append(label)
-            pdfOutline = pdfOutline?.parent
-        }
-        if titleFrags.isEmpty {
-            titleFrags.append("Page \(pageNumber)")
-        }
-        
-        return "  " + titleFrags.reversed().joined(separator: ", ")
-    }
-    
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFHighlightListCell
 

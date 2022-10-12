@@ -24,8 +24,11 @@ class YabrPDFView: PDFView {
     var singleTapGestureRecognizer: UITapGestureRecognizer?
     var highlightTapGestureRecognizer: UITapGestureRecognizer?
 
+    var yabrPDFViewController: YabrPDFViewController? {
+        delegate?.pdfViewParentViewController?() as? YabrPDFViewController
+    }
     var yabrPDFMetaSource: YabrPDFMetaSource? {
-        (delegate?.pdfViewParentViewController?() as? YabrPDFViewController)?.yabrPDFMetaSource
+        yabrPDFViewController?.yabrPDFMetaSource
     }
     
     var pageNextButton: UIButton?

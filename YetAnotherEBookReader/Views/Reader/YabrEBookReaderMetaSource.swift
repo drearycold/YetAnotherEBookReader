@@ -38,6 +38,9 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination) {
+        if let curPage = view?.currentPage {
+            view?.yabrPDFViewController?.updateHistoryMenu(curPage: curPage)
+        }
         view?.go(to: destination)
     }
     
@@ -135,7 +138,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T {
-        yabrPDFOptions(view)?.themeMode == .dark ? f : l
+        yabrPDFOptions(view)?.isDark(f, l) ?? l
     }
     
     
