@@ -11,16 +11,16 @@ import UIKit
 class YabrPDFTableViewController: UITableViewController {
     var yabrPDFView: YabrPDFView? {
         (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFView
+        ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFView
     }
     var yabrPDFMetaSource: YabrPDFMetaSource? {
         (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFMetaSource
+        ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFMetaSource
     }
     var backgroundColor: UIColor? {
-        if let fillColor = PDFPageWithBackground.fillColor {
-            return UIColor(cgColor: fillColor)
-        } else {
-            return nil
-        }
+        guard let fillColor = yabrPDFMetaSource?.yabrPDFOptions(yabrPDFView)?.fillColor
+        else { return nil }
+        return UIColor(cgColor: fillColor)
     }
     var textColor: UIColor? {
         yabrPDFMetaSource?.yabrPDFOptions(yabrPDFView)?.isDark(.lightText, .darkText)
@@ -40,10 +40,8 @@ class YabrPDFTableViewController: UITableViewController {
         self.dateFormatter.doesRelativeDateFormatting = true
         
         self.tableView.separatorInset = UIEdgeInsets.zero
-        if let backgroundColor = backgroundColor {
-            self.tableView.backgroundColor = backgroundColor
-            self.navigationController?.navigationBar.backgroundColor = backgroundColor
-        }
+        self.tableView.backgroundColor = backgroundColor
+        self.navigationController?.navigationBar.backgroundColor = backgroundColor
     }
     
     // MARK: - sections

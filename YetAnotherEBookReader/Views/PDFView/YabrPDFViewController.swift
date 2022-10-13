@@ -14,6 +14,8 @@ import SwiftUI
 @available(macCatalyst 14.0, *)
 class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pdfView = YabrPDFView()
+    let thumbController = UIViewController()
+
     let blankView = UIImageView()
     let blankActivityView = UIActivityIndicatorView()
     
@@ -32,7 +34,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     var tocList = [(String, Int)]()
     
     let thumbImageView = UIImageView()
-    let thumbController = UIViewController()
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
@@ -100,15 +101,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 }
                 
                 if pdfOptions.pageMode == .Page {
-                    pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
-                } else {
-                    pdfView.pageTapDisable()
+                    self.pageVisibleContentBounds.removeAll()
                 }
             }
             
             if pdfOptions.pageMode == .Page {
-                self.pageVisibleContentBounds.removeAll()
-                pdfView.pageTapResize(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                pdfView.pageTapResize(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
                 pdfView.pageTapDisable()
             }
@@ -186,7 +184,22 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                   ],
                   let image = bounds.thumbImage else { return }
             self.thumbImageView.image = image
-            self.present(self.thumbController, animated: true, completion: nil)
+            
+//            self.present(thumbController, animated: true, completion: nil)
+            
+            let pageController = YabrPDFNavigationPageVC()
+            
+            pageController.yabrPDFView = self.pdfView
+            pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
+            
+            let nav = UINavigationController(rootViewController: pageController)
+            if let fillColor = PDFPageWithBackground.fillColor {
+                nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
+                nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
+            }
+            
+            self.present(nav, animated: true)
+            
         }), for: .primaryActionTriggered)
         
         pageSlider.minimumValue = 1
@@ -241,9 +254,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         let toolbarView = UIBarButtonItem(customView: stackView)
         setToolbarItems([toolbarView], animated: false)
         
+        print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
+        stackView.frame = self.navigationController?.toolbar.frame ?? .zero
+        
         navigationItem.setLeftBarButtonItems([
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
-            UIBarButtonItem(title: "List", image: UIImage(systemName: "line.3.horizontal"), primaryAction: UIAction(handler: { action in
+            UIBarButtonItem(title: "List", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { action in
                 let pageController = YabrPDFAnnotationPageVC()
                 
                 pageController.yabrPDFView = self.pdfView
@@ -290,36 +306,13 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         buildTocList()
         
-        titleInfoButton.setTitle("Title", for: .normal)
+        titleInfoButton.setTitle(self.pdfView.document?.title ?? "", for: .normal)
         titleInfoButton.contentHorizontalAlignment = .center
         titleInfoButton.showsMenuAsPrimaryAction = true
         titleInfoButton.frame = CGRect(x:0, y:0, width: navigationController?.navigationBar.frame.width ?? 600 / 2, height: 40)
         
         navigationItem.titleView = titleInfoButton
         
-        thumbController.view = thumbImageView
-        
-        
-//        let doubleTapLeftGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(doubleTappedGesture(sender:)))
-//        doubleTapLeftGestureRecognizer.numberOfTapsRequired = 2
-//        doubleTapLeftGestureRecognizer.delegate = self
-//        doubleTapLeftLabel.addGestureRecognizer(doubleTapLeftGestureRecognizer)
-//
-//        let doubleTapRightGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(doubleTappedGesture(sender:)))
-//        doubleTapRightGestureRecognizer.numberOfTapsRequired = 2
-//        doubleTapRightGestureRecognizer.delegate = self
-//        doubleTapRightLabel.addGestureRecognizer(doubleTapRightGestureRecognizer)
-//
-//        let singleTapLeftGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(singleTappedGesture(sender:)))
-//        singleTapLeftGestureRecognizer.numberOfTapsRequired = 1
-//        singleTapLeftGestureRecognizer.delegate = self
-//        singleTapLeftLabel.addGestureRecognizer(singleTapLeftGestureRecognizer)
-//
-//        let singleTapRightGestureRecognizer = UITapGestureRecognizer(target: self, action: #selector(singleTappedGesture(sender:)))
-//        singleTapRightGestureRecognizer.numberOfTapsRequired = 1
-//        singleTapRightGestureRecognizer.delegate = self
-//        singleTapRightLabel.addGestureRecognizer(singleTapRightGestureRecognizer)
-
         pdfView.delegate = self
         
         pdfView.translatesAutoresizingMaskIntoConstraints = false
@@ -328,7 +321,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         NSLayoutConstraint.activate([
             pdfView.topAnchor.constraint(equalTo: self.view.topAnchor),
-            pdfView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor),
+            pdfView.bottomAnchor.constraint(
+                equalTo: self.view.bottomAnchor,
+                constant: -self.stackView.frame.height
+            ),
             pdfView.leftAnchor.constraint(equalTo: self.view.leftAnchor),
             pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
         ])
@@ -339,9 +335,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             pdfView.injectHighlight(highlight: highlight)
         }
         
-        print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
-        stackView.frame = self.navigationController?.toolbar.frame ?? .zero
-        
         
         blankView.contentMode = .scaleAspectFill
         blankView.addSubview(blankActivityView)
@@ -351,6 +344,14 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         pdfView.prepareActions(pageNextButton: pageNextButton, pagePrevButton: pagePrevButton)
         
+        self.thumbImageView.translatesAutoresizingMaskIntoConstraints = false
+        self.thumbController.view.addSubview(self.thumbImageView)
+        NSLayoutConstraint.activate([
+            self.thumbImageView.topAnchor.constraint(equalTo: self.thumbController.view.topAnchor),
+            self.thumbImageView.bottomAnchor.constraint(equalTo: self.thumbController.view.bottomAnchor),
+            self.thumbImageView.leadingAnchor.constraint(equalTo: self.thumbController.view.leadingAnchor),
+            self.thumbImageView.trailingAnchor.constraint(equalTo: self.thumbController.view.trailingAnchor)
+        ])
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -362,7 +363,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
 //        UIMenuController.shared.menuItems = [UIMenuItem(title: "StarDict", action: #selector(lookupStarDict))]
 //        starDictView.loadViewIfNeeded()
         if pdfOptions.pageMode == .Page {
-            pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+            pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
         }
         let destPageIndex = (pageViewPositionHistory.first?.key ?? 1) - 1 //convert from 1-based to 0-based
         
@@ -395,7 +396,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         } completion: { [self] _ in
             handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
             if pdfOptions.pageMode == .Page {
-                pdfView.pageTapPreview(navBarHeight: navigationController?.navigationBar.frame.height ?? 0, hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
+                pdfView.pageTapPreview(hMarginAutoScaler: pdfOptions.hMarginAutoScaler)
             } else {
                 pdfView.pageTapDisable()
             }
@@ -652,7 +653,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 case .Width:
                     return pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor)
                 case .Height:
-                    return pdfView.scaleFactor * (pdfView.frame.height - self.navigationController!.navigationBar.frame.height) / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
+                    return pdfView.scaleFactor * pdfView.frame.height / visibleRectInView.height * CGFloat(insetsVerticalScaleFactor)
                 default:    // including .Page
                     return min(
                         pdfView.scaleFactor * pdfView.frame.width / visibleRectInView.width * CGFloat(insetsHorizontalScaleFactor),
@@ -665,14 +666,14 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         }()
         pdfView.scaleFactor = scaleFactor
         //pdfView.scaleFactor = self.lastScale
-        let navBarFrame = self.navigationController!.navigationBar.frame
-        let navBarFrameInPDF = pdfView.convert(navBarFrame, to: curPage)
+//        let navBarFrame = self.navigationController!.navigationBar.frame
+//        let navBarFrameInPDF = pdfView.convert(navBarFrame, to: curPage)
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-        let stackViewFrameInPDF = pdfView.convert(stackView.frame, to: curPage)
+//        let stackViewFrameInPDF = pdfView.convert(stackView.frame, to: curPage)
         
         var newDestPoint = CGPoint(
             x: newDestX - (1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width + boundsForCropBox.minX,
-            y: newDestY + navBarFrameInPDF.height + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
+            y: newDestY /*+ navBarFrameInPDF.height*/ + boundsForCropBox.minY + (1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height
         )
         
         if let pageViewPositionHistory = getPageViewPositionHistory(curPageNum) {
@@ -683,10 +684,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 newDestPoint.y = pageViewPositionHistory.point.y
             }
             print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX) history=\(pageViewPositionHistory.point.x)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory.point.y)")
+            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height) history=\(pageViewPositionHistory.point.y)")
         } else {
             print("\(#function) newDest newDestX=\(newDestX) minus=\((1.0 - insetsHorizontalScaleFactor) / 2 * boundsForCropBox.width) plus=\(boundsForCropBox.minX)")
-            print("\(#function) newDest newDestY=\(newDestX) plus1=\(navBarFrameInPDF.height) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)")
+            print("\(#function) newDest newDestY=\(newDestX) plus1=\(0) plus2=\(boundsForCropBox.minY) plus3=\((1.0 - insetsVerticalScaleFactor) / 2 * viewFrameInPDF.height)")
         }
         
         let newDest = PDFDestination(
@@ -713,7 +714,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         pdfView.go(to: newDest)
         
         var afterPointX = pdfView.currentDestination!.point.x
-        var afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        var afterPointY = pdfView.currentDestination!.point.y /*+ navBarFrameInPDF.height*/ + viewFrameInPDF.height
         
         print("\(#function) AFTER POINT scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDest.point) boundsForCropBox=\(boundsForCropBox)")
         
@@ -728,14 +729,26 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         pdfView.go(to: bottomRight)
         pdfView.go(to: newDestForCompensation)
         afterPointX = pdfView.currentDestination!.point.x
-        afterPointY = pdfView.currentDestination!.point.y + navBarFrameInPDF.height + viewFrameInPDF.height
+        afterPointY = pdfView.currentDestination!.point.y /*+ navBarFrameInPDF.height*/ + viewFrameInPDF.height
         print("\(#function) AFTER POINT COMPENSATION scale=\(scaleFactor) curDestPoint=\(pdfView.currentDestination!.point) curDestPointInPDF=\(afterPointX),\(afterPointY) gotoDestPoint=\(newDestForCompensation.point) boundsForCropBox=\(boundsForCropBox)")
 
         print("\(#function) scaleFactor=\(pdfOptions.lastScale)")
         
         #if DEBUG
-        let newDestAnnotation = PDFAnnotation(bounds: .init(origin: newDest.point, size: .init(width: 4, height: 4)), forType: .circle, withProperties: nil)
+        let newDestAnnotation = PDFAnnotation(
+            bounds: .init(origin: newDest.point, size: .init(width: 4, height: 4)),
+            forType: .circle,
+            withProperties: nil
+        )
         curPage.addAnnotation(newDestAnnotation)
+        
+        let newDestForCompensationAnnotation = PDFAnnotation(
+            bounds: .init(origin: newDestForCompensation.point, size: .init(width: 4, height: 4)),
+            forType: .square,
+            withProperties: nil
+        )
+        newDestForCompensationAnnotation.color = .red
+        curPage.addAnnotation(newDestForCompensationAnnotation)
         
         print("\(#function) newDestPoint=\(newDest.point) cropBox=\(curPage.bounds(for: .cropBox)) mediaBox=\(curPage.bounds(for: .mediaBox))")
         #endif
@@ -1196,12 +1209,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         }
         
         let viewFrameInPDF = pdfView.convert(pdfView.frame, to: curPage)
-        let navBarFrame = self.navigationController?.navigationBar.frame ?? CGRect()
-        let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
+//        let navBarFrame = self.navigationController?.navigationBar.frame ?? CGRect()
+//        let navBarFrameInPDF = pdfView.convert(navBarFrame, to:curPage)
     
         let pointUpperLeft = CGPoint(
             x: curDestPoint.x,
-            y: curDestPoint.y + navBarFrameInPDF.height + viewFrameInPDF.height
+            y: curDestPoint.y /*+ navBarFrameInPDF.height*/ + viewFrameInPDF.height
         )
         
         return (

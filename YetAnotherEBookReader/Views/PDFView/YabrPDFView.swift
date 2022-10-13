@@ -153,8 +153,8 @@ class YabrPDFView: PDFView {
         self.highlightTapGestureRecognizer = highlightTapGestureRecognizer
     }
     
-    func pageTapPreview(navBarHeight: CGFloat, hMarginAutoScaler: Double) {
-        pageTapResize(navBarHeight: navBarHeight, hMarginAutoScaler: hMarginAutoScaler)
+    func pageTapPreview(hMarginAutoScaler: Double) {
+        pageTapResize(hMarginAutoScaler: hMarginAutoScaler)
         
         let textFont = UIFont.systemFont(ofSize: UITraitCollection.current.horizontalSizeClass == .regular ? 16 : 12, weight: .regular)
         UIView.animate(withDuration: TimeInterval(0.5)) { [self] in
@@ -197,7 +197,7 @@ class YabrPDFView: PDFView {
         }
     }
     
-    func pageTapResize(navBarHeight: CGFloat, hMarginAutoScaler: Double) {
+    func pageTapResize(hMarginAutoScaler: Double) {
         let pdfViewHeight = self.frame.height
         var doubleTapWidth = self.frame.width * (hMarginAutoScaler - 5) / 100.0
         if doubleTapWidth < 50.0 {
@@ -215,22 +215,22 @@ class YabrPDFView: PDFView {
         }
         let singleTapHeight = self.frame.height * 0.15
         doubleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1 - navBarHeight),
+            origin: CGPoint(x: 0, y: pdfViewHeight * 0.1),
             size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
         )
         
         doubleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - doubleTapWidth, y: pdfViewHeight * 0.1 - navBarHeight),
+            origin: CGPoint(x: self.frame.width - doubleTapWidth, y: pdfViewHeight * 0.1),
             size: CGSize(width: doubleTapWidth, height: pdfViewHeight * 0.9 - singleTapHeight)
         )
         
         singleTapLeftLabel.frame = CGRect(
-            origin: CGPoint(x: 0, y: pdfViewHeight - navBarHeight - singleTapHeight),
+            origin: CGPoint(x: 0, y: pdfViewHeight - singleTapHeight),
             size: CGSize(width: singleTapWidth, height: singleTapHeight)
         )
         
         singleTapRightLabel.frame = CGRect(
-            origin: CGPoint(x: self.frame.width - singleTapWidth, y: pdfViewHeight - navBarHeight - singleTapHeight),
+            origin: CGPoint(x: self.frame.width - singleTapWidth, y: pdfViewHeight - singleTapHeight),
             size: CGSize(width: singleTapWidth, height: singleTapHeight)
         )
         
