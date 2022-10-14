@@ -20,9 +20,6 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         
         // Create TOC list
         loadItems()
-      
-        //TODO: Jump to the current chapter
-        
     }
 
     func loadItems() {
@@ -45,6 +42,23 @@ class YabrPDFChapterList: YabrPDFTableViewController {
                 stack.append(child)
             }
         }
+    }
+    
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        guard let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber else { return }
+
+        var outlineIndex = outlines.endIndex - 1
+        for i in 0..<(outlines.count-1) {
+            if (outlines[i].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
+               (outlines[i+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
+                outlineIndex = i
+                break
+            }
+        }
+        
+        self.tableView.scrollToRow(at: IndexPath(row: outlineIndex, section: 0), at: .middle, animated: true)
     }
     
     // MARK: - Table view data source
@@ -87,6 +101,15 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         cell.preservesSuperviewLayoutMargins = false
         cell.contentView.backgroundColor = isSection ? UIColor(white: 0.7, alpha: 0.1) : UIColor.clear
         cell.backgroundColor = UIColor.clear
+        
+        if indexPath.row + 1 == outlines.endIndex {
+            cell.backgroundColor = .lightGray
+        } else if let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber,
+                  (outlines[indexPath.row].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
+                  (outlines[indexPath.row+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
+            cell.backgroundColor = .lightGray
+        }
+        
         return cell
     }
     

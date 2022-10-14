@@ -34,7 +34,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         guard let page = view?.document?.page(at: pageNumber - 1)
         else { return }
         
-        view?.go(to: PDFDestination(page: page, at: offset))
+        yabrPDFNavigate(view, destination: PDFDestination(page: page, at: offset))
     }
     
     func yabrPDFNavigate(_ view: YabrPDFView?, destination: PDFDestination) {

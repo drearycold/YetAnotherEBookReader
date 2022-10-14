@@ -33,6 +33,9 @@ class YabrPDFThumbnailList: UICollectionViewController {
         layout.itemSize = .init(width: 300, height: 400)
         layout.minimumInteritemSpacing = 0
         layout.scrollDirection = .vertical
+        layout.minimumLineSpacing = 16
+        layout.headerReferenceSize = .init(width: 100, height: 40)
+        layout.sectionHeadersPinToVisibleBounds = true
         
         super.init(collectionViewLayout: layout)
     }
@@ -74,8 +77,18 @@ class YabrPDFThumbnailList: UICollectionViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        // Jump to the current book
+        guard let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber else { return }
         
+        var sectionIndex = topLevelOutlines.count - 1
+        for i in 0..<(topLevelOutlines.count-1) {
+            if (topLevelOutlines[i].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
+               (topLevelOutlines[i+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
+                sectionIndex = i
+                break
+            }
+        }
+        let row = currentPageNumber - (topLevelOutlines[sectionIndex].destination?.page?.pageRef?.pageNumber ?? 0)
+        self.collectionView.scrollToItem(at: IndexPath(row: row, section: sectionIndex), at: .centeredVertically, animated: true)
     }
     
     override func viewWillLayoutSubviews() {
@@ -87,8 +100,6 @@ class YabrPDFThumbnailList: UICollectionViewController {
         let itemWidth = floor((self.collectionView.frame.size.width - layout.minimumInteritemSpacing*(itemCount-1)) / itemCount)
         let itemHeight = itemWidth * 1.333 + 80
         layout.itemSize = .init(width: itemWidth, height: itemHeight)
-        layout.minimumLineSpacing = 16
-        layout.headerReferenceSize = .init(width: 100, height: 40)
     }
 
     // MARK: - collection view data source
@@ -112,18 +123,27 @@ class YabrPDFThumbnailList: UICollectionViewController {
         
         headerView.titleLabel.text = topLevelOutlines[indexPath.section].label
         
+        headerView.contentView.backgroundColor = backgroundColor
+        
         return headerView
     }
     
     override func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: kReuseCellIdentifier, for: indexPath) as! YabrPDFThumbnailListCell
-
+        
+        cell.contentView.backgroundColor = .clear
         
         let outline = topLevelOutlines[indexPath.section]
         if let outlinePageNumber = outline.destination?.page?.pageRef?.pageNumber {
             cell.titleLabel.text = "Page \(outlinePageNumber + indexPath.row)"
             cell.thumbImage.image = yabrPDFView?.document?.page(at: outlinePageNumber - 1 + indexPath.row)?.thumbnail(of: layout.itemSize, for: .cropBox)
+            
+            if (outlinePageNumber + indexPath.row) == yabrPDFView?.currentPage?.pageRef?.pageNumber {
+                cell.contentView.backgroundColor = .lightGray
+            }
         }
+        
+        
         
         return cell
     }
@@ -131,6 +151,17 @@ class YabrPDFThumbnailList: UICollectionViewController {
     // MARK: - Table view delegate
 
     override func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
+        let outline = topLevelOutlines[indexPath.section]
+        if let outlinePageNumber = outline.destination?.page?.pageRef?.pageNumber,
+           let page = yabrPDFView?.document?.page(at: outlinePageNumber - 1 + indexPath.row) {
+//            let destination = PDFDestination(page: page, at: .zero)
+//            yabrPDFMetaSource?.yabrPDFNavigate(yabrPDFView, destination: destination)
+            if let curPage = yabrPDFView?.currentPage {
+                yabrPDFView?.yabrPDFViewController?.updateHistoryMenu(curPage: curPage)
+            }
+            yabrPDFView?.go(to: page)
+        }
         
+        self.dismiss(animated: true)
     }
 }
