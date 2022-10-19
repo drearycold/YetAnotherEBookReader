@@ -337,6 +337,7 @@ struct MainView: View {
     }
 
     private func showConsentInformation() {
+        #if canImport(GoogleMobileAds)
         let parameters = UMPRequestParameters()
 //        #if DEBUG
 //        let debugSettings = UMPDebugSettings()
@@ -362,6 +363,7 @@ struct MainView: View {
                     }
                 }
             })
+        #endif
     }
     
     #if canImport(GoogleMobileAds)

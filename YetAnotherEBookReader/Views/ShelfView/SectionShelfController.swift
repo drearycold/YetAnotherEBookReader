@@ -108,15 +108,16 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         ])
         
         #else
-        shelfView = SectionShelfView(
+        shelfView = SectionShelfCompositionalView(
             frame: CGRect(
                 x: 0,
-                y: statusBarHeight,
+                y: 0,
                 width: view.frame.width,
                 height: view.frame.height - statusBarHeight
-            ),
-            bookModelSection: [],
-            bookSource: SectionShelfView.BOOK_SOURCE_URL)
+            )
+        )
+        shelfView.translatesAutoresizingMaskIntoConstraints = false
+        
         shelfView.delegate = self
         view.addSubview(shelfView)
         NSLayoutConstraint.activate([
