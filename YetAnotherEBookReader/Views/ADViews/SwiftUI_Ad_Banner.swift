@@ -7,7 +7,9 @@
 
 import SwiftUI
 import UIKit
+#if canImport(GoogleMobileAds)
 import GoogleMobileAds
+#endif
 
 final private class BannerVC: UIViewControllerRepresentable  {
 
@@ -18,14 +20,17 @@ final private class BannerVC: UIViewControllerRepresentable  {
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
+        let viewController = UIViewController()
+        
+        #if canImport(GoogleMobileAds)
         let view = GADBannerView(adSize: GADAdSizeBanner)
 
-        let viewController = UIViewController()
         view.adUnitID = self.adUnitID
         view.rootViewController = viewController
         viewController.view.addSubview(view)
         viewController.view.frame = CGRect(origin: .zero, size: GADAdSizeBanner.size)
         view.load(GADRequest())
+        #endif
 
         return viewController
     }

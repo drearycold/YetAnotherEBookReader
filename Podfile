@@ -42,8 +42,16 @@ target 'YetAnotherEBookReader-Catalyst' do
   pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
-  # pod 'Realm', '~> 5.0'
-  # pod 'RealmSwift', '~> 5.0'
+  pod 'Realm', '~> 5.0'
+  pod 'RealmSwift', '~> 5.0'
+  pod 'MBProgressHUD', '~> 1.2.0'
+  # pod "GCDWebServer", "~> 3.0"
+pod 'R2Shared', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumShared.podspec'
+pod 'R2Streamer', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumStreamer.podspec'
+pod 'R2Navigator', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumNavigator.podspec'
+pod 'ReadiumOPDS', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec'
+pod 'ReadiumLCP', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec'
+pod 'GCDWebServer', podspec: 'https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec'
 
 end
 
@@ -51,6 +59,7 @@ post_install do |installer|
    installer.pods_project.targets.each do |target|
        #flutter_additional_ios_build_settings(target)
        target.build_configurations.each do |config|
+          config.build_settings["DEVELOPMENT_TEAM"] = "L8WKJ3U7UT"
           if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 12.0
             config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
           end

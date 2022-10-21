@@ -1173,3 +1173,66 @@ extension BookBookmark: Persistable {
         return obj
     }
 }
+
+
+//MARK: PDF
+class PDFOptionsRealm: Object {
+    @objc dynamic var id: Int32 = 0
+    @objc dynamic var libraryName = ""
+    @objc dynamic var themeMode = PDFThemeMode.serpia.rawValue
+    @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
+    @objc dynamic var pageMode = PDFLayoutMode.Page.rawValue
+    @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
+    @objc dynamic var scrollDirection = PDFScrollDirection.Vertical.rawValue
+    @objc dynamic var hMarginAutoScaler = 5.0
+    @objc dynamic var vMarginAutoScaler = 5.0
+    @objc dynamic var hMarginDetectStrength = 2.0
+    @objc dynamic var vMarginDetectStrength = 2.0
+    @objc dynamic var marginOffset = 0.0
+    @objc dynamic var lastScale = 1.0
+    @objc dynamic var rememberInPagePosition = true
+    
+    override static func primaryKey() -> String? {
+        return "id"
+    }
+}
+
+extension PDFOptions: Persistable {
+    public init(managedObject: PDFOptionsRealm) {
+        self.id = managedObject.id
+        self.libraryName = managedObject.libraryName
+        self.themeMode = .init(rawValue: managedObject.themeMode) ?? .serpia
+        self.selectedAutoScaler = .init(rawValue: managedObject.selectedAutoScaler) ?? .Width
+        self.pageMode = .init(rawValue: managedObject.pageMode) ?? .Page
+        self.readingDirection = .init(rawValue: managedObject.readingDirection) ?? .LtR_TtB
+        self.scrollDirection = .init(rawValue: managedObject.scrollDirection) ?? .Vertical
+        self.hMarginAutoScaler = managedObject.hMarginAutoScaler
+        self.vMarginAutoScaler = managedObject.vMarginAutoScaler
+        self.hMarginDetectStrength = managedObject.hMarginDetectStrength
+        self.vMarginDetectStrength = managedObject.vMarginDetectStrength
+        self.marginOffset = managedObject.marginOffset
+        self.lastScale = managedObject.lastScale
+        self.rememberInPagePosition = managedObject.rememberInPagePosition
+    }
+    
+    public func managedObject() -> PDFOptionsRealm {
+        let obj = PDFOptionsRealm()
+        
+        obj.id = self.id
+        obj.libraryName = self.libraryName
+        obj.themeMode = self.themeMode.rawValue
+        obj.selectedAutoScaler = self.selectedAutoScaler.rawValue
+        obj.pageMode = self.pageMode.rawValue
+        obj.readingDirection = self.readingDirection.rawValue
+        obj.scrollDirection = self.scrollDirection.rawValue
+        obj.hMarginAutoScaler = self.hMarginAutoScaler
+        obj.vMarginAutoScaler = self.vMarginAutoScaler
+        obj.hMarginDetectStrength = self.hMarginDetectStrength
+        obj.vMarginDetectStrength = self.vMarginDetectStrength
+        obj.marginOffset = self.marginOffset
+        obj.lastScale = self.lastScale
+        obj.rememberInPagePosition = self.rememberInPagePosition
+        
+        return obj
+    }
+}
