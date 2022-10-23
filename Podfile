@@ -6,7 +6,10 @@ target 'YetAnotherEBookReader' do
   use_frameworks!
 
   # Pods for YetAnotherEBookReader
-  pod 'Google-Mobile-Ads-SDK'
+  pod 'Google-Mobile-Ads-SDK', '~> 9'
+  pod 'GoogleAppMeasurement', '~> 9'
+  pod 'Google-Mobile-Ads-SDK', '~> 9'
+  pod 'Google-Mobile-Ads-SDK', '~> 9'
   pod 'Kingfisher/SwiftUI', '~> 5.0'
   # pod 'Realm', '~> 5.0'
   # pod 'RealmSwift', '~> 5.0'
