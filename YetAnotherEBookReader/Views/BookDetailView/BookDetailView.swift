@@ -384,7 +384,16 @@ struct BookDetailView: View {
         }, content: {
             NavigationView {
                 if let book = modelData.readingBook {
-                    ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                    ReadingPositionHistoryView(presenting: $readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction, content: {
+                                Button(action: {
+                                    readingPositionHistoryViewPresenting = false
+                                }) {
+                                    Image(systemName: "xmark")
+                                }
+                            })
+                        }
                 } else {
                     Text("Unexpected Internal Error")
                 }
@@ -438,7 +447,7 @@ struct BookDetailView: View {
                     
                 }, content: {
                     NavigationView {
-                        ActivityList(libraryId: book.library.id, bookId: book.id)
+                        ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
                             .environmentObject(modelData)
                     }
                 })

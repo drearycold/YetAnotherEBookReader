@@ -133,7 +133,7 @@ struct LibraryDetailView: View {
             
             Section(header: Text("Troubleshooting")) {
                 NavigationLink(
-                    destination: ActivityList(libraryId: library.id, bookId: nil)
+                    destination: ActivityList(presenting: Binding<Bool>(get: { false }, set:{_ in }), libraryId: library.id, bookId: nil)
                 ) {
                     Text("Activity Logs")
                 }

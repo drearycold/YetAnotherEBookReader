@@ -10,6 +10,8 @@ import SwiftUI
 struct ActivityList: View {
     @EnvironmentObject var modelData: ModelData
     
+    @Binding var presenting: Bool
+    
     var libraryId: String? = nil
     var bookId: Int32? = nil
     
@@ -23,6 +25,19 @@ struct ActivityList: View {
         }
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction, content: {
+                if presenting {
+                    Button(action: {
+                        presenting = false
+                    }) {
+                        Image(systemName: "xmark")
+                    }
+                } else {
+                    EmptyView()
+                }
+            })
+        }
     }
     
     @ViewBuilder
@@ -126,9 +141,10 @@ struct ActivityList: View {
 struct ActivityList_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
     
+    @State static private var presenting = false
     static var previews: some View {
         NavigationView {
-            ActivityList()
+            ActivityList(presenting: $presenting)
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .environmentObject(modelData)

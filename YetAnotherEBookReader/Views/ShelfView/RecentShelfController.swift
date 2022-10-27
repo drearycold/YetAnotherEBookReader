@@ -331,7 +331,11 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         
         let readingPositionHistoryView = UIHostingController(
-            rootView: ReadingPositionHistoryView(library: book.library, bookId: book.id).environmentObject(modelData)
+            rootView: ReadingPositionHistoryView(
+                presenting: Binding<Bool>(get: { true }, set: { _ in }),
+                library: book.library,
+                bookId: book.id
+            ).environmentObject(modelData)
         )
         
         let nav = UINavigationController(rootViewController: readingPositionHistoryView)

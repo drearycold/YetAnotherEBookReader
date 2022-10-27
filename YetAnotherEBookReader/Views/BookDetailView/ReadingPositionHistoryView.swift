@@ -12,7 +12,9 @@ import SwiftUICharts
 
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
-        
+    
+    @Binding var presenting: Bool
+    
     let library: CalibreLibrary?
     let bookId: Int32?
     
@@ -107,7 +109,7 @@ struct ReadingPositionHistoryView: View {
                             if let book = modelData.booksInShelf[inShelfId],
                                let minutesText = minutesFormatter.string(from: NSNumber(value: minutes)) {
                                 NavigationLink(
-                                    destination: ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                                    destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: book.library, bookId: book.id)
                                 ) {
                                     HStack {
                                         Text(book.title)
@@ -199,10 +201,12 @@ struct ReadingPositionHistoryView: View {
 struct ReadingPositionHistoryView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
 
+    @State static private var presenting = true
+    
     static var previews: some View {
         if let book = modelData.readingBook {
             NavigationView {
-                ReadingPositionHistoryView(library: book.library, bookId: book.id)
+                ReadingPositionHistoryView(presenting: $presenting, library: book.library, bookId: book.id)
             }
             .navigationViewStyle(.stack)
             .environmentObject(modelData)
