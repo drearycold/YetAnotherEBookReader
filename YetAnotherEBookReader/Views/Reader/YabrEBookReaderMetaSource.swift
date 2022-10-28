@@ -66,8 +66,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
-        guard let config = getBookPreferenceConfig(bookFileURL: readerInfo.url),
-              let realm = try? Realm(configuration: config),
+        guard let realm = book.readPos.realm,
               let pdfOptionsRealm = realm.objects(PDFOptionsRealm.self).first
         else { return nil }
         
@@ -75,8 +74,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        guard let config = getBookPreferenceConfig(bookFileURL: readerInfo.url),
-              let realm = try? Realm(configuration: config)
+        guard let realm = book.readPos.realm
         else { return }
         
         try? realm.write {

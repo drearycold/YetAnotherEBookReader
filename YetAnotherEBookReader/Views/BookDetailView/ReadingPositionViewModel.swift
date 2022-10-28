@@ -13,7 +13,6 @@ class ReadingPositionListViewModel: ObservableObject {
     
     @Published var positions: [BookDeviceReadingPosition]
     
-    let bookPref: BookPreference
     let percentFormatter = NumberFormatter()
     let dateFormatter = DateFormatter()
     
@@ -23,8 +22,6 @@ class ReadingPositionListViewModel: ObservableObject {
         self.modelData = modelData
         self.book = book
         self.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
-        
-        self.bookPref = .init(id: book.id, library: book.library)
         
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1

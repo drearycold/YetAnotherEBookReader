@@ -21,6 +21,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     var shelfView: SectionShelfCompositionalView!
     var shelfBookSink: AnyCancellable?
 
+    let activityIndicatorView = UIActivityIndicatorView()
+    
     #if canImport(GoogleMobileAds)
     var bannerSize = GADAdSizeBanner
     var bannerView: GADBannerView!
@@ -31,6 +33,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
+    var generatingCancellable: AnyCancellable?
     var updateAndReloadCancellable: AnyCancellable?
     
     override var canBecomeFirstResponder: Bool {
@@ -128,14 +131,36 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         ])
         #endif
         
+        activityIndicatorView.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicatorView.style = self.traitCollection.horizontalSizeClass == .regular ? .large : .medium
+        view.addSubview(activityIndicatorView)
+        
+        NSLayoutConstraint.activate([
+            activityIndicatorView.centerXAnchor.constraint(equalTo: shelfView.centerXAnchor),
+            activityIndicatorView.centerYAnchor.constraint(equalTo: shelfView.centerYAnchor),
+            activityIndicatorView.widthAnchor.constraint(equalTo: shelfView.widthAnchor, multiplier: self.traitCollection.horizontalSizeClass == .regular ? 0.25 : 0.5),
+            activityIndicatorView.heightAnchor.constraint(equalTo: activityIndicatorView.widthAnchor)
+        ])
+        
+        generatingCancellable?.cancel()
+        generatingCancellable = modelData.discoverShelfBooksRefreshedPublisher
+            .sink { _ in
+                self.activityIndicatorView.startAnimating()
+                print("\(#function) activityIndicatorView started")
+            }
         updateAndReloadCancellable?.cancel()
         updateAndReloadCancellable = modelData.discoverShelfGenerated
             .receive(on: DispatchQueue.main)
-            .sink { _ in
+            .sink { notification in
                 self.shelfView.reloadBooks(bookModelSection: self.modelData.bookModelSection)
+                if let stop = notification.object as? Bool, stop == true {
+                    self.activityIndicatorView.stopAnimating()
+                }
+                print("\(#function) activityIndicatorView stopped")
+
             }
         
-        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
+        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: false))
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {

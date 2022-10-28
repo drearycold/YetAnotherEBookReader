@@ -601,49 +601,6 @@ class CalibreActivityLogEntry: Object {
     }
 }
 
-struct BookPreference {
-    let id: Int32
-    let library: CalibreLibrary
-    let bookPrefId: String
-    
-    var realm: Realm?
-    
-    init(id: Int32, library: CalibreLibrary) {
-        self.id = id
-        self.library = library
-        bookPrefId = "\(library.key) - \(id)"
-        
-        realm = openRealm()
-    }
-    
-    func openRealm() -> Realm? {
-        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library),
-              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
-              let basePrefUrl = bookPrefConf.fileURL,
-              FileManager.default.fileExists(atPath: basePrefUrl.path)
-        else { return nil }
-        
-        return try? Realm(configuration: bookPrefConf)
-    }
-    
-    func getObject(for reader: ReaderType) -> Object? {
-        switch reader {
-        case .UNSUPPORTED:
-            return nil
-        case .YabrEPUB:
-            return realm?.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: bookPrefId + ".epub")
-        case .YabrPDF:
-            return realm?.object(ofType: PDFOptionsRealm.self, forPrimaryKey: Int(id))
-        case .ReadiumEPUB:
-            return nil
-        case .ReadiumPDF:
-            return nil
-        case .ReadiumCBZ:
-            return nil
-        }
-    }
-}
-
 class BookDeviceReadingPositionRealm: Object {
     @objc dynamic var bookId: String = .init()
     @objc dynamic var id = ""
