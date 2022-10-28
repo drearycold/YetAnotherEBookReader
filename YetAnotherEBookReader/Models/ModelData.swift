@@ -411,7 +411,7 @@ final class ModelData: ObservableObject {
                 let bookModelSection = self.generateShelfBookModel(limit: limit, earlyCut: earlyCut)
                 DispatchQueue.main.async {
                     self.bookModelSection = bookModelSection
-                    NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated))
+                    NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: true))
                 }
             })
         
