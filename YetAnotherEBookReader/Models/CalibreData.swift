@@ -9,6 +9,8 @@ import Foundation
 import UIKit
 
 struct CalibreServer: Hashable {
+    static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
+    
     var id: String {
         get {
             if isLocal {
@@ -35,6 +37,8 @@ struct CalibreServer: Hashable {
         }
         return documentDirectoryURL
     }
+    
+    let uuid: UUID
     
     var name: String
     var baseUrl: String

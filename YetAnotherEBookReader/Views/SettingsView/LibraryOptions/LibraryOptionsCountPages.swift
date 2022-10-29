@@ -79,7 +79,7 @@ struct LibraryOptionsCountPages: View {
 }
 
 struct LibraryOptionsCountPages_Previews: PreviewProvider {
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
+    @State static private var library = CalibreLibrary(server: CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
 
     @State static private var countPages = CalibreLibraryCountPages()
     static private var configuration = CalibreDSReaderHelperConfiguration()

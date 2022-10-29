@@ -43,7 +43,7 @@ struct LibraryInfoView: View {
     @State private var booksListCancellable: AnyCancellable?
     @State private var dismissAllCancellable: AnyCancellable?
 
-    private var errBook = CalibreBook(id: -1, library: CalibreLibrary(server: CalibreServer(name: "Error", baseUrl: "Error", hasPublicUrl: false, publicUrl: "Error", hasAuth: false, username: "Error", password: "Error"), key: "Error", name: "Error"))
+    private var errBook = CalibreBook(id: -1, library: CalibreLibrary(server: CalibreServer(uuid: .init(), name: "Error", baseUrl: "Error", hasPublicUrl: false, publicUrl: "Error", hasAuth: false, username: "Error", password: "Error"), key: "Error", name: "Error"))
     
     private var defaultLog = Logger()
     

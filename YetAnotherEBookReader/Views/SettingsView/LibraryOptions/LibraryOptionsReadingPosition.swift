@@ -128,7 +128,7 @@ struct LibraryOptionsReadingPosition: View {
 }
 
 struct LibraryOptionsReadingPosition_Previews: PreviewProvider {
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
+    @State static private var library = CalibreLibrary(server: CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
     
     @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
 

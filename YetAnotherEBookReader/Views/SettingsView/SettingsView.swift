@@ -42,7 +42,7 @@ struct SettingsView: View {
                 NavigationLink(
                     destination: AddModServerView(
                         server: Binding<CalibreServer>(get: {
-                            .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+                            .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
                         }, set: { _ in
                             updateServerList()
                         }),

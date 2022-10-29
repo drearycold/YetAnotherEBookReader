@@ -15,7 +15,7 @@ public protocol Persistable {
 }
 
 class CalibreServerRealm: Object {
-    @objc dynamic var primaryKey: String?
+    @objc dynamic var primaryKey: String?   //uuidString
     
     @objc dynamic var name: String?
     
@@ -47,7 +47,38 @@ class CalibreServerRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = "\(username ?? "-")@\(baseUrl ?? "-")"
+//        primaryKey = "\(username ?? "-")@\(baseUrl ?? "-")"
+    }
+}
+
+extension CalibreServer: Persistable {
+    init(managedObject: CalibreServerRealm) {
+        self.name = managedObject.name ?? managedObject.baseUrl!
+        self.baseUrl = managedObject.baseUrl!
+        self.hasPublicUrl = managedObject.hasPublicUrl
+        self.publicUrl = managedObject.publicUrl ?? ""
+        self.hasAuth = managedObject.hasAuth
+        self.username = managedObject.username ?? ""
+        self.password = managedObject.password ?? ""
+        self.defaultLibrary = managedObject.defaultLibrary ?? ""
+        self.lastLibrary = managedObject.lastLibrary ?? ""
+        self.uuid = UUID(uuidString: managedObject.primaryKey ?? "") ?? .init()
+    }
+    
+    func managedObject() -> CalibreServerRealm {
+        let serverRealm = CalibreServerRealm()
+        serverRealm.name = self.name
+        serverRealm.baseUrl = self.baseUrl
+        serverRealm.hasPublicUrl = self.hasPublicUrl
+        serverRealm.publicUrl = self.publicUrl
+        serverRealm.hasAuth = self.hasAuth
+        serverRealm.username = self.username
+        serverRealm.password = self.password
+        serverRealm.defaultLibrary = self.defaultLibrary
+        serverRealm.lastLibrary = self.lastLibrary
+        serverRealm.primaryKey = self.uuid.uuidString
+        
+        return serverRealm
     }
 }
 
@@ -64,6 +95,9 @@ class CalibreLibraryRealm: Object {
             updatePrimaryKey()
         }
     }
+    
+    @objc dynamic var serverUUID: String?
+    
     @objc dynamic var serverUrl: String? {
         didSet {
             updatePrimaryKey()
@@ -80,7 +114,8 @@ class CalibreLibraryRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
+//        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
+        primaryKey = "\(serverUUID ?? "-") - \(key ?? "-")"
     }
     
     var customColumns = List<CalibreCustomColumnRealm>()
@@ -110,6 +145,9 @@ class CalibreBookRealm: Object {
             updatePrimaryKey()
         }
     }
+    
+    @objc dynamic var serverUUID: String?
+    
     @objc dynamic var libraryName: String? {
         didSet {
             updatePrimaryKey()
@@ -240,7 +278,7 @@ class CalibreBookRealm: Object {
 extension CalibreBook: Persistable {
     internal init(managedObject: CalibreBookRealm) {
         self.id = 0
-        self.library = .init(server: .init(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: "")
+        self.library = .init(server: .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: "")
         self.readPos = BookAnnotation(id: id, library: library)
     }
     

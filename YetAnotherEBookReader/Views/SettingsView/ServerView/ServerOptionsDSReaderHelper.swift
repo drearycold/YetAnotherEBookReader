@@ -394,7 +394,7 @@ struct ServerOptionsDSReaderHelper: View {
 struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
     static private var modelData = ModelData()
 
-    @State static private var server = CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+    @State static private var server = CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
 
     @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: server.id, port: 1234)
     @State static private var updater = 0

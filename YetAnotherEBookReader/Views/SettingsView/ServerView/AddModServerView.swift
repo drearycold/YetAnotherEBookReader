@@ -340,7 +340,7 @@ struct AddModServerView: View {
             }
         }
         let calibreServer = CalibreServer(
-            name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
+            uuid: .init(), name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
         if let existingServer = modelData.calibreServers[calibreServer.id] {
             alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
             return
@@ -388,6 +388,7 @@ struct AddModServerView: View {
     
     private func modServerConfirmButtonAction() {
         let newServer = CalibreServer(
+            uuid: server.uuid,
             name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
         
         if newServer.id == server.id {
@@ -437,7 +438,7 @@ extension AddModServerView : AlertDelegate {
 struct AddModServerView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
     
-    @State static private var server = CalibreServer(name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
+    @State static private var server = CalibreServer(uuid: .init(), name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
     @State static private var addServerActive = false
 
     static var previews: some View {

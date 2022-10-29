@@ -75,7 +75,7 @@ struct LibraryOptionsGoodreadsSync: View {
 }
 
 struct LibraryOptionsGoodreadsSYnc_Previews: PreviewProvider {
-    @State static private var library = CalibreLibrary(server: CalibreServer(name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
+    @State static private var library = CalibreLibrary(server: CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "Default", name: "Default")
 
     @State static private var goodreadsSync = CalibreLibraryGoodreadsSync()
     static private var configuration = CalibreDSReaderHelperConfiguration()
