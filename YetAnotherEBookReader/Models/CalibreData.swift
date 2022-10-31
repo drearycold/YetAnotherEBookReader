@@ -12,16 +12,17 @@ struct CalibreServer: Hashable {
     static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
     
     var id: String {
-        get {
-            if isLocal {
-                return "Document Folder"
-            }
-            else if username.isEmpty {
-                return baseUrl
-            } else {
-                return "\(username) @ \(baseUrl)"
-            }
-        }
+//        get {
+//            if isLocal {
+//                return "Document Folder"
+//            }
+//            else if username.isEmpty {
+//                return baseUrl
+//            } else {
+//                return "\(username) @ \(baseUrl)"
+//            }
+//        }
+        uuid.uuidString
     }
     
     var isLocal: Bool {
@@ -75,7 +76,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     static let PLUGIN_COUNT_PAGES = "Count Pages"
     
     var id: String {
-        get { return server.id + " - " + name }
+//        get { return server.id + " - " + name }
+        CalibreLibraryRealm.PrimaryKey(serverUUID: server.uuid.uuidString, libraryName: name)
     }
     static func == (lhs: CalibreLibrary, rhs: CalibreLibrary) -> Bool {
         lhs.server == rhs.server && lhs.id == rhs.id
@@ -438,7 +440,11 @@ struct CalibreBook {
     }
     
     var inShelfId : String {
-        return CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.description)
+        return CalibreBookRealm.PrimaryKey(
+            serverUUID: library.server.uuid.uuidString,
+            libraryName: library.name,
+            id: id.description
+        )
     }
     
     var inShelf = false

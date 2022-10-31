@@ -122,45 +122,7 @@ struct ServerDetailView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
-                    modelData.librarySyncStatus.filter {
-                         $0.value.library.server.id == server.id && $0.value.del.count > 0
-                    }.forEach { lss in
-                        modelData.librarySyncStatus[lss.key]?.isSync = true
-                        var progress = 0
-                        let total = lss.value.del.count
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-                            
-                            try? realm.write {
-                                lss.value.del.forEach { id in
-                                    if progress % 100 == 0 {
-                                        DispatchQueue.main.async {
-                                            modelData.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
-                                        }
-                                    }
-                                    
-                                    let primaryKey = CalibreBookRealm.PrimaryKey(
-                                        serverUsername: lss.value.library.server.username,
-                                        serverUrl: lss.value.library.server.baseUrl,
-                                        libraryName: lss.value.library.name,
-                                        id: id.description)
-                                    
-                                    if let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) {
-                                        realm.delete(object)
-                                    }
-                                    progress += 1
-                                    
-                                }
-                            }
-                            
-                            DispatchQueue.main.async {
-                                modelData.librarySyncStatus[lss.key]?.del.removeAll()
-                                modelData.librarySyncStatus[lss.key]?.isSync = false
-                                modelData.librarySyncStatus[lss.key]?.msg = nil
-                            }
-                        }
-                    }
-                    modelData.probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
+                    modelData.removeDeleteBooksFromServer(server: server)
                 }) {
                     Image(systemName: "xmark.bin")
                 }.disabled(

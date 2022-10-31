@@ -92,16 +92,18 @@ struct ReadingPositionHistoryView: View {
                 
                 Section(header: Text("Local Activities")) {
                     if let library = library, let bookId = bookId {
-                        ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? [], id: \.self) { obj in
-                            NavigationLink(
-                                destination: ReadingPositionDetailView(
-                                    viewModel: ReadingPositionDetailViewModel(
-                                        modelData: modelData,
-                                        listModel: _positionViewModel!,
-                                        position: obj.endPosition!)
-                                )
-                            ) {
-                                row(position: obj.endPosition!)
+                        if let viewModel = _positionViewModel {
+                            ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? [], id: \.self) { obj in
+                                NavigationLink(
+                                    destination: ReadingPositionDetailView(
+                                        viewModel: ReadingPositionDetailViewModel(
+                                            modelData: modelData,
+                                            listModel: _positionViewModel!,
+                                            position: obj.endPosition!)
+                                    )
+                                ) {
+                                    row(position: obj.endPosition!)
+                                }
                             }
                         }
                     } else {

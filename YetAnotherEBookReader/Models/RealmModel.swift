@@ -87,7 +87,7 @@ class CalibreLibraryRealm: Object {
     
     @objc dynamic var key: String? {
         didSet {
-            
+            updatePrimaryKey()
         }
     }
     @objc dynamic var name: String? {
@@ -96,18 +96,22 @@ class CalibreLibraryRealm: Object {
         }
     }
     
-    @objc dynamic var serverUUID: String?
+    @objc dynamic var serverUUID: String? {
+        didSet {
+            updatePrimaryKey()
+        }
+    }
     
-    @objc dynamic var serverUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var serverUsername: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
+//    @objc dynamic var serverUrl: String? {
+//        didSet {
+//            updatePrimaryKey()
+//        }
+//    }
+//    @objc dynamic var serverUsername: String? {
+//        didSet {
+//            updatePrimaryKey()
+//        }
+//    }
     
     override static func primaryKey() -> String? {
         return "primaryKey"
@@ -115,9 +119,12 @@ class CalibreLibraryRealm: Object {
     
     func updatePrimaryKey() {
 //        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
-        primaryKey = "\(serverUUID ?? "-") - \(key ?? "-")"
+        primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: name ?? "-")
     }
     
+    static func PrimaryKey(serverUUID: String, libraryName: String) -> String {
+        return [libraryName, "@", serverUUID].joined()
+    }
     var customColumns = List<CalibreCustomColumnRealm>()
     @objc dynamic var pluginDSReaderHelper:     CalibreLibraryDSReaderHelperRealm?
     @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
@@ -135,18 +142,23 @@ class CalibreLibraryRealm: Object {
 class CalibreBookRealm: Object {
     @objc dynamic var primaryKey: String?
     
-    @objc dynamic var serverUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var serverUsername: String? {
+//    @objc dynamic var serverUrl: String? {
+//        didSet {
+//            updatePrimaryKey()
+//        }
+//    }
+//    @objc dynamic var serverUsername: String? {
+//        didSet {
+//            updatePrimaryKey()
+//        }
+//    }
+    
+    @objc dynamic var serverUUID: String? {
         didSet {
             updatePrimaryKey()
         }
     }
     
-    @objc dynamic var serverUUID: String?
     
     @objc dynamic var libraryName: String? {
         didSet {
@@ -263,11 +275,11 @@ class CalibreBookRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = CalibreBookRealm.PrimaryKey(serverUsername: serverUsername, serverUrl: serverUrl, libraryName: libraryName, id: id.description)
+        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: libraryName ?? "-", id: id.description)
     }
     
-    static func PrimaryKey(serverUsername: String?, serverUrl: String?, libraryName: String?, id: String) -> String {
-        return "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(libraryName ?? "-") ^ \(id)"
+    static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
+        return [id, "^", libraryName, "@", serverUUID].joined()
     }
     
     override static func indexedProperties() -> [String] {
@@ -343,8 +355,8 @@ extension CalibreBook: Persistable {
     public func managedObject() -> CalibreBookRealm {
         let bookRealm = CalibreBookRealm()
         bookRealm.id = self.id
-        bookRealm.serverUrl = self.library.server.baseUrl
-        bookRealm.serverUsername = self.library.server.username
+//        bookRealm.serverUrl = self.library.server.baseUrl
+//        bookRealm.serverUsername = self.library.server.username
         bookRealm.libraryName = self.library.name
         bookRealm.title = self.title
 

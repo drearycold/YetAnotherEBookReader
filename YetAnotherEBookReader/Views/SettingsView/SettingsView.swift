@@ -259,40 +259,40 @@ struct SettingsView: View {
             let realm = try! Realm(configuration: modelData.realmConf)
 
             //update books
-            let booksCached = realm.objects(CalibreBookRealm.self)
-                .filter("serverUrl == %@ AND serverUsername == %@", oldServer.baseUrl, oldServer.username)
-            let booksCount = booksCached.count
-            var booksProgress = 0
-            do {
-                var batch: [CalibreBookRealm] = booksCached.prefix(256).map { $0 }
-                while batch.count > 0 {
-                    booksProgress += batch.count
-                    print("\(#function) update books \(batch.count) / \(booksProgress) / \(booksCount)")
-                    DispatchQueue.main.async {
-                        modelData.calibreServerUpdatingStatus = "Updating... \(booksProgress)/\(booksCount)"
-                    }
-                    
-                    try realm.write {
-                        batch.forEach { oldBookRealm in
-                            let newBookRealm = CalibreBookRealm(value: oldBookRealm)
-                            newBookRealm.serverUrl = newServer.baseUrl
-                            newBookRealm.serverUsername = newServer.username
-                            newBookRealm.updatePrimaryKey()
-                            realm.delete(oldBookRealm)
-                            realm.add(newBookRealm, update: .all)
-                        }
-                    }
-                    batch = booksCached.prefix(256).map { $0 }
-                }
-            } catch {
-                print("\(#function) update books error=\(error)")
-            }
-            print("\(#function) update books finished")
+//            let booksCached = realm.objects(CalibreBookRealm.self)
+//                .filter("serverUrl == %@ AND serverUsername == %@", oldServer.baseUrl, oldServer.username)
+//            let booksCount = booksCached.count
+//            var booksProgress = 0
+//            do {
+//                var batch: [CalibreBookRealm] = booksCached.prefix(256).map { $0 }
+//                while batch.count > 0 {
+//                    booksProgress += batch.count
+//                    print("\(#function) update books \(batch.count) / \(booksProgress) / \(booksCount)")
+//                    DispatchQueue.main.async {
+//                        modelData.calibreServerUpdatingStatus = "Updating... \(booksProgress)/\(booksCount)"
+//                    }
+//
+//                    try realm.write {
+//                        batch.forEach { oldBookRealm in
+//                            let newBookRealm = CalibreBookRealm(value: oldBookRealm)
+//                            newBookRealm.serverUrl = newServer.baseUrl
+//                            newBookRealm.serverUsername = newServer.username
+//                            newBookRealm.updatePrimaryKey()
+//                            realm.delete(oldBookRealm)
+//                            realm.add(newBookRealm, update: .all)
+//                        }
+//                    }
+//                    batch = booksCached.prefix(256).map { $0 }
+//                }
+//            } catch {
+//                print("\(#function) update books error=\(error)")
+//            }
+//            print("\(#function) update books finished")
 
-            DispatchQueue.main.async {
-                modelData.calibreServerUpdatingStatus = "Cleanup up..."
-            }
-            let _ = modelData.removeServer(serverId: oldServer.id, realm: realm)
+//            DispatchQueue.main.async {
+//                modelData.calibreServerUpdatingStatus = "Cleanup up..."
+//            }
+//            let _ = modelData.removeServer(serverId: oldServer.id, realm: realm)
             
             print("\(#function) removeServer finished")
 

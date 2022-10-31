@@ -72,7 +72,7 @@ struct MainView: View {
                 }
                 .tag(3)
             }
-            if modelData.activeTab < 1 && modelData.booksInShelf.isEmpty {
+            if modelData.activeTab < 1 && modelData.realm != nil && modelData.booksInShelf.isEmpty {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Welcome!")

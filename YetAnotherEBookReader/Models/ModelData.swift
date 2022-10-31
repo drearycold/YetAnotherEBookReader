@@ -238,152 +238,14 @@ final class ModelData: ObservableObject {
         //Load content of Info.plist into resourceFileDictionary dictionary
         if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
             resourceFileDictionary = NSDictionary(contentsOfFile: path)
+        } else {
+            resourceFileDictionary = try? NSDictionary(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Contents", isDirectory: true).appendingPathComponent("Info.plist", isDirectory: false), error: ())
         }
-        
-        ModelData.RealmSchemaVersion = UInt64(resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1") ?? 1
-        realmConf = Realm.Configuration(
-            schemaVersion: ModelData.RealmSchemaVersion,
-            migrationBlock: { migration, oldSchemaVersion in
-                if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
-                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
-                        //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")
-                        if let publicUrl = oldObject!["publicUrl"] as? String {
-                            newObject!["hasPublicUrl"] = publicUrl.count > 0
-                        }
-                        if let username = oldObject!["username"] as? String, let password = oldObject!["password"] as? String {
-                            newObject!["hasAuth"] = username.count > 0 && password.count > 0
-                        }
-                    }
-                }
-                if oldSchemaVersion < 44 {  //authos to first/second/more, tags to first/second/third/more
-                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
-                        if let authorsOld = oldObject?.dynamicList("authors") {
-                            var authors = Array<DynamicObject>(authorsOld)
-                            ["First", "Second", "Third"].forEach {
-                                newObject?.setValue(authors.popFirst(), forKey: "author\($0)")
-                                
-                            }
-                            newObject?.dynamicList("authorsMore").append(objectsIn: authors)
-                        }
-                        
-                        if let tagsOld = oldObject?.dynamicList("tags") {
-                            var tags = Array<DynamicObject>(tagsOld)
-                            ["First", "Second", "Third"].forEach {
-                                newObject?.setValue(tags.popFirst(), forKey: "tag\($0)")
-                            }
-                            newObject?.dynamicList("tagsMore").append(objectsIn: tags)
-                        }
-                        
-                    }
-                }
-                if oldSchemaVersion < 46 {
-                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
-                        if let lastModified = oldObject?.value(forKey: "lastModified") {
-                            newObject?.setValue(lastModified, forKey: "lastModified")
-                        }
-                    }
-                }
-                if oldSchemaVersion < 80 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
-                        if let bookId = oldObject?.value(forKey: "bookId") as? Int32 {
-                            if let libraryId = oldObject?.value(forKey: "libraryId") as? String,
-                               let libraryName = libraryId.components(separatedBy: " - ").last {
-                                newObject?.setValue("\(libraryName.replacingOccurrences(of: " ", with: "_")) - \(bookId)", forUndefinedKey: "bookId")
-                            } else {
-                                newObject?.setValue("Unknown - \(bookId)", forUndefinedKey: "bookId")
-                            }
-                        } else if let bookId = oldObject?.value(forKey: "bookId") as? String {
-                            let components = bookId.components(separatedBy: " - ")
-                            let newId = components.suffix(2).joined(separator: " - ")
-                            newObject?.setValue(newId, forUndefinedKey: "bookId")
-                        } else {
-                            print("\(oldObject?.value(forKey: "bookId"))")
-                        }
-                    }
-                }
-            }
-        )
-        
-        if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
-            realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
-            if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
-                let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")
-                if FileManager.default.fileExists(atPath: existingRealmURL.path) {
-                    try? FileManager.default.moveItem(at: existingRealmURL, to: realmConf.fileURL!)
-                }
-            }
-        }
-        
-        realm = try! Realm(
-            configuration: realmConf
-        )
         
         
         kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
-        
-        let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
-        serversCached.forEach { serverRealm in
-            guard serverRealm.baseUrl != nil else { return }
-            let calibreServer = CalibreServer(
-                name: serverRealm.name ?? serverRealm.baseUrl!,
-                baseUrl: serverRealm.baseUrl!,
-                hasPublicUrl: serverRealm.hasPublicUrl,
-                publicUrl: serverRealm.publicUrl ?? "",
-                hasAuth: serverRealm.hasAuth,
-                username: serverRealm.username ?? "",
-                password: serverRealm.password ?? "",
-                defaultLibrary: serverRealm.defaultLibrary ?? "",
-                lastLibrary: serverRealm.lastLibrary ?? ""
-            )
-            calibreServers[calibreServer.id] = calibreServer
-            
-            if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
-                if let url = URL(string: calibreServer.baseUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
-                if let url = URL(string: calibreServer.publicUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
-            }
-        }
-        
-        populateLibraries()
-        
-        populateBookShelf()
-        
-        populateLocalLibraryBooks()
         
         switch UIDevice.current.userInterfaceIdiom {
             case .phone:
@@ -414,14 +276,6 @@ final class ModelData: ObservableObject {
                     NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: true))
                 }
             })
-        
-        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
-        }
-        
-        cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
         
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
@@ -491,6 +345,184 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
+        ModelData.RealmSchemaVersion = UInt64(resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1") ?? 1
+        realmConf = Realm.Configuration(
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
+                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
+                        //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")
+                        if let publicUrl = oldObject!["publicUrl"] as? String {
+                            newObject!["hasPublicUrl"] = publicUrl.count > 0
+                        }
+                        if let username = oldObject!["username"] as? String, let password = oldObject!["password"] as? String {
+                            newObject!["hasAuth"] = username.count > 0 && password.count > 0
+                        }
+                    }
+                }
+                if oldSchemaVersion < 44 {  //authos to first/second/more, tags to first/second/third/more
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
+                        if let authorsOld = oldObject?.dynamicList("authors") {
+                            var authors = Array<DynamicObject>(authorsOld)
+                            ["First", "Second", "Third"].forEach {
+                                newObject?.setValue(authors.popFirst(), forKey: "author\($0)")
+                                
+                            }
+                            newObject?.dynamicList("authorsMore").append(objectsIn: authors)
+                        }
+                        
+                        if let tagsOld = oldObject?.dynamicList("tags") {
+                            var tags = Array<DynamicObject>(tagsOld)
+                            ["First", "Second", "Third"].forEach {
+                                newObject?.setValue(tags.popFirst(), forKey: "tag\($0)")
+                            }
+                            newObject?.dynamicList("tagsMore").append(objectsIn: tags)
+                        }
+                        
+                    }
+                }
+                if oldSchemaVersion < 46 {
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
+                        if let lastModified = oldObject?.value(forKey: "lastModified") {
+                            newObject?.setValue(lastModified, forKey: "lastModified")
+                        }
+                    }
+                }
+                if oldSchemaVersion < 80 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
+                        if let bookId = oldObject?.value(forKey: "bookId") as? Int32 {
+                            if let libraryId = oldObject?.value(forKey: "libraryId") as? String,
+                               let libraryName = libraryId.components(separatedBy: " - ").last {
+                                newObject?.setValue("\(libraryName.replacingOccurrences(of: " ", with: "_")) - \(bookId)", forUndefinedKey: "bookId")
+                            } else {
+                                newObject?.setValue("Unknown - \(bookId)", forUndefinedKey: "bookId")
+                            }
+                        } else if let bookId = oldObject?.value(forKey: "bookId") as? String {
+                            let components = bookId.components(separatedBy: " - ")
+                            let newId = components.suffix(2).joined(separator: " - ")
+                            newObject?.setValue(newId, forUndefinedKey: "bookId")
+                        } else {
+                            print("\(oldObject?.value(forKey: "bookId"))")
+                        }
+                    }
+                }
+                
+                if oldSchemaVersion < 90 {
+                    /**
+                     migrate to UUID based server id
+                     1. create new objects with valid UUID, remove old objects,
+                     */
+                    var servers = [UUID: (baseUrl: String, username: String?)]()
+                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
+                        guard let oldObject = oldObject, let newObject = newObject else { return }
+                        guard let baseUrl = oldObject["baseUrl"] as? String else { return }
+                        
+//                        if let newObject = newObject {
+//                            migration.delete(newObject)
+//                        }
+                        
+                        let serverUUID = baseUrl.hasPrefix(".") ? CalibreServer.LocalServerUUID : .init()
+//                        let uuidObject = oldObject.copy()
+                        newObject["primaryKey"] = serverUUID.uuidString
+//                        migration.create(CalibreServerRealm.className(), value: uuidObject)
+                        print("\(#function) oldObject=\(oldObject) newObject=\(newObject)")
+                        
+                        servers[serverUUID] = (baseUrl: baseUrl, username: oldObject["username"] as? String)
+                    }
+                    
+                    var libraries = [String: (serverUUID: UUID, baseUrl: String?, username: String?, key: String?, name: String?)]()
+                    migration.enumerateObjects(ofType: CalibreLibraryRealm.className()) { oldObject, newObject in
+                        guard let oldObject = oldObject, let newObject = newObject else { return }
+                        guard let serverUUID = servers.first(where: {
+                            $1.baseUrl == (oldObject["serverUrl"] as? String) && $1.username == (oldObject["serverUsername"] as? String)
+                        })?.key else { return }
+                        
+                        let primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID.uuidString, libraryName: (oldObject["name"] as? String) ?? "Calibre Library")
+                        
+                        newObject["serverUUID"] = serverUUID.uuidString
+                        newObject["primaryKey"] = primaryKey
+                        print("\(#function) primaryKey=\(primaryKey) oldObject=\(oldObject) newObject=\(newObject)")
+                        
+                        libraries[primaryKey] = (
+                            serverUUID: serverUUID,
+                            baseUrl: oldObject["serverUrl"] as? String,
+                            username: oldObject["serverUsername"] as? String,
+                            key: oldObject["key"] as? String,
+                            name: oldObject["name"] as? String
+                        )
+                    }
+                    
+                    var count = 0
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldObject, newObject in
+                        guard let oldObject = oldObject, let newObject = newObject else { return }
+                        
+                        guard let libraryInfo = libraries.first(where: {
+                            $1.baseUrl == (oldObject["serverUrl"] as? String)
+                            && $1.username == (oldObject["serverUsername"] as? String)
+                            && $1.key != nil
+                            && $1.name == (oldObject["libraryName"] as? String)
+                        })?.value else { return }
+                        
+                        let primaryKey = CalibreBookRealm.PrimaryKey(
+                            serverUUID: libraryInfo.serverUUID.uuidString,
+                            libraryName: (oldObject["libraryName"] as? String) ?? "Calibre Library",
+                            id: (oldObject["id"] as! Int32).description
+                        )
+                                                
+                        newObject["serverUUID"] = libraryInfo.serverUUID.uuidString
+                        newObject["primaryKey"] = primaryKey
+                        count += 1
+                        
+                        print("\(#function) count=\(count) oldKey=\(oldObject["primaryKey"]!) newKey=\(newObject["primaryKey"]!)")
+                        
+                        if count % 1000 == 0 {
+                            statusHandler("Progress \(count)")
+                        }
+                    }
+                    
+//                    fatalError("TODO")
+                    statusHandler("Finalizing...")
+                }
+            }
+        )
+        
+        if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+            realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
+            if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+                let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")
+                if FileManager.default.fileExists(atPath: existingRealmURL.path) {
+                    try? FileManager.default.moveItem(at: existingRealmURL, to: realmConf.fileURL!)
+                }
+            }
+        }
+        
+        let _ = try Realm(configuration: realmConf)
+        realmConf.migrationBlock = nil
+    }
+    
+    func initializeDatabase() {
+        realm = try! Realm(
+            configuration: realmConf
+        )
+        
+        populateServers()
+        
+        populateLibraries()
+        
+        populateBookShelf()
+        
+        populateLocalLibraryBooks()
+        
+        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
+        }
+        
+        cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+    }
+    
     func importCustomFonts(urls: [URL]) -> [CFArray]? {
         guard let documentDirectory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
         else { return nil }
@@ -543,14 +575,20 @@ final class ModelData: ObservableObject {
         
         booksInShelfRealm.forEach {
             // print(bookRealm)
-            guard let server = calibreServers[CalibreServer(name: "", baseUrl: $0.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: $0.serverUsername?.count ?? 0 > 0, username: $0.serverUsername!, password: "").id] else {
-                print("ERROR booksInShelfRealm missing server \($0)")
-                return
-            }
-            guard let library = calibreLibraries[CalibreLibrary(server: server, key: "", name: $0.libraryName!).id] else {
-                print("ERROR booksInShelfRealm missing library \($0)")
-                return
-            }
+            guard let serverUUIDString = $0.serverUUID,
+                  let server = calibreServers[serverUUIDString],
+                  let libraryName = $0.libraryName,
+                  let library = calibreLibraries[CalibreLibrary(server: server, key: "", name: libraryName).id]
+            else { return }
+            
+//            guard let server = calibreServers[CalibreServer(name: "", baseUrl: $0.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: $0.serverUsername?.count ?? 0 > 0, username: $0.serverUsername!, password: "").id] else {
+//                print("ERROR booksInShelfRealm missing server \($0)")
+//                return
+//            }
+//            guard  else {
+//                print("ERROR booksInShelfRealm missing library \($0)")
+//                return
+//            }
             
             var book = self.convert(library: library, bookRealm: $0)
             
@@ -585,12 +623,80 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func populateServers() {
+        let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
+        serversCached.forEach { serverRealm in
+            guard serverRealm.baseUrl != nil else { return }
+            guard let uuidString = serverRealm.primaryKey,
+                  let uuid = UUID(uuidString: uuidString)
+            else { return }
+            
+            let calibreServer = CalibreServer(
+                uuid: uuid,
+                name: serverRealm.name ?? serverRealm.baseUrl!,
+                baseUrl: serverRealm.baseUrl!,
+                hasPublicUrl: serverRealm.hasPublicUrl,
+                publicUrl: serverRealm.publicUrl ?? "",
+                hasAuth: serverRealm.hasAuth,
+                username: serverRealm.username ?? "",
+                password: serverRealm.password ?? "",
+                defaultLibrary: serverRealm.defaultLibrary ?? "",
+                lastLibrary: serverRealm.lastLibrary ?? ""
+            )
+            calibreServers[calibreServer.id] = calibreServer
+            
+            if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
+                if let url = URL(string: calibreServer.baseUrl), let host = url.host, let port = url.port {
+                    var authMethod = NSURLAuthenticationMethodDefault
+                    if url.scheme == "http" {
+                        authMethod = NSURLAuthenticationMethodHTTPDigest
+                    }
+                    if url.scheme == "https" {
+                        authMethod = NSURLAuthenticationMethodHTTPBasic
+                    }
+                    let protectionSpace = URLProtectionSpace.init(host: host,
+                                                                  port: port,
+                                                                  protocol: url.scheme,
+                                                                  realm: "calibre",
+                                                                  authenticationMethod: authMethod)
+                    let userCredential = URLCredential(user: calibreServer.username,
+                                                       password: calibreServer.password,
+                                                       persistence: .permanent)
+                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+                }
+                if let url = URL(string: calibreServer.publicUrl), let host = url.host, let port = url.port {
+                    var authMethod = NSURLAuthenticationMethodDefault
+                    if url.scheme == "http" {
+                        authMethod = NSURLAuthenticationMethodHTTPDigest
+                    }
+                    if url.scheme == "https" {
+                        authMethod = NSURLAuthenticationMethodHTTPBasic
+                    }
+                    let protectionSpace = URLProtectionSpace.init(host: host,
+                                                                  port: port,
+                                                                  protocol: url.scheme,
+                                                                  realm: "calibre",
+                                                                  authenticationMethod: authMethod)
+                    let userCredential = URLCredential(user: calibreServer.username,
+                                                       password: calibreServer.password,
+                                                       persistence: .permanent)
+                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+                }
+            }
+        }
+    }
+    
     func populateLibraries() {
         let librariesCached = realm.objects(CalibreLibraryRealm.self)
 
         librariesCached.forEach { libraryRealm in
-            guard let calibreServer = calibreServers[CalibreServer(name: "", baseUrl: libraryRealm.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: libraryRealm.serverUsername?.count ?? 0 > 0, username: libraryRealm.serverUsername!, password: "").id] else {
-                print("Unknown Server: \(libraryRealm)")
+//            guard let calibreServer = calibreServers[CalibreServer(name: "", baseUrl: libraryRealm.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: libraryRealm.serverUsername?.count ?? 0 > 0, username: libraryRealm.serverUsername!, password: "").id] else {
+//                print("Unknown Server: \(libraryRealm)")
+//                return
+//            }
+            guard let serverUUIDString = libraryRealm.serverUUID,
+                  let calibreServer = calibreServers[serverUUIDString]
+            else {
                 return
             }
             let calibreLibrary = CalibreLibrary(
@@ -636,7 +742,7 @@ final class ModelData: ObservableObject {
             return
         }
         
-        let tmpServer = CalibreServer(name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         documentServer = calibreServers[tmpServer.id]
         if documentServer == nil || documentServer?.name != tmpServer.name {
             calibreServers[tmpServer.id] = tmpServer
@@ -885,18 +991,20 @@ final class ModelData: ObservableObject {
     }
     
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-        let serverId = { () -> String in
-            let serverUrl = bookRealm.serverUrl ?? "."
-            if let username = bookRealm.serverUsername,
-               username.isEmpty == false {
-                return "\(username) @ \(serverUrl)"
-            } else {
-                return serverUrl
-            }
-        }()
-        guard let libraryName = bookRealm.libraryName else { return nil }
-        let libraryId = "\(serverId) - \(libraryName)"
-        guard let library = calibreLibraries[libraryId] else { return nil }
+//        let serverId = { () -> String in
+//            let serverUrl = bookRealm.serverUrl ?? "."
+//            if let username = bookRealm.serverUsername,
+//               username.isEmpty == false {
+//                return "\(username) @ \(serverUrl)"
+//            } else {
+//                return serverUrl
+//            }
+//        }()
+        guard let serverUUID = bookRealm.serverUUID,
+              let server = calibreServers[serverUUID] else { return nil }
+        
+        guard let libraryName = bookRealm.libraryName,
+              let library = calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] else { return nil }
         
         return convert(library: library, bookRealm: bookRealm)
     }
@@ -1010,8 +1118,8 @@ final class ModelData: ObservableObject {
         let libraryRealm = CalibreLibraryRealm()
         libraryRealm.key = library.key
         libraryRealm.name = library.name
-        libraryRealm.serverUrl = library.server.baseUrl
-        libraryRealm.serverUsername = library.server.username
+//        libraryRealm.serverUrl = library.server.baseUrl
+//        libraryRealm.serverUsername = library.server.username
         libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
         libraryRealm.hidden = library.hidden
@@ -1064,21 +1172,22 @@ final class ModelData: ObservableObject {
     }
     
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
-        return realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-                        NSNumber(value: book.id),
-                        book.library.server.baseUrl,
-                        book.library.server.username,
-                        book.library.name
-            )
-        ).first
+//        return realm.objects(CalibreBookRealm.self).filter(
+//            NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
+//                        NSNumber(value: book.id),
+//                        book.library.server.baseUrl,
+//                        book.library.server.username,
+//                        book.library.name
+//            )
+//        ).first
+        
+        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
     }
 
     func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Realm) -> Int {
         return realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-                        library.server.baseUrl,
-                        library.server.username,
+            NSPredicate(format: "serverUUID = %@ AND libraryName = %@",
+                        library.server.uuid.uuidString,
                         library.name
             )
         ).count
@@ -1092,17 +1201,7 @@ final class ModelData: ObservableObject {
     }
     
     func removeFromRealm(book: CalibreBook) {
-        let bookRealm = CalibreBookRealm()
-        bookRealm.id = book.id
-        bookRealm.serverUrl = book.library.server.baseUrl
-        bookRealm.serverUsername = book.library.server.username
-        bookRealm.libraryName = book.library.name
-        
-        let objects = realm.objects(CalibreBookRealm.self).filter( "primaryKey = '\(bookRealm.primaryKey!)'" )
-        
-        try? realm.write {
-            realm.delete(objects)
-        }
+        removeFromRealm(for: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
     }
     
     func removeFromRealm(for primaryKey: String) {
@@ -1573,12 +1672,13 @@ final class ModelData: ObservableObject {
         }
         
         //remove library info
-        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
         do {
-            var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
-            ).prefix(256).map{ $0 }
-            while booksCached.count > 0 {
+            let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name)
+            var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self)
+                .filter(predicate)
+                .prefix(256)
+                .map{ $0 }
+            while booksCached.isEmpty == false {
                 while self.librarySyncStatus[libraryId]?.isSync == true || self.librarySyncStatus[libraryId]?.isUpd == true {
                     Thread.sleep(forTimeInterval: 0.1)
                 }
@@ -1586,9 +1686,10 @@ final class ModelData: ObservableObject {
                 try realm.write {
                     realm.delete(booksCached)
                 }
-                booksCached = realm.objects(CalibreBookRealm.self).filter(
-                    NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
-                ).prefix(256).map{ $0 }
+                booksCached = realm.objects(CalibreBookRealm.self)
+                    .filter(predicate)
+                    .prefix(256)
+                    .map{ $0 }
             }
         } catch {
             return false
@@ -1626,11 +1727,8 @@ final class ModelData: ObservableObject {
             }
         }
         do {
-            let serverLibraryRealms = realm.objects(CalibreLibraryRealm.self).filter(
-                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@",
-                            server.baseUrl,
-                            server.username
-                ))
+            let serverLibraryRealms = realm.objects(CalibreLibraryRealm.self)
+                .filter("serverUUID = %@", server.uuid.uuidString)
             try realm.write {
                 realm.delete(serverLibraryRealms)
             }
@@ -1657,6 +1755,48 @@ final class ModelData: ObservableObject {
         }
         
         return true
+    }
+    
+    func removeDeleteBooksFromServer(server: CalibreServer) {
+        librarySyncStatus.filter {
+             $0.value.library.server.id == server.id && $0.value.del.count > 0
+        }.forEach { lss in
+            self.librarySyncStatus[lss.key]?.isSync = true
+            var progress = 0
+            let total = lss.value.del.count
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let realm = try? Realm(configuration: self.realmConf) else { return }
+                
+                try? realm.write {
+                    lss.value.del.forEach { id in
+                        if progress % 100 == 0 {
+                            DispatchQueue.main.async {
+                                self.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
+                            }
+                        }
+                        
+                        let primaryKey = CalibreBookRealm.PrimaryKey(
+                            serverUUID: lss.value.library.server.uuid.uuidString,
+                            libraryName: lss.value.library.name,
+                            id: id.description)
+                        
+                        if let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) {
+                            realm.delete(object)
+                        }
+                        progress += 1
+                        
+                    }
+                }
+                
+                DispatchQueue.main.async {
+                    self.librarySyncStatus[lss.key]?.del.removeAll()
+                    self.librarySyncStatus[lss.key]?.isSync = false
+                    self.librarySyncStatus[lss.key]?.msg = nil
+                }
+            }
+        }
+        
+        probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
     }
     
     func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, disableAutoThreshold: Int = 0) {
@@ -1824,11 +1964,14 @@ final class ModelData: ObservableObject {
                               return
                           }
                     
+                    let serverUUID = result.library.server.uuid.uuidString
+                    let libraryName = result.library.name
+                    
                     try? realm.write {
                         result.books.forEach { id in
                             guard let obj = realm.object(
                                 ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)) else { return }
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: id)) else { return }
                             guard let entryOptional = entries[id],
                                   let entry = entryOptional,
                                   let root = json[id] as? NSDictionary else {
@@ -2003,12 +2146,12 @@ final class ModelData: ObservableObject {
             var filter = ""     //  "last_modified:>2022-02-20T00:00:00.000000+00:00"
             if incremental,
                let realm = try? Realm(configuration: self.realmConf),
-               let libraryRealm = realm.objects(CalibreLibraryRealm.self).filter(
-                NSPredicate(format: "serverUrl = %@ AND serverUsername = %@ AND name = %@",
-                            customColumnResult.library.server.baseUrl,
-                            customColumnResult.library.server.username,
-                            customColumnResult.library.name
-                )).first {
+               let libraryRealm = realm.object(
+                ofType: CalibreLibraryRealm.self,
+                forPrimaryKey: CalibreLibraryRealm.PrimaryKey(
+                    serverUUID: customColumnResult.library.server.uuid.uuidString,
+                    libraryName: customColumnResult.library.name)
+               ) {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
                 formatter.timeZone = .current
@@ -2046,6 +2189,8 @@ final class ModelData: ObservableObject {
     
     func syncLibrariesSinkValue(results: CalibreSyncLibraryResult) {
         var library = results.library
+        let serverUUID = library.server.uuid.uuidString
+        
         print("\(#function) receiveValue \(library.id) count=\(results.list.book_ids.count)")
         
         var isError = false
@@ -2070,15 +2215,13 @@ final class ModelData: ObservableObject {
             return
         }
         
-        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
-        
         defer {
             let objects = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
+                "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name
             )
             bookCount = objects.count
             
-            let objectsNeedUpdate = objects.filter("serverUrl == nil OR lastSynced < lastModified")
+            let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
             bookNeedUpdateCount = objectsNeedUpdate.count
             
             DispatchQueue.main.async {
@@ -2126,7 +2269,7 @@ final class ModelData: ObservableObject {
                         guard let lastModifiedStr = results.list.data.last_modified[id.s]?.v,
                               let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return }
                         realm.create(CalibreBookRealm.self, value: [
-                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: id.s),
+                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: id.s),
                             "lastModified": lastModified,
                             "id": id.i
                         ], update: .modified)
@@ -2139,7 +2282,7 @@ final class ModelData: ObservableObject {
         }
         defer {
             let objects = realm.objects(CalibreBookRealm.self).filter(
-                NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey)
+                "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name
             )
             if writeSucc == true, results.isIncremental == false {
                 bookDeleted = objects.filter {
@@ -2176,10 +2319,8 @@ final class ModelData: ObservableObject {
             self.librarySyncStatus[library.id]?.isUpd = true
         }
         
-        let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
-        
         let chunk = realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "( serverUrl == nil OR lastSynced < lastModified ) AND primaryKey BEGINSWITH %@", partialPrimaryKey)
+            "lastSynced < lastModified AND serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name
         )
         .sorted(byKeyPath: "lastModified", ascending: false)
         .map { $0.id }
@@ -2212,7 +2353,8 @@ final class ModelData: ObservableObject {
             
             let decoder = JSONDecoder()
             guard let realm = try? Realm(configuration: self.realmConf) else { return }
-
+            let serverUUID = result.library.server.uuid.uuidString
+            let libraryName = result.library.name
             do {
                 guard let data = result.data else {
                     print("getBookMetadataCancellable nildata \(result.library.name)")
@@ -2225,7 +2367,8 @@ final class ModelData: ObservableObject {
                     result.books.forEach { id in
                         guard let obj = realm.object(
                                 ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUsername: result.library.server.username, serverUrl: result.library.server.baseUrl, libraryName: result.library.name, id: id)) else { return }
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: id)
+                        ) else { return }
                         guard let entryOptional = entries[id],
                               let entry = entryOptional,
                               let root = json?[id] as? NSDictionary else {
@@ -2521,21 +2664,31 @@ final class ModelData: ObservableObject {
     func generateShelfBookModel(limit: Int = 100, earlyCut: Bool = false) -> [ShelfModelSection] {
         var shelfModelSection = [ShelfModelSection]()
 
-        let discoverableLibraries = self.calibreLibraries.filter { $1.discoverable && !$1.hidden }.map {
-            CalibreBookRealm.PrimaryKey(serverUsername: $1.server.username, serverUrl: $1.server.baseUrl, libraryName: $1.name, id: "")
-        }
+        let discoverableLibraries = self.calibreLibraries.filter { $1.discoverable && !$1.hidden }
+//            .map {
+//            CalibreBookRealm.PrimaryKey(serverUUID: $1.server.uuid.uuidString, libraryName: $1.name, id: "")
+//        }
+        
+        let discoverableLibrariesFilter = NSCompoundPredicate(orPredicateWithSubpredicates: discoverableLibraries.map {
+            NSPredicate(format: "serverUUID = %@ AND libraryName = %@", $1.server.uuid.uuidString, $1.name)
+        })
         
         guard discoverableLibraries.count > 0 else { return [] }
         
         guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
         
-        let discoverableLibrariesFilter = Array(repeating: "primaryKey BEGINSWITH %@", count: discoverableLibraries.count).joined(separator: " OR ")
-        var baselinePredicate = NSPredicate(format: "libraryName != nil AND inShelf == false")
-        if discoverableLibraries.count > 1 {
-            baselinePredicate = NSPredicate(format: "libraryName != nil AND ( \(discoverableLibrariesFilter) ) AND inShelf == false", argumentArray: discoverableLibraries)
-        } else {
-            baselinePredicate = NSPredicate(format: "libraryName != nil AND \(discoverableLibrariesFilter) AND inShelf == false AND libraryName != nil", argumentArray: discoverableLibraries)
-        }
+//        let discoverableLibrariesFilter = Array(repeating: "primaryKey BEGINSWITH %@", count: discoverableLibraries.count).joined(separator: " OR ")
+        
+        let baselinePredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "inShelf == false"),
+            discoverableLibrariesFilter
+        ])
+//        var baselinePredicate = NSPredicate(format: "libraryName != nil AND inShelf == false")
+//        if discoverableLibraries.count > 1 {
+//            baselinePredicate = NSPredicate(format: "libraryName != nil AND ( \(discoverableLibrariesFilter) ) AND inShelf == false", argumentArray: discoverableLibraries)
+//        } else {
+//            baselinePredicate = NSPredicate(format: "libraryName != nil AND \(discoverableLibrariesFilter) AND inShelf == false AND libraryName != nil", argumentArray: discoverableLibraries)
+//        }
         
         let baselineObjects = realm.objects(CalibreBookRealm.self)
             .filter(baselinePredicate)
@@ -2714,9 +2867,8 @@ final class ModelData: ObservableObject {
             .sorted { $0.value.name < $1.value.name }
             .forEach { id, library in
             let sectionId = "\(library)-\(id)"
-            let partialPrimaryKey = CalibreBookRealm.PrimaryKey(serverUsername: library.server.username, serverUrl: library.server.baseUrl, libraryName: library.name, id: "")
             let books: [ShelfModel] = baselineObjects
-                .filter(NSPredicate(format: "primaryKey BEGINSWITH %@", partialPrimaryKey))
+                .filter("serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name)
                 .sorted(byKeyPath: "lastModified", ascending: false)
                 .prefix(limit)
                 .compactMap {
