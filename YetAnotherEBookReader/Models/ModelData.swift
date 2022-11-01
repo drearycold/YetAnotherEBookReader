@@ -462,7 +462,10 @@ final class ModelData: ObservableObject {
                             && $1.username == (oldObject["serverUsername"] as? String)
                             && $1.key != nil
                             && $1.name == (oldObject["libraryName"] as? String)
-                        })?.value else { return }
+                        })?.value else {
+                            migration.delete(newObject)
+                            return
+                        }
                         
                         let primaryKey = CalibreBookRealm.PrimaryKey(
                             serverUUID: libraryInfo.serverUUID.uuidString,
@@ -484,6 +487,9 @@ final class ModelData: ObservableObject {
 //                    fatalError("TODO")
                     statusHandler("Finalizing...")
                 }
+            },
+            shouldCompactOnLaunch: { fileSize, dataSize in
+                return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize
             }
         )
         
@@ -1001,9 +1007,7 @@ final class ModelData: ObservableObject {
 //            }
 //        }()
         guard let serverUUID = bookRealm.serverUUID,
-              let server = calibreServers[serverUUID] else { return nil }
-        
-        guard let libraryName = bookRealm.libraryName,
+              let libraryName = bookRealm.libraryName,
               let library = calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] else { return nil }
         
         return convert(library: library, bookRealm: bookRealm)

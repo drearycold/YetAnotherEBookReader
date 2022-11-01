@@ -153,18 +153,9 @@ class CalibreBookRealm: Object {
 //        }
 //    }
     
-    @objc dynamic var serverUUID: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
+    @objc dynamic var serverUUID: String?
     
-    
-    @objc dynamic var libraryName: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
+    @objc dynamic var libraryName: String?
     
     @objc dynamic var id: Int32 = 0 {
         didSet {
@@ -275,7 +266,7 @@ class CalibreBookRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: libraryName ?? "-", id: id.description)
+        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: id.description)
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
@@ -354,10 +345,10 @@ extension CalibreBook: Persistable {
     
     public func managedObject() -> CalibreBookRealm {
         let bookRealm = CalibreBookRealm()
-        bookRealm.id = self.id
-//        bookRealm.serverUrl = self.library.server.baseUrl
-//        bookRealm.serverUsername = self.library.server.username
+        bookRealm.serverUUID = self.library.server.uuid.uuidString
         bookRealm.libraryName = self.library.name
+        bookRealm.id = self.id
+
         bookRealm.title = self.title
 
         var authors = self.authors

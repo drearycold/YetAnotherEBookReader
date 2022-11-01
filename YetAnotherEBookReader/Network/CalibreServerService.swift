@@ -425,7 +425,7 @@ struct CalibreServerService {
         
 //        bookRealm.serverUrl = library.server.baseUrl
 //        bookRealm.serverUsername = library.server.username
-        bookRealm.libraryName = library.name
+//        bookRealm.libraryName = library.name
         
         bookRealm.title = entry.title
         bookRealm.publisher = entry.publisher ?? ""

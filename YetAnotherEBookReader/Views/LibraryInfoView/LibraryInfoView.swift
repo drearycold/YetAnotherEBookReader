@@ -133,7 +133,7 @@ struct LibraryInfoView: View {
                             }.disabled(selectedBookIds.isEmpty)
                         }
                     }
-                    ToolbarItem(placement: .confirmationAction) {
+                    ToolbarItem(placement: .navigationBarTrailing) {
                         if editMode == .inactive {
                             filterMenuView()
                         } else {
@@ -221,7 +221,7 @@ struct LibraryInfoView: View {
             booksListCancellable = modelData.libraryBookListNeedUpdate
                 .receive(on: DispatchQueue.global(qos: .userInitiated))
                 .flatMap { _ -> AnyPublisher<Int, Never> in
-                    updateBooksList()
+                    updateBooksListNew()
                     return Just<Int>(0).setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
                 .receive(on: DispatchQueue.main)
@@ -345,7 +345,7 @@ struct LibraryInfoView: View {
         
         print("\(#function) predicateFormat=\(predicateFormat) \(predicateArgs)")
         
-        let allbooks = realm.objects(CalibreBookRealm.self)
+        let allbooks = realm.objects(CalibreBookRealm.self)//.filter("serverUUID != nil")
         
         var seriesSet = Set<String>(allbooks.map{ $0.series })
         seriesSet.insert("Not in a Series")
@@ -380,6 +380,8 @@ struct LibraryInfoView: View {
                 return "pubDate"
             case .Modified:
                 return "lastModified"
+            case .SeriesIndex:
+                return "seriesIndex"
             }
         }()
         booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
@@ -390,9 +392,134 @@ struct LibraryInfoView: View {
         libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
     }
     
+    func updateBooksListNew() {
+        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
+        
+        booksListRefreshing = true
+        var booksList = [String]()
+        var libraryList = [CalibreLibrary]()
+        var seriesList = [String]()
+        var pageCount = 1
+        defer {
+            DispatchQueue.main.async {
+                self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
+                self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
+                self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
+                self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
+                self.pageCount = pageCount
+                booksListRefreshing = false
+            }
+        }
+        
+        var predicates = [NSPredicate]()
+        let searchTerms = searchString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split { $0.isWhitespace }
+            .map { String($0) }
+        if searchTerms.isEmpty == false {
+            predicates.append(contentsOf:
+                searchTerms.map {
+                    NSCompoundPredicate(orPredicateWithSubpredicates: [
+                        NSPredicate(format: "title CONTAINS[c] %@", $0),
+                        NSPredicate(format: "authorFirst CONTAINS[c] %@", $0),
+                        NSPredicate(format: "authorSecond CONTAINS[c] %@", $0)
+                    ])
+                }
+            )
+        }
+
+        if modelData.filterCriteriaLibraries.isEmpty == false {
+            predicates.append(
+                NSCompoundPredicate(orPredicateWithSubpredicates: modelData.filterCriteriaLibraries.compactMap {
+                    guard let library = modelData.calibreLibraries[$0] else { return nil }
+                    return NSCompoundPredicate(andPredicateWithSubpredicates: [
+                        NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
+                        NSPredicate(format: "libraryName = %@", library.name)
+                    ])
+                })
+            )
+        }
+        
+        if modelData.filterCriteriaSeries.isEmpty == false {
+            predicates.append(
+                NSCompoundPredicate(
+                    orPredicateWithSubpredicates:
+                        modelData.filterCriteriaSeries.map {
+                            NSPredicate(format: "series = %@", $0)
+                        }
+                )
+            )
+        }
+        
+        if modelData.filterCriteriaRating.isEmpty == false {
+            predicates.append(
+                NSCompoundPredicate(
+                    orPredicateWithSubpredicates:
+                        modelData.filterCriteriaRating.map {
+                            NSPredicate(format: "rating = %@", NSNumber(value: $0.count <= 5 ? $0.count * 2 : 0))
+                        }
+                )
+            )
+        }
+        
+        if modelData.filterCriteriaShelved != .none {
+            predicates.append(
+                NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)
+            )
+        }
+        
+        let allbooks = realm.objects(CalibreBookRealm.self)//.filter("serverUUID != nil")
+        
+        var seriesSet = Set<String>(allbooks.map{ $0.series })
+        seriesSet.insert("Not in a Series")
+        seriesSet.remove("")
+        seriesList = seriesSet.sorted { lhs, rhs in
+            if lhs == "Not in a Series" {
+                return false
+            }
+            if rhs == "Not in a Series" {
+                return true
+            }
+            return lhs < rhs
+        }
+        
+        let objects = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+        
+        let count = objects.count
+        
+        pageCount = Int((Double(count) / Double(pageSize)).rounded(.up))
+        
+        guard pageNo*pageSize < count else { return }
+        
+        let sortKeyPath = { () -> String in
+            switch(sortCriteria.by) {
+            case .Title:
+                return "title"
+            case .Added:
+                return "timestamp"
+            case .Publication:
+                return "pubDate"
+            case .Modified:
+                return "lastModified"
+            case .SeriesIndex:
+                return "seriesIndex"
+            }
+        }()
+        booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
+            .compactMap {
+                $0.primaryKey
+            }
+        
+        libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
+    }
+    
+    
     private func getBook(for primaryKey: String) -> CalibreBook? {
         guard let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
-              let book = modelData.convert(bookRealm: obj) else { return nil }
+              let book = modelData.convert(bookRealm: obj)
+        else {
+            return nil
+        }
         return book
     }
     
@@ -752,6 +879,7 @@ enum SortCriteria: String, CaseIterable, Identifiable {
     case Added
     case Publication
     case Modified
+    case SeriesIndex
 }
 
 @available(macCatalyst 14.0, *)

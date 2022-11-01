@@ -98,7 +98,7 @@ struct ReadingPositionHistoryView: View {
                                     destination: ReadingPositionDetailView(
                                         viewModel: ReadingPositionDetailViewModel(
                                             modelData: modelData,
-                                            listModel: _positionViewModel!,
+                                            listModel: viewModel,
                                             position: obj.endPosition!)
                                     )
                                 ) {
