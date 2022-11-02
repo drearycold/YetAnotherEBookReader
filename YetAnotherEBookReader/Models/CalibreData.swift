@@ -1043,6 +1043,7 @@ struct CalibreBooksTask {
     var metadataUrl: URL
     var lastReadPositionUrl: URL
     var annotationsUrl: URL
+    var booksListUrl: URL
     var data: Data? = nil
     var response: URLResponse? = nil
     var lastReadPositionsData: Data? = nil
@@ -1948,6 +1949,30 @@ struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
     var reading_position_prefs: CalibreReadingPositionPrefs? = nil
+}
+
+struct CalibreLibraryBooksResult: Codable {
+    struct SearchResult: Codable {
+        var total_num: Int
+        var sort_order: String
+        var num_books_without_search: Int
+        var offset: Int
+        var num: Int
+        var sort: String
+        var base_url: String
+        var query: String
+        var library_id: String
+        var book_ids: [Int32]
+        var vl: String
+    }
+    
+    struct BookMetadata: Codable {
+        var title: String
+        var authors: [String]
+    }
+    
+    var search_result: SearchResult
+    var metadata: [String: BookMetadata]
 }
 
 extension Array {

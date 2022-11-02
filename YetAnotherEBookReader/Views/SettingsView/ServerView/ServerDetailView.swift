@@ -84,6 +84,8 @@ struct ServerDetailView: View {
                     let deletedLibraryIds = indexSet.map { libraryList[$0] }
                     deletedLibraryIds.forEach { libraryId in
                         modelData.hideLibrary(libraryId: libraryId)
+                        guard modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
+                        
                         modelData.librarySyncStatus[libraryId]?.isSync = true
                         updater += 1
                         DispatchQueue.global(qos: .utility).async {

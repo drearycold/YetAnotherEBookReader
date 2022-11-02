@@ -44,6 +44,7 @@ final class ModelData: ObservableObject {
     var formatList = [Format]()
     
     @Published var searchString = ""
+    @Published var sortCriteria = (by: SortCriteria.Modified, ascending: false)
     @Published var filterCriteriaRating = Set<String>()
     @Published var filterCriteriaFormat = Set<String>()
     @Published var filterCriteriaIdentifier = Set<String>()
@@ -53,6 +54,8 @@ final class ModelData: ObservableObject {
     @Published var filterCriteriaLibraries = Set<String>()
     
     @Published var filteredBookList = [Int32]()
+    
+    var booksListResult = [String: CalibreBook]()
     
     @Published var booksInShelf = [String: CalibreBook]()
     let recentShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
@@ -139,6 +142,10 @@ final class ModelData: ObservableObject {
             if readingBook == nil,
                let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
                 readingBook = convert(bookRealm: bookRealm)
+            }
+            
+            if readingBook == nil {
+                readingBook = booksListResult[readingBookInShelfId]
             }
 //            if let readingBook = readingBook {
 //                calibreServerService.getMetadata(oldbook: readingBook, completion: { newBook in
@@ -1122,18 +1129,19 @@ final class ModelData: ObservableObject {
         let libraryRealm = CalibreLibraryRealm()
         libraryRealm.key = library.key
         libraryRealm.name = library.name
-//        libraryRealm.serverUrl = library.server.baseUrl
-//        libraryRealm.serverUsername = library.server.username
-        libraryRealm.autoUpdate = library.autoUpdate
-        libraryRealm.discoverable = library.discoverable
-        libraryRealm.hidden = library.hidden
-        libraryRealm.lastModified = library.lastModified
+        libraryRealm.serverUUID = library.server.uuid.uuidString
+        
+        libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
+        
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
                 libraryRealm.pluginDSReaderHelper = plugin.managedObject()
             }
             if let plugin = $0.value as? CalibreLibraryReadingPosition {
                 libraryRealm.pluginReadingPosition = plugin.managedObject()
+            }
+            if let plugin = $0.value as? CalibreLibraryDictionaryViewer {
+                libraryRealm.pluginDictionaryViewer = plugin.managedObject()
             }
             if let plugin = $0.value as? CalibreLibraryGoodreadsSync {
                 libraryRealm.pluginGoodreadsSync = plugin.managedObject()
@@ -1142,7 +1150,11 @@ final class ModelData: ObservableObject {
                 libraryRealm.pluginCountPages = plugin.managedObject()
             }
         }
-        libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
+        libraryRealm.autoUpdate = library.autoUpdate
+        libraryRealm.discoverable = library.discoverable
+        libraryRealm.hidden = library.hidden
+        libraryRealm.lastModified = library.lastModified
+        
         try realm.write {
             realm.add(libraryRealm, update: .all)
         }
@@ -1165,7 +1177,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateBook(book: CalibreBook) {
-        updateBookRealm(book: book, realm: realm)
+        updateBookRealm(book: book, realm: (try? Realm(configuration: self.realmConf)) ?? self.realm)
         
         if readingBook?.inShelfId == book.inShelfId {
             readingBook = book
@@ -1683,9 +1695,6 @@ final class ModelData: ObservableObject {
                 .prefix(256)
                 .map{ $0 }
             while booksCached.isEmpty == false {
-                while self.librarySyncStatus[libraryId]?.isSync == true || self.librarySyncStatus[libraryId]?.isUpd == true {
-                    Thread.sleep(forTimeInterval: 0.1)
-                }
                 print("\(#function) will delete \(booksCached.count) entries of \(libraryId)")
                 try realm.write {
                     realm.delete(booksCached)

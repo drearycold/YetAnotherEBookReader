@@ -24,9 +24,8 @@ struct LibraryInfoView: View {
     @State private var formatList = [String]()
     @State private var identifierList = [String]()
     
-    @State private var sortCriteria = (by: SortCriteria.Modified, ascending: false)
-    
     @State private var booksListRefreshing = false
+    @State private var booksListQuerying = false
     @State private var searchString = ""
     @State private var selectedBookIds = Set<String>()
     @State private var editMode: EditMode = .inactive
@@ -41,6 +40,8 @@ struct LibraryInfoView: View {
     
     @State private var bookUpdateCancellable: AnyCancellable?
     @State private var booksListCancellable: AnyCancellable?
+    @State private var booksListQueryCancellable: AnyCancellable?
+    
     @State private var dismissAllCancellable: AnyCancellable?
 
     private var errBook = CalibreBook(id: -1, library: CalibreLibrary(server: CalibreServer(uuid: .init(), name: "Error", baseUrl: "Error", hasPublicUrl: false, publicUrl: "Error", hasAuth: false, username: "Error", password: "Error"), key: "Error", name: "Error"))
@@ -198,7 +199,7 @@ struct LibraryInfoView: View {
                 }.padding(4)    //bottom bar
             }
             .padding(4)
-            .navigationTitle("By \(sortCriteria.by.rawValue)")
+            .navigationTitle("By \(modelData.sortCriteria.by.rawValue)")
             .navigationBarTitleDisplayMode(.automatic)
             .statusBar(hidden: false)
             //                .toolbar {
@@ -370,21 +371,8 @@ struct LibraryInfoView: View {
         
         guard pageNo*pageSize < count else { return }
         
-        let sortKeyPath = { () -> String in
-            switch(sortCriteria.by) {
-            case .Title:
-                return "title"
-            case .Added:
-                return "timestamp"
-            case .Publication:
-                return "pubDate"
-            case .Modified:
-                return "lastModified"
-            case .SeriesIndex:
-                return "seriesIndex"
-            }
-        }()
-        booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
+        let sortKeyPath = modelData.sortCriteria.by.sortKeyPath
+        booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: modelData.sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
             .compactMap {
                 $0.primaryKey
             }
@@ -396,6 +384,7 @@ struct LibraryInfoView: View {
         guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
         
         booksListRefreshing = true
+        booksListQuerying = true
         var booksList = [String]()
         var libraryList = [CalibreLibrary]()
         var seriesList = [String]()
@@ -491,36 +480,68 @@ struct LibraryInfoView: View {
         
         guard pageNo*pageSize < count else { return }
         
-        let sortKeyPath = { () -> String in
-            switch(sortCriteria.by) {
-            case .Title:
-                return "title"
-            case .Added:
-                return "timestamp"
-            case .Publication:
-                return "pubDate"
-            case .Modified:
-                return "lastModified"
-            case .SeriesIndex:
-                return "seriesIndex"
-            }
-        }()
-        booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
+        booksList = objects.sorted(
+            byKeyPath: modelData.sortCriteria.by.sortKeyPath,
+            ascending: modelData.sortCriteria.ascending
+        )[(pageNo*pageSize) ..< min((pageNo+1)*pageSize, count)]
             .compactMap {
                 $0.primaryKey
             }
+        
+        booksListQueryCancellable?.cancel()
+        booksListQueryCancellable = modelData.calibreLibraries.values.filter({
+            $0.hidden == false
+        }).compactMap({
+            modelData.calibreServerService.buildBooksMetadataTask(library: $0, books: [])
+        }).publisher.flatMap { task in
+            modelData.calibreServerService.listLibraryBooks(task: task)
+        }.sink { completion in
+            print("\(#function) completion=\(completion)")
+        } receiveValue: { task in
+            print("\(#function) library=\(task.library.key) task.data=\(task.data?.count)")
+            
+            guard let data = task.data,
+                  let result = try? JSONDecoder().decode(CalibreLibraryBooksResult.self, from: data),
+                  task.library.key == result.search_result.library_id
+            else { return }
+            
+            print("\(#function) library=\(task.library.key) result.num=\(result.search_result.num) result.library_id=\(result.search_result.library_id)")
+            
+            result.metadata.forEach { entry in
+//                CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description)
+                guard let id = Int32(entry.key) else { return }
+                
+                var book = CalibreBook(id: id, library: task.library)
+                book.title = entry.value.title
+                book.authors = entry.value.authors
+                
+                DispatchQueue.main.async {
+                    modelData.booksListResult[book.inShelfId] = book
+                }
+            }
+            let idSet = Set<String>(booksList)
+            let serverUUID = task.library.server.uuid.uuidString
+            DispatchQueue.main.async {
+                self.booksList.append(
+                    contentsOf:
+                        result.search_result.book_ids.map { CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description) }.filter { idSet.contains($0) == false }
+                )
+            }
+        }
         
         libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
     }
     
     
     private func getBook(for primaryKey: String) -> CalibreBook? {
-        guard let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
-              let book = modelData.convert(bookRealm: obj)
-        else {
-            return nil
+        if let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
+           let book = modelData.convert(bookRealm: obj) {
+            return book
+        } else if let book = modelData.booksListResult[primaryKey] {
+            return book
         }
-        return book
+        return nil
+        
     }
     
     @ViewBuilder
@@ -811,17 +832,17 @@ struct LibraryInfoView: View {
         Menu {
             ForEach(SortCriteria.allCases, id: \.self) { sort in
                 Button(action: {
-                    if sortCriteria.by == sort {
-                        sortCriteria.ascending.toggle()
+                    if modelData.sortCriteria.by == sort {
+                        modelData.sortCriteria.ascending.toggle()
                     } else {
-                        sortCriteria.by = sort
-                        sortCriteria.ascending = sort == .Title ? true : false
+                        modelData.sortCriteria.by = sort
+                        modelData.sortCriteria.ascending = sort == .Title ? true : false
                     }
                     NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 }) {
                     HStack {
-                        if sortCriteria.by == sort {
-                            if sortCriteria.ascending {
+                        if modelData.sortCriteria.by == sort {
+                            if modelData.sortCriteria.ascending {
                                 Image(systemName: "arrow.down")
                             } else {
                                 Image(systemName: "arrow.up")
@@ -880,6 +901,36 @@ enum SortCriteria: String, CaseIterable, Identifiable {
     case Publication
     case Modified
     case SeriesIndex
+    
+    var sortKeyPath: String {
+        switch(self) {
+        case .Title:
+            return "title"
+        case .Added:
+            return "timestamp"
+        case .Publication:
+            return "pubDate"
+        case .Modified:
+            return "lastModified"
+        case .SeriesIndex:
+            return "seriesIndex"
+        }
+    }
+    
+    var sortQueryParam: String {
+        switch(self) {
+        case .Title:
+            return "sort"
+        case .Added:
+            return "timestamp"
+        case .Publication:
+            return "pubdate"
+        case .Modified:
+            return "last_modified"
+        case .SeriesIndex:
+            return "series_index"
+        }
+    }
 }
 
 @available(macCatalyst 14.0, *)

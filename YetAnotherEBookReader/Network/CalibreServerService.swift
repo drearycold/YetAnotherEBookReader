@@ -238,7 +238,8 @@ struct CalibreServerService {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
                     modelData.updatingMetadata = false
                     
-                    if updatingMetadataStatus == "Success" {
+                    if updatingMetadataStatus == "Success",
+                       modelData.getBookRealm(forPrimaryKey: bookResult.inShelfId) != nil {
                         modelData.updateBook(book: bookResult)
                     }
                     
@@ -928,12 +929,23 @@ struct CalibreServerService {
             return nil
         }
         
+        var booksListUrlComponents = URLComponents()
+        booksListUrlComponents.path = "interface-data/books-init"
+        booksListUrlComponents.queryItems = []
+        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "library_id", value: library.key))
+        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort", value: [modelData.sortCriteria.by.sortQueryParam, modelData.sortCriteria.ascending ? "asc" : "desc"].joined(separator: ".") ))
+        
+        guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
         return CalibreBooksTask(
             library: library,
             books: bookIds,
             metadataUrl: endpointUrl,
             lastReadPositionUrl: lastReadPositionEndpointUrl,
-            annotationsUrl: annotationsEndpointUrl
+            annotationsUrl: annotationsEndpointUrl,
+            booksListUrl: booksListUrl
         )
     }
     
@@ -980,6 +992,16 @@ struct CalibreServerService {
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.annotationsData = result.data
+                return task
+            }
+            .eraseToAnyPublisher()
+    }
+    
+    func listLibraryBooks(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
+            .map { result -> CalibreBooksTask in
+                var task = task
+                task.data = result.data
                 return task
             }
             .eraseToAnyPublisher()
