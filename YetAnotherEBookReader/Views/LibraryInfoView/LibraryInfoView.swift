@@ -489,42 +489,71 @@ struct LibraryInfoView: View {
             }
         
         booksListQueryCancellable?.cancel()
-        booksListQueryCancellable = modelData.calibreLibraries.values.filter({
+        booksListQueryCancellable =
+        modelData.calibreLibraries.values.filter({
             $0.hidden == false
-        }).compactMap({
+        })
+        .compactMap({
             modelData.calibreServerService.buildBooksMetadataTask(library: $0, books: [])
-        }).publisher.flatMap { task in
+        })
+        .publisher
+        .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
             modelData.calibreServerService.listLibraryBooks(task: task)
-        }.sink { completion in
+        }
+        .compactMap { task -> CalibreBooksTask? in
+            var newTask = modelData.calibreServerService.buildBooksMetadataTask(
+                library: task.library,
+                books: task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }) ?? []
+            )
+            newTask?.ajaxSearchResult = task.ajaxSearchResult
+            return newTask
+        }
+        .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
+            modelData.calibreServerService.getBooksMetadata(task: task)
+        }
+        .sink { completion in
             print("\(#function) completion=\(completion)")
         } receiveValue: { task in
             print("\(#function) library=\(task.library.key) task.data=\(task.data?.count)")
             
-            guard let data = task.data,
-                  let result = try? JSONDecoder().decode(CalibreLibraryBooksResult.self, from: data),
-                  task.library.key == result.search_result.library_id
+            guard let searchResult = task.ajaxSearchResult,
+                  let booksMetadataEntry = task.booksMetadataEntry,
+                  let booksMetadataJSON = task.booksMetadataJSON
             else { return }
             
-            print("\(#function) library=\(task.library.key) result.num=\(result.search_result.num) result.library_id=\(result.search_result.library_id)")
+            print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num) \(booksMetadataEntry.count)")
             
-            result.metadata.forEach { entry in
-//                CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description)
-                guard let id = Int32(entry.key) else { return }
+            let serverUUID = task.library.server.uuid.uuidString
+            let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
+                guard let entry = metadataEntry.value,
+                      let bookId = Int32(metadataEntry.key)
+                else { return nil }
                 
-                var book = CalibreBook(id: id, library: task.library)
-                book.title = entry.value.title
-                book.authors = entry.value.authors
+                let obj = CalibreBookRealm()
+                obj.serverUUID = serverUUID
+                obj.libraryName = task.library.name
+                obj.id = bookId
                 
-                DispatchQueue.main.async {
-                    modelData.booksListResult[book.inShelfId] = book
+                modelData.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: booksMetadataJSON)
+                
+                return obj
+            }
+            
+            DispatchQueue.main.async {
+                try? modelData.searchLibraryResultsRealm?.write{
+                    realmBooks.forEach {
+                        modelData.searchLibraryResultsRealm?.add($0, update: .modified)
+                    }
                 }
             }
+            
             let idSet = Set<String>(booksList)
-            let serverUUID = task.library.server.uuid.uuidString
             DispatchQueue.main.async {
                 self.booksList.append(
                     contentsOf:
-                        result.search_result.book_ids.map { CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description) }.filter { idSet.contains($0) == false }
+                        searchResult.book_ids.map {
+                            CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description)
+                        }.filter { idSet.contains($0) == false }
                 )
             }
         }
@@ -537,7 +566,8 @@ struct LibraryInfoView: View {
         if let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
            let book = modelData.convert(bookRealm: obj) {
             return book
-        } else if let book = modelData.booksListResult[primaryKey] {
+        } else if let obj = modelData.searchLibraryResultsRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+                  let book = modelData.convert(bookRealm: obj) {
             return book
         }
         return nil
@@ -931,6 +961,12 @@ enum SortCriteria: String, CaseIterable, Identifiable {
             return "series_index"
         }
     }
+}
+
+struct LibrarySearchResult {
+    var totalNumber = 0
+    var offset = 0
+    
 }
 
 @available(macCatalyst 14.0, *)

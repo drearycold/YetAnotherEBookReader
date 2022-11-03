@@ -44,6 +44,7 @@ final class ModelData: ObservableObject {
     var formatList = [Format]()
     
     @Published var searchString = ""
+    @Published var searchLibraryResults = [String: LibrarySearchResult]()
     @Published var sortCriteria = (by: SortCriteria.Modified, ascending: false)
     @Published var filterCriteriaRating = Set<String>()
     @Published var filterCriteriaFormat = Set<String>()
@@ -55,8 +56,8 @@ final class ModelData: ObservableObject {
     
     @Published var filteredBookList = [Int32]()
     
-    var booksListResult = [String: CalibreBook]()
-    
+    let searchLibraryResultsRealm = try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
+
     @Published var booksInShelf = [String: CalibreBook]()
     let recentShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
         for: .YABR_RecentShelfBooksRefreshed
@@ -144,8 +145,9 @@ final class ModelData: ObservableObject {
                 readingBook = convert(bookRealm: bookRealm)
             }
             
-            if readingBook == nil {
-                readingBook = booksListResult[readingBookInShelfId]
+            if readingBook == nil,
+               let bookRealm = self.searchLibraryResultsRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
+                readingBook = convert(bookRealm: bookRealm)
             }
 //            if let readingBook = readingBook {
 //                calibreServerService.getMetadata(oldbook: readingBook, completion: { newBook in
@@ -1948,9 +1950,6 @@ final class ModelData: ObservableObject {
             .flatMap { task in
                 self.calibreServerService.getBooksMetadata(task: task)
             }
-//            .flatMap { task in
-//                self.calibreServerService.getLastReadPosition(task: task)
-//            }
             .flatMap { task in
                 self.calibreServerService.getAnnotations(task: task)
             }
@@ -1970,9 +1969,8 @@ final class ModelData: ObservableObject {
                 
                 var updated = 0
                 tasks.forEach { result in
-                    guard let data = result.data,
-                          let entries = try? decoder.decode([String:CalibreBookEntry?].self, from: data),
-                          let json = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
+                    guard let entries = result.booksMetadataEntry,
+                          let json = result.booksMetadataJSON else {
                               print("getBookMetadataCancellable nildata \(result.library.name)")
                               return
                           }

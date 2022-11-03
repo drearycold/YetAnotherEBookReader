@@ -930,10 +930,10 @@ struct CalibreServerService {
         }
         
         var booksListUrlComponents = URLComponents()
-        booksListUrlComponents.path = "interface-data/books-init"
+        booksListUrlComponents.path = "ajax/search/\(library.key)"
         booksListUrlComponents.queryItems = []
-        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "library_id", value: library.key))
-        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort", value: [modelData.sortCriteria.by.sortQueryParam, modelData.sortCriteria.ascending ? "asc" : "desc"].joined(separator: ".") ))
+        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort", value: modelData.sortCriteria.by.sortQueryParam))
+        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort_order", value: modelData.sortCriteria.ascending ? "asc" : "desc"))
         
         guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
             return nil
@@ -972,6 +972,8 @@ struct CalibreServerService {
                 var task = task
                 task.data = result.data
                 task.response = result.response
+                task.booksMetadataEntry = try? JSONDecoder().decode([String:CalibreBookEntry?].self, from: result.data)
+                task.booksMetadataJSON = try? JSONSerialization.jsonObject(with: result.data, options: []) as? NSDictionary
                 return task
             }
             .eraseToAnyPublisher()
@@ -1001,7 +1003,7 @@ struct CalibreServerService {
         return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
-                task.data = result.data
+                task.ajaxSearchResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: result.data)
                 return task
             }
             .eraseToAnyPublisher()

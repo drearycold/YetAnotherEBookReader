@@ -1048,6 +1048,9 @@ struct CalibreBooksTask {
     var response: URLResponse? = nil
     var lastReadPositionsData: Data? = nil
     var annotationsData: Data? = nil
+    var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
+    var booksMetadataJSON: NSDictionary? = nil
+    var ajaxSearchResult: CalibreLibraryBooksResult.SearchResult? = nil
 }
 
 struct CalibreBookFormatMetadataEntry: Codable {
@@ -1960,7 +1963,7 @@ struct CalibreLibraryBooksResult: Codable {
         var num: Int
         var sort: String
         var base_url: String
-        var query: String
+        var query: String?
         var library_id: String
         var book_ids: [Int32]
         var vl: String
