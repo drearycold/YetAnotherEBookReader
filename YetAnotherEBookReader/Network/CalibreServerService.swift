@@ -966,6 +966,10 @@ struct CalibreServerService {
     }
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        guard task.metadataUrl.isHTTP else {
+            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+        }
+        
         return urlSession(server: task.library.server)
             .dataTaskPublisher(for: task.metadataUrl)
             .map { result -> CalibreBooksTask in
@@ -1000,6 +1004,10 @@ struct CalibreServerService {
     }
     
     func listLibraryBooks(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        guard task.booksListUrl.isHTTP else {
+            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+        }
+        
         return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
             .map { result -> CalibreBooksTask in
                 var task = task

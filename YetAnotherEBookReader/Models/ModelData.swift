@@ -56,7 +56,11 @@ final class ModelData: ObservableObject {
     
     @Published var filteredBookList = [Int32]()
     
-    let searchLibraryResultsRealm = try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
+    let searchLibraryResultsRealmMainThread = try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
+    
+    var searchLibraryResultsRealmLocalThread: Realm? {
+        try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
+    }
 
     @Published var booksInShelf = [String: CalibreBook]()
     let recentShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
@@ -146,7 +150,7 @@ final class ModelData: ObservableObject {
             }
             
             if readingBook == nil,
-               let bookRealm = self.searchLibraryResultsRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
+               let bookRealm = self.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
                 readingBook = convert(bookRealm: bookRealm)
             }
 //            if let readingBook = readingBook {

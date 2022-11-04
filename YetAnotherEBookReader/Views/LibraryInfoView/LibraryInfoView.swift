@@ -381,131 +381,26 @@ struct LibraryInfoView: View {
     }
     
     func updateBooksListNew() {
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        
-        booksListRefreshing = true
-        booksListQuerying = true
-        var booksList = [String]()
-        var libraryList = [CalibreLibrary]()
-        var seriesList = [String]()
-        var pageCount = 1
-        defer {
-            DispatchQueue.main.async {
-                self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
-                self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
-                self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
-                self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
-                self.pageCount = pageCount
-                booksListRefreshing = false
-            }
-        }
-        
-        var predicates = [NSPredicate]()
-        let searchTerms = searchString
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split { $0.isWhitespace }
-            .map { String($0) }
-        if searchTerms.isEmpty == false {
-            predicates.append(contentsOf:
-                searchTerms.map {
-                    NSCompoundPredicate(orPredicateWithSubpredicates: [
-                        NSPredicate(format: "title CONTAINS[c] %@", $0),
-                        NSPredicate(format: "authorFirst CONTAINS[c] %@", $0),
-                        NSPredicate(format: "authorSecond CONTAINS[c] %@", $0)
-                    ])
-                }
-            )
-        }
-
-        if modelData.filterCriteriaLibraries.isEmpty == false {
-            predicates.append(
-                NSCompoundPredicate(orPredicateWithSubpredicates: modelData.filterCriteriaLibraries.compactMap {
-                    guard let library = modelData.calibreLibraries[$0] else { return nil }
-                    return NSCompoundPredicate(andPredicateWithSubpredicates: [
-                        NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
-                        NSPredicate(format: "libraryName = %@", library.name)
-                    ])
-                })
-            )
-        }
-        
-        if modelData.filterCriteriaSeries.isEmpty == false {
-            predicates.append(
-                NSCompoundPredicate(
-                    orPredicateWithSubpredicates:
-                        modelData.filterCriteriaSeries.map {
-                            NSPredicate(format: "series = %@", $0)
-                        }
-                )
-            )
-        }
-        
-        if modelData.filterCriteriaRating.isEmpty == false {
-            predicates.append(
-                NSCompoundPredicate(
-                    orPredicateWithSubpredicates:
-                        modelData.filterCriteriaRating.map {
-                            NSPredicate(format: "rating = %@", NSNumber(value: $0.count <= 5 ? $0.count * 2 : 0))
-                        }
-                )
-            )
-        }
-        
-        if modelData.filterCriteriaShelved != .none {
-            predicates.append(
-                NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)
-            )
-        }
-        
-        let allbooks = realm.objects(CalibreBookRealm.self)//.filter("serverUUID != nil")
-        
-        var seriesSet = Set<String>(allbooks.map{ $0.series })
-        seriesSet.insert("Not in a Series")
-        seriesSet.remove("")
-        seriesList = seriesSet.sorted { lhs, rhs in
-            if lhs == "Not in a Series" {
-                return false
-            }
-            if rhs == "Not in a Series" {
-                return true
-            }
-            return lhs < rhs
-        }
-        
-        let objects = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
-        
-        let count = objects.count
-        
-        pageCount = Int((Double(count) / Double(pageSize)).rounded(.up))
-        
-        guard pageNo*pageSize < count else { return }
-        
-        booksList = objects.sorted(
-            byKeyPath: modelData.sortCriteria.by.sortKeyPath,
-            ascending: modelData.sortCriteria.ascending
-        )[(pageNo*pageSize) ..< min((pageNo+1)*pageSize, count)]
-            .compactMap {
-                $0.primaryKey
-            }
-        
+        let fbURL = URL(fileURLWithPath: "/")
         booksListQueryCancellable?.cancel()
         booksListQueryCancellable =
         modelData.calibreLibraries.values.filter({
             $0.hidden == false
+            && (modelData.filterCriteriaLibraries.isEmpty || modelData.filterCriteriaLibraries.contains($0.id))
         })
-        .compactMap({
-            modelData.calibreServerService.buildBooksMetadataTask(library: $0, books: [])
+        .map({
+            modelData.calibreServerService.buildBooksMetadataTask(library: $0, books: []) ?? .init(library: $0, books: [], metadataUrl: fbURL, lastReadPositionUrl: fbURL, annotationsUrl: fbURL, booksListUrl: fbURL)
         })
         .publisher
         .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
             modelData.calibreServerService.listLibraryBooks(task: task)
         }
-        .compactMap { task -> CalibreBooksTask? in
+        .map { task -> CalibreBooksTask in
             var newTask = modelData.calibreServerService.buildBooksMetadataTask(
                 library: task.library,
                 books: task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }) ?? []
-            )
-            newTask?.ajaxSearchResult = task.ajaxSearchResult
+            ) ?? .init(library: task.library, books: [], metadataUrl: fbURL, lastReadPositionUrl: fbURL, annotationsUrl: fbURL, booksListUrl: fbURL)
+            newTask.ajaxSearchResult = task.ajaxSearchResult
             return newTask
         }
         .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
@@ -516,40 +411,142 @@ struct LibraryInfoView: View {
         } receiveValue: { task in
             print("\(#function) library=\(task.library.key) task.data=\(task.data?.count)")
             
-            guard let searchResult = task.ajaxSearchResult,
-                  let booksMetadataEntry = task.booksMetadataEntry,
-                  let booksMetadataJSON = task.booksMetadataJSON
-            else { return }
-            
-            print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num) \(booksMetadataEntry.count)")
-            
-            let serverUUID = task.library.server.uuid.uuidString
-            let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
-                guard let entry = metadataEntry.value,
-                      let bookId = Int32(metadataEntry.key)
-                else { return nil }
-                
-                let obj = CalibreBookRealm()
-                obj.serverUUID = serverUUID
-                obj.libraryName = task.library.name
-                obj.id = bookId
-                
-                modelData.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: booksMetadataJSON)
-                
-                return obj
-            }
-            
-            DispatchQueue.main.async {
-                try? modelData.searchLibraryResultsRealm?.write{
-                    realmBooks.forEach {
-                        modelData.searchLibraryResultsRealm?.add($0, update: .modified)
-                    }
+            self.booksListRefreshing = true
+            self.booksListQuerying = true
+            var booksList = [String]()
+            var libraryList = [CalibreLibrary]()
+            var seriesList = [String]()
+            var pageCount = 1
+            defer {
+                DispatchQueue.main.async {
+                    self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
+                    self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
+                    self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
+                    self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
+                    self.pageCount = pageCount
+                    self.booksListRefreshing = false
                 }
             }
             
-            let idSet = Set<String>(booksList)
-            DispatchQueue.main.async {
-                self.booksList.append(
+            var predicates = [NSPredicate]()
+            predicates.append(
+                NSCompoundPredicate(orPredicateWithSubpredicates: modelData.filterCriteriaLibraries.compactMap {
+                    guard let library = modelData.calibreLibraries[$0] else { return nil }
+                    return NSCompoundPredicate(andPredicateWithSubpredicates: [
+                        NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
+                        NSPredicate(format: "libraryName = %@", library.name)
+                    ])
+                })
+            )
+            
+            let searchTerms = searchString
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split { $0.isWhitespace }
+                .map { String($0) }
+            if searchTerms.isEmpty == false {
+                predicates.append(contentsOf:
+                    searchTerms.map {
+                        NSCompoundPredicate(orPredicateWithSubpredicates: [
+                            NSPredicate(format: "title CONTAINS[c] %@", $0),
+                            NSPredicate(format: "authorFirst CONTAINS[c] %@", $0),
+                            NSPredicate(format: "authorSecond CONTAINS[c] %@", $0)
+                        ])
+                    }
+                )
+            }
+
+            if modelData.filterCriteriaSeries.isEmpty == false {
+                predicates.append(
+                    NSCompoundPredicate(
+                        orPredicateWithSubpredicates:
+                            modelData.filterCriteriaSeries.map {
+                                NSPredicate(format: "series = %@", $0)
+                            }
+                    )
+                )
+            }
+            
+            if modelData.filterCriteriaRating.isEmpty == false {
+                predicates.append(
+                    NSCompoundPredicate(
+                        orPredicateWithSubpredicates:
+                            modelData.filterCriteriaRating.map {
+                                NSPredicate(format: "rating = %@", NSNumber(value: $0.count <= 5 ? $0.count * 2 : 0))
+                            }
+                    )
+                )
+            }
+            
+            if modelData.filterCriteriaShelved != .none {
+                predicates.append(
+                    NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)
+                )
+            }
+            
+            if let realm = try? Realm(configuration: modelData.realmConf) {
+                let allbooks = realm.objects(CalibreBookRealm.self)//.filter("serverUUID != nil")
+                
+                var seriesSet = Set<String>(allbooks.map{ $0.series })
+                seriesSet.insert("Not in a Series")
+                seriesSet.remove("")
+                seriesList = seriesSet.sorted { lhs, rhs in
+                    if lhs == "Not in a Series" {
+                        return false
+                    }
+                    if rhs == "Not in a Series" {
+                        return true
+                    }
+                    return lhs < rhs
+                }
+                
+                let objects = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+                
+                let count = objects.count
+                
+                pageCount = Int((Double(count) / Double(pageSize)).rounded(.up))
+                
+                if pageNo*pageSize < count {
+                    booksList = objects.sorted(
+                        byKeyPath: modelData.sortCriteria.by.sortKeyPath,
+                        ascending: modelData.sortCriteria.ascending
+                    )[(pageNo*pageSize) ..< min((pageNo+1)*pageSize, count)]
+                        .compactMap {
+                            $0.primaryKey
+                        }
+                }
+            }
+            
+            let serverUUID = task.library.server.uuid.uuidString
+            
+            if let searchResult = task.ajaxSearchResult,
+               let booksMetadataEntry = task.booksMetadataEntry,
+               let booksMetadataJSON = task.booksMetadataJSON,
+               let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmLocalThread {
+                
+                print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num) \(booksMetadataEntry.count)")
+                
+                let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
+                    guard let entry = metadataEntry.value,
+                          let bookId = Int32(metadataEntry.key)
+                    else { return nil }
+                    
+                    let obj = CalibreBookRealm()
+                    obj.serverUUID = serverUUID
+                    obj.libraryName = task.library.name
+                    obj.id = bookId
+                    
+                    modelData.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: booksMetadataJSON)
+                    
+                    return obj
+                }
+                
+                try? searchLibraryResultsRealm.write{
+                    searchLibraryResultsRealm.add(realmBooks, update: .modified)
+                }
+            
+                
+                let idSet = Set<String>(booksList)
+                booksList.append(
                     contentsOf:
                         searchResult.book_ids.map {
                             CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: task.library.name, id: $0.description)
@@ -566,7 +563,7 @@ struct LibraryInfoView: View {
         if let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
            let book = modelData.convert(bookRealm: obj) {
             return book
-        } else if let obj = modelData.searchLibraryResultsRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
+        } else if let obj = modelData.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
                   let book = modelData.convert(bookRealm: obj) {
             return book
         }
