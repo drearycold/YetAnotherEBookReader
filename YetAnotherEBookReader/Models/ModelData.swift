@@ -44,8 +44,8 @@ final class ModelData: ObservableObject {
     var formatList = [Format]()
     
     @Published var searchString = ""
-    @Published var searchLibraryResults = [String: LibrarySearchResult]()
-    @Published var sortCriteria = (by: SortCriteria.Modified, ascending: false)
+    @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
+    @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
     @Published var filterCriteriaRating = Set<String>()
     @Published var filterCriteriaFormat = Set<String>()
     @Published var filterCriteriaIdentifier = Set<String>()

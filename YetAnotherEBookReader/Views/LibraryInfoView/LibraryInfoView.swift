@@ -94,11 +94,11 @@ struct LibraryInfoView: View {
 //                                }, set: { newBook in
 //                                    //dummy
 //                                }))
-                                bookRowView(book: getBook(for: bookInShelfId) ?? errBook)
+                                bookRowView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
                             }
                             .isDetailLink(true)
                             .contextMenu {
-                                bookRowContextMenuView(book: getBook(for: bookInShelfId) ?? errBook)
+                                bookRowContextMenuView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
                             }
                         }   //ForEach
                         //                        .onDelete(perform: deleteFromList)
@@ -222,7 +222,7 @@ struct LibraryInfoView: View {
             booksListCancellable = modelData.libraryBookListNeedUpdate
                 .receive(on: DispatchQueue.global(qos: .userInitiated))
                 .flatMap { _ -> AnyPublisher<Int, Never> in
-                    updateBooksListNew()
+                    updateBooksList()
                     return Just<Int>(0).setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
                 .receive(on: DispatchQueue.main)
@@ -270,118 +270,15 @@ struct LibraryInfoView: View {
     }
 
     func updateBooksList() {
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        
-        booksListRefreshing = true
-        var booksList = [String]()
-        var libraryList = [CalibreLibrary]()
-        var seriesList = [String]()
-        var pageCount = 1
-        defer {
-            DispatchQueue.main.async {
-                self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
-                self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
-                self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
-                self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
-                self.pageCount = pageCount
-                booksListRefreshing = false
-            }
-        }
-        
-        var predicates = [String]()
-        let searchTerms = searchString.trimmingCharacters(in: .whitespacesAndNewlines).split { $0.isWhitespace }
-        if searchTerms.isEmpty == false {
-            predicates.append(contentsOf:
-                searchTerms.map {
-                    "title CONTAINS[c] '\($0)' OR authorFirst CONTAINS[c] '\($0)'"
-                }
-            )
-        }
-
-        if modelData.filterCriteriaLibraries.isEmpty == false {
-            predicates.append(
-                " ( " +
-                    modelData.filterCriteriaLibraries.compactMap {
-                        guard let library = modelData.calibreLibraries[$0] else { return nil }
-                        return "( libraryName == '\(library.name)' AND serverUrl == '\(library.server.baseUrl)' AND serverUsername == '\(library.server.username)' )"
-                    }.joined(separator: " || ")
-                    + " ) "
-            )
-        }
-        
-        if modelData.filterCriteriaSeries.isEmpty == false {
-            predicates.append(" ( " + modelData.filterCriteriaSeries.map { "series == '\($0)'" }.joined(separator: " || ")  + " ) ")
-        }
-        
-        if modelData.filterCriteriaRating.isEmpty == false {
-            predicates.append(
-                " ( " +
-                    modelData.filterCriteriaRating.map {
-                        if $0.count <= 5 {
-                            return "rating == \($0.count * 2)"
-                        } else {
-                            return "rating == 0"
-                        }
-                    }.joined(separator: " || ")
-                    + " ) ")
-        }
-        
-        if modelData.filterCriteriaShelved != .none {
-            predicates.append("inShelf == \(modelData.filterCriteriaShelved == .shelvedOnly ? true : false)")
-        }
-//        guard filterCriteriaRating.isEmpty || filterCriteriaRating.contains(book.ratingDescription) else { return false }
-//        guard filterCriteriaFormat.isEmpty || filterCriteriaFormat.intersection(book.formats.compactMap { $0.key }).isEmpty == false else { return false }
-//        guard filterCriteriaIdentifier.isEmpty || filterCriteriaIdentifier.intersection(book.identifiers.compactMap { $0.key }).isEmpty == false else { return false }
-//        guard filterCriteriaSeries.isEmpty || filterCriteriaSeries.contains(book.seriesDescription) else { return false }
-//        guard filterCriteriaShelved == .none || (filterCriteriaShelved == .shelvedOnly && book.inShelf) || (filterCriteriaShelved == .notShelvedOnly && !book.inShelf) else { return false }
-        
-        let predicateFormat = predicates.isEmpty
-            ? ""
-            : (
-                predicates.count == 1
-                    ? predicates[0]
-                    : "( " + predicates.joined(separator: " ) AND ( ") + " )"
-            )
-        let predicateArgs = [Any]()
-        
-        print("\(#function) predicateFormat=\(predicateFormat) \(predicateArgs)")
-        
-        let allbooks = realm.objects(CalibreBookRealm.self)//.filter("serverUUID != nil")
-        
-        var seriesSet = Set<String>(allbooks.map{ $0.series })
-        seriesSet.insert("Not in a Series")
-        seriesSet.remove("")
-        seriesList = seriesSet.sorted { lhs, rhs in
-            if lhs == "Not in a Series" {
-                return false
-            }
-            if rhs == "Not in a Series" {
-                return true
-            }
-            return lhs < rhs
-        }
-        
-        var objects = allbooks
-        if predicateFormat.isEmpty == false {
-            objects = objects.filter(predicateFormat, predicateArgs)
-        }
-        let count = objects.count
-        
-        pageCount = Int((Double(count) / Double(pageSize)).rounded(.up))
-        
-        guard pageNo*pageSize < count else { return }
-        
-        let sortKeyPath = modelData.sortCriteria.by.sortKeyPath
-        booksList = objects.sorted(byKeyPath: sortKeyPath, ascending: modelData.sortCriteria.ascending)[(pageNo*pageSize) ..< Swift.min((pageNo+1)*pageSize, count)]
-            .compactMap {
-                $0.primaryKey
-            }
-        
-        libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
-    }
-    
-    func updateBooksListNew() {
         let fbURL = URL(fileURLWithPath: "/")
+        let searchCriteria = LibrarySearchCriteria(
+            searchString: modelData.searchString,
+            sortCriteria: modelData.sortCriteria,
+            filterCriteriaRating: modelData.filterCriteriaRating,
+            filterCriteriaFormat: modelData.filterCriteriaFormat,
+            filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
+            filterCriteriaSeries: modelData.filterCriteriaSeries
+        )
         booksListQueryCancellable?.cancel()
         booksListQueryCancellable =
         modelData.calibreLibraries.values.filter({
@@ -389,7 +286,19 @@ struct LibraryInfoView: View {
             && (modelData.filterCriteriaLibraries.isEmpty || modelData.filterCriteriaLibraries.contains($0.id))
         })
         .map({
-            modelData.calibreServerService.buildBooksMetadataTask(library: $0, books: []) ?? .init(library: $0, books: [], metadataUrl: fbURL, lastReadPositionUrl: fbURL, annotationsUrl: fbURL, booksListUrl: fbURL)
+            modelData.calibreServerService.buildBooksMetadataTask(
+                library: $0,
+                books: [],
+                searchCriteria: searchCriteria,
+                searchPreviousResult: modelData.searchLibraryResults[.init(libraryId: $0.id, criteria: searchCriteria)]
+            ) ?? .init(
+                library: $0,
+                books: [],
+                metadataUrl: fbURL,
+                lastReadPositionUrl: fbURL,
+                annotationsUrl: fbURL,
+                booksListUrl: fbURL
+            )
         })
         .publisher
         .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
@@ -419,11 +328,29 @@ struct LibraryInfoView: View {
             var pageCount = 1
             defer {
                 DispatchQueue.main.async {
-                    self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
+                    //self.booksList.replaceSubrange(self.booksList.indices, with: booksList)
                     self.seriesList.replaceSubrange(self.seriesList.indices, with: seriesList)
                     self.formatList.replaceSubrange(self.formatList.indices, with: formatList)
                     self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
-                    self.pageCount = pageCount
+                    //self.pageCount = pageCount
+                    
+                    let results = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria }
+                    
+                    let totalNumber = results.values.map { $0.totalNumber }.reduce(0) { partialResult, totalNumber in
+                        return partialResult + totalNumber
+                    }
+                    self.pageCount = Int((Double(totalNumber) / Double(pageSize)).rounded(.up))
+                    
+                    var mergeResults = results.reduce(into: [:], { partialResult, entry in
+                        partialResult[entry.key.libraryId] = entry.value
+                    })
+                    
+                    self.booksList = modelData.mergeBookLists(results: &mergeResults, page: pageNo)
+                    
+                    mergeResults.forEach {
+                        modelData.searchLibraryResults[.init(libraryId: $0.key, criteria: searchCriteria)]?.pageOffset = $0.value.pageOffset
+                    }
+                    
                     self.booksListRefreshing = false
                 }
             }
@@ -523,6 +450,15 @@ struct LibraryInfoView: View {
                let booksMetadataJSON = task.booksMetadataJSON,
                let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmLocalThread {
                 
+                DispatchQueue.main.async {
+                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
+                    if modelData.searchLibraryResults[librarySearchKey] == nil {
+                        modelData.searchLibraryResults[librarySearchKey] = .init(library: task.library)
+                    }
+                    modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
+                    modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
+                }
+                
                 print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num) \(booksMetadataEntry.count)")
                 
                 let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
@@ -543,7 +479,6 @@ struct LibraryInfoView: View {
                 try? searchLibraryResultsRealm.write{
                     searchLibraryResultsRealm.add(realmBooks, update: .modified)
                 }
-            
                 
                 let idSet = Set<String>(booksList)
                 booksList.append(
@@ -556,19 +491,6 @@ struct LibraryInfoView: View {
         }
         
         libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
-    }
-    
-    
-    private func getBook(for primaryKey: String) -> CalibreBook? {
-        if let obj = modelData.getBookRealm(forPrimaryKey: primaryKey),
-           let book = modelData.convert(bookRealm: obj) {
-            return book
-        } else if let obj = modelData.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
-                  let book = modelData.convert(bookRealm: obj) {
-            return book
-        }
-        return nil
-        
     }
     
     @ViewBuilder
@@ -960,10 +882,30 @@ enum SortCriteria: String, CaseIterable, Identifiable {
     }
 }
 
+struct LibrarySearchSort: Hashable {
+    var by = SortCriteria.Modified
+    var ascending = false
+}
+
+struct LibrarySearchCriteria: Hashable {
+    let searchString: String
+    let sortCriteria: LibrarySearchSort
+    let filterCriteriaRating: Set<String>
+    let filterCriteriaFormat: Set<String>
+    let filterCriteriaIdentifier: Set<String>
+    let filterCriteriaSeries: Set<String>
+}
+
+struct LibrarySearchKey: Hashable {
+    let libraryId: String
+    let criteria: LibrarySearchCriteria
+}
+
 struct LibrarySearchResult {
+    let library: CalibreLibrary
     var totalNumber = 0
-    var offset = 0
-    
+    var pageOffset = [Int: Int]()    //key: browser page no, value: offset in bookIds
+    var bookIds = [Int32]()
 }
 
 @available(macCatalyst 14.0, *)

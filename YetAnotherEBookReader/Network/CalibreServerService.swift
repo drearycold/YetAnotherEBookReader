@@ -896,7 +896,7 @@ struct CalibreServerService {
             url: endpointUrl)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook]) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchCriteria: LibrarySearchCriteria? = nil, searchPreviousResult: LibrarySearchResult? = nil) -> CalibreBooksTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
@@ -931,9 +931,21 @@ struct CalibreServerService {
         
         var booksListUrlComponents = URLComponents()
         booksListUrlComponents.path = "ajax/search/\(library.key)"
-        booksListUrlComponents.queryItems = []
-        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort", value: modelData.sortCriteria.by.sortQueryParam))
-        booksListUrlComponents.queryItems?.append(URLQueryItem(name: "sort_order", value: modelData.sortCriteria.ascending ? "asc" : "desc"))
+        
+        var booksListUrlQueryItems = [URLQueryItem]()
+        
+        if let searchCriteria = searchCriteria {
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchCriteria.sortCriteria.by.sortQueryParam))
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
+        } else {
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: SortCriteria.Modified.sortQueryParam))
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: "desc"))
+        }
+        
+        if let searchPreviousResult = searchPreviousResult {
+            booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
+        }
+        booksListUrlComponents.queryItems = booksListUrlQueryItems
         
         guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
             return nil
