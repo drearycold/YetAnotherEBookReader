@@ -54,8 +54,12 @@ final class ModelData: ObservableObject {
     
     @Published var filterCriteriaLibraries = Set<String>()
     
-    @Published var filteredBookList = [Int32]()
-    
+    @Published var filteredBookList = [String]()
+    @Published var filteredBookListRefreshing = false
+    @Published var filteredBookListPageCount = 0
+    @Published var filteredBookListPageSize = 100
+    @Published var filteredBookListPageNumber = 0
+
     let searchLibraryResultsRealmMainThread = try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
     
     var searchLibraryResultsRealmLocalThread: Realm? {
@@ -134,6 +138,12 @@ final class ModelData: ObservableObject {
         for: .YABR_BookReaderEnterActive
     ).eraseToAnyPublisher()
     var bookReaderEnterActiveCancellable: AnyCancellable? = nil
+    
+    let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    var librarySearchCancellable: AnyCancellable?
+    
+    let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    var filteredBookListMergeCancellable: AnyCancellable?
     
     var readingBookInShelfId: String? = nil {
         didSet {

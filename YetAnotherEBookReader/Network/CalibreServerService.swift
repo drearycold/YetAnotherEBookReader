@@ -896,7 +896,7 @@ struct CalibreServerService {
             url: endpointUrl)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchCriteria: LibrarySearchCriteria? = nil, searchPreviousResult: LibrarySearchResult? = nil) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchCriteria: LibrarySearchCriteria? = nil) -> CalibreBooksTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
@@ -937,14 +937,21 @@ struct CalibreServerService {
         if let searchCriteria = searchCriteria {
             booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchCriteria.sortCriteria.by.sortQueryParam))
             booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
+            
+            if let searchPreviousResult = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchCriteria)] {
+                booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
+                let maxOffset = searchPreviousResult.pageOffset.values.max() ?? 0
+                let num = max(0, maxOffset + searchCriteria.pageSize * 2 - searchPreviousResult.bookIds.count)
+                booksListUrlQueryItems.append(.init(name: "num", value: num.description))
+            } else {
+                booksListUrlQueryItems.append(.init(name: "num", value: (searchCriteria.pageSize * 2).description))
+            }
         } else {
             booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: SortCriteria.Modified.sortQueryParam))
             booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: "desc"))
         }
         
-        if let searchPreviousResult = searchPreviousResult {
-            booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
-        }
+        
         booksListUrlComponents.queryItems = booksListUrlQueryItems
         
         guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
@@ -957,7 +964,8 @@ struct CalibreServerService {
             metadataUrl: endpointUrl,
             lastReadPositionUrl: lastReadPositionEndpointUrl,
             annotationsUrl: annotationsEndpointUrl,
-            booksListUrl: booksListUrl
+            booksListUrl: booksListUrl,
+            searchCriteria: searchCriteria
         )
     }
     

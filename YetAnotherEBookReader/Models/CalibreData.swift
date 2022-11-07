@@ -1051,6 +1051,19 @@ struct CalibreBooksTask {
     var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
     var booksMetadataJSON: NSDictionary? = nil
     var ajaxSearchResult: CalibreLibraryBooksResult.SearchResult? = nil
+    var ajaxSearchError = false
+    var searchCriteria: LibrarySearchCriteria? = nil
+}
+
+struct CalibreLibrarySearchTask {
+    var library: CalibreLibrary
+    var searchCriteria: LibrarySearchCriteria
+    var booksListUrl: URL
+    var data: Data? = nil
+    var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
+    var booksMetadataJSON: NSDictionary? = nil
+    var ajaxSearchResult: CalibreLibraryBooksResult.SearchResult? = nil
+    var ajaxSearchError = false
 }
 
 struct CalibreBookFormatMetadataEntry: Codable {

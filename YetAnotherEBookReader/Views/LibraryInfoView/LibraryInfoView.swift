@@ -83,7 +83,7 @@ struct LibraryInfoView: View {
                 
                 ZStack {
                     List(selection: $selectedBookIds) {
-                        ForEach(booksList, id: \.self) { bookInShelfId in
+                        ForEach(modelData.filteredBookList, id: \.self) { bookInShelfId in
                             NavigationLink (
                                 destination: BookDetailView(viewMode: .LIBRARY),
                                 tag: bookInShelfId,
@@ -101,7 +101,6 @@ struct LibraryInfoView: View {
                                 bookRowContextMenuView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
                             }
                         }   //ForEach
-                        //                        .onDelete(perform: deleteFromList)
                     }
                     .disabled(booksListRefreshing)
                     .popover(isPresented: $batchDownloadSheetPresenting,
@@ -161,7 +160,8 @@ struct LibraryInfoView: View {
                 HStack {
                     Spacer()
                     
-                    Button(action:{
+                    /*
+                     Button(action:{
                         if pageNo > 10 {
                             pageNo -= 10
                         } else {
@@ -171,23 +171,25 @@ struct LibraryInfoView: View {
                     }) {
                         Image(systemName: "chevron.backward.2")
                     }
+                     */
                     Button(action:{
-                        if pageNo > 0 {
-                            pageNo -= 1
+                        if modelData.filteredBookListPageNumber > 0 {
+                            modelData.filteredBookListPageNumber -= 1
                         }
                     }) {
                         Image(systemName: "chevron.backward")
                     }
                     //                        Text("\(pageNo+1) / \(Int((Double(modelData.filteredBookList.count) / Double(pageSize)).rounded(.up)))")
-                    Text("\(pageNo+1) / \(pageCount)")
+                    Text("\(modelData.filteredBookListPageNumber+1) / \(modelData.filteredBookListPageCount)")
                     Button(action:{
-                        if pageNo + 1 < pageCount {
-                            pageNo += 1
+                        if modelData.filteredBookListPageNumber + 1 < modelData.filteredBookListPageCount {
+                            modelData.filteredBookListPageNumber += 1
                         }
                     }) {
                         Image(systemName: "chevron.forward")
                     }
-                    Button(action:{
+                    /*
+                     Button(action:{
                         if pageNo + 10 < pageCount {
                             pageNo += 10
                         } else {
@@ -196,7 +198,10 @@ struct LibraryInfoView: View {
                     }) {
                         Image(systemName: "chevron.forward.2")
                     }
-                }.padding(4)    //bottom bar
+                     */
+                }
+                .padding(4)    //bottom bar
+                .disabled(booksListRefreshing)
             }
             .padding(4)
             .navigationTitle("By \(modelData.sortCriteria.by.rawValue)")
@@ -209,10 +214,13 @@ struct LibraryInfoView: View {
         }   //NavigationView
         .navigationViewStyle(DefaultNavigationViewStyle())
         .listStyle(PlainListStyle())
-        .onChange(of: pageNo, perform: { value in
+        .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         })
         .onAppear {
+            modelData.calibreServerService.registerLibrarySearchHandler()
+            modelData.calibreServerService.registerFilteredBookListMergeHandler()
+            
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 batchDownloadSheetPresenting = false
@@ -228,7 +236,7 @@ struct LibraryInfoView: View {
                 .receive(on: DispatchQueue.main)
                 .sink { _ in
                     if modelData.activeTab == 2, modelData.readingBook == nil {
-                        modelData.readingBookInShelfId = booksList.first
+                        modelData.readingBookInShelfId = modelData.filteredBookList.first
                     }
                 }
             
@@ -279,51 +287,91 @@ struct LibraryInfoView: View {
             filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
             filterCriteriaSeries: modelData.filterCriteriaSeries
         )
+        
+        libraryList = modelData.calibreLibraries
+            .filter { $0.value.hidden == false }
+            .map { $0.value }
+            .sorted { $0.name < $1.name }
+        
+        modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: searchCriteria))
+        
+        return;
+        
         booksListQueryCancellable?.cancel()
         booksListQueryCancellable =
         modelData.calibreLibraries.values.filter({
             $0.hidden == false
             && (modelData.filterCriteriaLibraries.isEmpty || modelData.filterCriteriaLibraries.contains($0.id))
         })
-        .map({
-            modelData.calibreServerService.buildBooksMetadataTask(
-                library: $0,
+        .compactMap({ library -> CalibreBooksTask? in
+            modelData.librarySearchSubject.send(.init(libraryId: library.id, criteria: searchCriteria))
+            
+            return nil
+            
+            /*
+             return modelData.calibreServerService.buildBooksMetadataTask(
+                library: library,
                 books: [],
-                searchCriteria: searchCriteria,
-                searchPreviousResult: modelData.searchLibraryResults[.init(libraryId: $0.id, criteria: searchCriteria)]
+                searchCriteria: searchCriteria
             ) ?? .init(
-                library: $0,
+                library: library,
                 books: [],
                 metadataUrl: fbURL,
                 lastReadPositionUrl: fbURL,
                 annotationsUrl: fbURL,
                 booksListUrl: fbURL
             )
+             */
         })
         .publisher
-        .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
-            modelData.calibreServerService.listLibraryBooks(task: task)
-        }
-        .map { task -> CalibreBooksTask in
-            var newTask = modelData.calibreServerService.buildBooksMetadataTask(
-                library: task.library,
-                books: task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }) ?? []
-            ) ?? .init(library: task.library, books: [], metadataUrl: fbURL, lastReadPositionUrl: fbURL, annotationsUrl: fbURL, booksListUrl: fbURL)
-            newTask.ajaxSearchResult = task.ajaxSearchResult
-            return newTask
-        }
-        .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
-            modelData.calibreServerService.getBooksMetadata(task: task)
-        }
+        .subscribe(on: DispatchQueue.main)
+//        .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
+//            let searchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
+//            if modelData.searchLibraryResults[searchKey] == nil {
+//                modelData.searchLibraryResults[searchKey] = .init(library: task.library)
+//            }
+//            modelData.searchLibraryResults[searchKey]?.loading = true
+//
+//            self.booksListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }.isEmpty == false
+//
+//            var errorTask = task
+//            errorTask.ajaxSearchError = true
+//            return modelData.calibreServerService.listLibraryBooks(task: task)
+//                .replaceError(with: errorTask)
+//                .eraseToAnyPublisher()
+//        }
+//        .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+//        .map { task -> CalibreBooksTask in
+//            var newTask = modelData.calibreServerService.buildBooksMetadataTask(
+//                library: task.library,
+//                books: task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }) ?? []
+//            ) ?? .init(library: task.library, books: [], metadataUrl: fbURL, lastReadPositionUrl: fbURL, annotationsUrl: fbURL, booksListUrl: fbURL)
+//            newTask.ajaxSearchResult = task.ajaxSearchResult
+//            newTask.ajaxSearchError = task.ajaxSearchError
+//            return newTask
+//        }
+//        .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
+//            modelData.calibreServerService.getBooksMetadata(task: task)
+//                .replaceError(with: task)
+//                .eraseToAnyPublisher()
+//        }
         .sink { completion in
             print("\(#function) completion=\(completion)")
+            switch completion {
+            case .finished:
+                break
+            case .failure(_):
+                break
+            }
         } receiveValue: { task in
             print("\(#function) library=\(task.library.key) task.data=\(task.data?.count)")
             
-            self.booksListRefreshing = true
             self.booksListQuerying = true
             var booksList = [String]()
-            var libraryList = [CalibreLibrary]()
+            var libraryList = modelData.calibreLibraries
+                .filter { $0.value.hidden == false }
+                .map { $0.value }
+                .sorted { $0.name < $1.name }
             var seriesList = [String]()
             var pageCount = 1
             defer {
@@ -334,24 +382,7 @@ struct LibraryInfoView: View {
                     self.libraryList.replaceSubrange(self.libraryList.indices, with: libraryList)
                     //self.pageCount = pageCount
                     
-                    let results = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria }
-                    
-                    let totalNumber = results.values.map { $0.totalNumber }.reduce(0) { partialResult, totalNumber in
-                        return partialResult + totalNumber
-                    }
-                    self.pageCount = Int((Double(totalNumber) / Double(pageSize)).rounded(.up))
-                    
-                    var mergeResults = results.reduce(into: [:], { partialResult, entry in
-                        partialResult[entry.key.libraryId] = entry.value
-                    })
-                    
-                    self.booksList = modelData.mergeBookLists(results: &mergeResults, page: pageNo)
-                    
-                    mergeResults.forEach {
-                        modelData.searchLibraryResults[.init(libraryId: $0.key, criteria: searchCriteria)]?.pageOffset = $0.value.pageOffset
-                    }
-                    
-                    self.booksListRefreshing = false
+                   
                 }
             }
             
@@ -444,22 +475,20 @@ struct LibraryInfoView: View {
             }
             
             let serverUUID = task.library.server.uuid.uuidString
+            let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
+            
+            DispatchQueue.main.async {
+                if modelData.searchLibraryResults[librarySearchKey] == nil {
+                    modelData.searchLibraryResults[librarySearchKey] = .init(library: task.library)
+                }
+                
+                
+            }
             
             if let searchResult = task.ajaxSearchResult,
                let booksMetadataEntry = task.booksMetadataEntry,
                let booksMetadataJSON = task.booksMetadataJSON,
                let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmLocalThread {
-                
-                DispatchQueue.main.async {
-                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
-                    if modelData.searchLibraryResults[librarySearchKey] == nil {
-                        modelData.searchLibraryResults[librarySearchKey] = .init(library: task.library)
-                    }
-                    modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
-                    modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
-                }
-                
-                print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num) \(booksMetadataEntry.count)")
                 
                 let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
                     guard let entry = metadataEntry.value,
@@ -489,8 +518,6 @@ struct LibraryInfoView: View {
                 )
             }
         }
-        
-        libraryList = modelData.calibreLibraries.map { $0.value }.sorted { $0.name < $1.name }
     }
     
     @ViewBuilder
@@ -676,7 +703,7 @@ struct LibraryInfoView: View {
                         NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                     }, label: {
                         VStack(alignment: .leading) {
-                            Text(library.name + (modelData.filterCriteriaLibraries.contains(library.id) ? "✓" : ""))
+                            Text(getLibraryFilterText(library: library))
                             Text(library.server.name).font(.caption)
                         }
                     })
@@ -809,10 +836,19 @@ struct LibraryInfoView: View {
         }
     }
     
-    func deleteFromList(at offsets: IndexSet) {
-        modelData.filteredBookList.remove(atOffsets: offsets)
+    private func getLibraryFilterText(library: CalibreLibrary) -> String {
+        let searchResult = modelData.searchLibraryResults[LibrarySearchKey(libraryId: library.id, criteria: LibrarySearchCriteria(searchString: modelData.searchString, sortCriteria: modelData.sortCriteria, filterCriteriaRating: modelData.filterCriteriaRating, filterCriteriaFormat: modelData.filterCriteriaFormat, filterCriteriaIdentifier: modelData.filterCriteriaIdentifier, filterCriteriaSeries: modelData.filterCriteriaSeries))]
+        
+        return library.name
+        + " "
+        + (modelData.filterCriteriaLibraries.contains(library.id) ? "✓" : "")
+        + " "
+        + (searchResult?.description ?? "")
+        + " "
+        + (searchResult?.pageOffset[modelData.filteredBookListPageNumber]?.description ?? "0")
+        + "/"
+        + (searchResult?.pageOffset[modelData.filteredBookListPageNumber+1]?.description ?? "0")
     }
-    
 }
 
 extension LibraryInfoView : AlertDelegate {
@@ -894,6 +930,7 @@ struct LibrarySearchCriteria: Hashable {
     let filterCriteriaFormat: Set<String>
     let filterCriteriaIdentifier: Set<String>
     let filterCriteriaSeries: Set<String>
+    let pageSize: Int = 100
 }
 
 struct LibrarySearchKey: Hashable {
@@ -903,9 +940,16 @@ struct LibrarySearchKey: Hashable {
 
 struct LibrarySearchResult {
     let library: CalibreLibrary
+    var loading = false
+    var error = false
+    var errorOffset = 0
     var totalNumber = 0
     var pageOffset = [Int: Int]()    //key: browser page no, value: offset in bookIds
     var bookIds = [Int32]()
+    
+    var description: String {
+        "\(bookIds.count)/\(totalNumber)"
+    }
 }
 
 @available(macCatalyst 14.0, *)
