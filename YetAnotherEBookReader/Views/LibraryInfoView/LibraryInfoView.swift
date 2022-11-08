@@ -33,6 +33,7 @@ struct LibraryInfoView: View {
     @State private var pageSize = 100
     @State private var pageCount = 0
     @State private var updater = 0
+    @State private var booksListInfoPresenting = false
     
     @State private var alertItem: AlertItem?
     
@@ -158,6 +159,79 @@ struct LibraryInfoView: View {
                 Divider()
                 
                 HStack {
+                    Button {
+                        booksListInfoPresenting = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }.popover(isPresented: $booksListInfoPresenting) {
+                        NavigationView {
+                            List {
+                                ForEach(modelData.currentSearchLibraryResults
+                                    .map({ (modelData.calibreLibraries[$0.key.libraryId]!, $0.value) })
+                                    .sorted(by: { $0.0.id < $1.0.id}),
+                                        id: \.0.id) { searchResult in
+                                    Section {
+                                        HStack {
+                                            Text("Books")
+                                            Spacer()
+                                            Text("\(searchResult.1.totalNumber)")
+                                        }
+                                    } header: {
+                                        HStack {
+                                            Text(searchResult.0.name)
+                                            Spacer()
+                                            Text(searchResult.0.server.name)
+                                        }
+                                    } footer: {
+                                        if searchResult.1.loading {
+                                            Text("Searching for more, results incomplete.")
+                                        } else if searchResult.1.error {
+                                            Text("Error occured, results incomplete.")
+                                        }
+                                    }
+                                    
+                                }
+                            }
+                            .navigationTitle("Libraries")
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button {
+                                        booksListInfoPresenting = false
+                                    } label: {
+                                        Image(systemName: "xmark.circle")
+                                    }
+                                }
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button {
+                                        let serverIds = modelData.currentSearchLibraryResults
+                                            .filter { $0.value.error }
+                                            .compactMap { modelData.calibreLibraries[$0.key.libraryId]?.server.id }
+                                        if serverIds.isEmpty == false {
+                                            modelData.probeServersReachability(with: .init(serverIds)) { serverId in
+                                                modelData.currentSearchLibraryResults
+                                                    .filter { $0.value.error && modelData.calibreLibraries[$0.key.libraryId]?.server.id == serverId }
+                                                    .forEach {
+                                                        modelData.librarySearchSubject.send($0.key)
+                                                    }
+                                            }
+                                        }
+                                        
+                                        booksListInfoPresenting = false
+                                    } label: {
+                                        Image(systemName: "arrow.triangle.2.circlepath")
+                                    }
+                                }
+                            }
+                        }
+                        .navigationViewStyle(.stack)
+                    }
+
+                    Text(getLibrarySearchingText())
+                    if modelData.filteredBookListRefreshing {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                    }
+                    
                     Spacer()
                     
                     /*
@@ -187,7 +261,7 @@ struct LibraryInfoView: View {
                         }
                     }) {
                         Image(systemName: "chevron.forward")
-                    }
+                    }.disabled(modelData.filteredBookListRefreshing && modelData.currentSearchLibraryResultsCannotFurther)
                     /*
                      Button(action:{
                         if pageNo + 10 < pageCount {
@@ -848,6 +922,39 @@ struct LibraryInfoView: View {
         + (searchResult?.pageOffset[modelData.filteredBookListPageNumber]?.description ?? "0")
         + "/"
         + (searchResult?.pageOffset[modelData.filteredBookListPageNumber+1]?.description ?? "0")
+    }
+    
+    private func getLibrarySearchingText() -> String {
+        let searchCriteria = LibrarySearchCriteria(
+            searchString: modelData.searchString,
+            sortCriteria: modelData.sortCriteria,
+            filterCriteriaRating: modelData.filterCriteriaRating,
+            filterCriteriaFormat: modelData.filterCriteriaFormat,
+            filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
+            filterCriteriaSeries: modelData.filterCriteriaSeries
+        )
+        
+        let searchResultsLoading = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }
+        if searchResultsLoading.count == 1,
+           let libraryId = searchResultsLoading.first?.key.libraryId,
+           let library = modelData.calibreLibraries[libraryId] {
+            return "Searching \(library.name)..."
+        }
+        if searchResultsLoading.count > 1 {
+            return "Searching \(searchResultsLoading.count) libraries..."
+        }
+        let searchResultsError = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.error }
+        if searchResultsError.isEmpty == false {
+            return "Result Incomplete"
+        }
+        
+        return ""
+    }
+    
+    private func hasLibrarySearchError() -> Bool {
+        let searchCriteria = modelData.currentLibrarySearchCriteria
+        
+        return modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.error }.isEmpty == false
     }
 }
 

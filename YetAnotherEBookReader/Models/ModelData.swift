@@ -1828,7 +1828,7 @@ final class ModelData: ObservableObject {
         probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
     }
     
-    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, disableAutoThreshold: Int = 0) {
+    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, disableAutoThreshold: Int = 0, completion: ((String) -> Void)? = nil) {
         guard calibreServerUpdating == false else { return }    //structural changing ongoing
         
         calibreServers.filter {
@@ -1878,6 +1878,10 @@ final class ModelData: ObservableObject {
             var serverReachableChanged = false
             
             results.forEach { newServerInfo in
+                defer {
+                    completion?(newServerInfo.server.id)
+                }
+                
                 guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
                 serverInfo.probing = false
                 serverInfo.errorMsg = newServerInfo.errorMsg

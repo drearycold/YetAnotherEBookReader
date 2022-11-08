@@ -22,7 +22,33 @@ extension ModelData {
         
     }
     
-    func mergeBookLists(results: inout [String : LibrarySearchResult], page: Int = 0, limit: Int = 100) -> [String] {
+    var currentLibrarySearchCriteria: LibrarySearchCriteria {
+        LibrarySearchCriteria(
+            searchString: self.searchString,
+            sortCriteria: self.sortCriteria,
+            filterCriteriaRating: self.filterCriteriaRating,
+            filterCriteriaFormat: self.filterCriteriaFormat,
+            filterCriteriaIdentifier: self.filterCriteriaIdentifier,
+            filterCriteriaSeries: self.filterCriteriaSeries
+        )
+    }
+    
+    var currentSearchLibraryResults: [LibrarySearchKey: LibrarySearchResult] {
+        let searchCriteria = self.currentLibrarySearchCriteria
+        return self.searchLibraryResults.filter { $0.key.criteria == searchCriteria }
+    }
+    
+    var currentSearchLibraryResultsCannotFurther: Bool {
+        guard let maxPage = self.currentSearchLibraryResults.flatMap({ result -> [Int] in
+            result.value.pageOffset.filter {
+                (result.value.error || result.value.loading) ? $0.value < result.value.errorOffset : true
+            }.keys.map { $0 } }).max()
+        else { return true }
+        
+        return self.filteredBookListPageNumber + 1 == maxPage
+    }
+    
+    func mergeBookLists(results: inout [String : LibrarySearchResult], sortCriteria: LibrarySearchSort, page: Int = 0, limit: Int = 100) -> [String] {
         guard let realm = try? Realm(configuration: realmConf),
               let realmSearch = searchLibraryResultsRealmLocalThread
         else { return [] }
@@ -46,6 +72,10 @@ extension ModelData {
                 headIndex[$0.key] = 0
             } else if let offset = $0.value.pageOffset[startPage] {
                 headIndex[$0.key] = offset
+                
+                if offset < $0.value.bookIds.count  {
+                    results[$0.key]?.error = false
+                }
             }
         }
         
@@ -62,9 +92,10 @@ extension ModelData {
             return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
             ?? realmSearch.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
         }
-        heads.sort { lhs, rhs in
-            lhs.lastModified < rhs.lastModified
-        }
+        
+        // sort in reverse so we can use popLast() (O(1)) to merge
+        let sortComparator = MergeSortComparator(criteria: sortCriteria.by, order: sortCriteria.ascending ? .reverse : .forward)
+        heads.sort(using: sortComparator)
         
         let mergeLength = limit + (page - startPage) * limit
         while merged.count < mergeLength, let head = heads.popLast() {
@@ -92,12 +123,12 @@ extension ModelData {
             
             guard let next = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
             ?? realmSearch.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
-            else { continue }
+            else {
+                continue
+            }
             
             heads.append(next)
-            heads.sort { lhs, rhs in
-                lhs.lastModified < rhs.lastModified
-            }
+            heads.sort(using: sortComparator)
             
             if merged.count % limit == 0 {
                 let currentPage = (merged.count / limit) + startPage
@@ -108,15 +139,66 @@ extension ModelData {
             
         }
         
-        if merged.count % limit == 0 {
-            return merged.suffix(limit)
+        let resultLength = merged.count - (page - startPage) * limit
+        if resultLength > 0 {
+            return merged.suffix(resultLength)
         } else {
-            return merged.suffix(merged.count % limit)
+            return []
         }
     }
-    
-    
 }
+
+struct MergeSortComparator: SortComparator {
+    let criteria: SortCriteria
+    var order: SortOrder
+    
+    func compare(
+        _ lhs: CalibreBookRealm,
+        _ rhs: CalibreBookRealm
+    ) -> ComparisonResult {
+        switch order {
+        case .forward:
+            switch criteria {
+            case .Title:
+                return lhs.title.compare(rhs.title)
+            case .Added:
+                return lhs.timestamp.compare(rhs.timestamp)
+            case .Publication:
+                return lhs.pubDate.compare(rhs.pubDate)
+            case .Modified:
+                return lhs.lastModified.compare(rhs.lastModified)
+            case .SeriesIndex:
+                if lhs.seriesIndex < rhs.seriesIndex {
+                    return .orderedAscending
+                } else if lhs.seriesIndex > rhs.seriesIndex {
+                    return .orderedDescending
+                } else {
+                    return .orderedSame
+                }
+            }
+        case .reverse:
+            switch criteria {
+            case .Title:
+                return rhs.title.compare(lhs.title)
+            case .Added:
+                return rhs.timestamp.compare(lhs.timestamp)
+            case .Publication:
+                return rhs.pubDate.compare(lhs.pubDate)
+            case .Modified:
+                return rhs.lastModified.compare(lhs.lastModified)
+            case .SeriesIndex:
+                if rhs.seriesIndex < lhs.seriesIndex {
+                    return .orderedAscending
+                } else if rhs.seriesIndex > lhs.seriesIndex {
+                    return .orderedDescending
+                } else {
+                    return .orderedSame
+                }
+            }
+        }
+    }
+}
+
 
 extension CalibreServerService {
     func buildLibrarySearchTask(library: CalibreLibrary, searchCriteria: LibrarySearchCriteria) -> CalibreLibrarySearchTask? {
@@ -183,18 +265,21 @@ extension CalibreServerService {
                 guard let library = modelData.calibreLibraries[librarySearchKey.libraryId]
                 else { return nil }
                 
-                let searchKey = LibrarySearchKey(libraryId: library.id, criteria: librarySearchKey.criteria)
-                if modelData.searchLibraryResults[searchKey] == nil {
-                    modelData.searchLibraryResults[searchKey] = .init(library: library)
+                if modelData.searchLibraryResults[librarySearchKey] == nil {
+                    modelData.searchLibraryResults[librarySearchKey] = .init(library: library)
                 }
-                modelData.searchLibraryResults[searchKey]?.loading = true
-
-                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
                 
-                return modelData.calibreServerService.buildLibrarySearchTask(
+                guard let task = modelData.calibreServerService.buildLibrarySearchTask(
                     library: library,
                     searchCriteria: librarySearchKey.criteria
                 )
+                else { return nil }
+                
+                modelData.searchLibraryResults[librarySearchKey]?.loading = true
+
+                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
+                
+                return task
             }
             .receive(on: DispatchQueue.global(qos: .userInitiated))
             .flatMap({ task -> AnyPublisher<CalibreLibrarySearchTask, Never> in
@@ -227,14 +312,22 @@ extension CalibreServerService {
                 
                 return task
             }
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
             .compactMap { task -> CalibreBooksTask? in
                 guard let books = task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }),
                       books.isEmpty == false
-                else { return nil }
+                else {
+                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
+                    
+                    modelData.searchLibraryResults[librarySearchKey]?.loading = false
+
+                    modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
+                    
+                    return nil
+                }
                 
                 return buildBooksMetadataTask(library: task.library, books: books, searchCriteria: task.searchCriteria)
             }
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
             .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
                 modelData.calibreServerService.getBooksMetadata(task: task)
                     .replaceError(with: task)
@@ -276,16 +369,17 @@ extension CalibreServerService {
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
                 
-                guard let searchPreviousResult = modelData.searchLibraryResults[librarySearchKey]
+                modelData.searchLibraryResults[librarySearchKey]?.loading = false
+
+                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
+                
+                guard let searchPreviousResult = modelData.searchLibraryResults[librarySearchKey],
+                      searchPreviousResult.error
                 else { return }
                 
-                guard modelData.searchLibraryResults[librarySearchKey]?.error == true else { return }
-                
-                var needRemerge = false
-                if searchPreviousResult.pageOffset.isEmpty {
-                    needRemerge = true
-                }
-                else if let minPartialPage = searchPreviousResult.pageOffset.filter ({ $0.value >= searchPreviousResult.errorOffset }).keys.min() {
+                var needRemerge = searchPreviousResult.pageOffset.isEmpty
+                if !needRemerge,
+                   let minPartialPage = searchPreviousResult.pageOffset.filter ({ $0.value >= searchPreviousResult.errorOffset }).keys.min() {
                     // discard partial offsets
                     for key in modelData.searchLibraryResults.keys {
                         if let pages = modelData.searchLibraryResults[key]?.pageOffset.keys.filter({ $0 >= minPartialPage }) {
@@ -332,7 +426,7 @@ extension CalibreServerService {
                     partialResult[entry.key.libraryId] = entry.value
                 })
                 
-                modelData.filteredBookList = modelData.mergeBookLists(results: &mergeResults, page: modelData.filteredBookListPageNumber, limit: modelData.filteredBookListPageSize)
+                modelData.filteredBookList = modelData.mergeBookLists(results: &mergeResults, sortCriteria: librarySearchKey.criteria.sortCriteria, page: modelData.filteredBookListPageNumber, limit: modelData.filteredBookListPageSize)
                 
                 mergeResults.forEach {
                     let key = LibrarySearchKey(libraryId: $0.key, criteria: searchCriteria)
