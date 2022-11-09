@@ -2167,7 +2167,11 @@ final class ModelData: ObservableObject {
 
             return self.calibreServerService.getCustomColumnsPublisher(library: library)
         }
+        .flatMap { result -> AnyPublisher<CalibreSyncLibraryResult, Never> in
+            self.calibreServerService.getLibraryCategoriesPublisher(resultPrev: result)
+        }
         .flatMap { customColumnResult -> AnyPublisher<CalibreSyncLibraryResult, Never> in
+            print("\(#function) syncLibraryPublisher \(customColumnResult.library.id) \(customColumnResult.categories)")
             guard customColumnResult.result["just_syncing"] == nil,
                   customColumnResult.result["auto_update"] == nil else {
                 return Just(customColumnResult).setFailureType(to: Never.self).eraseToAnyPublisher()

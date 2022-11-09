@@ -1527,7 +1527,15 @@ struct CalibreSyncLibraryResult {
     var isIncremental: Bool = true
     var result: [String: [String:CalibreCustomColumnInfo]]
     var errmsg = ""
+    var categories: [CalibreLibraryCategory] = []
     var list = CalibreCdbCmdListResult()
+}
+
+struct CalibreLibraryCategory: Codable {
+    var name: String
+    var url: String
+    var icon: String
+    var is_category: Bool
 }
 
 struct CalibreCdbCmdListResult: Codable, Hashable {

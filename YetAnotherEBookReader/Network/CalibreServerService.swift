@@ -1284,6 +1284,32 @@ struct CalibreServerService {
         
         return a
     }
+    
+    func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+        var urlComponents = URLComponents()
+        urlComponents.path = "ajax/categories/\(resultPrev.library.key)"
+        
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server),
+              let endpointUrl = urlComponents.url(relativeTo: serverUrl)
+        else {
+            var result = resultPrev
+            result.errmsg = "Server not Reachable"
+            return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
+        }
+        
+        return urlSession(server: resultPrev.library.server).dataTaskPublisher(for: endpointUrl)
+            .map {
+                $0.data
+            }
+            .decode(type: [CalibreLibraryCategory].self, decoder: JSONDecoder())
+            .replaceError(with: [])
+            .map { categories -> CalibreSyncLibraryResult in
+                var result = resultPrev
+                result.categories = categories
+                return result
+            }
+            .eraseToAnyPublisher()
+    }
 }
 
 struct CalibreServerLibraryInfo: Codable {
