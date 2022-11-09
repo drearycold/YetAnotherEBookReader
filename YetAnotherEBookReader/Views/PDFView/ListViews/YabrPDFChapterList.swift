@@ -50,13 +50,15 @@ class YabrPDFChapterList: YabrPDFTableViewController {
         guard let currentPageNumber = yabrPDFView?.currentPage?.pageRef?.pageNumber else { return }
 
         var outlineIndex = outlines.endIndex - 1
-        for i in 0..<(outlines.count-1) {
+        for i in outlines.indices {
             if (outlines[i].destination?.page?.pageRef?.pageNumber ?? 0) <= currentPageNumber,
                (outlines[i+1].destination?.page?.pageRef?.pageNumber ?? 0) >= currentPageNumber {
                 outlineIndex = i
                 break
             }
         }
+        
+        guard outlineIndex >= 0 else { return }
         
         self.tableView.scrollToRow(at: IndexPath(row: outlineIndex, section: 0), at: .middle, animated: true)
     }
