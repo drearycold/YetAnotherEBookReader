@@ -18,6 +18,7 @@ struct LibraryInfoView: View {
     //@State private var booksList = [CalibreBook]()
     @State private var booksList = [String]()
     
+    @State private var searchHistoryList = [String]()
     @State private var libraryList = [CalibreLibrary]()
     @State private var seriesList = [String]()
     @State private var ratingList = ["Not Rated", "★★★★★", "★★★★", "★★★", "★★", "★"]
@@ -34,6 +35,7 @@ struct LibraryInfoView: View {
     @State private var pageCount = 0
     @State private var updater = 0
     @State private var booksListInfoPresenting = false
+    @State private var searchHistoryPresenting = false
     
     @State private var alertItem: AlertItem?
     
@@ -60,9 +62,17 @@ struct LibraryInfoView: View {
                         } else {
                             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                         }
-                        
-                    })
+                    }).padding([.leading, .trailing], 24)
                     HStack {
+                        Button {
+                            searchHistoryPresenting = true
+                        } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .popover(isPresented: $searchHistoryPresenting) {
+                            Text("Search History")
+                        }
+
                         Spacer()
                         Button(action: {
                             guard modelData.searchString.count > 0 || searchString.count > 0 else { return }
@@ -77,7 +87,7 @@ struct LibraryInfoView: View {
                             Image(systemName: "xmark.circle.fill")
                                 .foregroundColor(.gray)
                         }.disabled(searchString.isEmpty)
-                    }
+                    }.padding([.leading, .trailing], 4)
                 }
                 
                 Divider()
@@ -361,6 +371,12 @@ struct LibraryInfoView: View {
             filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
             filterCriteriaSeries: modelData.filterCriteriaSeries
         )
+        
+        if modelData.searchString.isEmpty == false {
+            var set = Set<String>(searchHistoryList)
+            set.insert(modelData.searchString)
+            searchHistoryList = set.sorted()
+        }
         
         libraryList = modelData.calibreLibraries
             .filter { $0.value.hidden == false }
