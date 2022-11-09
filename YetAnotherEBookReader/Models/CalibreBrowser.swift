@@ -29,7 +29,8 @@ extension ModelData {
             filterCriteriaRating: self.filterCriteriaRating,
             filterCriteriaFormat: self.filterCriteriaFormat,
             filterCriteriaIdentifier: self.filterCriteriaIdentifier,
-            filterCriteriaSeries: self.filterCriteriaSeries
+            filterCriteriaSeries: self.filterCriteriaSeries,
+            filterCriteriaLibraries: self.filterCriteriaLibraries
         )
     }
     
@@ -223,6 +224,10 @@ extension CalibreServerService {
             booksListUrlQueryItems.append(.init(name: "num", value: (searchCriteria.pageSize * 2).description))
         }
         
+        if searchCriteria.searchString.isEmpty == false {
+            booksListUrlQueryItems.append(.init(name: "query", value: searchCriteria.searchString))
+        }
+        
         booksListUrlComponents.queryItems = booksListUrlQueryItems
         
         guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
@@ -279,6 +284,8 @@ extension CalibreServerService {
 
                 modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
                 
+                print("\(#function) searchUrl=\(task.booksListUrl.absoluteString)")
+                
                 return task
             }
             .receive(on: DispatchQueue.global(qos: .userInitiated))
@@ -313,8 +320,19 @@ extension CalibreServerService {
                 return task
             }
             .compactMap { task -> CalibreBooksTask? in
-                guard let books = task.ajaxSearchResult?.book_ids.map({ CalibreBook(id: $0, library: task.library) }),
-                      books.isEmpty == false
+                let serverUUID = task.library.server.uuid.uuidString
+                
+                guard let realm = modelData.searchLibraryResultsRealmLocalThread,
+                      let books = task.ajaxSearchResult?.book_ids
+                    .filter({ realm.object(
+                        ofType: CalibreBookRealm.self,
+                        forPrimaryKey:
+                            CalibreBookRealm.PrimaryKey(
+                                serverUUID: serverUUID,
+                                libraryName: task.library.name,
+                                id: $0.description
+                            )) == nil })
+                    .map({ CalibreBook(id: $0, library: task.library) })
                 else {
                     let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
                     
@@ -410,8 +428,14 @@ extension CalibreServerService {
                 
                 let searchCriteria = librarySearchKey.criteria
                 
-                let results = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria }
-                modelData.calibreLibraries.filter { $0.value.hidden == false }.forEach {
+                let results = modelData.searchLibraryResults.filter {
+                    $0.key.criteria == searchCriteria
+                    && (searchCriteria.filterCriteriaLibraries.isEmpty || searchCriteria.filterCriteriaLibraries.contains($0.key.libraryId))
+                }
+                modelData.calibreLibraries.filter {
+                    $0.value.hidden == false
+                    && (searchCriteria.filterCriteriaLibraries.isEmpty || searchCriteria.filterCriteriaLibraries.contains($0.key))
+                }.forEach {
                     if results[.init(libraryId: $0.key, criteria: searchCriteria)] == nil {
                         modelData.librarySearchSubject.send(.init(libraryId: $0.key, criteria: searchCriteria))
                     }

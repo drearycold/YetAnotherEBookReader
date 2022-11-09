@@ -337,6 +337,7 @@
 		6E7B810028FBA7AD008B075C /* CalibreDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */; };
 		6E7B810128FBA7AD008B075C /* FontsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47879C271526BF009C8770 /* FontsHelper.swift */; };
 		6E7B810228FBA7AD008B075C /* BookAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405B28EBDAB50013BA01 /* BookAnnotation.swift */; };
+		E706CBCA291B48CB00C1426F /* CalibreBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E730405C28EBDAB50013BA01 /* BookAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405B28EBDAB50013BA01 /* BookAnnotation.swift */; };
 		E738C89F29160AA700A4AC6E /* CalibreBrowser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */; };
@@ -1736,6 +1737,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E706CBCA291B48CB00C1426F /* CalibreBrowser.swift in Sources */,
 				6E7B80D428FBA7AD008B075C /* ActivityList.swift in Sources */,
 				6E7B80D528FBA7AD008B075C /* ReadingPositionHistoryView.swift in Sources */,
 				6E7B80D628FBA7AD008B075C /* Configuration.swift in Sources */,

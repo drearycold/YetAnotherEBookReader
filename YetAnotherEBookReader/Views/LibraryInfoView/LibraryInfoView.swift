@@ -62,7 +62,9 @@ struct LibraryInfoView: View {
                         } else {
                             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                         }
-                    }).padding([.leading, .trailing], 24)
+                    })
+                    .keyboardType(.webSearch)
+                    .padding([.leading, .trailing], 24)
                     HStack {
                         Button {
                             searchHistoryPresenting = true
@@ -363,14 +365,7 @@ struct LibraryInfoView: View {
 
     func updateBooksList() {
         let fbURL = URL(fileURLWithPath: "/")
-        let searchCriteria = LibrarySearchCriteria(
-            searchString: modelData.searchString,
-            sortCriteria: modelData.sortCriteria,
-            filterCriteriaRating: modelData.filterCriteriaRating,
-            filterCriteriaFormat: modelData.filterCriteriaFormat,
-            filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
-            filterCriteriaSeries: modelData.filterCriteriaSeries
-        )
+        let searchCriteria = modelData.currentLibrarySearchCriteria
         
         if modelData.searchString.isEmpty == false {
             var set = Set<String>(searchHistoryList)
@@ -927,7 +922,7 @@ struct LibraryInfoView: View {
     }
     
     private func getLibraryFilterText(library: CalibreLibrary) -> String {
-        let searchResult = modelData.searchLibraryResults[LibrarySearchKey(libraryId: library.id, criteria: LibrarySearchCriteria(searchString: modelData.searchString, sortCriteria: modelData.sortCriteria, filterCriteriaRating: modelData.filterCriteriaRating, filterCriteriaFormat: modelData.filterCriteriaFormat, filterCriteriaIdentifier: modelData.filterCriteriaIdentifier, filterCriteriaSeries: modelData.filterCriteriaSeries))]
+        let searchResult = modelData.searchLibraryResults[LibrarySearchKey(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria)]
         
         return library.name
         + " "
@@ -941,14 +936,7 @@ struct LibraryInfoView: View {
     }
     
     private func getLibrarySearchingText() -> String {
-        let searchCriteria = LibrarySearchCriteria(
-            searchString: modelData.searchString,
-            sortCriteria: modelData.sortCriteria,
-            filterCriteriaRating: modelData.filterCriteriaRating,
-            filterCriteriaFormat: modelData.filterCriteriaFormat,
-            filterCriteriaIdentifier: modelData.filterCriteriaIdentifier,
-            filterCriteriaSeries: modelData.filterCriteriaSeries
-        )
+        let searchCriteria = modelData.currentLibrarySearchCriteria
         
         let searchResultsLoading = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }
         if searchResultsLoading.count == 1,
@@ -1053,6 +1041,7 @@ struct LibrarySearchCriteria: Hashable {
     let filterCriteriaFormat: Set<String>
     let filterCriteriaIdentifier: Set<String>
     let filterCriteriaSeries: Set<String>
+    let filterCriteriaLibraries: Set<String>
     let pageSize: Int = 100
 }
 
