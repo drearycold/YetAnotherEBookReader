@@ -1522,6 +1522,17 @@ struct CalibreCustomColumnDisplayInfo: Codable, Hashable {
     }
 }
 
+struct CalibreLibraryCategoryKey: Hashable {
+    let libraryId: String
+    let categoryName: String
+}
+
+struct CalibreLibraryCategoryValue {
+    var reqId: Int
+    var totalNumber: Int
+    var items: [LibraryCategoryListResult.Item]
+}
+
 struct CalibreSyncLibraryResult {
     var library: CalibreLibrary
     var isIncremental: Bool = true

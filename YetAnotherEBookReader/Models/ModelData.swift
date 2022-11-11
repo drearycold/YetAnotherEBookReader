@@ -29,6 +29,7 @@ final class ModelData: ObservableObject {
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
+    @Published var calibreLibraryCategories = [CalibreLibraryCategoryKey: CalibreLibraryCategoryValue]()
     
     /// Used for server level activities
     @Published var calibreServerUpdating = false
@@ -51,7 +52,8 @@ final class ModelData: ObservableObject {
     @Published var filterCriteriaIdentifier = Set<String>()
     @Published var filterCriteriaShelved = FilterCriteriaShelved.none
     @Published var filterCriteriaSeries = Set<String>()
-    
+    @Published var filterCriteriaTags = Set<String>()
+
     @Published var filterCriteriaLibraries = Set<String>()
     
     @Published var filteredBookList = [String]()
@@ -139,11 +141,11 @@ final class ModelData: ObservableObject {
     ).eraseToAnyPublisher()
     var bookReaderEnterActiveCancellable: AnyCancellable? = nil
     
-    let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
-    var librarySearchCancellable: AnyCancellable?
+    var calibreCancellables = Set<AnyCancellable>()
     
+    let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
-    var filteredBookListMergeCancellable: AnyCancellable?
+    let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -303,6 +305,8 @@ final class ModelData: ObservableObject {
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
         registerBookReaderClosedCancellable()
+        
+        self.calibreServerService.registerLibraryCategoryHandler()
         
         if mock {
             let library = calibreLibraries.first!.value
@@ -2233,6 +2237,20 @@ final class ModelData: ObservableObject {
         
         defer {
             DispatchQueue.main.async {
+                results.categories.filter {
+                    $0.is_category && $0.name != "Authors"
+                }.forEach { category in
+                    self.libraryCategorySubject.send(
+                        .init(
+                            library: library,
+                            category: category,
+                            reqId: (self.calibreLibraryCategories[.init(libraryId: library.id, categoryName: category.name)]?.reqId ?? 0) + 1,
+                            offset: 0,
+                            num: 0
+                        )
+                    )   //get total_num
+                }
+                
                 self.librarySyncStatus[library.id]?.isSync = false
                 self.librarySyncStatus[library.id]?.isError = isError
                 self.librarySyncStatus[library.id]?.cnt = bookCount

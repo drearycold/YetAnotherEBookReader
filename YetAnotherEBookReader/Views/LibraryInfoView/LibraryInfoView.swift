@@ -15,12 +15,20 @@ import struct Kingfisher.KFImage
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
 
+    @State private var viewByCategory = false
     //@State private var booksList = [CalibreBook]()
+    @State private var categoriesList = [String]()
+    @State private var categoriesSelected : String? = nil
+    @State private var categoryItems = [String]()
+    @State private var categoryItemSelected: String? = nil
+    
     @State private var booksList = [String]()
     
     @State private var searchHistoryList = [String]()
     @State private var libraryList = [CalibreLibrary]()
     @State private var seriesList = [String]()
+    @State private var tagsList = [String]()
+
     @State private var ratingList = ["Not Rated", "★★★★★", "★★★★", "★★★", "★★", "★"]
     @State private var formatList = [String]()
     @State private var identifierList = [String]()
@@ -95,32 +103,108 @@ struct LibraryInfoView: View {
                 Divider()
                 
                 ZStack {
-                    List(selection: $selectedBookIds) {
-                        ForEach(modelData.filteredBookList, id: \.self) { bookInShelfId in
-                            NavigationLink (
-                                destination: BookDetailView(viewMode: .LIBRARY),
-                                tag: bookInShelfId,
-                                selection: $modelData.selectedBookId
-                            ) {
-//                                LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
-//                                    book
-//                                }, set: { newBook in
-//                                    //dummy
-//                                }))
-                                bookRowView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
+                    if viewByCategory {
+                        List {
+                            ForEach(categoriesList, id: \.self) { categoryName in
+                                NavigationLink(tag: categoryName, selection: $categoriesSelected) {
+                                    List {
+                                        ForEach(categoryItems, id: \.self) { categoryItem in
+                                            NavigationLink(tag: categoryItem, selection: $categoryItemSelected) {
+                                                List(selection: $selectedBookIds) {
+                                                    ForEach(modelData.filteredBookList, id: \.self) { bookInShelfId in
+                                                        NavigationLink (
+                                                            destination: BookDetailView(viewMode: .LIBRARY),
+                                                            tag: bookInShelfId,
+                                                            selection: $modelData.selectedBookId
+                                                        ) {
+                                                            bookRowView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
+                                                        }
+                                                        .isDetailLink(true)
+                                                        .contextMenu {
+                                                            bookRowContextMenuView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
+                                                        }
+                                                    }   //ForEach
+                                                }
+                                            } label: {
+                                                Text(categoryItem)
+                                            }.onChange(of: categoryItemSelected) { [categoryItemSelected] categoryItem in
+                                                modelData.filteredBookList.removeAll()
+                                                
+                                                print("\(#function) categoryItemSelected=\(categoryItemSelected) categoryItem=\(categoryItem)")
+                                                
+                                                guard let categoriesSelected = categoriesSelected,
+                                                      let categoryItem = categoryItem else { return }
+                                                
+                                                let filterItems = [modelData.filterCriteriaRating,
+                                                                   modelData.filterCriteriaFormat,
+                                                                   modelData.filterCriteriaIdentifier,
+                                                                   modelData.filterCriteriaSeries,
+                                                                   modelData.filterCriteriaTags,
+                                                                   modelData.filterCriteriaLibraries].flatMap { $0 }
+                                                if filterItems.count == 1,
+                                                   filterItems.first == categoryItem {
+                                                    return
+                                                }
+                                                
+                                                modelData.filterCriteriaRating.removeAll()
+                                                modelData.filterCriteriaFormat.removeAll()
+                                                modelData.filterCriteriaIdentifier.removeAll()
+                                                modelData.filterCriteriaSeries.removeAll()
+                                                modelData.filterCriteriaTags.removeAll()
+                                                modelData.filterCriteriaLibraries.removeAll()
+                                                
+                                                modelData.filterCriteriaShelved = .none
+                                                
+                                                
+                                                switch categoriesSelected {
+                                                case "Series":
+                                                    modelData.filterCriteriaSeries.insert(categoryItem)
+                                                case "Tags":
+                                                    modelData.filterCriteriaTags.insert(categoryItem)
+                                                default:
+                                                    break
+                                                }
+                                                
+                                                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                                                
+                                            }
+                                        }
+                                    }
+                                } label: {
+                                    Text(categoryName)
+                                }.isDetailLink(false)
                             }
-                            .isDetailLink(true)
-                            .contextMenu {
-                                bookRowContextMenuView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
-                            }
-                        }   //ForEach
-                    }
-                    .disabled(booksListRefreshing)
-                    .popover(isPresented: $batchDownloadSheetPresenting,
-                             attachmentAnchor: .rect(.bounds),
-                             arrowEdge: .top
-                    ) {
-                        LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, editMode: $editMode, selectedBookIds: $selectedBookIds)
+                        }.onChange(of: categoriesSelected) { categoryName in
+                            categoryItems = Set<String>(
+                                modelData.calibreLibraryCategories
+                                    .filter { $0.key.categoryName == categoryName }
+                                    .flatMap({ $0.value.items })
+                                    .map { $0.name }
+                            ).sorted()
+                        }
+                    } else {
+                        List(selection: $selectedBookIds) {
+                            ForEach(modelData.filteredBookList, id: \.self) { bookInShelfId in
+                                NavigationLink (
+                                    destination: BookDetailView(viewMode: .LIBRARY),
+                                    tag: bookInShelfId,
+                                    selection: $modelData.selectedBookId
+                                ) {
+                                    bookRowView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
+                                }
+                                .isDetailLink(true)
+                                .contextMenu {
+                                    bookRowContextMenuView(book: modelData.getBook(for: bookInShelfId) ?? errBook)
+                                }
+                            }   //ForEach
+                        }
+                        .disabled(booksListRefreshing)
+                        .popover(isPresented: $batchDownloadSheetPresenting,
+                                 attachmentAnchor: .rect(.bounds),
+                                 arrowEdge: .top
+                        ) {
+                            LibraryInfoBatchDownloadSheet(presenting: $batchDownloadSheetPresenting, editMode: $editMode, selectedBookIds: $selectedBookIds)
+                        }
                     }
                     
                     if booksListRefreshing {
@@ -165,6 +249,18 @@ struct LibraryInfoView: View {
                     ToolbarItem(placement: .navigationBarLeading) {
                         editButton
                         //editButtonView()
+                    }
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            viewByCategory.toggle()
+                        } label: {
+                            if viewByCategory {
+                                Image(systemName: "list.bullet.indent")
+                            } else {
+                                Image(systemName: "list.bullet")
+                            }
+                        }
+
                     }
                 }
                 
@@ -298,7 +394,7 @@ struct LibraryInfoView: View {
             //                }   //List.toolbar
             .environment(\.editMode, self.$editMode)  //TODO
         }   //NavigationView
-        .navigationViewStyle(DefaultNavigationViewStyle())
+        .navigationViewStyle(ColumnNavigationViewStyle.columns)
         .listStyle(PlainListStyle())
         .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
@@ -379,6 +475,12 @@ struct LibraryInfoView: View {
             .sorted { $0.name < $1.name }
         
         modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: searchCriteria))
+        
+        categoriesList = Set<String>(modelData.calibreLibraryCategories.map { $0.key.categoryName }).sorted()
+        
+        seriesList = Set<String>(modelData.calibreLibraryCategories.filter { $0.key.categoryName == "Series" }.flatMap({ $0.value.items }).map { $0.name }).sorted()
+        
+        tagsList = Set<String>(modelData.calibreLibraryCategories.filter { $0.key.categoryName == "Tags" }.flatMap({ $0.value.items }).map { $0.name }).sorted()
         
         return;
         
@@ -771,6 +873,7 @@ struct LibraryInfoView: View {
                 modelData.filterCriteriaIdentifier.removeAll()
                 modelData.filterCriteriaShelved = .none
                 modelData.filterCriteriaSeries.removeAll()
+                modelData.filterCriteriaTags.removeAll()
                 modelData.filterCriteriaLibraries.removeAll()
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
             }) {
@@ -795,7 +898,7 @@ struct LibraryInfoView: View {
                 }
             }
             
-            Menu("Series ...") {
+            Menu("Series ... (\(seriesList.count))") {
                 ForEach(seriesList, id: \.self) { id in
                     Button(action: {
                         if modelData.filterCriteriaSeries.contains(id) {
@@ -806,6 +909,21 @@ struct LibraryInfoView: View {
                         NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                     }, label: {
                         Text(id + (modelData.filterCriteriaSeries.contains(id) ? "✓" : ""))
+                    })
+                }
+            }
+            
+            Menu("Tags ... (\(tagsList.count))") {
+                ForEach(tagsList, id: \.self) { id in
+                    Button(action: {
+                        if modelData.filterCriteriaTags.contains(id) {
+                            modelData.filterCriteriaTags.remove(id)
+                        } else {
+                            modelData.filterCriteriaTags.insert(id)
+                        }
+                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                    }, label: {
+                        Text(id + (modelData.filterCriteriaTags.contains(id) ? "✓" : ""))
                     })
                 }
             }
@@ -986,81 +1104,6 @@ extension EditMode {
 
     mutating func toggle() {
         self = self == .active ? .inactive : .active
-    }
-}
-
-enum SortCriteria: String, CaseIterable, Identifiable {
-    var id: String { self.rawValue }
-    
-    case Title
-    case Added
-    case Publication
-    case Modified
-    case SeriesIndex
-    
-    var sortKeyPath: String {
-        switch(self) {
-        case .Title:
-            return "title"
-        case .Added:
-            return "timestamp"
-        case .Publication:
-            return "pubDate"
-        case .Modified:
-            return "lastModified"
-        case .SeriesIndex:
-            return "seriesIndex"
-        }
-    }
-    
-    var sortQueryParam: String {
-        switch(self) {
-        case .Title:
-            return "sort"
-        case .Added:
-            return "timestamp"
-        case .Publication:
-            return "pubdate"
-        case .Modified:
-            return "last_modified"
-        case .SeriesIndex:
-            return "series_index"
-        }
-    }
-}
-
-struct LibrarySearchSort: Hashable {
-    var by = SortCriteria.Modified
-    var ascending = false
-}
-
-struct LibrarySearchCriteria: Hashable {
-    let searchString: String
-    let sortCriteria: LibrarySearchSort
-    let filterCriteriaRating: Set<String>
-    let filterCriteriaFormat: Set<String>
-    let filterCriteriaIdentifier: Set<String>
-    let filterCriteriaSeries: Set<String>
-    let filterCriteriaLibraries: Set<String>
-    let pageSize: Int = 100
-}
-
-struct LibrarySearchKey: Hashable {
-    let libraryId: String
-    let criteria: LibrarySearchCriteria
-}
-
-struct LibrarySearchResult {
-    let library: CalibreLibrary
-    var loading = false
-    var error = false
-    var errorOffset = 0
-    var totalNumber = 0
-    var pageOffset = [Int: Int]()    //key: browser page no, value: offset in bookIds
-    var bookIds = [Int32]()
-    
-    var description: String {
-        "\(bookIds.count)/\(totalNumber)"
     }
 }
 

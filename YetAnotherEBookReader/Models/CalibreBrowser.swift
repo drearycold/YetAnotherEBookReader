@@ -9,6 +9,111 @@ import Foundation
 import RealmSwift
 import Combine
 
+struct LibrarySearchSort: Hashable {
+    var by = SortCriteria.Modified
+    var ascending = false
+}
+
+enum SortCriteria: String, CaseIterable, Identifiable {
+    var id: String { self.rawValue }
+    
+    case Title
+    case Added
+    case Publication
+    case Modified
+    case SeriesIndex
+    
+    var sortKeyPath: String {
+        switch(self) {
+        case .Title:
+            return "title"
+        case .Added:
+            return "timestamp"
+        case .Publication:
+            return "pubDate"
+        case .Modified:
+            return "lastModified"
+        case .SeriesIndex:
+            return "seriesIndex"
+        }
+    }
+    
+    var sortQueryParam: String {
+        switch(self) {
+        case .Title:
+            return "sort"
+        case .Added:
+            return "timestamp"
+        case .Publication:
+            return "pubdate"
+        case .Modified:
+            return "last_modified"
+        case .SeriesIndex:
+            return "series_index"
+        }
+    }
+}
+
+struct LibrarySearchCriteria: Hashable {
+    let searchString: String
+    let sortCriteria: LibrarySearchSort
+    let filterCriteriaRating: Set<String>
+    let filterCriteriaFormat: Set<String>
+    let filterCriteriaIdentifier: Set<String>
+    let filterCriteriaSeries: Set<String>
+    let filterCriteriaTags: Set<String>
+    let filterCriteriaLibraries: Set<String>
+    let pageSize: Int = 100
+}
+
+struct LibrarySearchKey: Hashable {
+    let libraryId: String
+    let criteria: LibrarySearchCriteria
+}
+
+struct LibrarySearchResult {
+    let library: CalibreLibrary
+    var loading = false
+    var error = false
+    var errorOffset = 0
+    var totalNumber = 0
+    var pageOffset = [Int: Int]()    //key: browser page no, value: offset in bookIds
+    var bookIds = [Int32]()
+    
+    var description: String {
+        "\(bookIds.count)/\(totalNumber)"
+    }
+}
+
+struct LibraryCategoryList {
+    let library: CalibreLibrary
+    let category: CalibreLibraryCategory
+    let reqId: Int
+    var offset: Int
+    var num: Int
+    
+    var result: LibraryCategoryListResult?
+}
+
+struct LibraryCategoryListResult: Codable {
+    struct Item: Codable {
+        let name: String
+        let average_rating: Double
+        let count: Int
+        let url: String
+        let has_children: Bool
+    }
+    let category_name: String
+    let base_url: String
+    let total_num: Int
+    let offset: Int
+    let num: Int
+    let sort: String
+    let sort_order: String
+    //"subcategories": [],  unknown
+    let items: [Item]
+}
+
 extension ModelData {
     func getBook(for primaryKey: String) -> CalibreBook? {
         if let obj = getBookRealm(forPrimaryKey: primaryKey),
@@ -30,6 +135,7 @@ extension ModelData {
             filterCriteriaFormat: self.filterCriteriaFormat,
             filterCriteriaIdentifier: self.filterCriteriaIdentifier,
             filterCriteriaSeries: self.filterCriteriaSeries,
+            filterCriteriaTags: self.filterCriteriaTags,
             filterCriteriaLibraries: self.filterCriteriaLibraries
         )
     }
@@ -224,9 +330,21 @@ extension CalibreServerService {
             booksListUrlQueryItems.append(.init(name: "num", value: (searchCriteria.pageSize * 2).description))
         }
         
+        var queryStrings = [String]()
         if searchCriteria.searchString.isEmpty == false {
-            booksListUrlQueryItems.append(.init(name: "query", value: searchCriteria.searchString))
+            queryStrings.append(searchCriteria.searchString)
         }
+        if searchCriteria.filterCriteriaSeries.isEmpty == false {
+            queryStrings.append(" ( " + searchCriteria.filterCriteriaSeries.map {
+                "series:\"=\($0)\""
+            }.joined(separator: " OR ") + " ) ")
+        }
+        if searchCriteria.filterCriteriaTags.isEmpty == false {
+            queryStrings.append(" ( " + searchCriteria.filterCriteriaTags.map {
+                "tags:\"=\($0)\""
+            }.joined(separator: " OR ") + " ) ")
+        }
+        booksListUrlQueryItems.append(.init(name: "query", value: queryStrings.joined(separator: " AND ")))
         
         booksListUrlComponents.queryItems = booksListUrlQueryItems
         
@@ -260,10 +378,7 @@ extension CalibreServerService {
     }
     
     func registerLibrarySearchHandler() {
-        let fbURL = URL(fileURLWithPath: "/")
-        
-        modelData.librarySearchCancellable?.cancel()
-        modelData.librarySearchCancellable = modelData.librarySearchSubject
+        modelData.librarySearchSubject
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .compactMap { librarySearchKey -> CalibreLibrarySearchTask? in
@@ -414,12 +529,11 @@ extension CalibreServerService {
                 }
                 
                 modelData.searchLibraryResults[librarySearchKey]?.error = false
-            })
+            }).store(in: &modelData.calibreCancellables)
     }
     
     func registerFilteredBookListMergeHandler() {
-        modelData.filteredBookListMergeCancellable?.cancel()
-        modelData.filteredBookListMergeCancellable = modelData.filteredBookListMergeSubject
+        modelData.filteredBookListMergeSubject
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
                 
@@ -466,6 +580,88 @@ extension CalibreServerService {
                 }
                 
                 modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }.isEmpty == false
-            })
+            }).store(in: &modelData.calibreCancellables)
+    }
+    
+    func registerLibraryCategoryHandler() {
+        modelData.libraryCategorySubject
+            .subscribe(on: DispatchQueue.global())
+            .flatMap { request -> AnyPublisher<LibraryCategoryList, Never> in
+                let just = Just(request).setFailureType(to: Never.self).eraseToAnyPublisher()
+                guard let serverUrl = getServerUrlByReachability(server: request.library.server)
+                else { return just }
+                
+                var urlComponents = URLComponents(string: request.category.url)
+                urlComponents?.queryItems = [
+                    URLQueryItem(name: "num", value: request.num.description),
+                    URLQueryItem(name: "offset", value: request.offset.description)
+                ]
+                guard let url = urlComponents?.url(relativeTo: serverUrl)
+                else { return just }
+                
+                return urlSession(server: request.library.server).dataTaskPublisher(for: url)
+                    .map {
+                        $0.data
+                    }
+                    .decode(type: LibraryCategoryListResult.self, decoder: JSONDecoder())
+                    .map { result -> LibraryCategoryList in
+                        var request = request
+                        request.result = result
+                        return request
+                    }
+                    .replaceError(with: request)
+                    .eraseToAnyPublisher()
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                
+            } receiveValue: { value in
+                guard let result = value.result
+                else { return }
+                
+                print("\(#function) category=\(value.category) \(value.reqId) \(result.total_num) \(result.num) \(result.offset)")
+
+                let key = CalibreLibraryCategoryKey(libraryId: value.library.id, categoryName: value.category.name)
+                if modelData.calibreLibraryCategories[key] == nil {
+                    modelData.calibreLibraryCategories[key] = .init(reqId: 0, totalNumber: 0, items: [])
+                }
+                if (modelData.calibreLibraryCategories[key]?.reqId ?? 0) < value.reqId,
+                   (modelData.calibreLibraryCategories[key]?.totalNumber ?? 0) != result.total_num {
+                    modelData.calibreLibraryCategories[key]?.reqId = value.reqId
+                    modelData.calibreLibraryCategories[key]?.totalNumber = result.total_num
+                    modelData.calibreLibraryCategories[key]?.items.removeAll(keepingCapacity: true)
+                    modelData.calibreLibraryCategories[key]?.items.reserveCapacity(result.total_num)
+                }
+                guard modelData.calibreLibraryCategories[key]?.reqId == value.reqId
+                else { return }
+                
+                if result.offset + result.items.count < result.total_num {
+                    modelData.libraryCategorySubject.send(
+                        .init(
+                            library: value.library,
+                            category: value.category,
+                            reqId: value.reqId,
+                            offset: result.offset + result.items.count,
+                            num: 100
+                        )
+                    )
+                }
+                
+                guard result.items.isEmpty == false
+                else { return }
+                
+                if (modelData.calibreLibraryCategories[key]?.items.count ?? 0) < (result.offset + result.items.count) {
+                    modelData.calibreLibraryCategories[key]?.items.append(
+                        contentsOf:
+                            Array(
+                                repeating: .init(name: "", average_rating: 0, count: 0, url: "", has_children: false),
+                                count: (result.offset + result.items.count) - (modelData.calibreLibraryCategories[key]?.items.count ?? 0)
+                            )
+                    )
+                }
+                
+                modelData.calibreLibraryCategories[key]?.items.replaceSubrange(result.offset..<(result.offset+result.items.count), with: result.items)
+            }.store(in: &modelData.calibreCancellables)
+
     }
 }
