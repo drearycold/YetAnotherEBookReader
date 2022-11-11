@@ -125,13 +125,12 @@ struct LibraryInfoView: View {
                                                         }
                                                     }   //ForEach
                                                 }
+                                                .navigationTitle("\(categoryName): \(categoryItem)")
                                             } label: {
                                                 Text(categoryItem)
-                                            }.onChange(of: categoryItemSelected) { [categoryItemSelected] categoryItem in
-                                                modelData.filteredBookList.removeAll()
-                                                
-                                                print("\(#function) categoryItemSelected=\(categoryItemSelected) categoryItem=\(categoryItem)")
-                                                
+                                            }
+                                            .isDetailLink(false)
+                                            .onChange(of: categoryItemSelected) { categoryItem in
                                                 guard let categoriesSelected = categoriesSelected,
                                                       let categoryItem = categoryItem else { return }
                                                 
@@ -141,10 +140,11 @@ struct LibraryInfoView: View {
                                                                    modelData.filterCriteriaSeries,
                                                                    modelData.filterCriteriaTags,
                                                                    modelData.filterCriteriaLibraries].flatMap { $0 }
-                                                if filterItems.count == 1,
-                                                   filterItems.first == categoryItem {
+                                                if filterItems == [categoryItem] {
                                                     return
                                                 }
+                                                
+                                                modelData.filteredBookList.removeAll()
                                                 
                                                 modelData.filterCriteriaRating.removeAll()
                                                 modelData.filterCriteriaFormat.removeAll()
@@ -159,6 +159,8 @@ struct LibraryInfoView: View {
                                                 switch categoriesSelected {
                                                 case "Series":
                                                     modelData.filterCriteriaSeries.insert(categoryItem)
+                                                    modelData.sortCriteria.by = .SeriesIndex
+                                                    modelData.sortCriteria.ascending = true
                                                 case "Tags":
                                                     modelData.filterCriteriaTags.insert(categoryItem)
                                                 default:
@@ -170,11 +172,14 @@ struct LibraryInfoView: View {
                                             }
                                         }
                                     }
+                                    .navigationTitle("Category: \(categoryName)")
                                 } label: {
                                     Text(categoryName)
-                                }.isDetailLink(false)
+                                }
+                                .isDetailLink(false)
                             }
-                        }.onChange(of: categoriesSelected) { categoryName in
+                        }
+                        .onChange(of: categoriesSelected) { categoryName in
                             categoryItems = Set<String>(
                                 modelData.calibreLibraryCategories
                                     .filter { $0.key.categoryName == categoryName }
