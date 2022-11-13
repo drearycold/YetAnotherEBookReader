@@ -307,6 +307,8 @@ final class ModelData: ObservableObject {
         registerBookReaderClosedCancellable()
         
         self.calibreServerService.registerLibraryCategoryHandler()
+        self.calibreServerService.registerLibrarySearchHandler()
+        self.calibreServerService.registerFilteredBookListMergeHandler()
         
         if mock {
             let library = calibreLibraries.first!.value

@@ -405,9 +405,6 @@ struct LibraryInfoView: View {
             NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
         })
         .onAppear {
-            modelData.calibreServerService.registerLibrarySearchHandler()
-            modelData.calibreServerService.registerFilteredBookListMergeHandler()
-            
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
                 batchDownloadSheetPresenting = false
