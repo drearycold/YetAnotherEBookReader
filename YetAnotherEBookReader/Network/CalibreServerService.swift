@@ -896,7 +896,7 @@ struct CalibreServerService {
             url: endpointUrl)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchCriteria: LibrarySearchCriteria? = nil) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
         }
@@ -934,17 +934,17 @@ struct CalibreServerService {
         
         var booksListUrlQueryItems = [URLQueryItem]()
         
-        if let searchCriteria = searchCriteria {
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchCriteria.sortCriteria.by.sortQueryParam))
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
+        if let searchTask = searchTask {
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchTask.searchCriteria.sortCriteria.by.sortQueryParam))
+            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchTask.searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
             
-            if let searchPreviousResult = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchCriteria)] {
+            if let searchPreviousResult = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchTask.searchCriteria)] {
                 booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
                 let maxOffset = searchPreviousResult.pageOffset.values.max() ?? 0
-                let num = max(0, maxOffset + searchCriteria.pageSize * 2 - searchPreviousResult.bookIds.count)
+                let num = max(0, maxOffset + searchTask.searchCriteria.pageSize * 2 - searchPreviousResult.bookIds.count)
                 booksListUrlQueryItems.append(.init(name: "num", value: num.description))
             } else {
-                booksListUrlQueryItems.append(.init(name: "num", value: (searchCriteria.pageSize * 2).description))
+                booksListUrlQueryItems.append(.init(name: "num", value: (searchTask.searchCriteria.pageSize * 2).description))
             }
         } else {
             booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: SortCriteria.Modified.sortQueryParam))
@@ -958,6 +958,8 @@ struct CalibreServerService {
             return nil
         }
         
+        print("\(#function) endpointUrl=\(endpointUrl.absoluteString)")
+        
         return CalibreBooksTask(
             library: library,
             books: bookIds,
@@ -965,7 +967,7 @@ struct CalibreServerService {
             lastReadPositionUrl: lastReadPositionEndpointUrl,
             annotationsUrl: annotationsEndpointUrl,
             booksListUrl: booksListUrl,
-            searchCriteria: searchCriteria
+            searchTask: searchTask
         )
     }
     
@@ -1018,20 +1020,6 @@ struct CalibreServerService {
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.annotationsData = result.data
-                return task
-            }
-            .eraseToAnyPublisher()
-    }
-    
-    func listLibraryBooks(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        guard task.booksListUrl.isHTTP else {
-            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
-        }
-        
-        return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
-            .map { result -> CalibreBooksTask in
-                var task = task
-                task.ajaxSearchResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: result.data)
                 return task
             }
             .eraseToAnyPublisher()

@@ -6,15 +6,11 @@ target 'YetAnotherEBookReader' do
   use_frameworks!
 
   # Pods for YetAnotherEBookReader
-  pod 'Google-Mobile-Ads-SDK', '~> 9'
-  pod 'GoogleAppMeasurement', '~> 9'
-  pod 'Google-Mobile-Ads-SDK', '~> 9'
-  pod 'Google-Mobile-Ads-SDK', '~> 9'
-  pod 'Kingfisher/SwiftUI', '~> 5.0'
-  # pod 'Realm', '~> 5.0'
-  # pod 'RealmSwift', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
+
+  pod 'Google-Mobile-Ads-SDK'
+  pod 'GoogleAppMeasurement'
 
 pod 'R2Shared', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumShared.podspec'
 pod 'R2Streamer', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumStreamer.podspec'
@@ -23,8 +19,10 @@ pod 'ReadiumOPDS', podspec: 'https://raw.githubusercontent.com/readium/swift-too
 pod 'ReadiumLCP', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec'
 pod 'GCDWebServer', podspec: 'https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec'
 
+  pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'MBProgressHUD', '~> 1.2.0'
-  pod 'RealmSwift', '~>5'
+  pod 'RealmSwift', '~> 10.0'
+  pod 'SQLite.swift', '~> 0.13.0'
 
   target 'YetAnotherEBookReaderTests' do
     inherit! :search_paths
@@ -45,8 +43,7 @@ target 'YetAnotherEBookReader-Catalyst' do
   pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
-  pod 'Realm', '~> 5.0'
-  pod 'RealmSwift', '~> 5.0'
+  pod 'RealmSwift', '~> 10.0'
   pod 'MBProgressHUD', '~> 1.2.0'
   # pod "GCDWebServer", "~> 3.0"
 pod 'R2Shared', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumShared.podspec'
@@ -55,6 +52,7 @@ pod 'R2Navigator', podspec: 'https://raw.githubusercontent.com/readium/swift-too
 pod 'ReadiumOPDS', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumOPDS.podspec'
 pod 'ReadiumLCP', podspec: 'https://raw.githubusercontent.com/readium/swift-toolkit/2.4.0/Support/CocoaPods/ReadiumLCP.podspec'
 pod 'GCDWebServer', podspec: 'https://raw.githubusercontent.com/readium/GCDWebServer/3.7.3/GCDWebServer.podspec'
+  pod 'SQLite.swift', '~> 0.13.0'
 
 end
 

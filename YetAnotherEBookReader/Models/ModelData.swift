@@ -30,6 +30,7 @@ final class ModelData: ObservableObject {
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var calibreLibraryCategories = [CalibreLibraryCategoryKey: CalibreLibraryCategoryValue]()
+    @Published var calibreLibraryCategoryMerged = [String: [String]]()
     
     /// Used for server level activities
     @Published var calibreServerUpdating = false
@@ -47,6 +48,7 @@ final class ModelData: ObservableObject {
     @Published var searchString = ""
     @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
     @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
+    @Published var filterCriteriaCategory = [String: String]()
     @Published var filterCriteriaRating = Set<String>()
     @Published var filterCriteriaFormat = Set<String>()
     @Published var filterCriteriaIdentifier = Set<String>()
@@ -56,18 +58,22 @@ final class ModelData: ObservableObject {
 
     @Published var filterCriteriaLibraries = Set<String>()
     
+    @Published var searchCriteriaResults = [LibrarySearchCriteria: LibrarySearchCriteriaResultMerged]()
+    
     @Published var filteredBookList = [String]()
     @Published var filteredBookListRefreshing = false
     @Published var filteredBookListPageCount = 0
     @Published var filteredBookListPageSize = 100
     @Published var filteredBookListPageNumber = 0
 
-    let searchLibraryResultsRealmMainThread = try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
+    static let SearchLibraryResultsRealmConfiguration = Realm.Configuration(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm")
     
-    var searchLibraryResultsRealmLocalThread: Realm? {
-        try? Realm(configuration: .init(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm"))
-    }
-
+    static let SearchLibraryResultsRealmQueue = DispatchQueue(label: "searchLibraryResultsRealm", qos: .userInitiated)
+    
+    let searchLibraryResultsRealmMainThread = try? Realm(configuration: SearchLibraryResultsRealmConfiguration)
+    
+    var searchLibraryResultsRealmQueue: Realm?
+    
     @Published var booksInShelf = [String: CalibreBook]()
     let recentShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
         for: .YABR_RecentShelfBooksRefreshed
@@ -146,6 +152,7 @@ final class ModelData: ObservableObject {
     let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
+    let libraryCategoryMergeSubject = PassthroughSubject<String, Never>()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -309,6 +316,11 @@ final class ModelData: ObservableObject {
         self.calibreServerService.registerLibraryCategoryHandler()
         self.calibreServerService.registerLibrarySearchHandler()
         self.calibreServerService.registerFilteredBookListMergeHandler()
+        self.calibreServerService.registerLibraryCategoryMergeHandler()
+        
+        ModelData.SearchLibraryResultsRealmQueue.sync {
+            self.searchLibraryResultsRealmQueue = try? Realm(configuration: ModelData.SearchLibraryResultsRealmConfiguration, queue: ModelData.SearchLibraryResultsRealmQueue)
+        }
         
         if mock {
             let library = calibreLibraries.first!.value

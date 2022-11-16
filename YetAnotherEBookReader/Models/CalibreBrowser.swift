@@ -52,11 +52,21 @@ enum SortCriteria: String, CaseIterable, Identifiable {
             return "series_index"
         }
     }
+    
+    var description: String {
+        switch (self) {
+        case .SeriesIndex:
+            return "Series Index"
+        default:
+            return self.rawValue
+        }
+    }
 }
 
 struct LibrarySearchCriteria: Hashable {
     let searchString: String
     let sortCriteria: LibrarySearchSort
+    let filterCriteriaCategory: [String: String]
     let filterCriteriaRating: Set<String>
     let filterCriteriaFormat: Set<String>
     let filterCriteriaIdentifier: Set<String>
@@ -64,6 +74,13 @@ struct LibrarySearchCriteria: Hashable {
     let filterCriteriaTags: Set<String>
     let filterCriteriaLibraries: Set<String>
     let pageSize: Int = 100
+}
+
+struct LibrarySearchCriteriaResultMerged {
+    var books = [CalibreBook]()
+    var pageNo = 0
+    var pageCount = 0
+    var pageSize = 100
 }
 
 struct LibrarySearchKey: Hashable {
@@ -83,6 +100,15 @@ struct LibrarySearchResult {
     var description: String {
         "\(bookIds.count)/\(totalNumber)"
     }
+}
+
+struct LibrarySearchMergeResult {
+    let libraryId: String
+    let criteria: LibrarySearchCriteria
+    
+    var totalNumber = 0
+    var mergeResults: [String : LibrarySearchResult] = [:]
+    var mergedBooks: [CalibreBook] = []
 }
 
 struct LibraryCategoryList {
@@ -124,13 +150,13 @@ extension ModelData {
             return book
         }
         return nil
-        
     }
     
     var currentLibrarySearchCriteria: LibrarySearchCriteria {
         LibrarySearchCriteria(
             searchString: self.searchString,
             sortCriteria: self.sortCriteria,
+            filterCriteriaCategory: self.filterCriteriaCategory,
             filterCriteriaRating: self.filterCriteriaRating,
             filterCriteriaFormat: self.filterCriteriaFormat,
             filterCriteriaIdentifier: self.filterCriteriaIdentifier,
@@ -155,12 +181,12 @@ extension ModelData {
         return self.filteredBookListPageNumber + 1 == maxPage
     }
     
-    func mergeBookLists(results: inout [String : LibrarySearchResult], sortCriteria: LibrarySearchSort, page: Int = 0, limit: Int = 100) -> [String] {
+    func mergeBookLists(results: inout [String : LibrarySearchResult], sortCriteria: LibrarySearchSort, page: Int = 0, limit: Int = 100) -> [CalibreBook] {
         guard let realm = try? Realm(configuration: realmConf),
-              let realmSearch = searchLibraryResultsRealmLocalThread
+              let realmSearch = searchLibraryResultsRealmQueue
         else { return [] }
         
-        var merged = [String]()
+        var merged = [CalibreBook]()
         
         var startPage = page
         while startPage > 0 {
@@ -186,6 +212,10 @@ extension ModelData {
             }
         }
         
+        headIndex.forEach {
+            print("LIBRARYINFOVIEW headIndex \($0)")
+        }
+        
         var heads = results.compactMap { entry -> CalibreBookRealm? in
             guard let headOffset = headIndex[entry.value.library.id],
                   headOffset < entry.value.bookIds.count
@@ -196,9 +226,15 @@ extension ModelData {
                 id: entry.value.bookIds[headOffset].description
             )
             
-            return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
+            let obj = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
             ?? realmSearch.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
+            
+            print("LIBRARYINFOVIEW headObj=\(obj) primaryKey=\(primaryKey)")
+            
+            return obj
         }
+        
+        print("LIBRARYINFOVIEW heads=\(heads.count)")
         
         // sort in reverse so we can use popLast() (O(1)) to merge
         let sortComparator = MergeSortComparator(criteria: sortCriteria.by, order: sortCriteria.ascending ? .reverse : .forward)
@@ -206,7 +242,9 @@ extension ModelData {
         
         let mergeLength = limit + (page - startPage) * limit
         while merged.count < mergeLength, let head = heads.popLast() {
-            merged.append(head.primaryKey!)
+            if let book = self.convert(bookRealm: head) {
+                merged.append(book)
+            }
             
             let headLibraryId = CalibreLibraryRealm.PrimaryKey(serverUUID: head.serverUUID!, libraryName: head.libraryName!)
             guard let searchResult = results[headLibraryId] else { continue }
@@ -334,16 +372,32 @@ extension CalibreServerService {
         if searchCriteria.searchString.isEmpty == false {
             queryStrings.append(searchCriteria.searchString)
         }
-        if searchCriteria.filterCriteriaSeries.isEmpty == false {
-            queryStrings.append(" ( " + searchCriteria.filterCriteriaSeries.map {
-                "series:\"=\($0)\""
-            }.joined(separator: " OR ") + " ) ")
+        searchCriteria.filterCriteriaCategory.forEach { entry in
+            if let customColumnInfo = library.customColumnInfos.filter({ $0.value.name == entry.key }).first {
+                if customColumnInfo.value.datatype == "rating" {
+                    queryStrings.append("#\(customColumnInfo.key):\(entry.value.count)")
+                } else {
+                    queryStrings.append("#\(customColumnInfo.key):\"=\(entry.value)\"")
+                }
+            } else {
+                if entry.key == "Rating" {
+                    queryStrings.append("\(entry.key.lowercased()):\(entry.value.count)")
+                } else {
+                    queryStrings.append("\(entry.key.lowercased()):\"=\(entry.value)\"")
+                }
+            }
         }
-        if searchCriteria.filterCriteriaTags.isEmpty == false {
-            queryStrings.append(" ( " + searchCriteria.filterCriteriaTags.map {
-                "tags:\"=\($0)\""
-            }.joined(separator: " OR ") + " ) ")
-        }
+        
+//        if searchCriteria.filterCriteriaSeries.isEmpty == false {
+//            queryStrings.append(" ( " + searchCriteria.filterCriteriaSeries.map {
+//                "series:\"=\($0)\""
+//            }.joined(separator: " OR ") + " ) ")
+//        }
+//        if searchCriteria.filterCriteriaTags.isEmpty == false {
+//            queryStrings.append(" ( " + searchCriteria.filterCriteriaTags.map {
+//                "tags:\"=\($0)\""
+//            }.joined(separator: " OR ") + " ) ")
+//        }
         booksListUrlQueryItems.append(.init(name: "query", value: queryStrings.joined(separator: " AND ")))
         
         booksListUrlComponents.queryItems = booksListUrlQueryItems
@@ -386,7 +440,7 @@ extension CalibreServerService {
                 else { return nil }
                 
                 if modelData.searchLibraryResults[librarySearchKey] == nil {
-                    modelData.searchLibraryResults[librarySearchKey] = .init(library: library)
+                    modelData.searchLibraryResults[librarySearchKey] = .init(library: library, error: true)
                 }
                 
                 guard let task = modelData.calibreServerService.buildLibrarySearchTask(
@@ -412,32 +466,24 @@ extension CalibreServerService {
                     .eraseToAnyPublisher()
             })
             .receive(on: DispatchQueue.main)
-            .map { task -> CalibreLibrarySearchTask in
-                let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
-                if let searchResult = task.ajaxSearchResult {
-                    if searchResult.total_num > 0,
-                       (modelData.searchLibraryResults[librarySearchKey]?.totalNumber ?? 0) == 0 {
-                        modelData.searchLibraryResults[librarySearchKey]?.error = true  //trigger list remerge
-                        modelData.searchLibraryResults[librarySearchKey]?.errorOffset = 0
-                    }
-                    modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
-                    if modelData.searchLibraryResults[librarySearchKey]?.bookIds.count == searchResult.offset {
-                        modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
-                    } else {
-                        print("\(#function) library=\(task.library.key) mismatch \(searchResult.num) \(searchResult.total_num) \(searchResult.offset) \(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
-                    }
+            .compactMap { task -> CalibreLibrarySearchTask? in
+                guard task.ajaxSearchResult != nil else {
+                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
                     
-                    print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
-                } else if task.ajaxSearchError {
+                    modelData.searchLibraryResults[librarySearchKey]?.loading = false
+
+                    modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
                     
+                    return nil
                 }
                 
                 return task
             }
+            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
             .compactMap { task -> CalibreBooksTask? in
                 let serverUUID = task.library.server.uuid.uuidString
                 
-                guard let realm = modelData.searchLibraryResultsRealmLocalThread,
+                guard let realm = modelData.searchLibraryResultsRealmQueue,
                       let books = task.ajaxSearchResult?.book_ids
                     .filter({ realm.object(
                         ofType: CalibreBookRealm.self,
@@ -449,16 +495,10 @@ extension CalibreServerService {
                             )) == nil })
                     .map({ CalibreBook(id: $0, library: task.library) })
                 else {
-                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
-                    
-                    modelData.searchLibraryResults[librarySearchKey]?.loading = false
-
-                    modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
-                    
                     return nil
                 }
                 
-                return buildBooksMetadataTask(library: task.library, books: books, searchCriteria: task.searchCriteria)
+                return buildBooksMetadataTask(library: task.library, books: books, searchTask: task)
             }
             .receive(on: DispatchQueue.global(qos: .userInitiated))
             .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
@@ -466,12 +506,13 @@ extension CalibreServerService {
                     .replaceError(with: task)
                     .eraseToAnyPublisher()
             }
+            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
             .map { task -> CalibreBooksTask in
                 let serverUUID = task.library.server.uuid.uuidString
                 
                 if let booksMetadataEntry = task.booksMetadataEntry,
                    let booksMetadataJSON = task.booksMetadataJSON,
-                   let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmLocalThread {
+                   let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmQueue {
                     let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
                         guard let entry = metadataEntry.value,
                               let bookId = Int32(metadataEntry.key)
@@ -495,10 +536,34 @@ extension CalibreServerService {
                 return task
             }
             .receive(on: DispatchQueue.main)
+            .map { task -> CalibreBooksTask in
+                guard let searchTask = task.searchTask else { return task }
+                
+                let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchTask.searchCriteria)
+                if let searchResult = searchTask.ajaxSearchResult {
+                    if searchResult.total_num > 0,
+                       (modelData.searchLibraryResults[librarySearchKey]?.totalNumber ?? 0) == 0 {
+                        modelData.searchLibraryResults[librarySearchKey]?.error = true  //trigger list remerge
+                        modelData.searchLibraryResults[librarySearchKey]?.errorOffset = 0
+                    }
+                    modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
+                    if modelData.searchLibraryResults[librarySearchKey]?.bookIds.count == searchResult.offset {
+                        modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
+                    } else {
+                        print("\(#function) library=\(task.library.key) mismatch \(searchResult.num) \(searchResult.total_num) \(searchResult.offset) \(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
+                    }
+                    
+                    print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
+                } else if searchTask.ajaxSearchError {
+                    
+                }
+                
+                return task
+            }
             .sink(receiveCompletion: { completion in
                 
             }, receiveValue: { task in
-                guard let searchCriteria = task.searchCriteria else { return }
+                guard let searchCriteria = task.searchTask?.searchCriteria else { return }
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
                 
@@ -523,7 +588,8 @@ extension CalibreServerService {
                     }
                     needRemerge = true
                 }
-                
+
+                print("LIBRARYINFOVIEW library=\(task.library.id) needRemerge=\(needRemerge) \(task.books.count)")
                 if needRemerge {
                     modelData.filteredBookListMergeSubject.send(.init(libraryId: task.library.id, criteria: searchCriteria))
                 }
@@ -535,10 +601,17 @@ extension CalibreServerService {
     func registerFilteredBookListMergeHandler() {
         modelData.filteredBookListMergeSubject
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                
-            }, receiveValue: { librarySearchKey in
+            .map { librarySearchKey -> LibrarySearchKey in
+                if modelData.searchCriteriaResults[librarySearchKey.criteria] == nil {
+                    modelData.searchCriteriaResults[librarySearchKey.criteria] = .init()
+                }
+                return librarySearchKey
+            }
+            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
+            .map { librarySearchKey -> LibrarySearchMergeResult in
                 print("\(#function) librarySearchKey=\(librarySearchKey)")
+                
+                var librarySearchMergeResult = LibrarySearchMergeResult(libraryId: librarySearchKey.libraryId, criteria: librarySearchKey.criteria)
                 
                 let searchCriteria = librarySearchKey.criteria
                 
@@ -549,43 +622,68 @@ extension CalibreServerService {
                 modelData.calibreLibraries.filter {
                     $0.value.hidden == false
                     && (searchCriteria.filterCriteriaLibraries.isEmpty || searchCriteria.filterCriteriaLibraries.contains($0.key))
+                    && results[.init(libraryId: $0.key, criteria: searchCriteria)] == nil
                 }.forEach {
-                    if results[.init(libraryId: $0.key, criteria: searchCriteria)] == nil {
-                        modelData.librarySearchSubject.send(.init(libraryId: $0.key, criteria: searchCriteria))
-                    }
+                    modelData.librarySearchSubject.send(.init(libraryId: $0.key, criteria: searchCriteria))
                 }
                 
-                let totalNumber = results.values.map { $0.totalNumber }.reduce(0) { partialResult, totalNumber in
+                librarySearchMergeResult.totalNumber = results.values.map { $0.totalNumber }.reduce(0) { partialResult, totalNumber in
                     return partialResult + totalNumber
                 }
-                modelData.filteredBookListPageCount = Int((Double(totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
                 
                 var mergeResults = results.reduce(into: [:], { partialResult, entry in
                     partialResult[entry.key.libraryId] = entry.value
                 })
                 
-                modelData.filteredBookList = modelData.mergeBookLists(results: &mergeResults, sortCriteria: librarySearchKey.criteria.sortCriteria, page: modelData.filteredBookListPageNumber, limit: modelData.filteredBookListPageSize)
+                librarySearchMergeResult.mergedBooks = modelData.mergeBookLists(
+                    results: &mergeResults,
+                    sortCriteria: librarySearchKey.criteria.sortCriteria,
+                    page: modelData.filteredBookListPageNumber,
+                    limit: modelData.filteredBookListPageSize
+                )
                 
-                mergeResults.forEach {
-                    let key = LibrarySearchKey(libraryId: $0.key, criteria: searchCriteria)
+                librarySearchMergeResult.mergeResults = mergeResults
+                
+                return librarySearchMergeResult
+            }
+            .receive(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                
+            }, receiveValue: { librarySearchMergeResult in
+                
+                modelData.filteredBookListPageCount = Int((Double(librarySearchMergeResult.totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
+                
+                modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.books = librarySearchMergeResult.mergedBooks
+                print("LIBRARYINFOVIEW \(#function) library=\(librarySearchMergeResult.libraryId) merged=\(librarySearchMergeResult.mergedBooks.count)")
+//                if modelData.currentLibrarySearchCriteria == librarySearchKey.criteria {
+//                    modelData.filteredBookList = mergedBooks
+//                }
+                
+                librarySearchMergeResult.mergeResults.forEach {
+                    let key = LibrarySearchKey(libraryId: $0.key, criteria: librarySearchMergeResult.criteria)
                     modelData.searchLibraryResults[key]?.pageOffset = $0.value.pageOffset
                     modelData.searchLibraryResults[key]?.error = $0.value.error
                     modelData.searchLibraryResults[key]?.errorOffset = $0.value.errorOffset
                     
-                    if librarySearchKey.libraryId == "" || librarySearchKey.libraryId == $0.key {
+                    if librarySearchMergeResult.libraryId == "" || librarySearchMergeResult.libraryId == $0.key {
                         if $0.value.error || ($0.value.pageOffset[modelData.filteredBookListPageNumber+1] ?? 0) + modelData.filteredBookListPageSize >= $0.value.bookIds.count {
                             modelData.librarySearchSubject.send(key)
+                        } else {
+                            if librarySearchMergeResult.libraryId.starts(with: "Domestic"),
+                               librarySearchMergeResult.mergedBooks.count <= 2 {
+                                print("LIBRARYINFOVIEW DISCONTINUE merged=\(librarySearchMergeResult.mergedBooks.count) searchLibraryResults=\(modelData.searchLibraryResults)")
+                            }
                         }
                     }
                 }
                 
-                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }.isEmpty == false
+                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchMergeResult.criteria && $0.value.loading }.isEmpty == false
             }).store(in: &modelData.calibreCancellables)
     }
     
     func registerLibraryCategoryHandler() {
         modelData.libraryCategorySubject
-            .subscribe(on: DispatchQueue.global())
+            .receive(on: DispatchQueue.global())
             .flatMap { request -> AnyPublisher<LibraryCategoryList, Never> in
                 let just = Just(request).setFailureType(to: Never.self).eraseToAnyPublisher()
                 guard let serverUrl = getServerUrlByReachability(server: request.library.server)
@@ -619,7 +717,7 @@ extension CalibreServerService {
                 guard let result = value.result
                 else { return }
                 
-                print("\(#function) category=\(value.category) \(value.reqId) \(result.total_num) \(result.num) \(result.offset)")
+                print("\(#function) category=\(value.category) reqId=\(value.reqId) totalNum=\(result.total_num) num=\(result.num) offset=\(result.offset)")
 
                 let key = CalibreLibraryCategoryKey(libraryId: value.library.id, categoryName: value.category.name)
                 if modelData.calibreLibraryCategories[key] == nil {
@@ -651,17 +749,45 @@ extension CalibreServerService {
                 else { return }
                 
                 if (modelData.calibreLibraryCategories[key]?.items.count ?? 0) < (result.offset + result.items.count) {
+                    let dummyItem = LibraryCategoryListResult.Item(name: "", average_rating: 0, count: 0, url: "", has_children: false)
                     modelData.calibreLibraryCategories[key]?.items.append(
                         contentsOf:
                             Array(
-                                repeating: .init(name: "", average_rating: 0, count: 0, url: "", has_children: false),
+                                repeating: dummyItem,
                                 count: (result.offset + result.items.count) - (modelData.calibreLibraryCategories[key]?.items.count ?? 0)
                             )
                     )
                 }
                 
                 modelData.calibreLibraryCategories[key]?.items.replaceSubrange(result.offset..<(result.offset+result.items.count), with: result.items)
+                
+                if modelData.calibreLibraryCategories[key]?.items.count == result.total_num {
+                    modelData.libraryCategoryMergeSubject.send(key.categoryName)
+                }
             }.store(in: &modelData.calibreCancellables)
 
+    }
+    
+    func registerLibraryCategoryMergeHandler() {
+        modelData.libraryCategoryMergeSubject
+            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .map { categoryName -> (String, [String]) in
+                (
+                    categoryName,
+                    modelData.calibreLibraryCategories
+                        .filter {
+                            $0.key.categoryName == categoryName && $0.value.items.count == $0.value.totalNumber
+                        }
+                        .reduce(into: Set<String>()) { partialResult, category in
+                            partialResult.formUnion(category.value.items.map { $0.name })
+                        }
+                        .sorted()
+                 )
+            }
+            .subscribe(on: DispatchQueue.main)
+            .sink { entry in
+                modelData.calibreLibraryCategoryMerged[entry.0] = entry.1
+            }
+            .store(in: &modelData.calibreCancellables)
     }
 }

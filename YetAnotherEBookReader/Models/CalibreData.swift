@@ -271,7 +271,15 @@ struct CalibreLibrary: Hashable, Identifiable {
     }
 }
 
-struct CalibreBook {
+struct CalibreBook: Hashable {
+    static func == (lhs: CalibreBook, rhs: CalibreBook) -> Bool {
+        lhs.inShelfId == rhs.inShelfId
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(inShelfId)
+    }
+    
     let id: Int32
     let library: CalibreLibrary
     var title = "No Title"
@@ -1050,9 +1058,8 @@ struct CalibreBooksTask {
     var annotationsData: Data? = nil
     var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
     var booksMetadataJSON: NSDictionary? = nil
-    var ajaxSearchResult: CalibreLibraryBooksResult.SearchResult? = nil
-    var ajaxSearchError = false
     var searchCriteria: LibrarySearchCriteria? = nil
+    var searchTask: CalibreLibrarySearchTask? = nil
 }
 
 struct CalibreLibrarySearchTask {
