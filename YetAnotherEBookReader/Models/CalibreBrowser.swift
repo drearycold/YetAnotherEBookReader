@@ -91,6 +91,7 @@ struct LibrarySearchKey: Hashable {
 struct LibrarySearchResult {
     let library: CalibreLibrary
     var loading = false
+    var offlineResult = false
     var error = false
     var errorOffset = 0
     var totalNumber = 0
@@ -347,9 +348,9 @@ struct MergeSortComparator: SortComparator {
 
 extension CalibreServerService {
     func buildLibrarySearchTask(library: CalibreLibrary, searchCriteria: LibrarySearchCriteria) -> CalibreLibrarySearchTask? {
-        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
-            return nil
-        }
+        guard let serverUrl = getServerUrlByReachability(server: library.server) ??
+                ( (library.autoUpdate || library.server.isLocal) ? URL(fileURLWithPath: "/realm") : nil)
+        else { return nil }
         
         var booksListUrlComponents = URLComponents()
         booksListUrlComponents.path = "ajax/search/\(library.key)"
@@ -414,21 +415,96 @@ extension CalibreServerService {
     }
     
     func searchLibraryBooks(task: CalibreLibrarySearchTask) -> AnyPublisher<CalibreLibrarySearchTask, URLError> {
-        guard task.booksListUrl.isHTTP else {
-            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+        if task.booksListUrl.isHTTP {
+            return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
+                .map { result -> CalibreLibrarySearchTask in
+                    var task = task
+                    do {
+                        task.ajaxSearchResult = try JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: result.data)
+                    } catch {
+                        task.ajaxSearchError = true
+                    }
+                    return task
+                }
+                .eraseToAnyPublisher()
+        }
+        if task.booksListUrl.isFileURL,
+           let urlComponents = URLComponents(url: task.booksListUrl, resolvingAgainstBaseURL: false) {    //search offline realm
+            var task = task
+            
+            let libraryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+                    NSPredicate(format: "serverUUID = %@", task.library.server.uuid.uuidString),
+                    NSPredicate(format: "libraryName = %@", task.library.name)
+                ])
+            
+            var predicates = [NSPredicate]()
+            let searchTerms = task.searchCriteria.searchString
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .split { $0.isWhitespace }
+                .map { String($0) }
+            if searchTerms.isEmpty == false {
+                predicates.append(contentsOf:
+                    searchTerms.map {
+                        NSCompoundPredicate(orPredicateWithSubpredicates: [
+                            NSPredicate(format: "title CONTAINS[c] %@", $0),
+                            NSPredicate(format: "authorFirst CONTAINS[c] %@", $0),
+                            NSPredicate(format: "authorSecond CONTAINS[c] %@", $0)
+                        ])
+                    }
+                )
+            }
+
+            if task.searchCriteria.filterCriteriaSeries.isEmpty == false {
+                predicates.append(
+                    NSCompoundPredicate(
+                        orPredicateWithSubpredicates:
+                            task.searchCriteria.filterCriteriaSeries.map {
+                                NSPredicate(format: "series = %@", $0)
+                            }
+                    )
+                )
+            }
+            
+            if task.searchCriteria.filterCriteriaRating.isEmpty == false {
+                predicates.append(
+                    NSCompoundPredicate(
+                        orPredicateWithSubpredicates:
+                            task.searchCriteria.filterCriteriaRating.map {
+                                NSPredicate(format: "rating = %@", NSNumber(value: $0.count <= 5 ? $0.count * 2 : 0))
+                            }
+                    )
+                )
+            }
+            
+//            if task.searchCriteria.filterCriteriaShelved != .none {
+//                predicates.append(
+//                    NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)
+//                )
+//            }
+            
+            if let realm = try? Realm(configuration: modelData.realmConf) {
+                let allbooks = realm.objects(CalibreBookRealm.self).filter(libraryPredicate)
+                let filteredBooks = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+                
+                let offset = Int(urlComponents.queryItems?.first(where: { $0.name == "offset" })?.value ?? "0") ?? 0
+                let num = Int(urlComponents.queryItems?.first(where: { $0.name == "num" })?.value ?? "100") ?? 100
+                
+                if offset <= filteredBooks.count {
+                    let bookIds : [Int32] = filteredBooks[offset..<min(offset+num, filteredBooks.endIndex)]
+                        .map {
+                            $0.id
+                        }
+                    
+                    task.ajaxSearchResult = .init(total_num: filteredBooks.count, sort_order: task.searchCriteria.sortCriteria.ascending ? "asc" : "desc", num_books_without_search: allbooks.count, offset: offset, num: bookIds.count, sort: task.searchCriteria.sortCriteria.by.sortQueryParam, base_url: "", library_id: task.library.key, book_ids: bookIds, vl: "")
+                    
+                    return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                }
+            }
         }
         
-        return urlSession(server: task.library.server).dataTaskPublisher(for: task.booksListUrl)
-            .map { result -> CalibreLibrarySearchTask in
-                var task = task
-                do {
-                    task.ajaxSearchResult = try JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: result.data)
-                } catch {
-                    task.ajaxSearchError = true
-                }
-                return task
-            }
-            .eraseToAnyPublisher()
+        return Fail(error: URLError(.badURL)).eraseToAnyPublisher()
+        
+//        return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
     }
     
     func registerLibrarySearchHandler() {
@@ -437,7 +513,9 @@ extension CalibreServerService {
             .receive(on: DispatchQueue.main)
             .compactMap { librarySearchKey -> CalibreLibrarySearchTask? in
                 guard let library = modelData.calibreLibraries[librarySearchKey.libraryId]
-                else { return nil }
+                else {
+                    return nil
+                }
                 
                 if modelData.searchLibraryResults[librarySearchKey] == nil {
                     modelData.searchLibraryResults[librarySearchKey] = .init(library: library, error: true)
@@ -446,9 +524,11 @@ extension CalibreServerService {
                 guard let task = modelData.calibreServerService.buildLibrarySearchTask(
                     library: library,
                     searchCriteria: librarySearchKey.criteria
-                )
-                else { return nil }
+                ) else {
+                    return nil
+                }
                 
+                modelData.searchLibraryResults[librarySearchKey]?.offlineResult = (task.booksListUrl.isFileURL && !task.library.server.isLocal)
                 modelData.searchLibraryResults[librarySearchKey]?.loading = true
 
                 modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
@@ -679,6 +759,22 @@ extension CalibreServerService {
                 
                 modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchMergeResult.criteria && $0.value.loading }.isEmpty == false
             }).store(in: &modelData.calibreCancellables)
+    }
+    
+    func registerLibrarySearchResetHandler() {
+        modelData.librarySearchResetSubject
+            .subscribe(on: DispatchQueue.main)
+            .sink(receiveCompletion: { completion in
+                
+            }, receiveValue: { librarySearchKey in
+                if librarySearchKey.libraryId.isEmpty {
+                    modelData.searchCriteriaResults.removeValue(forKey: librarySearchKey.criteria)
+                    modelData.filteredBookList.removeAll(keepingCapacity: true)
+                } else {
+                    modelData.searchLibraryResults.removeValue(forKey: librarySearchKey)
+                }
+            })
+            .store(in: &modelData.calibreCancellables)
     }
     
     func registerLibraryCategoryHandler() {

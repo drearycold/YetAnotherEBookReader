@@ -897,9 +897,7 @@ struct CalibreServerService {
     }
     
     func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
-        guard let serverUrl = getServerUrlByReachability(server: library.server) else {
-            return nil
-        }
+        let serverUrl = getServerUrlByReachability(server: library.server) ?? URL(fileURLWithPath: "/realm")
         
         let bookIds = books.map{ $0.id.description }
         

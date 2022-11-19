@@ -40,13 +40,16 @@ struct ServerDetailView: View {
                         Text("Modify Configuration")
                     }
                 )
+                .isDetailLink(false)
                 
                 NavigationLink(
                     destination: ServerOptionsDSReaderHelper(server: $server, updater: $updater),
                     isActive: $dshelperActive,
                     label: {
                         Text("DSReader Helper")
-                    })
+                    }
+                )
+                .isDetailLink(false)
             }
             
             Section(header: librarySectionHeader()) {

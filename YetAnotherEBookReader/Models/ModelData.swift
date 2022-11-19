@@ -151,6 +151,8 @@ final class ModelData: ObservableObject {
     
     let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    
     let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
     let libraryCategoryMergeSubject = PassthroughSubject<String, Never>()
     
@@ -315,6 +317,8 @@ final class ModelData: ObservableObject {
         
         self.calibreServerService.registerLibraryCategoryHandler()
         self.calibreServerService.registerLibrarySearchHandler()
+        self.calibreServerService.registerLibrarySearchResetHandler()
+        
         self.calibreServerService.registerFilteredBookListMergeHandler()
         self.calibreServerService.registerLibraryCategoryMergeHandler()
         
@@ -1145,6 +1149,7 @@ final class ModelData: ObservableObject {
     
     func updateServerRealm(server: CalibreServer) throws {
         let serverRealm = CalibreServerRealm()
+        serverRealm.primaryKey = server.uuid.uuidString
         serverRealm.name = server.name
         serverRealm.baseUrl = server.baseUrl
         serverRealm.hasPublicUrl = server.hasPublicUrl
@@ -2335,6 +2340,8 @@ final class ModelData: ObservableObject {
                               let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return }
                         realm.create(CalibreBookRealm.self, value: [
                             "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: id.s),
+                            "serverUUID": serverUUID,
+                            "libraryName": library.name,
                             "lastModified": lastModified,
                             "id": id.i
                         ], update: .modified)

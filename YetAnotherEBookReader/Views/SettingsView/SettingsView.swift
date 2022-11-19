@@ -41,11 +41,14 @@ struct SettingsView: View {
             }) {
                 NavigationLink(
                     destination: AddModServerView(
-                        server: Binding<CalibreServer>(get: {
-                            .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-                        }, set: { _ in
-                            updateServerList()
-                        }),
+                        server: Binding<CalibreServer>(
+                            get: {
+                                .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+                            },
+                            set: { _ in
+                                updateServerList()
+                            }
+                        ),
                         isActive: $addServerActive
                     )
                     .navigationTitle("Add Server"),
@@ -56,11 +59,16 @@ struct SettingsView: View {
                 
                 ForEach(serverList, id: \.self) { server in
                     NavigationLink (
-                        destination: ServerDetailView(server: Binding<CalibreServer>(get: {
-                            server
-                        }, set: { [server] newServer in
-                            updateServer(oldServer: server, newServer: newServer)
-                        })),
+                        destination: ServerDetailView(
+                            server: Binding<CalibreServer>(
+                                get: {
+                                    server
+                                },
+                                set: { [server] newServer in
+                                    updateServer(oldServer: server, newServer: newServer)
+                                }
+                            )
+                        ),
                         tag: server.id,
                         selection: $selectedServer
                     ) {
@@ -230,6 +238,10 @@ struct SettingsView: View {
                 serverList[index] = newServer
             }
 
+            for libraryId in modelData.calibreLibraries.filter({ $0.value.server.id == newServer.id }).map({ $0.key }) {
+                modelData.calibreLibraries[libraryId]?.server = newServer
+            }
+            
             modelData.calibreServerUpdatingStatus = "Updated"
             return
         }

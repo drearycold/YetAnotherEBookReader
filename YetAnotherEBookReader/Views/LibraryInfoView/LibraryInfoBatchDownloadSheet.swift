@@ -11,7 +11,6 @@ struct LibraryInfoBatchDownloadSheet: View {
     @EnvironmentObject var modelData: ModelData
     
     @Binding var presenting: Bool
-    @Binding var editMode: EditMode
     @Binding var selectedBookIds: Set<String>
     
     @State private var formats = [String]()
@@ -88,7 +87,6 @@ struct LibraryInfoBatchDownloadSheet: View {
                     modelData.startBatchDownload(bookIds: selectedFormatBookIds, formats: Array(selectedFormats.keys))
                     
                     selectedBookIds.removeAll()
-                    editMode = .inactive
                 }) {
                     Text("OK")
                 }
