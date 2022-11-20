@@ -68,9 +68,13 @@ struct LibraryInfoView: View {
                 }
                 
                 Section {
-                    ForEach(modelData.calibreLibraryCategoryMerged.filter({
-                        $0.value.count < 10000
-                        
+                    ForEach(modelData.calibreLibraryCategoryMerged.filter({ categoryMerged in
+                        categoryMerged.value.count < 10000
+                        && modelData.calibreLibraryCategories
+                            .filter { $0.key.categoryName == categoryMerged.key }
+                            .reduce(0) { result, libraryCategory in
+                                result + libraryCategory.value.totalNumber
+                            } < 10000
                     }).keys.sorted(), id: \.self) { categoryName in
                         NavigationLink(tag: categoryName, selection: $categoriesSelected) {
                             ZStack {
@@ -214,6 +218,10 @@ struct LibraryInfoView: View {
                 .receive(on: DispatchQueue.main)
                 .subscribe(on: DispatchQueue.main)
                 .map { categoryName -> String in
+                    guard categoryName == categoriesSelected else {
+                        return ""
+                    }
+                    
                     self.categoryItems.removeAll(keepingCapacity: true)
                     self.categoryItemListUpdating = true
                     
@@ -827,6 +835,15 @@ struct LibraryInfoView: View {
     }
     
     private func hasLibrarySearchError() -> Bool {
+        let a = modelData.calibreLibraryCategoryMerged.filter({ categoryMerged in
+            categoryMerged.value.count < 10000
+            && modelData.calibreLibraryCategories
+                .filter { $0.key.categoryName == categoryMerged.key }
+                .reduce(0) { result, libraryCategory in
+                    result + libraryCategory.value.totalNumber
+                } < 10000
+        }).keys.sorted()
+        
         let searchCriteria = modelData.currentLibrarySearchCriteria
         
         return modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.error }.isEmpty == false
