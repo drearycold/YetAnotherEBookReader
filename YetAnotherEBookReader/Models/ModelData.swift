@@ -48,19 +48,15 @@ final class ModelData: ObservableObject {
     @Published var searchString = ""
     @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
     @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
-    @Published var filterCriteriaCategory = [String: String]()
-    @Published var filterCriteriaRating = Set<String>()
+    @Published var filterCriteriaCategory = [String: Set<String>]()
     @Published var filterCriteriaFormat = Set<String>()
     @Published var filterCriteriaIdentifier = Set<String>()
     @Published var filterCriteriaShelved = FilterCriteriaShelved.none
-    @Published var filterCriteriaSeries = Set<String>()
-    @Published var filterCriteriaTags = Set<String>()
 
     @Published var filterCriteriaLibraries = Set<String>()
     
     @Published var searchCriteriaResults = [LibrarySearchCriteria: LibrarySearchCriteriaResultMerged]()
     
-    @Published var filteredBookList = [String]()
     @Published var filteredBookListRefreshing = false
     @Published var filteredBookListPageCount = 0
     @Published var filteredBookListPageSize = 100
@@ -149,12 +145,16 @@ final class ModelData: ObservableObject {
     
     var calibreCancellables = Set<AnyCancellable>()
     
+    let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
+    
     let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
     
     let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
     let libraryCategoryMergeSubject = PassthroughSubject<String, Never>()
+    
+    let categoryItemListSubject = PassthroughSubject<String, Never>()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -314,6 +314,15 @@ final class ModelData: ObservableObject {
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
         registerBookReaderClosedCancellable()
+        
+        bookDownloadedSubject.sink { book in
+            if self.activeTab == 0 {
+                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+            }
+            if self.activeTab == 2 {
+                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+            }
+        }.store(in: &calibreCancellables)
         
         self.calibreServerService.registerLibraryCategoryHandler()
         self.calibreServerService.registerLibrarySearchHandler()
@@ -2268,7 +2277,7 @@ final class ModelData: ObservableObject {
         defer {
             DispatchQueue.main.async {
                 results.categories.filter {
-                    $0.is_category && $0.name != "Authors"
+                    $0.is_category //&& $0.name != "Authors"
                 }.forEach { category in
                     self.libraryCategorySubject.send(
                         .init(

@@ -231,6 +231,8 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 modelData.activeDownloads[download.sourceURL]?.isDownloading = false
                 modelData.activeDownloads[download.sourceURL]?.resumeData = nil
                 
+                modelData.bookDownloadedSubject.send(download.book)
+                
                 guard let request = download.downloadTask?.originalRequest ?? task.originalRequest else { return }
                 modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(fileSize)")
             }
@@ -241,9 +243,6 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
             
             modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Failed, response=\(String(describing: task.response)) error=\(String(describing: error))")
         }
-        
-        NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {

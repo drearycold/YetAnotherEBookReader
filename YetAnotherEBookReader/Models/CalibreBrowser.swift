@@ -66,14 +66,18 @@ enum SortCriteria: String, CaseIterable, Identifiable {
 struct LibrarySearchCriteria: Hashable {
     let searchString: String
     let sortCriteria: LibrarySearchSort
-    let filterCriteriaCategory: [String: String]
-    let filterCriteriaRating: Set<String>
+    let filterCriteriaCategory: [String: Set<String>]
     let filterCriteriaFormat: Set<String>
     let filterCriteriaIdentifier: Set<String>
-    let filterCriteriaSeries: Set<String>
-    let filterCriteriaTags: Set<String>
     let filterCriteriaLibraries: Set<String>
     let pageSize: Int = 100
+    
+    var hasEmptyFilter: Bool {
+        filterCriteriaCategory.isEmpty
+        && filterCriteriaFormat.isEmpty
+        && filterCriteriaIdentifier.isEmpty
+        && filterCriteriaLibraries.isEmpty
+    }
 }
 
 struct LibrarySearchCriteriaResultMerged {
@@ -81,6 +85,7 @@ struct LibrarySearchCriteriaResultMerged {
     var pageNo = 0
     var pageCount = 0
     var pageSize = 100
+    var merging = false
 }
 
 struct LibrarySearchKey: Hashable {
@@ -158,11 +163,8 @@ extension ModelData {
             searchString: self.searchString,
             sortCriteria: self.sortCriteria,
             filterCriteriaCategory: self.filterCriteriaCategory,
-            filterCriteriaRating: self.filterCriteriaRating,
             filterCriteriaFormat: self.filterCriteriaFormat,
             filterCriteriaIdentifier: self.filterCriteriaIdentifier,
-            filterCriteriaSeries: self.filterCriteriaSeries,
-            filterCriteriaTags: self.filterCriteriaTags,
             filterCriteriaLibraries: self.filterCriteriaLibraries
         )
     }
@@ -374,31 +376,22 @@ extension CalibreServerService {
             queryStrings.append(searchCriteria.searchString)
         }
         searchCriteria.filterCriteriaCategory.forEach { entry in
+            var queryKey = entry.key.lowercased()
+            var queryIsRating = entry.key == "Rating"
+            
             if let customColumnInfo = library.customColumnInfos.filter({ $0.value.name == entry.key }).first {
-                if customColumnInfo.value.datatype == "rating" {
-                    queryStrings.append("#\(customColumnInfo.key):\(entry.value.count)")
-                } else {
-                    queryStrings.append("#\(customColumnInfo.key):\"=\(entry.value)\"")
-                }
-            } else {
-                if entry.key == "Rating" {
-                    queryStrings.append("\(entry.key.lowercased()):\(entry.value.count)")
-                } else {
-                    queryStrings.append("\(entry.key.lowercased()):\"=\(entry.value)\"")
-                }
+                queryKey = "#\(customColumnInfo.key)"
+                queryIsRating = customColumnInfo.value.datatype == "rating"
+            }
+            
+            let q = entry.value.map {
+                "\(queryKey):" + (queryIsRating ? "\($0.count)" : "\"=\($0)\"")
+            }.joined(separator: " OR ")
+            if q.isEmpty == false {
+                queryStrings.append("( " + q + " )")
             }
         }
         
-//        if searchCriteria.filterCriteriaSeries.isEmpty == false {
-//            queryStrings.append(" ( " + searchCriteria.filterCriteriaSeries.map {
-//                "series:\"=\($0)\""
-//            }.joined(separator: " OR ") + " ) ")
-//        }
-//        if searchCriteria.filterCriteriaTags.isEmpty == false {
-//            queryStrings.append(" ( " + searchCriteria.filterCriteriaTags.map {
-//                "tags:\"=\($0)\""
-//            }.joined(separator: " OR ") + " ) ")
-//        }
         booksListUrlQueryItems.append(.init(name: "query", value: queryStrings.joined(separator: " AND ")))
         
         booksListUrlComponents.queryItems = booksListUrlQueryItems
@@ -454,28 +447,6 @@ extension CalibreServerService {
                 )
             }
 
-            if task.searchCriteria.filterCriteriaSeries.isEmpty == false {
-                predicates.append(
-                    NSCompoundPredicate(
-                        orPredicateWithSubpredicates:
-                            task.searchCriteria.filterCriteriaSeries.map {
-                                NSPredicate(format: "series = %@", $0)
-                            }
-                    )
-                )
-            }
-            
-            if task.searchCriteria.filterCriteriaRating.isEmpty == false {
-                predicates.append(
-                    NSCompoundPredicate(
-                        orPredicateWithSubpredicates:
-                            task.searchCriteria.filterCriteriaRating.map {
-                                NSPredicate(format: "rating = %@", NSNumber(value: $0.count <= 5 ? $0.count * 2 : 0))
-                            }
-                    )
-                )
-            }
-            
 //            if task.searchCriteria.filterCriteriaShelved != .none {
 //                predicates.append(
 //                    NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)
@@ -685,6 +656,7 @@ extension CalibreServerService {
                 if modelData.searchCriteriaResults[librarySearchKey.criteria] == nil {
                     modelData.searchCriteriaResults[librarySearchKey.criteria] = .init()
                 }
+                modelData.searchCriteriaResults[librarySearchKey.criteria]?.merging = true
                 return librarySearchKey
             }
             .receive(on: ModelData.SearchLibraryResultsRealmQueue)
@@ -727,10 +699,7 @@ extension CalibreServerService {
                 return librarySearchMergeResult
             }
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                
-            }, receiveValue: { librarySearchMergeResult in
-                
+            .map { librarySearchMergeResult -> LibrarySearchMergeResult in
                 modelData.filteredBookListPageCount = Int((Double(librarySearchMergeResult.totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
                 
                 modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.books = librarySearchMergeResult.mergedBooks
@@ -738,6 +707,7 @@ extension CalibreServerService {
 //                if modelData.currentLibrarySearchCriteria == librarySearchKey.criteria {
 //                    modelData.filteredBookList = mergedBooks
 //                }
+                modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.merging = false
                 
                 librarySearchMergeResult.mergeResults.forEach {
                     let key = LibrarySearchKey(libraryId: $0.key, criteria: librarySearchMergeResult.criteria)
@@ -757,7 +727,15 @@ extension CalibreServerService {
                     }
                 }
                 
-                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchMergeResult.criteria && $0.value.loading }.isEmpty == false
+                return librarySearchMergeResult
+            }
+            .sink(receiveCompletion: { completion in
+                
+            }, receiveValue: { librarySearchMergeResult in
+                modelData.filteredBookListRefreshing = (modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.merging == true) ||
+                (modelData.searchLibraryResults.filter({
+                    $0.key.criteria == librarySearchMergeResult.criteria && $0.value.loading
+                }).isEmpty == false)
             }).store(in: &modelData.calibreCancellables)
     }
     
@@ -769,7 +747,6 @@ extension CalibreServerService {
             }, receiveValue: { librarySearchKey in
                 if librarySearchKey.libraryId.isEmpty {
                     modelData.searchCriteriaResults.removeValue(forKey: librarySearchKey.criteria)
-                    modelData.filteredBookList.removeAll(keepingCapacity: true)
                 } else {
                     modelData.searchLibraryResults.removeValue(forKey: librarySearchKey)
                 }
@@ -836,7 +813,7 @@ extension CalibreServerService {
                             category: value.category,
                             reqId: value.reqId,
                             offset: result.offset + result.items.count,
-                            num: 100
+                            num: 1000
                         )
                     )
                 }
@@ -883,6 +860,8 @@ extension CalibreServerService {
             .subscribe(on: DispatchQueue.main)
             .sink { entry in
                 modelData.calibreLibraryCategoryMerged[entry.0] = entry.1
+                
+                modelData.categoryItemListSubject.send(entry.0)
             }
             .store(in: &modelData.calibreCancellables)
     }
