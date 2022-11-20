@@ -1431,6 +1431,17 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func startBatchDownload(books: [CalibreBook], formats: [String]) {
+        books.forEach { book in
+            formats.forEach { format in
+                guard let f = Format(rawValue: format),
+                      let formatInfo = book.formats[format],
+                      formatInfo.serverSize > 0 else { return }
+                let _ = startDownloadFormat(book: book, format: f)
+            }
+        }
+    }
+    
     func clearCache(inShelfId: String) {
         guard let book = booksInShelf[inShelfId] else {
             return

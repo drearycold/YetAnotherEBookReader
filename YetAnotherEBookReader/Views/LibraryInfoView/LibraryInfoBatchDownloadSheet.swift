@@ -11,107 +11,90 @@ struct LibraryInfoBatchDownloadSheet: View {
     @EnvironmentObject var modelData: ModelData
     
     @Binding var presenting: Bool
-    @Binding var selectedBookIds: Set<String>
+    @Binding var downloadBookList: [CalibreBook]
     
+    @State private var selected = Set<String>()
     @State private var formats = [String]()
-    @State private var selectedFormats = [String: Int]()
-    @State private var selectedFormatBookIds = [String]()
+    @State private var selectedFormats = [String: SelectedFormatInfo]()    //format to priority
+    @State private var selectedFormatBooks = [CalibreBook]()
+    
+    @State private var editMode = EditMode.active
     
     var body: some View {
-        VStack(alignment: .center, spacing: 8) {
-            Text("Please Select Formats to Download")
-            
-            List {
+        NavigationView {
+            List(selection: $selected) {
                 ForEach(formats, id: \.self) { format in
-                    Button( action: {
-                        if selectedFormats.keys.contains(format) {
-                            selectedFormats.removeValue(forKey: format)
-                        } else {
-                            selectedFormats[format] = (selectedFormats.values.max() ?? 0) + 1
-                        }
-                        formats.sort {
-                            let priorityLeft = selectedFormats[$0] ?? -1
-                            let priorityRight = selectedFormats[$1] ?? -1
-                            if priorityLeft > 0 && priorityRight > 0 {
-                                return priorityLeft < priorityRight
-                            } else if priorityLeft < 0 && priorityRight < 0 {
-                                return $0 < $1
-                            } else if priorityLeft < 0 {
-                                return false
-                            } else if priorityRight < 0 {
-                                return true
-                            } else {
-                                return true
-                            }
-                        }
-                        
-                        selectedFormatBookIds = selectedBookIds.reduce(into: [String](), { result, bookId in
-                            guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
-                            guard book.formats().keys.filter(selectedFormats.keys.contains).isEmpty == false else { return }
-                            result.append(bookId)
-                        })
-                    }) {
+                    if let selectFormatInfo = selectedFormats[format] {
                         HStack {
-                            Text(format)
+                            Text("\(format), \(selectFormatInfo.books.count) \(selectFormatInfo.books.count > 1 ? "books" : "book")")
+                            
                             Spacer()
-                            if selectedFormats.keys.contains(format) {
-                                Image(systemName: "minus.circle")
-                            } else {
-                                Image(systemName: "plus.circle")
-                            }
-                        }
+                            
+                            Text(
+                                ByteCountFormatter.string(fromByteCount: selectFormatInfo.totalSize, countStyle: .file)
+                            )
+                        }.tag(format)
                     }
                 }
             }
+            .navigationTitle(Text("Formats to Download"))
+            .environment(\.editMode, $editMode)
+            .onChange(of: selected, perform: { newValue in
+                selectedFormatBooks = selectedFormats
+                    .filter { newValue.contains($0.key) }
+                    .reduce(into: Set<CalibreBook>(), { partialResult, entry in
+                        partialResult.formUnion(entry.value.books)
+                    }).map { $0 }
+            })
             .onAppear() {
-                formats = selectedBookIds.reduce(into: Set<String>()) { result, bookId in
-                    guard let book = modelData.getBookRealm(forPrimaryKey: bookId) else { return }
-                    result.formUnion(book.formats().keys)
-                }.sorted()
-//                if formats.count == 1 {
-//                    selectedFormats[formats.first!] = 1
-//                }
+                selectedFormats = downloadBookList.reduce(into: [:]) { partialResult, book in
+                    partialResult = book.formats.reduce(into: partialResult) { partialResult, formatEntry in
+                        var selectFormatInfo = partialResult[formatEntry.key] ?? .init()
+                        
+                        selectFormatInfo.books.append(book)
+                        selectFormatInfo.totalSize += Int64(formatEntry.value.serverSize)
+                        
+                        partialResult[formatEntry.key] = selectFormatInfo
+                    }
+                }
+                
+                formats = selectedFormats.keys.sorted()
             }
-            .frame(height: CGFloat(200))
-            
-            if selectedBookIds.count > 1 {
-                Text("Will add \(selectedFormatBookIds.count) books to shelf.")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        presenting = false
+                    }) {
+                        Text("Cancel")
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        presenting = false
+                        
+                        modelData.startBatchDownload(books: selectedFormatBooks, formats: Array(selectedFormats.keys))
+                        
+                        downloadBookList.removeAll()
+                    }) {
+                        Text("Download")
+                    }
+                }
+            }
+        }
+        HStack {
+            if selectedFormatBooks.count > 1 {
+                Text("Will add \(selectedFormatBooks.count) books to shelf.")
             } else {
-                Text("Will add \(selectedFormatBookIds.count) book to shelf.")
-            }
-            
-            HStack(alignment: .center, spacing: 24) {
-                Button(action: {
-                    presenting = false
-                    
-                    modelData.startBatchDownload(bookIds: selectedFormatBookIds, formats: Array(selectedFormats.keys))
-                    
-                    selectedBookIds.removeAll()
-                }) {
-                    Text("OK")
-                }
-                Button(action: {
-                    presenting = false
-                }) {
-                    Text("Cancel")
-                }
+                Text("Will add \(selectedFormatBooks.count) book to shelf.")
             }
         }.padding()
     }
-    
-    func test() {
-//        selectedBookIds.forEach { bookId in
-//            var downloaded = false
-//            Format.allCases.forEach {
-//                downloaded = downloaded || modelData.downloadFormat(book: modelData.calibreServerLibraryBooks[bookId]!, format: $0) { result in
-//                    
-//                }
-//            }
-//            if downloaded {
-//                modelData.addToShelf(bookId, shelfName: "Untagged")
-//            }
-//        }
-    }
+}
+
+struct SelectedFormatInfo {
+    var totalSize: Int64 = 0
+    var books: [CalibreBook] = []
 }
 
 //struct LibraryInfoBatchDownloadSheet_Previews: PreviewProvider {

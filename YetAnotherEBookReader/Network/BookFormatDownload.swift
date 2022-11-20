@@ -243,6 +243,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         }
         
         NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
