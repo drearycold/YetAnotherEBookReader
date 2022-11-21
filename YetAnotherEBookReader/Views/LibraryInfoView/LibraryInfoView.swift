@@ -16,8 +16,13 @@ struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
     @State private var categoriesSelected : String? = nil
-    @State private var categoryItems = [String]()
     @State private var categoryItemSelected: String? = nil
+    
+    @State private var categoryName = ""
+    @State private var categoryFilter = ""
+    @State private var categoryItems = [String]()
+    
+    private let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
     
     @State private var searchHistoryList = [String]()
     @State private var libraryList = [CalibreLibrary]()
@@ -45,148 +50,19 @@ struct LibraryInfoView: View {
     @State private var categoryItemListCancellable: AnyCancellable?
     @State private var categoryItemListUpdating = false
     
+    @State private var filteredBookListRefreshingCancellable: AnyCancellable?
+    @State private var filteredBookListRefreshing = false
+    
     private var defaultLog = Logger()
     
     var body: some View {
         NavigationView {
             List {
-                Section {
-                    NavigationLink {
-                        bookListView()
-                            .navigationTitle("All Books")
-                            .onAppear {
-                                resetSearchCriteria()
-                                modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
-                            }
-                        
-                    } label: {
-                        Text("All Books")
-                    }
-                    .isDetailLink(false)
-                } header: {
-                    Text("Combined View")
-                }
+                combinedListView()
                 
-                Section {
-                    ForEach(modelData.calibreLibraryCategoryMerged.filter({ categoryMerged in
-                        categoryMerged.value.count < 10000
-                        && modelData.calibreLibraryCategories
-                            .filter { $0.key.categoryName == categoryMerged.key }
-                            .reduce(0) { result, libraryCategory in
-                                result + libraryCategory.value.totalNumber
-                            } < 10000
-                    }).keys.sorted(), id: \.self) { categoryName in
-                        NavigationLink(tag: categoryName, selection: $categoriesSelected) {
-                            ZStack {
-                                TextField("Filter \(categoryName)", text: $categoryFilterString, onCommit: {
-                                    modelData.categoryItemListSubject.send(categoryName)
-                                })
-                                .keyboardType(.webSearch)
-                                .padding([.leading, .trailing], 24)
-                                HStack {
-                                    Spacer()
-                                    Button(action: {
-                                        categoryFilterString = ""
-                                        modelData.categoryItemListSubject.send(categoryName)
-                                    }) {
-                                        Image(systemName: "xmark.circle.fill")
-                                            .foregroundColor(.gray)
-                                    }.disabled(categoryFilterString.isEmpty)
-                                }.padding([.leading, .trailing], 4)
-                            }
-                            
-                            Divider()
-                            
-                            ZStack {
-                                List {
-                                    ForEach(categoryItems, id: \.self) { categoryItem in
-                                        NavigationLink(tag: categoryItem, selection: $categoryItemSelected) {
-                                            bookListView()
-                                                .onAppear {
-                                                    resetSearchCriteria()
-                                                    
-                                                    modelData.filterCriteriaCategory[categoryName] = .init([categoryItem])
-                                                    
-                                                    if categoriesSelected == "Series" {
-                                                        if modelData.sortCriteria.by != .SeriesIndex {
-                                                            lastSortCriteria.append(modelData.sortCriteria)
-                                                        }
-                                                        
-                                                        modelData.sortCriteria.by = .SeriesIndex
-                                                        modelData.sortCriteria.ascending = true
-                                                    } else if categoriesSelected == "Publisher" {
-                                                        if modelData.sortCriteria.by != .Publication {
-                                                            lastSortCriteria.append(modelData.sortCriteria)
-                                                        }
-                                                        
-                                                        modelData.sortCriteria.by = .Publication
-                                                        modelData.sortCriteria.ascending = false
-                                                    }
-                                                    else {
-                                                        modelData.sortCriteria.by = .Modified
-                                                        modelData.sortCriteria.ascending = false
-                                                    }
-                                                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
-                                                }
-                                                .navigationTitle("\(categoryName): \(categoryItem)")
-                                        } label: {
-                                            Text(categoryItem)
-                                        }
-                                        .isDetailLink(false)
-                                    }
-                                }
-                                .navigationTitle("Category: \(categoryName)")
-                                .disabled(categoryItemListUpdating)
-                                .onAppear {
-                                    guard let categoryName = categoriesSelected
-                                    else { return }
-                                    
-                                    categoryFilterString = ""
-                                    modelData.categoryItemListSubject.send(categoryName)
-                                }
-                                .onDisappear {
-                                    categoryItems.removeAll(keepingCapacity: true)
-                                }
-                                
-                                if categoryItemListUpdating {
-                                    ProgressView()
-                                        .scaleEffect(4, anchor: .center)
-                                        .progressViewStyle(CircularProgressViewStyle())
-                                }
-                            }
-                        } label: {
-                            Text(categoryName)
-                        }
-                        .isDetailLink(false)
-                    }
-                } header: {
-                    Text("By Category")
-                }
+                categoryListView()
                 
-                Section {
-                    ForEach(libraryList, id: \.id) { library in
-                        NavigationLink {
-                            bookListView()
-                                .navigationTitle(Text(library.name))
-                                .onAppear {
-                                    resetSearchCriteria()
-                                    modelData.filterCriteriaLibraries.insert(library.id)
-                                    modelData.filteredBookListMergeSubject.send(.init(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria))
-                                }
-                        } label: {
-                            HStack {
-                                Text(library.name)
-                                Spacer()
-                                Image(systemName: "server.rack")
-                                Text(library.server.name)
-                                    .font(.caption)
-                            }
-                        }
-                        .isDetailLink(false)
-                    }
-                } header: {
-                    Text("By Library")
-                }
+                libraryListView()
                 
             }
             .padding(4)
@@ -213,35 +89,59 @@ struct LibraryInfoView: View {
                     modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
                 }
             
+            filteredBookListRefreshingCancellable?.cancel()
+            filteredBookListRefreshingCancellable = modelData.filteredBookListRefreshingSubject
+                .receive(on: RunLoop.main)
+                .map {
+                    let searchCriteria = modelData.currentLibrarySearchCriteria
+                    filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }.isEmpty == false
+                    return $0
+                }
+                .sink(receiveValue: { _ in
+                    let searchCriteria = modelData.currentLibrarySearchCriteria
+                    filteredBookListRefreshing = filteredBookListRefreshing || (modelData.searchCriteriaResults[searchCriteria]?.merging == true)
+                })
+            
             categoryItemListCancellable?.cancel()
             categoryItemListCancellable = modelData.categoryItemListSubject
                 .receive(on: DispatchQueue.main)
-                .subscribe(on: DispatchQueue.main)
-                .map { categoryName -> String in
-                    guard categoryName == categoriesSelected else {
-                        return ""
+                .compactMap { categoryName -> String? in
+                    guard categoryName == categoriesSelected else { return nil }
+                    
+                    if categoryName == self.categoryName,
+                       categoryFilter == self.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines),
+                       categoryFilter.isEmpty == false {
+                        return nil
                     }
+                    
+                    self.categoryName = categoryName
+                    self.categoryFilter = self.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
                     
                     self.categoryItems.removeAll(keepingCapacity: true)
                     self.categoryItemListUpdating = true
                     
                     return categoryName
                 }
-                .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+                .receive(on: DispatchQueue.global(qos: .userInitiated))
                 .map { categoryName -> [String] in
                     guard var categoryItems = modelData.calibreLibraryCategoryMerged[categoryName]
                     else { return [] }
                     
-                    let filterString = categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if filterString.isEmpty == false {
-                        categoryItems = categoryItems.filter { $0.localizedCaseInsensitiveContains(filterString) }
+                    if categoryFilter.isEmpty == false {
+                        categoryItems = categoryItems.filter { $0.localizedCaseInsensitiveContains(categoryFilter) }
+                    }
+                    
+                    guard categoryItems.count < 1000 else {
+                        return categoryItemsTooLong
                     }
                     
                     return categoryItems
                 }
-                .subscribe(on: DispatchQueue.main)
+                .receive(on: DispatchQueue.main)
                 .sink { categoryItems in
-                    self.categoryItems.append(contentsOf: categoryItems)
+                    if categoryItems.isEmpty == false {
+                        self.categoryItems.append(contentsOf: categoryItems)
+                    }
                     categoryItemListUpdating = false
                 }
             
@@ -250,6 +150,163 @@ struct LibraryInfoView: View {
         
         //Body
     }   //View
+    
+    @ViewBuilder
+    private func combinedListView() -> some View {
+        Section {
+            NavigationLink {
+                bookListView()
+                    .navigationTitle("All Books")
+                    .onAppear {
+                        resetSearchCriteria()
+                        modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                    }
+                
+            } label: {
+                Text("All Books")
+            }
+            .isDetailLink(false)
+        } header: {
+            Text("Combined View")
+        }
+    }
+    
+    @ViewBuilder
+    private func categoryListView() -> some View {
+        Section {
+            ForEach(modelData.calibreLibraryCategoryMerged.keys.sorted(), id: \.self) { categoryName in
+                NavigationLink(tag: categoryName, selection: $categoriesSelected) {
+                    ZStack {
+                        TextField("Filter \(categoryName)", text: $categoryFilterString, onCommit: {
+                            modelData.categoryItemListSubject.send(categoryName)
+                        })
+                        .keyboardType(.webSearch)
+                        .padding([.leading, .trailing], 24)
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                categoryFilterString = ""
+                                modelData.categoryItemListSubject.send(categoryName)
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }.disabled(categoryFilterString.isEmpty)
+                        }.padding([.leading, .trailing], 4)
+                    }
+                    
+                    Divider()
+                    
+                    ZStack {
+                        if categoryItems == categoryItemsTooLong {
+                            VStack(alignment: .center) {
+                                Spacer()
+                                Text("Too many category items,")
+                                Text("Please specify a filter.")
+                                Spacer()
+                            }
+                        } else {
+                            List {
+                                ForEach(categoryItems, id: \.self) { categoryItem in
+                                    NavigationLink(tag: categoryItem, selection: $categoryItemSelected) {
+                                        bookListView()
+                                            .onAppear {
+                                                if modelData.filterCriteriaCategory[categoryName]?.contains(categoryItem) == true {
+                                                    return
+                                                }
+                                                
+                                                resetSearchCriteria()
+                                                
+                                                modelData.filterCriteriaCategory[categoryName] = .init([categoryItem])
+                                                
+                                                if categoriesSelected == "Series" {
+                                                    if modelData.sortCriteria.by != .SeriesIndex {
+                                                        lastSortCriteria.append(modelData.sortCriteria)
+                                                    }
+                                                    
+                                                    modelData.sortCriteria.by = .SeriesIndex
+                                                    modelData.sortCriteria.ascending = true
+                                                } else if categoriesSelected == "Publisher" {
+                                                    if modelData.sortCriteria.by != .Publication {
+                                                        lastSortCriteria.append(modelData.sortCriteria)
+                                                    }
+                                                    
+                                                    modelData.sortCriteria.by = .Publication
+                                                    modelData.sortCriteria.ascending = false
+                                                }
+                                                else {
+                                                    modelData.sortCriteria.by = .Modified
+                                                    modelData.sortCriteria.ascending = false
+                                                }
+                                                modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                                            }
+                                            .navigationTitle("\(categoryName): \(categoryItem)")
+                                    } label: {
+                                        Text(categoryItem)
+                                    }
+                                    .isDetailLink(false)
+                                }
+                            }
+                            .disabled(categoryItemListUpdating)
+                            .onAppear {
+                                guard let categoryName = categoriesSelected,
+                                      categoryName != self.categoryName
+                                else { return }
+                                
+                                categoryFilterString = ""
+                                modelData.categoryItemListSubject.send(categoryName)
+                            }
+                            .onDisappear {
+                                if categoriesSelected == nil {
+                                    self.categoryName = ""
+                                    categoryItems.removeAll(keepingCapacity: true)
+                                }
+                            }
+                        }
+                        
+                        if categoryItemListUpdating {
+                            ProgressView()
+                                .scaleEffect(4, anchor: .center)
+                                .progressViewStyle(CircularProgressViewStyle())
+                        }
+                    }
+                    .navigationTitle("Category: \(categoryName)")
+                } label: {
+                    Text(categoryName)
+                }
+                .isDetailLink(false)
+            }
+        } header: {
+            Text("By Category")
+        }
+    }
+    
+    @ViewBuilder
+    private func libraryListView() -> some View {
+        Section {
+            ForEach(libraryList, id: \.id) { library in
+                NavigationLink {
+                    bookListView()
+                        .navigationTitle(Text(library.name))
+                        .onAppear {
+                            resetSearchCriteria()
+                            modelData.filterCriteriaLibraries.insert(library.id)
+                            modelData.filteredBookListMergeSubject.send(.init(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria))
+                        }
+                } label: {
+                    HStack {
+                        Text(library.name)
+                        Spacer()
+                        Image(systemName: "server.rack")
+                        Text(library.server.name)
+                            .font(.caption)
+                    }
+                }
+                .isDetailLink(false)
+            }
+        } header: {
+            Text("By Library")
+        }
+    }
     
     @ViewBuilder
     private func bookListView() -> some View {
@@ -297,8 +354,10 @@ struct LibraryInfoView: View {
                 }.disabled(searchString.isEmpty)
                 
                 Menu {
-                    ForEach(modelData.filterCriteriaCategory.filter({ $0.key != categoriesSelected }).sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
-                        ForEach(categoryFilter.value.sorted(), id: \.self) { categoryFilterValue in
+                    ForEach(modelData.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
+                        ForEach(categoryFilter.value.filter({
+                            categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
+                        }).sorted(), id: \.self) { categoryFilterValue in
                             Button {
                                 if modelData.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
                                     searchStringChanged(searchString: self.searchString)
@@ -343,7 +402,7 @@ struct LibraryInfoView: View {
             .onAppear {
                 print("LIBRARYINFOVIEW books=\(modelData.searchCriteriaResults[modelData.currentLibrarySearchCriteria]?.books.count)")
             }
-            .disabled(modelData.filteredBookListRefreshing)
+            .disabled(filteredBookListRefreshing)
             .popover(isPresented: $batchDownloadSheetPresenting,
                      attachmentAnchor: .rect(.bounds),
                      arrowEdge: .top
@@ -364,13 +423,13 @@ struct LibraryInfoView: View {
                     } label: {
                         Image(systemName: "square.and.arrow.down.on.square")
                     }
-                    .disabled(modelData.filteredBookListRefreshing)
+                    .disabled(filteredBookListRefreshing)
                     
                     sortMenuView()
-                        .disabled(modelData.filteredBookListRefreshing)
+                        .disabled(filteredBookListRefreshing)
                 }
             }
-            if modelData.filteredBookListRefreshing {
+            if filteredBookListRefreshing {
                 ProgressView()
                     .scaleEffect(4, anchor: .center)
                     .progressViewStyle(CircularProgressViewStyle())
@@ -456,7 +515,7 @@ struct LibraryInfoView: View {
             }
 
             Text(getLibrarySearchingText())
-            if modelData.filteredBookListRefreshing {
+            if filteredBookListRefreshing {
                 ProgressView()
                     .progressViewStyle(.circular)
             }
@@ -477,10 +536,9 @@ struct LibraryInfoView: View {
                 }
             }) {
                 Image(systemName: "chevron.forward")
-            }.disabled(modelData.filteredBookListRefreshing && modelData.currentSearchLibraryResultsCannotFurther)
+            }.disabled(filteredBookListRefreshing && modelData.currentSearchLibraryResultsCannotFurther)
         }
         .padding(4)    //bottom bar
-        .disabled(modelData.filteredBookListRefreshing)
     }
     
     func searchStringChanged(searchString: String) {
@@ -651,12 +709,12 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         if let authors = book.authors.filter({
-            modelData.filterCriteriaCategory["Author"]?.contains($0) != true
+            modelData.filterCriteriaCategory["Authors"]?.contains($0) != true
         }) as [String]?, authors.isEmpty == false {
             Menu("More by Author ...") {
                 ForEach(authors, id: \.self) { author in
                     Button {
-                        updateFilterCategory(key: "Author", value: author)
+                        updateFilterCategory(key: "Authors", value: author)
                     } label: {
                         Text(author)
                     }

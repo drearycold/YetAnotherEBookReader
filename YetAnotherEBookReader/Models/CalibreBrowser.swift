@@ -502,7 +502,7 @@ extension CalibreServerService {
                 modelData.searchLibraryResults[librarySearchKey]?.offlineResult = (task.booksListUrl.isFileURL && !task.library.server.isLocal)
                 modelData.searchLibraryResults[librarySearchKey]?.loading = true
 
-                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
+                modelData.filteredBookListRefreshingSubject.send("")
                 
                 print("\(#function) searchUrl=\(task.booksListUrl.absoluteString)")
                 
@@ -523,8 +523,8 @@ extension CalibreServerService {
                     
                     modelData.searchLibraryResults[librarySearchKey]?.loading = false
 
-                    modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
-                    
+                    modelData.filteredBookListRefreshingSubject.send("")
+
                     return nil
                 }
                 
@@ -604,11 +604,13 @@ extension CalibreServerService {
                         print("\(#function) library=\(task.library.key) mismatch \(searchResult.num) \(searchResult.total_num) \(searchResult.offset) \(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
                     }
                     
-                    print("\(#function) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
+                    print("\(#function) finishLoading library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
                 } else if searchTask.ajaxSearchError {
                     
                 }
                 
+                modelData.searchLibraryResults[librarySearchKey]?.loading = false
+
                 return task
             }
             .sink(receiveCompletion: { completion in
@@ -618,10 +620,8 @@ extension CalibreServerService {
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
                 
-                modelData.searchLibraryResults[librarySearchKey]?.loading = false
+                modelData.filteredBookListRefreshingSubject.send("")
 
-                modelData.filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == librarySearchKey.criteria && $0.value.loading }.isEmpty == false
-                
                 guard let searchPreviousResult = modelData.searchLibraryResults[librarySearchKey],
                       searchPreviousResult.error
                 else { return }
@@ -700,7 +700,6 @@ extension CalibreServerService {
             }
             .receive(on: DispatchQueue.main)
             .map { librarySearchMergeResult -> LibrarySearchMergeResult in
-                modelData.filteredBookListPageCount = Int((Double(librarySearchMergeResult.totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
                 
                 modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.books = librarySearchMergeResult.mergedBooks
                 print("LIBRARYINFOVIEW \(#function) library=\(librarySearchMergeResult.libraryId) merged=\(librarySearchMergeResult.mergedBooks.count)")
@@ -727,15 +726,16 @@ extension CalibreServerService {
                     }
                 }
                 
+                if librarySearchMergeResult.criteria == modelData.currentLibrarySearchCriteria {
+                    modelData.filteredBookListPageCount = Int((Double(librarySearchMergeResult.totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
+                }
+                
                 return librarySearchMergeResult
             }
             .sink(receiveCompletion: { completion in
                 
             }, receiveValue: { librarySearchMergeResult in
-                modelData.filteredBookListRefreshing = (modelData.searchCriteriaResults[librarySearchMergeResult.criteria]?.merging == true) ||
-                (modelData.searchLibraryResults.filter({
-                    $0.key.criteria == librarySearchMergeResult.criteria && $0.value.loading
-                }).isEmpty == false)
+                modelData.filteredBookListRefreshingSubject.send("")
             }).store(in: &modelData.calibreCancellables)
     }
     

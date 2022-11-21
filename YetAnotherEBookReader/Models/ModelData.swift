@@ -57,7 +57,6 @@ final class ModelData: ObservableObject {
     
     @Published var searchCriteriaResults = [LibrarySearchCriteria: LibrarySearchCriteriaResultMerged]()
     
-    @Published var filteredBookListRefreshing = false
     @Published var filteredBookListPageCount = 0
     @Published var filteredBookListPageSize = 100
     @Published var filteredBookListPageNumber = 0
@@ -150,6 +149,7 @@ final class ModelData: ObservableObject {
     let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    let filteredBookListRefreshingSubject = PassthroughSubject<Any, Never>()
     
     let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
     let libraryCategoryMergeSubject = PassthroughSubject<String, Never>()
