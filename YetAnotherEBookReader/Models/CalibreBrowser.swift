@@ -447,6 +447,72 @@ extension CalibreServerService {
                 )
             }
 
+            predicates = task.searchCriteria.filterCriteriaCategory.reduce(into: predicates) { partialResult, categoryFilter in
+                guard categoryFilter.value.isEmpty == false else { return }
+                
+                switch categoryFilter.key {
+                case "Tags":
+                    partialResult.append(
+                        NSCompoundPredicate(
+                            orPredicateWithSubpredicates:
+                                categoryFilter.value.map ({
+                                    NSCompoundPredicate(orPredicateWithSubpredicates: [
+                                        NSPredicate(format: "tagFirst = %@", $0),
+                                        NSPredicate(format: "tagSecond = %@", $0),
+                                        NSPredicate(format: "tagThird = %@", $0)
+                                    ])
+                                    
+                                })
+                        )
+                    )
+                case "Authors":
+                    partialResult.append(
+                        NSCompoundPredicate(
+                            orPredicateWithSubpredicates:
+                                categoryFilter.value.map ({
+                                    NSCompoundPredicate(orPredicateWithSubpredicates: [
+                                        NSPredicate(format: "authorFirst = %@", $0),
+                                        NSPredicate(format: "authorSecond = %@", $0),
+                                        NSPredicate(format: "authorThird = %@", $0)
+                                    ])
+                                    
+                                })
+                        )
+                    )
+                case "Series":
+                    partialResult.append(
+                        NSCompoundPredicate(
+                            orPredicateWithSubpredicates:
+                                categoryFilter.value.map ({
+                                    NSPredicate(format: "series = %@", $0)
+                                })
+                        )
+                    )
+                case "Publisher":
+                    partialResult.append(
+                        NSCompoundPredicate(
+                            orPredicateWithSubpredicates:
+                                categoryFilter.value.map ({
+                                    NSPredicate(format: "publisher = %@", $0)
+                                })
+                        )
+                    )
+                case "Rating":
+                    partialResult.append(
+                        NSCompoundPredicate(
+                            orPredicateWithSubpredicates:
+                                categoryFilter.value.map ({
+                                    NSPredicate(format: "rating = %@", NSNumber(value: $0.count * 2))
+                                })
+                        )
+                    )
+                case "Languages":   //not recorded in realm
+                    partialResult.append(NSPredicate(value: false))
+                default:    //unrecognized
+                    partialResult.append(NSPredicate(value: false))
+                }
+            }
+            
 //            if task.searchCriteria.filterCriteriaShelved != .none {
 //                predicates.append(
 //                    NSPredicate(format: "inShelf = %@", modelData.filterCriteriaShelved == .shelvedOnly)

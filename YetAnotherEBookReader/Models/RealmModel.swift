@@ -190,7 +190,6 @@ class CalibreBookRealm: Object {
     @objc dynamic var userMetaData: NSData?
     
     @objc dynamic var inShelf = false
-    @objc dynamic var inShelfName = ""
     
     func formats() -> [String: FormatInfo] {
         guard let formatsData = formatsData as Data? else { return [:] }

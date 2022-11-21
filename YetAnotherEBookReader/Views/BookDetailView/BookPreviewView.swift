@@ -34,6 +34,7 @@ struct BookPreviewView: View {
                     readerInfo: ReaderInfo(
                         deviceName: _VM.modelData.deviceName,
                         url: _VM.url,
+                        missing: false,
                         format: _VM.format,
                         readerType: _VM.reader,
                         position: _VM.modelData.getInitialReadingPosition(book: _VM.book, format: _VM.format, reader: _VM.reader)

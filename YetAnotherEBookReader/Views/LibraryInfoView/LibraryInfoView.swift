@@ -752,8 +752,11 @@ struct LibraryInfoView: View {
         Menu("Download ...") {
             ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
                 Button {
-                    modelData.clearCache(book: book, format: format)
-                    modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+                    if book.inShelf {
+                        modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+                    } else {
+                        modelData.addToShelf(book: book, formats: [format])
+                    }
                 } label: {
                     Text(
                         format.rawValue

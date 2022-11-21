@@ -102,7 +102,7 @@ struct BookFormatDownloadService {
             return false
         }
 
-        defaultLog.info("downloadURL: \(url.absoluteString)")
+        defaultLog.info("prepare downloadURL: \(url.absoluteString)")
         
         guard let savedURL = getSavedUrl(book: book, format: format) else {
             return false
@@ -111,6 +111,10 @@ struct BookFormatDownloadService {
         self.defaultLog.info("savedURL: \(savedURL.absoluteString)")
         
         if FileManager.default.fileExists(atPath: savedURL.path) && !overwrite {
+            return false
+        }
+        
+        if modelData.activeDownloads[url]?.isDownloading == true && !overwrite {
             return false
         }
         
@@ -148,12 +152,16 @@ struct BookFormatDownloadService {
             }
         }
         
+        modelData.activeDownloads[url]?.downloadTask?.cancel()
+        
         bookFormatDownload.isDownloading = true
         bookFormatDownload.downloadTask = downloadTask
         
         modelData.activeDownloads[url] = bookFormatDownload
         
         downloadTask.resume()
+        
+        defaultLog.info("start downloadURL: \(url.absoluteString)")
         
         return true
     }
@@ -233,15 +241,20 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 
                 modelData.bookDownloadedSubject.send(download.book)
                 
-                guard let request = download.downloadTask?.originalRequest ?? task.originalRequest else { return }
+                guard let request = task.originalRequest else { return }
                 modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(fileSize)")
             }
         } else {
             guard let modelData = download.downloadService?.modelData,
-                  let request = download.downloadTask?.originalRequest
+                  let request = task.originalRequest
                    else { return }
             
-            modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Failed, response=\(String(describing: task.response)) error=\(String(describing: error))")
+            DispatchQueue.main.async { [self] in
+                modelData.activeDownloads[download.sourceURL]?.isDownloading = false
+                modelData.activeDownloads[download.sourceURL]?.resumeData = nil
+                
+                modelData.logFinishCalibreActivity(type: "Download Format \(download.format.rawValue)", request: request, startDatetime: download.startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: error?.localizedDescription))")
+            }
         }
     }
     
@@ -262,4 +275,15 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
 
 struct DownloadError: Error {
     let msg: String
+}
+
+extension CalibreServerService {
+    func registerBookFormatDownloadHandler() {
+        modelData.bookFormatDownloadSubject
+            .receive(on: DispatchQueue.main)
+            .sink { request in
+                let _ = modelData.downloadService.startDownload(request.book, format: request.format, overwrite: false)
+            }
+            .store(in: &modelData.calibreCancellables)
+    }
 }

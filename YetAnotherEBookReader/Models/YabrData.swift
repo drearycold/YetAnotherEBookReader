@@ -22,6 +22,7 @@ enum Format: String, CaseIterable, Identifiable {
 }
 
 struct FormatInfo: Codable {
+    var selected: Bool?
     var filename: String?
     var serverSize: UInt64
     var serverMTime: Date
@@ -67,6 +68,7 @@ enum ReaderType: String, CaseIterable, Identifiable {
 struct ReaderInfo {
     let deviceName: String
     let url: URL
+    let missing: Bool
     let format: Format
     let readerType: ReaderType
     let position: BookDeviceReadingPosition

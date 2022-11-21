@@ -53,7 +53,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
                 )
             }
-            .compactMap { (inShelfId, book) in
+            .compactMap { (inShelfId, book) -> BookModel? in
                 guard let coverUrl = book.coverURL else { return nil }
                 guard let readerInfo = modelData.prepareBookReading(book: book) else { return nil }
                 
@@ -61,10 +61,19 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     $1.cached == false ||
                         ($1.cached && $1.cacheUptoDate)
                 }
+                let missingFormats = book.formats.filter {
+                    $1.selected == true && $1.cached == false
+                }
+                
                 var bookStatus = BookModel.BookStatus.READY
                 if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
                     bookStatus = .NOCONNECT
                 } else {
+                    missingFormats.forEach {
+                        guard let format = Format(rawValue: $0.key) else { return }
+                        modelData.bookFormatDownloadSubject.send((book: book, format: format))
+                    }
+                    
                     if !bookUptoDate {
                         bookStatus = .HASUPDATE
                     }
@@ -256,9 +265,36 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         guard let book = modelData.readingBook,
               let readerInfo = modelData.prepareBookReading(book: book) else { return }
         
-        modelData.readerInfo = readerInfo
-        
-        modelData.presentingEBookReaderFromShelf = true
+        if readerInfo.missing {
+            if let activeDownload = modelData.activeDownloads.first(where: {
+                $0.value.book == book && $0.value.format == readerInfo.format
+            }),
+               activeDownload.value.isDownloading {
+                let alert = UIAlertController(title: "Downloading Format", message: "Please wait a few moment", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Dismiss", style: .cancel, handler: { _ in
+                    alert.dismiss(animated: true)
+                }))
+                alert.addAction(UIAlertAction(title: "Restart", style: .default, handler: { _ in
+                    self.modelData.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
+                    alert.dismiss(animated: true)
+                }))
+                self.present(alert, animated: true)
+            } else {
+                let alert = UIAlertController(title: "Missing Format", message: "Try Download Now?", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: { _ in
+                    alert.dismiss(animated: true)
+                }))
+                alert.addAction(UIAlertAction(title: "Download", style: .default, handler: { _ in
+                    self.modelData.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
+                    alert.dismiss(animated: true)
+                }))
+                self.present(alert, animated: true)
+            }
+        } else {
+            modelData.readerInfo = readerInfo
+            
+            modelData.presentingEBookReaderFromShelf = true
+        }
     }
     
     func onBookLongClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String, frame inShelfView: CGRect) {
@@ -316,10 +352,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
-            if started {
-                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-            }
+
+            self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     

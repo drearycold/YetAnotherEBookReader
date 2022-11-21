@@ -35,8 +35,6 @@ struct BookDetailView: View {
     
     @StateObject private var previewViewModel = BookPreviewViewModel()
     
-    @State private var downloadStatus = DownloadStatus.INITIAL
-    
     var defaultLog = Logger()
     
     @State private var alertItem: AlertItem?
@@ -81,22 +79,6 @@ struct BookDetailView: View {
         }
         .toolbar {
             toolbarContent()
-        }
-        .alert(item: $alertItem) { item in
-            if item.id == "Delete" {
-                return Alert(
-                    title: Text("Confirm to Deleting"),
-                    message: Text("Will Delete Book from Calibre Server"),
-                    primaryButton: .destructive(Text("Sure"), action: {
-                        deleteBook()
-                    }),
-                    secondaryButton: .cancel()
-                )
-            }
-            if item.id == "Updated" {
-                return Alert(title: Text("Updated"), message: Text(item.msg ?? "Success"))
-            }
-            return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
         .disabled(modelData.readingBook == nil)
     }
@@ -179,8 +161,8 @@ struct BookDetailView: View {
                     presentingReadingSheet = true
                 } else {
                     //TODO prompt for formats
-                    if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
-                        downloadStatus = .DOWNLOADING
+                    if let downloadFormat = modelData.getPreferredFormat(for: book) {
+                        modelData.addToShelf(book: book, formats: [downloadFormat])
                     } else {
                         alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
                     }
@@ -595,11 +577,15 @@ struct BookDetailView: View {
     
     private func cacheFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action:{
-            modelData.startDownloadFormat(
-                book: book,
-                format: format,
-                overwrite: true
-            )
+            if book.inShelf {
+                modelData.startDownloadFormat(
+                    book: book,
+                    format: format,
+                    overwrite: true
+                )
+            } else {
+                modelData.addToShelf(book: book, formats: [format])
+            }
         }) {
             Image(systemName: "tray.and.arrow.down")
                 .resizable()
@@ -638,18 +624,6 @@ struct BookDetailView: View {
     
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
-//        ToolbarItem(placement: .cancellationAction) {
-//            Button(action: {
-//                alertItem = AlertItem(id: "Delete")
-//            }) {
-//                if viewMode == .LIBRARY {
-//                Image(systemName: "trash")
-//                    .accentColor(.red)
-//                } else {
-//                    EmptyView().hidden()
-//                }
-//            }.disabled(!modelData.updatingMetadataSucceed)
-//        }
         ToolbarItem(placement: .cancellationAction) {
             Button(action: {
                 if modelData.updatingMetadata {
@@ -670,29 +644,6 @@ struct BookDetailView: View {
                 }
             }
         }
-//        ToolbarItem(placement: .confirmationAction) {
-//            Button(action: {
-//                modelData.goToPreviousBook()
-//            }) {
-//                if viewMode == .LIBRARY && sizeClass == .regular {
-//                    Image(systemName: "chevron.up")
-//                } else {
-//                    Image(systemName: "chevron.up").hidden()
-//                }
-//            }
-//            .disabled(!modelData.updatingMetadataSucceed)
-//        }
-//        ToolbarItem(placement: .confirmationAction) {
-//            Button(action: {
-//                modelData.goToNextBook()
-//            }) {
-//                if viewMode == .LIBRARY && sizeClass == .regular {
-//                    Image(systemName: "chevron.down")
-//                } else {
-//                    Image(systemName: "chevron.down").hidden()
-//                }
-//            }.disabled(!modelData.updatingMetadataSucceed)
-//        }
         
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
@@ -702,11 +653,10 @@ struct BookDetailView: View {
                 }
                 if book.inShelf {
                     modelData.clearCache(inShelfId: book.inShelfId)
-                    downloadStatus = .INITIAL
                 } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
                     //TODO prompt for formats
-                    if let downloadFormat = modelData.getPreferredFormat(for: book), modelData.startDownloadFormat(book: book, format: downloadFormat) {
-                        downloadStatus = .DOWNLOADING
+                    if let downloadFormat = modelData.getPreferredFormat(for: book) {
+                        modelData.addToShelf(book: book, formats: [downloadFormat])
                     } else {
                         alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
                     }
@@ -721,7 +671,7 @@ struct BookDetailView: View {
                 } else {
                     Image(systemName: "star")
                 }
-            }.disabled(!modelData.updatingMetadataSucceed)
+            }
         }
         
         ToolbarItem(placement: .confirmationAction) {
@@ -735,58 +685,6 @@ struct BookDetailView: View {
                     .frame(width: 20, height: 20)
             }
         }
-    }
-    
-    private func deleteToolbarItem() -> some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button(action: {
-                alertItem = AlertItem(id: "Delete")
-            }) {
-                Image(systemName: "trash")
-                    .accentColor(.red)
-            }.disabled(!modelData.updatingMetadataSucceed)
-        }
-    }
-    
-    func deleteBook() {
-        guard let book = modelData.readingBook else {
-            assert(false, "readingBook is nil")
-            return
-        }
-        guard let endpointUrl = book.library.urlForDeleteBook else {
-            return
-        }
-        let json:[Any] = [[book.id], false]
-        
-        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else { return }
-            
-        var request = URLRequest(url: endpointUrl)
-        request.httpMethod = "POST"
-        request.httpBody = data
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let task = modelData.calibreServerService.urlSession(server: book.library.server, timeout: 60).dataTask(with: request) { data, response, error in
-            if let error = error {
-                // self.handleClientError(error)
-                defaultLog.warning("error: \(error.localizedDescription)")
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode) else {
-                // self.handleServerError(response)
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json" {
-                DispatchQueue.main.async {
-                    handleBookDeleted()
-                }
-            }
-        }
-        
-        task.resume()
     }
     
     func initStates(book: CalibreBook) {

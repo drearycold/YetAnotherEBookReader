@@ -144,6 +144,7 @@ final class ModelData: ObservableObject {
     
     var calibreCancellables = Set<AnyCancellable>()
     
+    let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
     let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
     
     let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
@@ -316,9 +317,7 @@ final class ModelData: ObservableObject {
         registerBookReaderClosedCancellable()
         
         bookDownloadedSubject.sink { book in
-            if self.activeTab == 0 {
-                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-            }
+            NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
             if self.activeTab == 2 {
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
             }
@@ -330,6 +329,8 @@ final class ModelData: ObservableObject {
         
         self.calibreServerService.registerFilteredBookListMergeHandler()
         self.calibreServerService.registerLibraryCategoryMergeHandler()
+        
+        self.calibreServerService.registerBookFormatDownloadHandler()
         
         ModelData.SearchLibraryResultsRealmQueue.sync {
             self.searchLibraryResultsRealmQueue = try? Realm(configuration: ModelData.SearchLibraryResultsRealmConfiguration, queue: ModelData.SearchLibraryResultsRealmQueue)
@@ -1115,6 +1116,12 @@ final class ModelData: ObservableObject {
     }
     
     func getPreferredFormat(for book: CalibreBook) -> Format? {
+        let selectedFormats = book.formats.filter { $0.value.selected == true }
+        if selectedFormats.count == 1,
+           let firstFormatRaw = selectedFormats.first?.key,
+           let firstFormat = Format(rawValue: firstFormatRaw) {
+            return firstFormat
+        }
         if book.formats[getPreferredFormat().rawValue] != nil {
             return getPreferredFormat()
         } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
@@ -1349,22 +1356,14 @@ final class ModelData: ObservableObject {
         return (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync)
     }
     
-    func addToShelf(_ inShelfId: String, shelfName: String) {
-        guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: inShelfId) else { return }
-        
-        try? realm.write {
-            bookRealm.inShelfName = shelfName
-            bookRealm.inShelf = true
-            bookRealm.lastUpdated = Date()
+    func addToShelf(book: CalibreBook, formats: [Format]) {
+        var book = book
+        book.inShelf = true
+        formats.forEach {
+            book.formats[$0.rawValue]?.selected = true
         }
         
-        guard let book = convert(bookRealm: bookRealm) else { return }
-        
-        if readingBook?.inShelfId == inShelfId {
-            readingBook = book
-        }
-        
-        booksInShelf[book.inShelfId] = book
+        updateBook(book: book)
         
         if let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
@@ -1428,26 +1427,15 @@ final class ModelData: ObservableObject {
         return result
     }
     
-    func startBatchDownload(bookIds: [String], formats: [String]) {
-        bookIds.forEach { bookId in
-            guard let obj = getBookRealm(forPrimaryKey: bookId), let book = convert(bookRealm: obj) else { return }
-            formats.forEach { format in
-                guard let f = Format(rawValue: format),
-                      let formatInfo = book.formats[format],
-                      formatInfo.serverSize > 0 else { return }
-                let _ = startDownloadFormat(book: book, format: f)
-            }
-        }
-    }
-    
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
         books.forEach { book in
-            formats.forEach { format in
+            let downloadFormats = formats.compactMap { format -> Format? in
                 guard let f = Format(rawValue: format),
                       let formatInfo = book.formats[format],
-                      formatInfo.serverSize > 0 else { return }
-                let _ = startDownloadFormat(book: book, format: f)
+                      formatInfo.serverSize > 0 else { return nil }
+                return f
             }
+            self.addToShelf(book: book, formats: downloadFormats)
         }
     }
     
@@ -1483,9 +1471,9 @@ final class ModelData: ObservableObject {
         
         updateBook(book: newBook)
 
-        if newBook.inShelf == false {
-            addToShelf(newBook.inShelfId, shelfName: newBook.tags.first ?? "Untagged")
-        }
+//        if newBook.inShelf == false {
+//            addToShelf(newBook.inShelfId)
+//        }
         
         if format == Format.EPUB {
             removeFolioCache(book: newBook, format: format)
@@ -1716,17 +1704,16 @@ final class ModelData: ObservableObject {
         
         guard let formatReaderPair = formatReaderPairArray.first else { return nil }
         guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }
-        guard FileManager.default.fileExists(atPath: savedURL.path) else {
-            return nil
-        }
+        let urlMissing = !FileManager.default.fileExists(atPath: savedURL.path)
         
-        return ReaderInfo(deviceName: deviceName, url: savedURL, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
+        return ReaderInfo(deviceName: deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
         let readerInfo = ReaderInfo(
             deviceName: deviceName,
             url: url,
+            missing: false,
             format: format,
             readerType: readerType,
             position: position

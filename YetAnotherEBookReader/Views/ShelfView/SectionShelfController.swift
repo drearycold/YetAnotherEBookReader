@@ -309,10 +309,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            let started = modelData.startDownloadFormat(book: book, format: format, overwrite: true)
-            if started {
-                
-            }
+
+            self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     
