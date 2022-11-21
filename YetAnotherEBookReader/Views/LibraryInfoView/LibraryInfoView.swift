@@ -60,7 +60,9 @@ struct LibraryInfoView: View {
             List {
                 combinedListView()
                 
-                categoryListView()
+                if modelData.calibreLibraryCategoryMerged.isEmpty == false {
+                    categoryListView()
+                }
                 
                 libraryListView()
                 
@@ -158,7 +160,7 @@ struct LibraryInfoView: View {
                 bookListView()
                     .navigationTitle("All Books")
                     .onAppear {
-                        resetSearchCriteria()
+//                        resetSearchCriteria()
                         modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
                     }
                 
@@ -247,20 +249,6 @@ struct LibraryInfoView: View {
                                 }
                             }
                             .disabled(categoryItemListUpdating)
-                            .onAppear {
-                                guard let categoryName = categoriesSelected,
-                                      categoryName != self.categoryName
-                                else { return }
-                                
-                                categoryFilterString = ""
-                                modelData.categoryItemListSubject.send(categoryName)
-                            }
-                            .onDisappear {
-                                if categoriesSelected == nil {
-                                    self.categoryName = ""
-                                    categoryItems.removeAll(keepingCapacity: true)
-                                }
-                            }
                         }
                         
                         if categoryItemListUpdating {
@@ -270,6 +258,20 @@ struct LibraryInfoView: View {
                         }
                     }
                     .navigationTitle("Category: \(categoryName)")
+                    .onAppear {
+                        guard let categoryName = categoriesSelected,
+                              categoryName != self.categoryName
+                        else { return }
+                        
+                        categoryFilterString = ""
+                        modelData.categoryItemListSubject.send(categoryName)
+                    }
+                    .onDisappear {
+                        if categoriesSelected == nil {
+                            self.categoryName = ""
+                            categoryItems.removeAll(keepingCapacity: true)
+                        }
+                    }
                 } label: {
                     Text(categoryName)
                 }
