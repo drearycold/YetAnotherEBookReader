@@ -11,13 +11,15 @@ import SwiftUI
 struct RecentShelfUI: UIViewControllerRepresentable {
     @EnvironmentObject var modelData: ModelData
 
-    func makeUIViewController(context: Context) -> RecentShelfController {
+    func makeUIViewController(context: Context) -> UINavigationController {
         let shelfController = RecentShelfController()
         shelfController.modelData = modelData
-        return shelfController
+        
+        let navController = UINavigationController(rootViewController: shelfController)
+        return navController
     }
     
-    func updateUIViewController(_ uiViewController: RecentShelfController, context: Context) {
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
 //        uiViewController.updateBookModel()
     }
     

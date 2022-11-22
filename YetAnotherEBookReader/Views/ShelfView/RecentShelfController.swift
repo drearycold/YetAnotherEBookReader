@@ -15,12 +15,11 @@ import GoogleMobileAds
 #endif
 
 class RecentShelfController: UIViewController, PlainShelfViewDelegate {
-    let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var tabBarHeight = CGFloat(0)
 
+    var books = [(key: String, value: CalibreBook)]()
     var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
-//    var shelfBookSink: AnyCancellable?
     
     #if canImport(GoogleMobileAds)
     var bannerSize = GADAdSizeBanner
@@ -43,19 +42,20 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     }
     
     @objc func updateBookModel() {
-        bookModel = modelData.booksInShelf
-//            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) || $0.value.library.server.isLocal }
-            .sorted {
-                max($0.value.lastModified,
-                    $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
-                ) > max(
-                    $1.value.lastModified,
-                    $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
-                )
-            }
-            .compactMap { (inShelfId, book) -> BookModel? in
-                guard let coverUrl = book.coverURL else { return nil }
-                guard let readerInfo = modelData.prepareBookReading(book: book) else { return nil }
+        books = modelData.booksInShelf
+        //            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) || $0.value.library.server.isLocal }
+                    .sorted {
+                        max($0.value.lastModified,
+                            $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
+                        ) > max(
+                            $1.value.lastModified,
+                            $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
+                        )
+                    }
+        
+        bookModel = books
+            .map { (inShelfId, book) -> BookModel in
+                let readerInfo = modelData.prepareBookReading(book: book)
                 
                 let bookUptoDate = book.formats.allSatisfy {
                     $1.cached == false ||
@@ -88,7 +88,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 }
                 
                 return BookModel(
-                    bookCoverSource: coverUrl.absoluteString,
+                    bookCoverSource: book.coverURL?.absoluteString ?? "",
                     bookId: inShelfId,
                     bookTitle: book.title,
                     bookProgress: Int(floor(readerInfo.position.lastProgress)),
@@ -172,7 +172,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             shelfView.bottomAnchor.constraint(equalTo: bannerView.topAnchor),
             bannerView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             bannerView.centerXAnchor.constraint(equalTo: view.centerXAnchor)
-//            bannerView.centerYAnchor.constraint(equalTo: view.bottomAnchor, constant: kGADAdSizeBanner.size.height / -2)
         ])
         #else
         NSLayoutConstraint.activate([
@@ -188,13 +187,40 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 //            self?.updateBookModel()
 //        }
         
-        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
-            .subscribe(on: DispatchQueue.main)
-            .receive(on: DispatchQueue.main)
-            .sink { _ in
-                self.updateBookModel()
-            }
+        registerNotificationHandler()
         
+        let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
+//        self.navigationController?.navigationBar.setBackgroundImage(
+//            navBarBackgroundImage,
+//            for: .any,
+//            barMetrics: .default)
+        
+        let navBarScrollApp = UINavigationBarAppearance()
+        navBarScrollApp.configureWithTransparentBackground()
+        navBarScrollApp.backgroundImage = navBarBackgroundImage
+        self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
+        self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
+        
+//        self.navigationItem.rightBarButtonItem =
+//            .init(title: "Edit", style: .plain, target: self, action: #selector(editAction(_:)))
+        
+        self.navigationItem.setRightBarButtonItems([
+            self.editButtonItem
+        ], animated: false)
+        
+        let toolBarApp = UIToolbarAppearance()
+        toolBarApp.configureWithOpaqueBackground()
+        toolBarApp.backgroundImage = navBarBackgroundImage
+        self.navigationController?.toolbar.standardAppearance = toolBarApp
+        self.navigationController?.toolbar.scrollEdgeAppearance = toolBarApp
+        
+        self.setToolbarItems([
+            .init(title: "Select All", style: .plain, target: shelfView, action: #selector(shelfView.selectAll(_:))),
+            UIBarButtonItem.flexibleSpace(),
+            .init(title: "Delete", style: .done, target: self, action: #selector(delete(_:))),
+            UIBarButtonItem.flexibleSpace(),
+            .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
+        ], animated: true)
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
@@ -229,8 +255,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             x: 0,
             y: 0,
             width: size.width,
-            height: size.height - bannerSize.size.height
+            height: size.height - bannerSize.size.height - (isEditing ? 50 : 0)
         )
+        
+        if var toolbarFrame = self.navigationController?.toolbar.frame {
+            self.navigationController?.toolbar.frame = toolbarFrame.offsetBy(dx: 0, dy: -50)
+        }
         
         #if canImport(GoogleMobileAds)
         print("SECTIONFRAME \(view.frame) \(shelfView.frame) \(bannerView.frame) \(tabBarHeight) \(bannerSize.size)")
@@ -258,12 +288,41 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
     }
     
+    override func setEditing(_ editing: Bool, animated: Bool) {
+        super.setEditing(editing, animated: animated)
+        
+        shelfView.setEditing(editing)
+        
+        self.navigationController?.setToolbarHidden(!editing, animated: false)
+        
+        if self.navigationController?.isToolbarHidden == false,
+           let toolbar = self.navigationController?.toolbar {
+            NSLayoutConstraint.activate([
+                toolbar.bottomAnchor.constraint(equalTo: shelfView.bottomAnchor)
+            ])
+        }
+    }
+    
+    func suspendNotificationHandler() {
+        updateAndReloadCancellable?.cancel()
+    }
+    
+    func registerNotificationHandler() {
+        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
+//            .subscribe(on: DispatchQueue.global(qos: .background))
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                self.updateBookModel()
+            }
+    }
+    
     func onBookClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        guard let book = modelData.readingBook,
-              let readerInfo = modelData.prepareBookReading(book: book) else { return }
+        guard let book = modelData.readingBook else { return }
+        
+        let readerInfo = modelData.prepareBookReading(book: book)
         
         if readerInfo.missing {
             if let activeDownload = modelData.activeDownloads.first(where: {
@@ -454,4 +513,29 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         modelData.readingBookInShelfId = nil
     }
 
+    override func delete(_ sender: Any?) {
+        let count = self.shelfView.selectedBookIndex.count
+        guard count > 0 else { return }
+        
+        let alert = UIAlertController(title: "Delete Books?", message: "Will delete \(count) books from reading shelf, are you sure?", preferredStyle: .alert)
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
+            self.suspendNotificationHandler()
+            
+            self.shelfView.selectedBookIndex.map {
+                self.books[$0.row]
+            }.forEach {
+                self.modelData.clearCache(inShelfId: $0.key)
+            }
+            self.setEditing(false, animated: true)
+            
+            self.registerNotificationHandler()
+            
+            NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+        })
+        
+        self.present(alert, animated: true)
+    }
 }

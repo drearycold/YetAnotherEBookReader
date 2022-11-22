@@ -923,10 +923,11 @@ final class ModelData: ObservableObject {
                 
                 // check for identical file
                 let bookForQuery = CalibreBook(id: bookId, library: localLibrary)
-                if let book = booksInShelf[bookForQuery.inShelfId],
-                   let readerInfo = prepareBookReading(book: book),
-                   readerInfo.url.pathExtension.lowercased() == url.pathExtension.lowercased() {
-                    return bookImportInfo
+                if let book = booksInShelf[bookForQuery.inShelfId] {
+                   let readerInfo = prepareBookReading(book: book)
+                    if readerInfo.url.pathExtension.lowercased() == url.pathExtension.lowercased() {
+                        return bookImportInfo
+                    }
                 }
                 
                 // check for dest file
@@ -1677,7 +1678,7 @@ final class ModelData: ObservableObject {
         return formats.first?.key
     }
     
-    func prepareBookReading(book: CalibreBook) -> ReaderInfo? {
+    func prepareBookReading(book: CalibreBook) -> ReaderInfo {
         var candidatePositions = [BookDeviceReadingPosition]()
 
         //preference: device, latest, selected, any
@@ -1702,8 +1703,8 @@ final class ModelData: ObservableObject {
             return (format, reader, position)
         }
         
-        guard let formatReaderPair = formatReaderPairArray.first else { return nil }
-        guard let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) else { return nil }
+        let formatReaderPair = formatReaderPairArray.first ?? (Format.UNKNOWN, ReaderType.UNSUPPORTED, BookDeviceReadingPosition.init(readerName: ReaderType.UNSUPPORTED.id))
+        let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) ?? URL(fileURLWithPath: "/invalid")
         let urlMissing = !FileManager.default.fileExists(atPath: savedURL.path)
         
         return ReaderInfo(deviceName: deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)

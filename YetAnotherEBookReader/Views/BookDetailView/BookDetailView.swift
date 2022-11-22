@@ -159,8 +159,8 @@ struct BookDetailView: View {
             Button(action: {
                 guard modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty else { return }
                 
-                if book.inShelf, let readerInfo = modelData.prepareBookReading(book: book) {
-                    modelData.readerInfo = readerInfo
+                if book.inShelf {
+                    modelData.readerInfo = modelData.prepareBookReading(book: book)
                     presentingReadingSheet = true
                 } else {
                     //TODO prompt for formats
