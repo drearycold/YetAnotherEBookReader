@@ -11,10 +11,14 @@ import FolioReaderKit
 import GCDWebServer
 import ZIPFoundation
 
+#if canImport(GoogleMobileAds)
+import GoogleMobileAds
+#endif
+
 internal let kGCDWebServerPreferredPort = 46436
 
 @available(macCatalyst 14.0, *)
-class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
+class EpubFolioReaderContainer: FolioReaderContainer {
 //    var savedPositionObserver: NSKeyValueObservation?
     var modelData: ModelData?
     
@@ -29,6 +33,10 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
     let dateFormatter = DateFormatter()
     var epubArchive: Archive?
 
+#if canImport(GoogleMobileAds)
+    let bannerSize = GADAdSizeMediumRectangle
+#endif
+    
     func open(bookReadingPosition: BookDeviceReadingPosition) {
         readerConfig.loadSavedPositionForCurrentBook = true
         
@@ -48,32 +56,7 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
         super.initialization()
     }
 
-    func folioReader(_ folioReader: FolioReader, didFinishedLoading book: FRBook) {
-        folioReader.readerCenter?.delegate = MyFolioReaderCenterDelegate()
-        folioReader.readerCenter?.pageDelegate = yabrFolioReaderPageDelegate
-        
-        self.epubArchive = book.epubArchive
-        initializeWebServer()
-        readerConfig.serverPort = Int(webServer.port)
-        
-//        if let bookId = readerConfig.identifier,
-//           let savedPosition = readerConfig.savedPositionForCurrentBook,
-//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
-//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, start: savedPosition)
-//        }
-    }
-    
-    func folioReaderDidClose(_ folioReader: FolioReader) {
-        updateReadingPosition(folioReader)
-        webServer.stop()
-        
-//        if let bookId = readerConfig.identifier,
-//           let savedPosition = folioReader.savedPositionForCurrentBook,
-//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
-//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, finish: savedPosition)
-//        }
-    }
-    
+
     func updateReadingPosition(_ folioReader: FolioReader) {
 //        guard var updatedReadingPosition = modelData?.updatedReadingPosition else { return }
         
@@ -218,6 +201,68 @@ class EpubFolioReaderContainer: FolioReaderContainer, FolioReaderDelegate {
                 ])
             }
         }
+        
+    }
+}
+
+extension EpubFolioReaderContainer: FolioReaderDelegate {
+    func folioReader(_ folioReader: FolioReader, didFinishedLoading book: FRBook) {
+        folioReader.readerCenter?.delegate = MyFolioReaderCenterDelegate()
+        folioReader.readerCenter?.pageDelegate = yabrFolioReaderPageDelegate
+        
+        self.epubArchive = book.epubArchive
+        initializeWebServer()
+        readerConfig.serverPort = Int(webServer.port)
+        
+//        if let bookId = readerConfig.identifier,
+//           let savedPosition = readerConfig.savedPositionForCurrentBook,
+//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
+//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, start: savedPosition)
+//        }
+        
+#if canImport(GoogleMobileAds)
+
+#endif
+        
+    }
+    
+    func folioReaderDidClose(_ folioReader: FolioReader) {
+        updateReadingPosition(folioReader)
+        webServer.stop()
+        
+//        if let bookId = readerConfig.identifier,
+//           let savedPosition = folioReader.savedPositionForCurrentBook,
+//           let provider = folioReader.delegate?.folioReaderReadPositionProvider?(folioReader) {
+//            provider.folioReaderPositionHistory?(folioReader, bookId: bookId, finish: savedPosition)
+//        }
+    }
+    
+    func folioReaderAdView(_ folioReader: FolioReader) -> UIView? {
+#if canImport(GoogleMobileAds)
+        let bannerView = GADBannerView(
+            frame: .init(origin: .zero, size: bannerSize.size)
+        )
+#if DEBUG
+        bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
+        GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ "23e0202ad7a1682137a4ad8bccc0e35b" ]
+#else
+        bannerView.adUnitID = modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
+#endif
+        bannerView.rootViewController = self
+        
+        bannerView.translatesAutoresizingMaskIntoConstraints = false
+        bannerView.adSize = bannerSize
+        
+#if GAD_ENABLED
+        let gadRequest = GADRequest()
+        //        gadRequest.scene = self.view.window?.windowScene
+        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
+        bannerView.load(gadRequest)
+#endif
+        return bannerView
+#else
+        return nil
+#endif
         
     }
 }
