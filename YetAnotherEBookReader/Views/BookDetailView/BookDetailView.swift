@@ -80,6 +80,9 @@ struct BookDetailView: View {
         .toolbar {
             toolbarContent()
         }
+        .alert(item: $alertItem) { item in
+            return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
+        }
         .disabled(modelData.readingBook == nil)
     }
     

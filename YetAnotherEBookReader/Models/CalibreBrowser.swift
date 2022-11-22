@@ -350,8 +350,16 @@ struct MergeSortComparator: SortComparator {
 
 extension CalibreServerService {
     func buildLibrarySearchTask(library: CalibreLibrary, searchCriteria: LibrarySearchCriteria) -> CalibreLibrarySearchTask? {
-        guard let serverUrl = getServerUrlByReachability(server: library.server) ??
-                ( (library.autoUpdate || library.server.isLocal) ? URL(fileURLWithPath: "/realm") : nil)
+        guard let serverUrl =
+                modelData.librarySyncStatus[library.id]?.isError == true
+                ? URL(fileURLWithPath: "/realm")
+                : (
+                    getServerUrlByReachability(server: library.server) ?? (
+                        (library.autoUpdate || library.server.isLocal)
+                        ? URL(fileURLWithPath: "/realm")
+                        : nil
+                    )
+                )
         else { return nil }
         
         var booksListUrlComponents = URLComponents()

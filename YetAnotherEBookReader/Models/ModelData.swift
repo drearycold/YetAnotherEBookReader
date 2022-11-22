@@ -2279,6 +2279,9 @@ final class ModelData: ObservableObject {
                 
                 self.librarySyncStatus[library.id]?.isSync = false
                 self.librarySyncStatus[library.id]?.isError = isError
+                if isError, results.errmsg.isEmpty == false {
+                    self.librarySyncStatus[library.id]?.msg = results.errmsg
+                }
                 self.librarySyncStatus[library.id]?.cnt = bookCount
                 self.librarySyncStatus[library.id]?.upd = bookNeedUpdateCount
                 self.librarySyncStatus[library.id]?.del.formUnion(bookDeleted)

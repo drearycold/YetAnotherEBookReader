@@ -263,7 +263,12 @@ struct CalibreServerService {
             }
             guard (200...299).contains(httpResponse.statusCode) else {
                 defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                updatingMetadataStatus = httpResponse.debugDescription
+                if let data = data,
+                   let msg = String(data: data, encoding: .utf8) {
+                    updatingMetadataStatus = msg
+                } else {
+                    updatingMetadataStatus = httpResponse.debugDescription
+                }
                 return
             }
             
@@ -1253,19 +1258,20 @@ struct CalibreServerService {
 
         let a = urlSession(server: library.server)
             .dataTaskPublisher(for: urlRequest)
-            .tryMap { output in
-//                print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
-                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
+            .map { output -> CalibreSyncLibraryResult in
+                if let result = try? JSONDecoder().decode([String: [String:CalibreCustomColumnInfo]].self, from: output.data) {
+                    return CalibreSyncLibraryResult(library: library, result: result)
+                } else {
+                    var libraryResult = CalibreSyncLibraryResult(library: library, result: error)
+                    if let httpResponse = output.response as? HTTPURLResponse {
+                        if (400...499).contains(httpResponse.statusCode) {
+                            libraryResult.errmsg = String(data: output.data, encoding: .utf8) ?? "Code \(httpResponse.statusCode)"
+                        }
+                    }
+                    return libraryResult
                 }
-                
-                return output.data
             }
-            .decode(type: [String: [String:CalibreCustomColumnInfo]].self, decoder: JSONDecoder())
-            .replaceError(with: error)
-            .map {
-                CalibreSyncLibraryResult(library: library, result: $0)
-            }
+            .replaceError(with: .init(library: library, result: error))
             .eraseToAnyPublisher()
         
         return a
