@@ -35,6 +35,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
 
 #if canImport(GoogleMobileAds)
     let bannerSize = GADAdSizeMediumRectangle
+    var interstitialAd: GADInterstitialAd?
 #endif
     
     func open(bookReadingPosition: BookDeviceReadingPosition) {
@@ -52,6 +53,21 @@ class EpubFolioReaderContainer: FolioReaderContainer {
         
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willResignActiveNotification, object: nil)
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
+        
+#if GAD_ENABLED
+        let gadRequest = GADRequest()
+        //        gadRequest.scene = self.view.window?.windowScene
+        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
+        
+        GADInterstitialAd.load(withAdUnitID: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
+            if let error = error {
+                print("\(#function) interstitial error=\(error.localizedDescription)")
+                return
+            }
+            self.interstitialAd = ad
+            self.interstitialAd?.fullScreenContentDelegate = self
+        }
+#endif
         
         super.initialization()
     }
@@ -246,7 +262,7 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
         bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
         GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ "23e0202ad7a1682137a4ad8bccc0e35b" ]
 #else
-        bannerView.adUnitID = modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
+        bannerView.adUnitID = modelData?.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
 #endif
         bannerView.rootViewController = self
         
@@ -265,7 +281,56 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
 #endif
         
     }
+    
+    func folioReaderAdPresent(_ folioReader: FolioReader) {
+#if canImport(GoogleMobileAds)
+        guard let interstitialAd = interstitialAd else {
+            initInterstitialAd()
+            return
+        }
+        guard let readerCenter = folioReader.readerCenter else { return }
+        
+        interstitialAd.present(fromRootViewController: readerCenter)
+#endif
+    }
 }
+
+#if canImport(GoogleMobileAds)
+extension EpubFolioReaderContainer: GADFullScreenContentDelegate {
+    func initInterstitialAd() {
+        self.interstitialAd = nil
+        
+        let gadRequest = GADRequest()
+        //        gadRequest.scene = self.view.window?.windowScene
+        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
+        
+        GADInterstitialAd.load(withAdUnitID: "ca-app-pub-3940256099942544/4411468910", request: gadRequest) { ad, error in
+            if let error = error {
+                print("\(#function) interstitial error=\(error.localizedDescription)")
+                return
+            }
+            self.interstitialAd = ad
+            self.interstitialAd?.fullScreenContentDelegate = self
+        }
+    }
+    
+    func adWillDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+
+    }
+    
+    func adWillPresentFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+        initInterstitialAd()
+    }
+    
+    func adDidDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
+        
+    }
+    
+    func ad(_ ad: GADFullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
+        print("\(#function) interstitial present error=\(error.localizedDescription)")
+    }
+}
+#endif
 
 struct UncompressError: Error {
     
