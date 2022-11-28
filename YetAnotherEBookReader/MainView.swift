@@ -106,21 +106,7 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf, onDismiss: {
-            /*
-            guard let book = modelData.readingBook,
-                  let selectedPosition = modelData.readerInfo?.position,
-                  modelData.updatedReadingPosition.isSameType(with: selectedPosition),
-                  modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false
-            else { return }
-
-            modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: modelData.updatedReadingPosition)
-
-            
-            modelData.updateCurrentPosition(alertDelegate: nil)
-            NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-            */
-        }) {
+        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf) {
             if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {

@@ -107,8 +107,15 @@ struct FontInfo {
     }
 }
 
+enum calibreUpdatedSignal {
+    case shelf
+    case deleted(String)
+    case book(CalibreBook)
+    case library(CalibreLibrary)
+    case server(CalibreServer)
+}
+
 extension Notification.Name {
-    static let YABR_RecentShelfBooksRefreshed = Notification.Name("YABR.recentShelfbooksRefreshed")
     static let YABR_DiscoverShelfBooksRefreshed = Notification.Name("YABR.discoverShelfbooksRefreshed")
     static let YABR_ReadingBookRemovedFromShelf = Notification.Name("YABR.readingBookRemovedFromShelf")
     static let YABR_BookImported = Notification.Name("YABR.bookImported")

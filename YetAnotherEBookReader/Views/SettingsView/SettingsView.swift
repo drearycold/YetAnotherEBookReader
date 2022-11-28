@@ -341,7 +341,7 @@ struct SettingsView: View {
                     alertItem = AlertItem(id: "DelServerFailed")
                 }
                 serverListDelete = nil
-                NotificationCenter.default.post(.init(name: .YABR_RecentShelfBooksRefreshed))
+                modelData.calibreUpdatedSubject.send(.shelf)
                 NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfBooksRefreshed))
             }
     }

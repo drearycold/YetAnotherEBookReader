@@ -694,6 +694,8 @@ extension CalibreServerService {
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchCriteria)
                 
+                modelData.librarySearchReturnedSubject.send(librarySearchKey)
+                
                 modelData.filteredBookListRefreshingSubject.send("")
 
                 guard let searchPreviousResult = modelData.searchLibraryResults[librarySearchKey],

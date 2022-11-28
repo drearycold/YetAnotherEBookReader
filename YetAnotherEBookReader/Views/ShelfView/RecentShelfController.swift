@@ -33,6 +33,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     var modelData: ModelData!
     var updateAndReloadCancellable: AnyCancellable?
     var dismissControllerCancellable: AnyCancellable?
+    var bookUpdatedCancellable: AnyCancellable?
+    
     var bookDetailViewPresenting = false
 
     var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
@@ -301,19 +303,93 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 toolbar.bottomAnchor.constraint(equalTo: shelfView.bottomAnchor)
             ])
         }
+        
+//        if editing == false {
+            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
+//        }
     }
     
     func suspendNotificationHandler() {
         updateAndReloadCancellable?.cancel()
+        bookUpdatedCancellable?.cancel()
     }
     
     func registerNotificationHandler() {
-        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
-//            .subscribe(on: DispatchQueue.global(qos: .background))
-            .receive(on: DispatchQueue.main)
-            .sink { _ in
-                self.updateBookModel()
+//        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
+////            .subscribe(on: DispatchQueue.global(qos: .background))
+//            .receive(on: DispatchQueue.main)
+//            .sink { _ in
+//                self.updateBookModel()
+//            }
+        
+        bookUpdatedCancellable = modelData.calibreUpdatedSubject
+            .collect(.byTime(RunLoop.main, .seconds(1)))
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .map { signals -> [(key: String, value: CalibreBook)] in
+                self.modelData.booksInShelf
+                    .sorted {
+                        max($0.value.lastModified,
+                            $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
+                        ) > max(
+                            $1.value.lastModified,
+                            $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
+                        )
+                    }
             }
+            .map { books -> ([(key: String, value: CalibreBook)], [BookModel]) in
+                (
+                    books,
+                    books
+                        .map { (inShelfId, book) -> BookModel in
+                            let readerInfo = self.modelData.prepareBookReading(book: book)
+                            
+                            let bookUptoDate = book.formats.allSatisfy {
+                                $1.cached == false ||
+                                    ($1.cached && $1.cacheUptoDate)
+                            }
+                            let missingFormats = book.formats.filter {
+                                $1.selected == true && $1.cached == false
+                            }
+                            
+                            var bookStatus = BookModel.BookStatus.READY
+                            if self.modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
+                                bookStatus = .NOCONNECT
+                            } else {
+                                missingFormats.forEach {
+                                    guard let format = Format(rawValue: $0.key) else { return }
+                                    self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
+                                }
+                                
+                                if !bookUptoDate {
+                                    bookStatus = .HASUPDATE
+                                }
+                                if self.modelData.activeDownloads.contains(where: { (url, download) in
+                                    download.isDownloading && download.book.inShelfId == inShelfId
+                                }) {
+                                    bookStatus = .DOWNLOADING
+                                }
+                            }
+                            if book.library.server.isLocal {
+                                bookStatus = .LOCAL
+                            }
+                            
+                            return BookModel(
+                                bookCoverSource: book.coverURL?.absoluteString ?? "",
+                                bookId: inShelfId,
+                                bookTitle: book.title,
+                                bookProgress: Int(floor(readerInfo.position.lastProgress)),
+                                bookStatus: bookStatus
+                            )
+                        }
+                )
+            }
+            .receive(on: RunLoop.main)
+            .sink(receiveValue: { result in
+//                self.updateBookModel()
+                self.books = result.0
+                self.bookModel = result.1
+                self.shelfView.reloadBooks(bookModel: self.bookModel)
+            })
     }
     
     func onBookClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String) {
@@ -533,7 +609,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             
             self.registerNotificationHandler()
             
-            NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
+            self.modelData.calibreUpdatedSubject.send(.shelf)
         })
         
         self.present(alert, animated: true)

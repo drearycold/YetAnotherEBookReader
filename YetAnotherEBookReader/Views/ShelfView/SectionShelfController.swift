@@ -150,12 +150,18 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             }
         updateAndReloadCancellable?.cancel()
         updateAndReloadCancellable = modelData.discoverShelfGenerated
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .collect(.byTime(RunLoop.main, .seconds(1)))
+            .map { signals in
+                
+                return signals
+            }
             .receive(on: DispatchQueue.main)
             .sink { notification in
                 self.shelfView.reloadBooks(bookModelSection: self.modelData.bookModelSection)
-                if let stop = notification.object as? Bool, stop == true {
+//                if let stop = notification.object as? Bool, stop == true {
                     self.activityIndicatorView.stopAnimating()
-                }
+//                }
                 print("\(#function) activityIndicatorView stopped")
 
             }

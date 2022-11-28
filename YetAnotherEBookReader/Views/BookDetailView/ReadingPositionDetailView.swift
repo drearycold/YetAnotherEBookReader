@@ -115,21 +115,7 @@ struct ReadingPositionDetailView: View {
         .navigationTitle(
             Text("\(_VM.position.id) with \(_VM.position.readerName)")
         )
-        .fullScreenCover(
-            isPresented: $presentingReadSheet,
-            onDismiss: {
-                /*
-                guard let book = _VM.modelData.readingBook,
-                    let selectedPosition = _VM.modelData.readerInfo?.position,
-                      _VM.modelData.updatedReadingPosition.isSameType(with: selectedPosition),
-                      _VM.modelData.updatedReadingPosition.isSameProgress(with: selectedPosition) == false else { return }
-                
-                _VM.modelData.logBookDeviceReadingPositionHistoryFinish(book: book, endPosition: _VM.modelData.updatedReadingPosition)
-                
-                updatePosition()
-                NotificationCenter.default.post(Notification(name: .YABR_RecentShelfBooksRefreshed))
-                */
-            } ) {
+        .fullScreenCover(isPresented: $presentingReadSheet) {
             if let book = _VM.modelData.readingBook, let readerInfo = _VM.modelData.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
                     .environmentObject(_VM.modelData)
