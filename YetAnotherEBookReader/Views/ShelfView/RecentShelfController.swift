@@ -18,7 +18,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     var tabBarHeight = CGFloat(0)
 
     var books = [(key: String, value: CalibreBook)]()
-    var bookModel = [BookModel]()
     var shelfView: PlainShelfView!
     
     #if canImport(GoogleMobileAds)
@@ -55,7 +54,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                         )
                     }
         
-        bookModel = books
+        let bookModel = books
             .map { (inShelfId, book) -> BookModel in
                 let readerInfo = modelData.prepareBookReading(book: book)
                 
@@ -192,19 +191,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         registerNotificationHandler()
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
-//        self.navigationController?.navigationBar.setBackgroundImage(
-//            navBarBackgroundImage,
-//            for: .any,
-//            barMetrics: .default)
         
         let navBarScrollApp = UINavigationBarAppearance()
         navBarScrollApp.configureWithTransparentBackground()
         navBarScrollApp.backgroundImage = navBarBackgroundImage
         self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
         self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
-        
-//        self.navigationItem.rightBarButtonItem =
-//            .init(title: "Edit", style: .plain, target: self, action: #selector(editAction(_:)))
         
         self.navigationItem.setRightBarButtonItems([
             self.editButtonItem
@@ -387,8 +379,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             .sink(receiveValue: { result in
 //                self.updateBookModel()
                 self.books = result.0
-                self.bookModel = result.1
-                self.shelfView.reloadBooks(bookModel: self.bookModel)
+                self.shelfView.reloadBooks(bookModel: result.1)
             })
     }
     
@@ -590,7 +581,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     }
 
     override func delete(_ sender: Any?) {
-        let count = self.shelfView.selectedBookIndex.count
+        let count = self.shelfView.selectedBookIds.count
         guard count > 0 else { return }
         
         let alert = UIAlertController(title: "Delete Books?", message: "Will delete \(count) books from reading shelf, are you sure?", preferredStyle: .alert)
@@ -600,10 +591,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
             self.suspendNotificationHandler()
             
-            self.shelfView.selectedBookIndex.map {
-                self.books[$0.row]
-            }.forEach {
-                self.modelData.clearCache(inShelfId: $0.key)
+            self.shelfView.selectedBookIds.forEach {
+                self.modelData.clearCache(inShelfId: $0)
             }
             self.setEditing(false, animated: true)
             

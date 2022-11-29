@@ -11,13 +11,15 @@ import SwiftUI
 struct SectionShelfUI: UIViewControllerRepresentable {
     @EnvironmentObject var modelData: ModelData
 
-    func makeUIViewController(context: Context) -> SectionShelfController {
+    func makeUIViewController(context: Context) -> UINavigationController {
         let shelfController = SectionShelfController()
         shelfController.modelData = modelData
-        return shelfController
+        
+        let navController = UINavigationController(rootViewController: shelfController)
+        return navController
     }
     
-    func updateUIViewController(_ uiViewController: SectionShelfController, context: Context) {
+    func updateUIViewController(_ uiViewController: UINavigationController, context: Context) {
 //        uiViewController.resizeSubviews(to: uiViewController.view.frame.size, to: uiViewController.traitCollection)
 //        uiViewController.updateBookModel(reload: true)
 //        uiViewController.reloadBookModel()

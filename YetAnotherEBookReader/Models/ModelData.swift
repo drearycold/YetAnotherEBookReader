@@ -413,9 +413,7 @@ final class ModelData: ObservableObject {
                                 lhs.lastProgress < rhs.lastProgress
                             }?.lastProgress ?? 0.0),
                         bookStatus: .READY,
-                        sectionId: sectionId,
-                        show: true,
-                        type: ""
+                        sectionId: sectionId
                     )
                 }
                 
@@ -2909,10 +2907,7 @@ final class ModelData: ObservableObject {
                             bookTitle: book.title,
                             bookProgress: Int(self.getLatestReadingPosition(book: book)?.lastProgress ?? 0.0),
                             bookStatus: .READY,
-                            sectionId: sectionInfo.2,
-                            show: true,
-                            type: ""
-                        )
+                            sectionId: sectionInfo.2)
                     )
                     // print("updateBookModel \(sectionInfo.0) \(book)")
                 }
@@ -3000,10 +2995,7 @@ final class ModelData: ObservableObject {
                                 lhs.lastProgress < rhs.lastProgress
                             }?.lastProgress ?? 0.0),
                         bookStatus: .READY,
-                        sectionId: "reading",
-                        show: true,
-                        type: ""
-                    )
+                        sectionId: "reading")
                 }
         )
         
@@ -3039,10 +3031,7 @@ final class ModelData: ObservableObject {
                                     lhs.lastProgress < rhs.lastProgress
                                 }?.lastProgress ?? 0.0),
                             bookStatus: .READY,
-                            sectionId: sectionId,
-                            show: true,
-                            type: ""
-                        )
+                            sectionId: sectionId)
                     }
                 
                 guard books.count > 1 else { return }
@@ -3083,10 +3072,7 @@ final class ModelData: ObservableObject {
                                 lhs.lastProgress < rhs.lastProgress
                             }?.lastProgress ?? 0.0),
                         bookStatus: .READY,
-                        sectionId: sectionId,
-                        show: true,
-                        type: ""
-                    )
+                        sectionId: sectionId)
                 }
             
             guard books.count > 1 else { return }

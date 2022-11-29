@@ -167,6 +167,32 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             }
         
         NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: false))
+        
+        let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
+        
+        let navBarScrollApp = UINavigationBarAppearance()
+        navBarScrollApp.configureWithTransparentBackground()
+        navBarScrollApp.backgroundImage = navBarBackgroundImage
+        self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
+        self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
+        
+        self.navigationItem.setRightBarButtonItems([
+            self.editButtonItem
+        ], animated: false)
+        
+        let toolBarApp = UIToolbarAppearance()
+        toolBarApp.configureWithOpaqueBackground()
+        toolBarApp.backgroundImage = navBarBackgroundImage
+        self.navigationController?.toolbar.standardAppearance = toolBarApp
+        self.navigationController?.toolbar.scrollEdgeAppearance = toolBarApp
+        
+        self.setToolbarItems([
+            .init(title: "Select All", style: .plain, target: shelfView, action: #selector(shelfView.selectAll(_:))),
+            UIBarButtonItem.flexibleSpace(),
+            .init(title: "Download", style: .done, target: self, action: #selector(download(_:))),
+            UIBarButtonItem.flexibleSpace(),
+            .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
+        ], animated: true)
     }
 
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
@@ -230,6 +256,25 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         } completion: { _ in
         }
         
+    }
+    
+    override func setEditing(_ editing: Bool, animated: Bool) {
+        super.setEditing(editing, animated: animated)
+        
+        shelfView.setEditing(editing)
+        
+        self.navigationController?.setToolbarHidden(!editing, animated: false)
+        
+        if self.navigationController?.isToolbarHidden == false,
+           let toolbar = self.navigationController?.toolbar {
+            NSLayoutConstraint.activate([
+                toolbar.bottomAnchor.constraint(equalTo: shelfView.bottomAnchor)
+            ])
+        }
+        
+//        if editing == false {
+            self.resizeSubviews(to: self.view.frame.size, to: self.traitCollection)
+//        }
     }
     
     func onBookClicked(_ shelfView: SectionShelfCompositionalView, section: Int, index: Int, sectionId: String, sectionTitle: String, bookId: String, bookTitle: String) {
@@ -326,4 +371,33 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         }
     }
     
+    @objc func download(_ sender: Any?) {
+        let count = self.shelfView.selectedBookIds.count
+        guard count > 0 else { return }
+        
+        let alert = UIAlertController(title: "Download Books?", message: "Will add \(count) books to reading shelf, are you sure?", preferredStyle: .alert)
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        
+        alert.addAction(UIAlertAction(title: "Download", style: .destructive) { _ in
+//            self.suspendNotificationHandler()
+            
+            self.shelfView.selectedBookIds.forEach { bookId in
+                guard let obj = self.modelData.realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId) ?? self.modelData.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId),
+                      let book = self.modelData.convert(bookRealm: obj),
+                      let format = self.modelData.getPreferredFormat(for: book)
+                else { return }
+                
+                self.modelData.addToShelf(book: book, formats: [format])
+            }
+            
+            self.setEditing(false, animated: true)
+            
+//            self.registerNotificationHandler()
+            
+//            self.modelData.calibreUpdatedSubject.send(.shelf)
+        })
+        
+        self.present(alert, animated: true)
+    }
 }
