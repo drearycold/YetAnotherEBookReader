@@ -342,7 +342,6 @@ struct SettingsView: View {
                 }
                 serverListDelete = nil
                 modelData.calibreUpdatedSubject.send(.shelf)
-                NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfBooksRefreshed))
             }
     }
     

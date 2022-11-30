@@ -15,7 +15,6 @@ import GoogleMobileAds
 #endif
 
 class SectionShelfController: UIViewController, SectionShelfCompositionalViewDelegate {
-    let statusBarHeight = UIApplication.shared.statusBarFrame.height
     var tabBarHeight = CGFloat(0)
     
     var shelfView: SectionShelfCompositionalView!
@@ -31,10 +30,11 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     var bannerSize = CGRect.zero
     #endif
 
-    // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
     var generatingCancellable: AnyCancellable?
-    var updateAndReloadCancellable: AnyCancellable?
+    var reloadShelfCancellable: AnyCancellable?
+    
+    let refreshBarButtonItem = BarButtonItem()
     
     override var canBecomeFirstResponder: Bool {
         true
@@ -54,8 +54,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         bannerView.load(gadRequest)
         #endif
         #endif
-        
-        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfBooksRefreshed))
     }
 
     override func viewDidLoad() {
@@ -116,7 +114,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 x: 0,
                 y: 0,
                 width: view.frame.width,
-                height: view.frame.height - statusBarHeight
+                height: view.frame.height
             )
         )
         shelfView.translatesAutoresizingMaskIntoConstraints = false
@@ -142,31 +140,12 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             activityIndicatorView.heightAnchor.constraint(equalTo: activityIndicatorView.widthAnchor)
         ])
         
-        generatingCancellable?.cancel()
-        generatingCancellable = modelData.discoverShelfBooksRefreshedPublisher
-            .sink { _ in
-                self.activityIndicatorView.startAnimating()
-                print("\(#function) activityIndicatorView started")
-            }
-        updateAndReloadCancellable?.cancel()
-        updateAndReloadCancellable = modelData.discoverShelfGenerated
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
-            .collect(.byTime(RunLoop.main, .seconds(1)))
-            .map { signals in
-                
-                return signals
-            }
+        reloadShelfCancellable?.cancel()
+        reloadShelfCancellable = modelData.discoverShelfModelSubject
             .receive(on: DispatchQueue.main)
-            .sink { notification in
-                self.shelfView.reloadBooks(bookModelSection: self.modelData.bookModelSection)
-//                if let stop = notification.object as? Bool, stop == true {
-                    self.activityIndicatorView.stopAnimating()
-//                }
-                print("\(#function) activityIndicatorView stopped")
-
+            .sink { shelfModels in
+                self.shelfView.reloadBooks(bookModelSection: shelfModels)
             }
-        
-        NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: false))
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
         
@@ -175,6 +154,14 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         navBarScrollApp.backgroundImage = navBarBackgroundImage
         self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
         self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
+        
+        refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
+            self.modelData.calibreUpdatedSubject.send(.shelf)
+        })
+        
+        self.navigationItem.setLeftBarButtonItems([
+            refreshBarButtonItem
+        ], animated: false)
         
         self.navigationItem.setRightBarButtonItems([
             self.editButtonItem
@@ -379,7 +366,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
-        alert.addAction(UIAlertAction(title: "Download", style: .destructive) { _ in
+        alert.addAction(UIAlertAction(title: "Download", style: .default) { _ in
 //            self.suspendNotificationHandler()
             
             self.shelfView.selectedBookIds.forEach { bookId in

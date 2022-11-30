@@ -70,7 +70,7 @@ struct ServerDetailView: View {
                             }, set: { newValue in
                                 modelData.calibreLibraries[id]!.discoverable = newValue
                                 try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
-                                NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
+                                self.modelData.calibreUpdatedSubject.send(.shelf)
                             }),
                             autoUpdate: Binding<Bool>(get: {
                                 modelData.calibreLibraries[id]!.autoUpdate

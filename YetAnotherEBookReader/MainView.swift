@@ -47,6 +47,9 @@ struct MainView: View {
                         Text("Recent")
                     }
                     .tag(0)
+                    .onAppear {
+                        modelData.calibreUpdatedSubject.send(.shelf)
+                    }
                     
                 SectionShelfUI()
                     .tabItem {
@@ -54,6 +57,9 @@ struct MainView: View {
                         Text("Discover")
                     }
                     .tag(1)
+                    .onAppear {
+                        modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
+                    }
                 
                 LibraryInfoView()
                     .tabItem {

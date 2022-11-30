@@ -17,7 +17,6 @@ import GoogleMobileAds
 class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     var tabBarHeight = CGFloat(0)
 
-    var books = [(key: String, value: CalibreBook)]()
     var shelfView: PlainShelfView!
     
     #if canImport(GoogleMobileAds)
@@ -30,11 +29,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
-    var updateAndReloadCancellable: AnyCancellable?
     var dismissControllerCancellable: AnyCancellable?
-    var bookUpdatedCancellable: AnyCancellable?
+    var reloadShelfCancellable: AnyCancellable?
     
-    var bookDetailViewPresenting = false
+    var bookDetailViewPresentingId: String? = nil
 
     var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
     
@@ -42,91 +40,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         true
     }
     
-    @objc func updateBookModel() {
-        books = modelData.booksInShelf
-        //            .filter { $0.value.lastModified > Date(timeIntervalSinceNow: -86400 * 30) || $0.value.library.server.isLocal }
-                    .sorted {
-                        max($0.value.lastModified,
-                            $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
-                        ) > max(
-                            $1.value.lastModified,
-                            $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
-                        )
-                    }
-        
-        let bookModel = books
-            .map { (inShelfId, book) -> BookModel in
-                let readerInfo = modelData.prepareBookReading(book: book)
-                
-                let bookUptoDate = book.formats.allSatisfy {
-                    $1.cached == false ||
-                        ($1.cached && $1.cacheUptoDate)
-                }
-                let missingFormats = book.formats.filter {
-                    $1.selected == true && $1.cached == false
-                }
-                
-                var bookStatus = BookModel.BookStatus.READY
-                if modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-                    bookStatus = .NOCONNECT
-                } else {
-                    missingFormats.forEach {
-                        guard let format = Format(rawValue: $0.key) else { return }
-                        modelData.bookFormatDownloadSubject.send((book: book, format: format))
-                    }
-                    
-                    if !bookUptoDate {
-                        bookStatus = .HASUPDATE
-                    }
-                    if modelData.activeDownloads.contains(where: { (url, download) in
-                        download.isDownloading && download.book.inShelfId == inShelfId
-                    }) {
-                        bookStatus = .DOWNLOADING
-                    }
-                }
-                if book.library.server.isLocal {
-                    bookStatus = .LOCAL
-                }
-                
-                return BookModel(
-                    bookCoverSource: book.coverURL?.absoluteString ?? "",
-                    bookId: inShelfId,
-                    bookTitle: book.title,
-                    bookProgress: Int(floor(readerInfo.position.lastProgress)),
-                    bookStatus: bookStatus
-                )
-            }
-        print("\(#function) modelData.booksInShelf.count=\(modelData.booksInShelf.count) bookModel.count=\(bookModel.count)")
-
-        self.shelfView.reloadBooks(bookModel: bookModel)
-    }
-    
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        
-        resizeSubviews(to: view.frame.size, to: traitCollection)
-        
-        //updateBookModel()
-        #if canImport(GoogleMobileAds)
-        #if GAD_ENABLED
-        guard gadRequestInitialized == false else { return }
-        gadRequestInitialized = true
-        let gadRequest = GADRequest()
-//        gadRequest.scene = self.view.window?.windowScene
-        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
-        bannerView.load(gadRequest)
-        #endif
-        #endif
-        
-        
-        dismissControllerCancellable?.cancel()
-        dismissControllerCancellable = modelData.readingBookRemovedFromShelfPublisher.sink { _ in
-            guard self.bookDetailViewPresenting else { return }
-            self.dismiss(animated: true, completion: { self.bookDetailViewPresenting = false })
-        }
-        
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
         
@@ -162,7 +75,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         bannerView.translatesAutoresizingMaskIntoConstraints = false
         bannerView.adSize = GADAdSizeBanner
-        
 
         view.addSubview(bannerView)
         
@@ -183,12 +95,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         ])
         #endif
         
-        self.updateBookModel()
-//        shelfBookSink = modelData.$booksInShelf.sink { [weak self] _ in
-//            self?.updateBookModel()
-//        }
-        
-        registerNotificationHandler()
+        reloadShelfCancellable?.cancel()
+        reloadShelfCancellable = modelData.recentShelfModelSubject
+            .receive(on: DispatchQueue.main)
+            .sink { bookModel in
+                self.shelfView.reloadBooks(bookModel: bookModel)
+            }
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
         
@@ -211,12 +123,37 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         self.setToolbarItems([
             .init(title: "Select All", style: .plain, target: shelfView, action: #selector(shelfView.selectAll(_:))),
             UIBarButtonItem.flexibleSpace(),
-            .init(title: "Delete", style: .done, target: self, action: #selector(delete(_:))),
+            .init(title: "Delete", style: .done, target: self, action: #selector(deleteBooks(_:))),
             UIBarButtonItem.flexibleSpace(),
             .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
         ], animated: true)
     }
 
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        resizeSubviews(to: view.frame.size, to: traitCollection)
+        
+        //updateBookModel()
+        #if canImport(GoogleMobileAds)
+        #if GAD_ENABLED
+        guard gadRequestInitialized == false else { return }
+        gadRequestInitialized = true
+        let gadRequest = GADRequest()
+//        gadRequest.scene = self.view.window?.windowScene
+        gadRequest.scene = UIApplication.shared.keyWindow?.rootViewController?.view.window?.windowScene
+        bannerView.load(gadRequest)
+        #endif
+        #endif
+        
+        dismissControllerCancellable?.cancel()
+        dismissControllerCancellable = modelData.calibreUpdatedSubject.sink { signal in
+            guard let bookId = self.bookDetailViewPresentingId, signal == .deleted(bookId) else { return }
+            self.dismiss(animated: true, completion: { self.bookDetailViewPresentingId = nil })
+        }
+        
+    }
+    
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
         if let tabBarController = self.tabBarController {
             tabBarHeight = tabBarController.tabBar.frame.height
@@ -301,88 +238,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 //        }
     }
     
-    func suspendNotificationHandler() {
-        updateAndReloadCancellable?.cancel()
-        bookUpdatedCancellable?.cancel()
-    }
-    
-    func registerNotificationHandler() {
-//        updateAndReloadCancellable = modelData.recentShelfBooksRefreshedPublisher
-////            .subscribe(on: DispatchQueue.global(qos: .background))
-//            .receive(on: DispatchQueue.main)
-//            .sink { _ in
-//                self.updateBookModel()
-//            }
-        
-        bookUpdatedCancellable = modelData.calibreUpdatedSubject
-            .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
-            .map { signals -> [(key: String, value: CalibreBook)] in
-                self.modelData.booksInShelf
-                    .sorted {
-                        max($0.value.lastModified,
-                            $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
-                        ) > max(
-                            $1.value.lastModified,
-                            $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
-                        )
-                    }
-            }
-            .map { books -> ([(key: String, value: CalibreBook)], [BookModel]) in
-                (
-                    books,
-                    books
-                        .map { (inShelfId, book) -> BookModel in
-                            let readerInfo = self.modelData.prepareBookReading(book: book)
-                            
-                            let bookUptoDate = book.formats.allSatisfy {
-                                $1.cached == false ||
-                                    ($1.cached && $1.cacheUptoDate)
-                            }
-                            let missingFormats = book.formats.filter {
-                                $1.selected == true && $1.cached == false
-                            }
-                            
-                            var bookStatus = BookModel.BookStatus.READY
-                            if self.modelData.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-                                bookStatus = .NOCONNECT
-                            } else {
-                                missingFormats.forEach {
-                                    guard let format = Format(rawValue: $0.key) else { return }
-                                    self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
-                                }
-                                
-                                if !bookUptoDate {
-                                    bookStatus = .HASUPDATE
-                                }
-                                if self.modelData.activeDownloads.contains(where: { (url, download) in
-                                    download.isDownloading && download.book.inShelfId == inShelfId
-                                }) {
-                                    bookStatus = .DOWNLOADING
-                                }
-                            }
-                            if book.library.server.isLocal {
-                                bookStatus = .LOCAL
-                            }
-                            
-                            return BookModel(
-                                bookCoverSource: book.coverURL?.absoluteString ?? "",
-                                bookId: inShelfId,
-                                bookTitle: book.title,
-                                bookProgress: Int(floor(readerInfo.position.lastProgress)),
-                                bookStatus: bookStatus
-                            )
-                        }
-                )
-            }
-            .receive(on: RunLoop.main)
-            .sink(receiveValue: { result in
-//                self.updateBookModel()
-                self.books = result.0
-                self.shelfView.reloadBooks(bookModel: result.1)
-            })
-    }
-    
     func onBookClicked(_ shelfView: PlainShelfView, index: Int, bookId: String, bookTitle: String) {
         print("I just clicked \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
@@ -447,7 +302,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             detailView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
             
             self.present(nav, animated: true, completion: {
-                self.bookDetailViewPresenting = true
+                self.bookDetailViewPresentingId = bookId
             })
         }
     }
@@ -507,7 +362,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         readingPositionHistoryView.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
         self.present(nav, animated: true, completion: {
-            
+            self.bookDetailViewPresentingId = bookId
         })
     }
 
@@ -562,7 +417,6 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
     @objc func refreshBook(_ sender: Any?) {
         print("refreshBook")
         
-        updateBookModel()
     }
     
     @objc func deleteBook(_ sender: Any?) {
@@ -571,16 +425,15 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
               book.inShelfId == modelData.readingBookInShelfId  else { return }
         
         modelData.clearCache(inShelfId: book.inShelfId)
-        
-        updateBookModel()
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
         self.dismiss(animated: true, completion: nil)
         modelData.readingBookInShelfId = nil
+        self.bookDetailViewPresentingId = nil
     }
 
-    override func delete(_ sender: Any?) {
+    @objc func deleteBooks(_ sender: Any?) {
         let count = self.shelfView.selectedBookIds.count
         guard count > 0 else { return }
         
@@ -589,14 +442,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
         alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            self.suspendNotificationHandler()
-            
             self.shelfView.selectedBookIds.forEach {
                 self.modelData.clearCache(inShelfId: $0)
             }
             self.setEditing(false, animated: true)
-            
-            self.registerNotificationHandler()
             
             self.modelData.calibreUpdatedSubject.send(.shelf)
         })

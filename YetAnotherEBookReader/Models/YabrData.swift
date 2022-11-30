@@ -107,7 +107,7 @@ struct FontInfo {
     }
 }
 
-enum calibreUpdatedSignal {
+enum calibreUpdatedSignal: Hashable {
     case shelf
     case deleted(String)
     case book(CalibreBook)
@@ -116,14 +116,11 @@ enum calibreUpdatedSignal {
 }
 
 extension Notification.Name {
-    static let YABR_DiscoverShelfBooksRefreshed = Notification.Name("YABR.discoverShelfbooksRefreshed")
-    static let YABR_ReadingBookRemovedFromShelf = Notification.Name("YABR.readingBookRemovedFromShelf")
     static let YABR_BookImported = Notification.Name("YABR.bookImported")
     static let YABR_BookReaderEnterBackground = Notification.Name("YABR.bookReaderEnterBackground")
     static let YABR_BookReaderEnterActive = Notification.Name("YABR.bookReaderEnterActive")
     static let YABR_BookReaderClosed = Notification.Name("YABR.bookReaderClosed")
     static let YABR_LibraryBookListNeedUpdate = Notification.Name("YABR.LibraryBookListNeedUpdate")
-    static let YABR_DiscoverShelfGenerated = Notification.Name("YABR.DiscoverShelfGenerated")
     
     static let YABR_DismissAll = Notification.Name("YABR.dismissAll")
     static let YABR_ServerAdded = Notification.Name("YABR.serverAdded")

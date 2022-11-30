@@ -70,14 +70,6 @@ final class ModelData: ObservableObject {
     var searchLibraryResultsRealmQueue: Realm?
     
     @Published var booksInShelf = [String: CalibreBook]()
-
-    let discoverShelfBooksRefreshedPublisher = NotificationCenter.default.publisher(
-        for: .YABR_DiscoverShelfBooksRefreshed
-    ).eraseToAnyPublisher()
-    
-    let readingBookRemovedFromShelfPublisher = NotificationCenter.default.publisher(
-        for: .YABR_ReadingBookRemovedFromShelf
-    ).eraseToAnyPublisher()
     
     let bookImportedPublisher = NotificationCenter.default.publisher(
         for: .YABR_BookImported
@@ -95,9 +87,8 @@ final class ModelData: ObservableObject {
         for: .YABR_LibraryBookListNeedUpdate
     ).eraseToAnyPublisher()
     
-    let discoverShelfGenerated = NotificationCenter.default.publisher(
-        for: .YABR_DiscoverShelfGenerated
-    ).eraseToAnyPublisher()
+    let recentShelfModelSubject = PassthroughSubject<[BookModel], Never>()
+    let discoverShelfModelSubject = PassthroughSubject<[ShelfModelSection], Never>()
     
     var presentingStack = [Binding<Bool>]()
     
@@ -238,7 +229,6 @@ final class ModelData: ObservableObject {
     var shelfRefreshCancellable: AnyCancellable?
     var dshelperRefreshCancellable: AnyCancellable?
     var syncLibrariesIncrementalCancellable: AnyCancellable?
-    var generateDiscovertShelf: AnyCancellable?
     
     lazy var metadataQueue: OperationQueue = {
         var queue = OperationQueue()
@@ -300,62 +290,12 @@ final class ModelData: ObservableObject {
         
         self.reloadCustomFonts()
         
-        generateDiscovertShelf = discoverShelfBooksRefreshedPublisher
-            .subscribe(on: DispatchQueue.main)
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
-            .map { output -> [ShelfModelSection] in
-                let limit = output.object as? Bool == true ? 10 : 100
-                let earlyCut = output.object as? Bool == true ? true : false
-                return self.generateShelfBookModel(limit: limit, earlyCut: earlyCut)
-            }
-            .receive(on: DispatchQueue.main)
-            .sink(receiveValue: { bookModelSection in
-//                self.bookModelSection = bookModelSection
-                
-                self.booksInShelf.values.reduce(into: Set<LibrarySearchKey>()) { libraryKeys, book in
-                    if let author = book.authors.first {
-                        libraryKeys.insert(.init(
-                            libraryId: book.library.id,
-                            criteria: .init(
-                                searchString: "",
-                                sortCriteria: .init(by: .Title, ascending: true),
-                                filterCriteriaCategory: ["Authors": Set<String>([author])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
-                                filterCriteriaLibraries: [])))
-                    }
-                    book.tags.forEach { tag in
-                        libraryKeys.insert(.init(
-                            libraryId: book.library.id,
-                            criteria: .init(
-                                searchString: "",
-                                sortCriteria: .init(by: .Modified, ascending: false),
-                                filterCriteriaCategory: ["Tags": Set<String>([tag])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
-                                filterCriteriaLibraries: [])))
-                    }
-                    if book.series.isEmpty == false {
-                        libraryKeys.insert(.init(
-                            libraryId: book.library.id,
-                            criteria: .init(
-                                searchString: "",
-                                sortCriteria: .init(by: .SeriesIndex, ascending: true),
-                                filterCriteriaCategory: ["Series": Set<String>([book.series])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
-                                filterCriteriaLibraries: [])))
-                    }
-                }.forEach {
-                    self.librarySearchSubject.send($0)
-                }
-                
-                NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: true))
-            })
-        
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
         registerBookReaderClosedCancellable()
+        
+        registerRecentShelfUpdater()
+        registerDiscoverShelfUpdater()
         
         bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
@@ -363,75 +303,6 @@ final class ModelData: ObservableObject {
                 NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
             }
         }.store(in: &calibreCancellables)
-        
-        librarySearchReturnedSubject
-            .receive(on: DispatchQueue.main)
-            .sink { librarySearchKey in
-                guard librarySearchKey.criteria.filterCriteriaCategory.count == 1,
-                      let categoryFilter = librarySearchKey.criteria.filterCriteriaCategory.first,
-                      categoryFilter.value.count == 1,
-                      let categoryFilterValue = categoryFilter.value.first,
-                      let library = self.calibreLibraries[librarySearchKey.libraryId],
-                      library.hidden == false,
-                      library.discoverable == true,
-                      let result = self.searchLibraryResults[librarySearchKey]
-                else { return }
-                
-                switch categoryFilter.key {
-                case "Tags":
-                    guard self.booksInShelf.first(where: { $0.value.tags.firstIndex(of: categoryFilterValue) != nil }) != nil
-                    else { return }
-                case "Authors":
-                    guard self.booksInShelf.first(where: { $0.value.authors.firstIndex(of: categoryFilterValue) != nil }) != nil
-                    else { return }
-                case "Series":
-                    guard self.booksInShelf.first(where: { $0.value.series == categoryFilterValue }) != nil
-                    else { return }
-                default:    //unrecognized
-                    return
-                }
-                let sectionId = "\(librarySearchKey)"
-                
-                self.bookModelSection.removeAll { $0.sectionId == sectionId }
-                
-                let serverUUID = library.server.uuid.uuidString
-                
-                let sectionShelf = result.bookIds.compactMap { bookId -> ShelfModel? in
-                    let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
-                    guard let bookRealm = self.realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? self.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
-                          bookRealm.inShelf == false
-                    else { return nil }
-                    
-                    let book = self.convert(library: library, bookRealm: bookRealm)
-                    
-                    return ShelfModel(
-                        bookCoverSource: book.coverURL?.absoluteString ?? ".",
-                        bookId: book.inShelfId,
-                        bookTitle: book.title,
-                        bookProgress: Int(
-                            book.readPos.getDevices().max { lhs, rhs in
-                                lhs.lastProgress < rhs.lastProgress
-                            }?.lastProgress ?? 0.0),
-                        bookStatus: .READY,
-                        sectionId: sectionId
-                    )
-                }
-                
-                guard sectionShelf.count > 1 else { return }
-                
-                let sectionName = "\(categoryFilter.key): \(categoryFilterValue) in \(library.name)"
-                
-                self.bookModelSection.append(.init(
-                    sectionName: sectionName,
-                    sectionId: sectionId,
-                    sectionShelf: sectionShelf
-                ))
-                
-                self.bookModelSection.sort { $0.sectionName < $1.sectionName }
-                
-                NotificationCenter.default.post(.init(name: .YABR_DiscoverShelfGenerated, object: true))
-            }
-            .store(in: &calibreCancellables)
         
         self.calibreServerService.registerLibraryCategoryHandler()
         self.calibreServerService.registerLibrarySearchHandler()
@@ -686,9 +557,6 @@ final class ModelData: ObservableObject {
         populateLocalLibraryBooks()
         
         calibreUpdatedSubject.send(.shelf)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed, object: Bool(true)))
-        }
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
     }
@@ -1484,13 +1352,12 @@ final class ModelData: ObservableObject {
         }
         
         calibreUpdatedSubject.send(.book(book))
-        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
     }
     
     func removeFromShelf(inShelfId: String) {
         if readingBook?.inShelfId == inShelfId {
             readingBook?.inShelf = false
-            NotificationCenter.default.post(Notification(name: .YABR_ReadingBookRemovedFromShelf))
+//            NotificationCenter.default.post(Notification(name: .YABR_ReadingBookRemovedFromShelf))
         }
         
         guard var book = booksInShelf[inShelfId] else { return }
@@ -1514,7 +1381,6 @@ final class ModelData: ObservableObject {
         }
 
         calibreUpdatedSubject.send(.deleted(book.inShelfId))
-        NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
     }
     
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
@@ -2581,8 +2447,6 @@ final class ModelData: ObservableObject {
                 
                 self.trySendGetBooksMetadataTask(library: result.library)
                 
-                NotificationCenter.default.post(Notification(name: .YABR_DiscoverShelfBooksRefreshed))
-                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
                 print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
             } catch let DecodingError.keyNotFound(key, context) {
                 print("getBookMetadataCancellable decode keyNotFound \(result.library.name) \(key) \(context) \(result.data?.count ?? -1)")
