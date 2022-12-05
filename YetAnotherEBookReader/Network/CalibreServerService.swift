@@ -136,7 +136,7 @@ struct CalibreServerService {
     }
     
     func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, filter: String = "") -> AnyPublisher<CalibreSyncLibraryResult, Never> {
-        guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server) else {
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server) else {
             var result = resultPrev
             result.errmsg = "Server not Reachable"
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
@@ -149,7 +149,7 @@ struct CalibreServerService {
         }
         
         urlComponents.path.append("/cdb/cmd/list/0")
-        urlComponents.queryItems = [URLQueryItem(name: "library_id", value: resultPrev.library.key)]
+        urlComponents.queryItems = [URLQueryItem(name: "library_id", value: resultPrev.request.library.key)]
         
         guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
             var result = resultPrev
@@ -176,13 +176,13 @@ struct CalibreServerService {
         print("\(#function) listRequest \(endpointUrl.absoluteString) \(String(data: data, encoding: .utf8))")
         
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.library.id)
+        modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
 
-        let a = urlSession(server: resultPrev.library.server).dataTaskPublisher(for: urlRequest)
+        let a = urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 // print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    print("\(#function) error \(resultPrev.library.id)")
+                    print("\(#function) error \(resultPrev.request.library.id)")
                     throw NSError(domain: "HTTP", code: 0, userInfo: nil)
                 }
                 
@@ -1231,23 +1231,38 @@ struct CalibreServerService {
         return 0
     }
     
-    func getCustomColumnsPublisher(library: CalibreLibrary) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+    func getCustomColumnsPublisher(request: CalibreSyncLibraryRequest) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         let error: [String: [String:CalibreCustomColumnInfo]] = ["error":[:]]
 
-        guard let serverURL = getServerUrlByReachability(server: library.server),
+        guard let serverURL = getServerUrlByReachability(server: request.library.server),
               var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
-            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(
+                CalibreSyncLibraryResult(
+                    request: request,
+                    result: error
+                )
+            ).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         endpointURLComponent.path.append("/cdb/cmd/custom_columns/0")
-        endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: library.key)]
+        endpointURLComponent.queryItems = [URLQueryItem(name: "library_id", value: request.library.key)]
 
         guard let endpointUrl = endpointURLComponent.url else {
-            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(
+                CalibreSyncLibraryResult(
+                    request: request,
+                    result: error
+                )
+            ).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         guard let postData = "[]".data(using: .utf8) else {
-            return Just(CalibreSyncLibraryResult(library: library, result: error)).setFailureType(to: Never.self).eraseToAnyPublisher()
+            return Just(
+                CalibreSyncLibraryResult(
+                    request: request,
+                    result: error
+                )
+            ).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
         var urlRequest = URLRequest(url: endpointUrl)
@@ -1256,13 +1271,19 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let a = urlSession(server: library.server)
+        let a = urlSession(server: request.library.server)
             .dataTaskPublisher(for: urlRequest)
             .map { output -> CalibreSyncLibraryResult in
                 if let result = try? JSONDecoder().decode([String: [String:CalibreCustomColumnInfo]].self, from: output.data) {
-                    return CalibreSyncLibraryResult(library: library, result: result)
+                    return CalibreSyncLibraryResult(
+                        request: request,
+                        result: result
+                    )
                 } else {
-                    var libraryResult = CalibreSyncLibraryResult(library: library, result: error)
+                    var libraryResult = CalibreSyncLibraryResult(
+                        request: request,
+                        result: error
+                    )
                     if let httpResponse = output.response as? HTTPURLResponse {
                         if (400...499).contains(httpResponse.statusCode) {
                             libraryResult.errmsg = String(data: output.data, encoding: .utf8) ?? "Code \(httpResponse.statusCode)"
@@ -1271,17 +1292,19 @@ struct CalibreServerService {
                     return libraryResult
                 }
             }
-            .replaceError(with: .init(library: library, result: error))
-            .eraseToAnyPublisher()
+            .replaceError(with: .init(
+                request: request,
+                result: error)
+            ).eraseToAnyPublisher()
         
         return a
     }
     
     func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         var urlComponents = URLComponents()
-        urlComponents.path = "ajax/categories/\(resultPrev.library.key)"
+        urlComponents.path = "ajax/categories/\(resultPrev.request.library.key)"
         
-        guard let serverUrl = getServerUrlByReachability(server: resultPrev.library.server),
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server),
               let endpointUrl = urlComponents.url(relativeTo: serverUrl)
         else {
             var result = resultPrev
@@ -1289,7 +1312,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        return urlSession(server: resultPrev.library.server).dataTaskPublisher(for: endpointUrl)
+        return urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: endpointUrl)
             .map {
                 $0.data
             }

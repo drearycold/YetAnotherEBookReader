@@ -380,10 +380,6 @@ struct AddModServerView: View {
         
         server = newServer
         isActive = false
-        
-        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(200))) {
-            NotificationCenter.default.post(Notification(name: .YABR_ServerAdded))
-        }
     }
     
     private func modServerConfirmButtonAction() {

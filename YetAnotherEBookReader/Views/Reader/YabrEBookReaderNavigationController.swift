@@ -7,12 +7,15 @@
 
 import Foundation
 import UIKit
+import Combine
 
 class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate {
     var modelData: ModelData
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    
+    var activityCancellables = Set<AnyCancellable>()
     
     init(modelData: ModelData, book: CalibreBook, readerInfo: ReaderInfo) {
         self.modelData = modelData
@@ -33,62 +36,56 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     override func viewWillAppear(_ animated: Bool) {
         book.readPos.session(start: readerInfo.position)
         
-        modelData.bookReaderEnterBackgroundCancellable?.cancel()
-        modelData.bookReaderEnterBackgroundCancellable = modelData.bookReaderEnterBackgroundPublished.sink { _ in
-            switch self.readerInfo.readerType {
-            case .YabrEPUB:
-                if let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() {
+        modelData.bookReaderActivitySubject.sink { subject in
+            switch subject {
+            case .background:
+                switch self.readerInfo.readerType {
+                case .YabrEPUB:
+                    guard let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() else { break }
                     yabrEPub.folioReader.saveReaderState {
                         yabrEPub.updateReadingPosition(yabrEPub.folioReader)
                         if let position = self.book.readPos.getPosition(self.modelData.deviceName) {
                             self.book.readPos.session(end: position)
                         }
                     }
-                }
-            case .YabrPDF:
-                if let yabrPDF: YabrPDFViewController = self.findChildViewController() {
+                case .YabrPDF:
+                    guard let yabrPDF: YabrPDFViewController = self.findChildViewController() else { break }
                     yabrPDF.updatePageViewPositionHistory()
                     yabrPDF.updateReadingProgress()
                     if let position = self.book.readPos.getPosition(self.modelData.deviceName) {
                         self.book.readPos.session(end: position)
                     }
-                }
-            case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
-                if let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController(),
-                   let locator = yabrReadium.navigator.currentLocation {
+                case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
+                    guard let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController(),
+                          let locator = yabrReadium.navigator.currentLocation
+                    else { break }
                     yabrReadium.navigator(yabrReadium.navigator, locationDidChange: locator)
                     if let position = self.book.readPos.getPosition(self.modelData.deviceName) {
                         self.book.readPos.session(end: position)
                     }
+                case .UNSUPPORTED:
+                    break
                 }
-            case .UNSUPPORTED:
+            case .inactive:
+                break   //trans, do nothing
+            case .active:
+                if let position = self.book.readPos.getPosition(self.modelData.deviceName),
+                   position.readerName == self.readerInfo.readerType.rawValue {
+                    self.book.readPos.session(start: position)
+                }
+            @unknown default:
                 break
             }
-        }
-        
-        modelData.bookReaderEnterActiveCancellable?.cancel()
-        modelData.bookReaderEnterActiveCancellable = modelData.bookReaderEnterActivePublished.sink { _ in
-            if let position = self.book.readPos.getPosition(self.modelData.deviceName),
-               position.readerName == self.readerInfo.readerType.rawValue {
-                self.book.readPos.session(start: position)
-            }
-        }
+        }.store(in: &activityCancellables)
     }
     
     override func viewWillDisappear(_ animated: Bool) {
-        ModelData.shared?.bookReaderEnterBackgroundCancellable?.cancel()
-        ModelData.shared?.bookReaderEnterBackgroundCancellable = nil
-        ModelData.shared?.bookReaderEnterActiveCancellable?.cancel()
-        ModelData.shared?.bookReaderEnterActiveCancellable = nil
+        activityCancellables.removeAll()
         
         if let position = self.book.readPos.getPosition(self.modelData.deviceName) {
             self.book.readPos.session(end: position)
         }
         
-        NotificationCenter.default.post(
-            name: .YABR_BookReaderClosed,
-            object: book.inShelfId,
-            userInfo: ["lastPosition": readerInfo.position]
-        )
+        ModelData.shared?.bookReaderClosedSubject.send((book: book, position: readerInfo.position))
     }
 }

@@ -17,8 +17,6 @@ struct YetAnotherEBookReaderApp: App {
     
     var body: some Scene {
         WindowGroup {
-//            ContentView()
-//                .environment(\.managedObjectContext, persistenceController.container.viewContext)
             ZStack {
                 MainView()
                     .environmentObject(modelData)
@@ -40,7 +38,6 @@ struct YetAnotherEBookReaderApp: App {
 
             switch(newScenePhase) {
             case .active:
-                modelData.registerGetBooksMetadataCancellable()
                 if modelData.realm == nil {
                     upgradingDatabase = true
                     DispatchQueue.global(qos: .userInitiated).async {
@@ -53,7 +50,7 @@ struct YetAnotherEBookReaderApp: App {
                                 upgradingDatabase = false
                                 
                                 modelData.probeServersReachability(with: [], updateLibrary: true)
-                                NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterActive))
+                                modelData.bookReaderActivitySubject.send(newScenePhase)
                             }
                         } catch {
                             upgradingDatabaseStatus = error.localizedDescription
@@ -61,13 +58,13 @@ struct YetAnotherEBookReaderApp: App {
                     }
                 } else {
                     modelData.probeServersReachability(with: [], updateLibrary: true)
-                    NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterActive))
+                    modelData.bookReaderActivitySubject.send(newScenePhase)
                 }
                 break
             case .inactive:
                 break
             case .background:
-                NotificationCenter.default.post(.init(name: .YABR_BookReaderEnterBackground))
+                modelData.bookReaderActivitySubject.send(newScenePhase)
                 break
             @unknown default:
                 break

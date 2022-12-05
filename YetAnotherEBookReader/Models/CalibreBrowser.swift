@@ -67,15 +67,11 @@ struct LibrarySearchCriteria: Hashable {
     let searchString: String
     let sortCriteria: LibrarySearchSort
     let filterCriteriaCategory: [String: Set<String>]
-    let filterCriteriaFormat: Set<String>
-    let filterCriteriaIdentifier: Set<String>
     let filterCriteriaLibraries: Set<String>
     let pageSize: Int = 100
     
     var hasEmptyFilter: Bool {
         filterCriteriaCategory.isEmpty
-        && filterCriteriaFormat.isEmpty
-        && filterCriteriaIdentifier.isEmpty
         && filterCriteriaLibraries.isEmpty
     }
 }
@@ -163,8 +159,6 @@ extension ModelData {
             searchString: self.searchString,
             sortCriteria: self.sortCriteria,
             filterCriteriaCategory: self.filterCriteriaCategory,
-            filterCriteriaFormat: self.filterCriteriaFormat,
-            filterCriteriaIdentifier: self.filterCriteriaIdentifier,
             filterCriteriaLibraries: self.filterCriteriaLibraries
         )
     }

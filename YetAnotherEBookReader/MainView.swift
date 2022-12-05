@@ -240,11 +240,11 @@ struct MainView: View {
                     buttons: [
                         .default(Text("As a new book"), action: {
                             let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookImportInfo.bookId)
-                            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
+                            modelData.bookImportedSubject.send(result)
                         }),
                         .destructive(Text("Overwrite"), action: {
                             let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookImportInfo.bookId)
-                            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
+                            modelData.bookImportedSubject.send(result)
                         }),
                         .cancel()
                     ]
@@ -263,9 +263,8 @@ struct MainView: View {
         .font(.headline)
         .onOpenURL { url in
             print("onOpenURL \(url)")
-            let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
-            
-            NotificationCenter.default.post(name: .YABR_BookImported, object: nil, userInfo: ["result": result])
+            let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)            
+            modelData.bookImportedSubject.send(result)
         }.onAppear {
             let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
             if !termsAccepted {
@@ -275,28 +274,35 @@ struct MainView: View {
             }
             
             dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 modelData.presentingEBookReaderFromShelf = false
                 positionActionPresenting = false
             }
 
             bookImportedCancellable?.cancel()
-            bookImportedCancellable = modelData.bookImportedPublisher.sink { notification in
-                print("bookImportedCancellable sink \(notification)")
-                guard let info = notification.userInfo?["result"] as? BookImportInfo else { return }
-                bookImportInfo = info
-                
-                print("dismissAll \(modelData.presentingStack.count)")
-                dismissAll() {
-                    NotificationCenter.default.post(name: .YABR_DismissAll, object: nil)
-                    modelData.activeTab = 0
-
-                    bookImportActionSheetPresenting = false
-                    DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
-                        bookImportActionSheetPresenting = true
+            bookImportedCancellable = modelData.bookImportedSubject
+                .sink { bookImportInfo in
+                    print("bookImportedCancellable sink \(bookImportInfo)")
+                    self.bookImportInfo = bookImportInfo
+                    
+                    print("dismissAll \(modelData.presentingStack.count)")
+                    dismissAll() {
+                        modelData.dismissAllSubject.send("")
+                        modelData.activeTab = 0
+                        
+                        bookImportActionSheetPresenting = false
+                        
+                        if let localLibrary = modelData.localLibrary,
+                           let bookId = bookImportInfo.bookId,
+                           let book = modelData.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
+                            modelData.calibreUpdatedSubject.send(.book(book))
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
+                            bookImportActionSheetPresenting = true
+                        }
                     }
                 }
-            }
         }
         
     }

@@ -1540,8 +1540,15 @@ struct CalibreLibraryCategoryValue {
     var items: [LibraryCategoryListResult.Item]
 }
 
+struct CalibreSyncLibraryRequest {
+    let library: CalibreLibrary
+    let autoUpdateOnly: Bool
+    let incremental: Bool
+    let disableAutoThreshold: Int
+}
+
 struct CalibreSyncLibraryResult {
-    var library: CalibreLibrary
+    let request: CalibreSyncLibraryRequest
     var isIncremental: Bool = true
     var result: [String: [String:CalibreCustomColumnInfo]]
     var errmsg = ""

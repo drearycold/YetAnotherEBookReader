@@ -43,8 +43,6 @@ struct LibraryInfoView: View {
     
     @State private var batchDownloadSheetPresenting = false
     
-    @State private var booksListCancellable: AnyCancellable?
-    
     @State private var dismissAllCancellable: AnyCancellable?
     
     @State private var categoryItemListCancellable: AnyCancellable?
@@ -73,7 +71,7 @@ struct LibraryInfoView: View {
         .navigationViewStyle(ColumnNavigationViewStyle.columns)
         .listStyle(PlainListStyle())
         .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
-            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
         })
         .onAppear {
             libraryList = modelData.calibreLibraries.values
@@ -81,15 +79,9 @@ struct LibraryInfoView: View {
                 .sorted { $0.name < $1.name }
             
             dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 batchDownloadSheetPresenting = false
             }
-            
-            booksListCancellable?.cancel()
-            booksListCancellable = modelData.libraryBookListNeedUpdate
-                .sink { _ in
-                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
-                }
             
             filteredBookListRefreshingCancellable?.cancel()
             filteredBookListRefreshingCancellable = modelData.filteredBookListRefreshingSubject
@@ -147,7 +139,7 @@ struct LibraryInfoView: View {
                     categoryItemListUpdating = false
                 }
             
-            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
         }
         
         //Body
@@ -550,7 +542,7 @@ struct LibraryInfoView: View {
         if modelData.filteredBookListPageNumber > 0 {
             modelData.filteredBookListPageNumber = 0
         } else {
-            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
         }
     }
     
@@ -563,15 +555,13 @@ struct LibraryInfoView: View {
         if modelData.filteredBookListPageNumber > 0 {
             modelData.filteredBookListPageNumber = 0
         } else {
-            NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
         }
     }
     
     
     func resetSearchCriteria() {
         modelData.filterCriteriaCategory.removeAll()
-        modelData.filterCriteriaFormat.removeAll()
-        modelData.filterCriteriaIdentifier.removeAll()
         modelData.filterCriteriaLibraries.removeAll()
         
         modelData.filterCriteriaShelved = .none
@@ -776,7 +766,7 @@ struct LibraryInfoView: View {
         Menu {
             Button(action: {
                 resetSearchCriteria()
-                NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
             }) {
                 Text("Reset")
             }
@@ -789,7 +779,7 @@ struct LibraryInfoView: View {
                         } else {
                             modelData.filterCriteriaLibraries.insert(library.id)
                         }
-                        NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                        modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
                     }, label: {
                         VStack(alignment: .leading) {
                             Text(getLibraryFilterText(library: library))
@@ -806,7 +796,7 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .shelvedOnly
                     }
-                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
 
                 }, label: {
                     Text("Yes" + (modelData.filterCriteriaShelved == .shelvedOnly ? "✓" : ""))
@@ -817,7 +807,7 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .notShelvedOnly
                     }
-                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
 
                 }, label: {
                     Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
@@ -841,7 +831,7 @@ struct LibraryInfoView: View {
                         modelData.sortCriteria.by = sort
                         modelData.sortCriteria.ascending = sort == .Title ? true : false
                     }
-                    NotificationCenter.default.post(Notification(name: .YABR_LibraryBookListNeedUpdate))
+                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
                 }) {
                     HStack {
                         if modelData.sortCriteria.by == sort {

@@ -171,11 +171,14 @@ struct BookDetailView: View {
                     }
                 }
             }) {
-                if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
-                    ProgressView(value: download.progress)
+                if modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).isEmpty == false ||
+                    book.formats.filter({ $0.value.selected == true && $0.value.cached == false }).isEmpty == false
+                {
+                    ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .gray))
                         .scaleEffect(6, anchor: .center)
-                } else if book.inShelf {
+                } else if book.inShelf,
+                          book.formats.allSatisfy({ $1.selected != true || $1.cached }) {
                     Image(systemName: "book")
                         .resizable()
                         .frame(width: 160, height: 160)

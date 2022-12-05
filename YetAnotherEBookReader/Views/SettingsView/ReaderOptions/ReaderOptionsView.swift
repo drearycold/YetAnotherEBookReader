@@ -186,7 +186,7 @@ struct ReaderOptionsView: View {
         }
         .onAppear() {
             dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllPublisher.sink { _ in
+            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 fontsFolderPresenting = false
                 fontsDetailPresenting = false
                 optionsHelpPresenting = nil

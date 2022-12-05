@@ -114,14 +114,3 @@ enum calibreUpdatedSignal: Hashable {
     case library(CalibreLibrary)
     case server(CalibreServer)
 }
-
-extension Notification.Name {
-    static let YABR_BookImported = Notification.Name("YABR.bookImported")
-    static let YABR_BookReaderEnterBackground = Notification.Name("YABR.bookReaderEnterBackground")
-    static let YABR_BookReaderEnterActive = Notification.Name("YABR.bookReaderEnterActive")
-    static let YABR_BookReaderClosed = Notification.Name("YABR.bookReaderClosed")
-    static let YABR_LibraryBookListNeedUpdate = Notification.Name("YABR.LibraryBookListNeedUpdate")
-    
-    static let YABR_DismissAll = Notification.Name("YABR.dismissAll")
-    static let YABR_ServerAdded = Notification.Name("YABR.serverAdded")
-}

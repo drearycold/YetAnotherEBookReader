@@ -101,8 +101,6 @@ extension ModelData {
                                 searchString: "",
                                 sortCriteria: .init(by: .Title, ascending: true),
                                 filterCriteriaCategory: ["Authors": Set<String>([author])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
                                 filterCriteriaLibraries: [])))
                     }
                     book.tags.forEach { tag in
@@ -112,8 +110,6 @@ extension ModelData {
                                 searchString: "",
                                 sortCriteria: .init(by: .Modified, ascending: false),
                                 filterCriteriaCategory: ["Tags": Set<String>([tag])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
                                 filterCriteriaLibraries: [])))
                     }
                     if book.series.isEmpty == false {
@@ -123,8 +119,6 @@ extension ModelData {
                                 searchString: "",
                                 sortCriteria: .init(by: .SeriesIndex, ascending: true),
                                 filterCriteriaCategory: ["Series": Set<String>([book.series])],
-                                filterCriteriaFormat: [],
-                                filterCriteriaIdentifier: [],
                                 filterCriteriaLibraries: [])))
                     }
                 }.forEach {
