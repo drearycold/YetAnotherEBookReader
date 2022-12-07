@@ -19,6 +19,8 @@ struct AddModServerView: View {
     @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
     @State private var calibreServerUrlWelformed = ""
+    @State private var calibreServerOffline = false
+    
     @State private var calibreServerUrlPublic = ""
     @State private var calibreServerSetPublicAddress = false
     @State private var calibreServerNeedAuth = false
@@ -60,7 +62,6 @@ struct AddModServerView: View {
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
-                
             }
             Section(
                 header: Text("Internet Access"),
@@ -199,28 +200,36 @@ struct AddModServerView: View {
                 Text(modelData.calibreServerUpdating ? "Connecting" : modelData.calibreServerUpdatingStatus ?? "Unexcepted Error")
             }
             
-            Button(action: {
-                serverCalibreInfoPresenting = false
-            }) {
-                Text("Cancel")
+            Section {
+                if modelData.calibreServerUpdatingStatus == "Success" {
+                    Toggle(isOn: $calibreServerOffline) {
+                        Text("Offline Browsable")
+                    }
+                }
+                
+                Button(action: {
+                    serverCalibreInfoPresenting = false
+                }) {
+                    Text("Cancel")
+                }
+                
+                Button(action: {
+                    if dataAction == "Add" {
+                        addServerConfirmed()
+                    } else if dataAction == "Mod" {
+                        modServerConfirmed()
+                    }
+                    serverCalibreInfoPresenting = false
+                }) {
+                    if dataAction == "Add" {
+                        Text("Add")
+                    } else if dataAction == "Mod" {
+                        Text("Update")
+                    } else {
+                        Text("OK")
+                    }
+                }.disabled(modelData.calibreServerUpdatingStatus != "Success")
             }
-            
-            Button(action: {
-                if dataAction == "Add" {
-                    addServerConfirmed()
-                } else if dataAction == "Mod" {
-                    modServerConfirmed()
-                }
-                serverCalibreInfoPresenting = false
-            }) {
-                if dataAction == "Add" {
-                    Text("Add")
-                } else if dataAction == "Mod" {
-                    Text("Update")
-                } else {
-                    Text("OK")
-                }
-            }.disabled(modelData.calibreServerUpdatingStatus != "Success")
             
             Section(header: Text("Library List")) {
                 if let updatingStatus = modelData.calibreServerUpdatingStatus,
@@ -346,6 +355,7 @@ struct AddModServerView: View {
             return
         }
 
+        calibreServerOffline = false
         modelData.calibreServerUpdating = true
         if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
             dataLoadingTask = task
@@ -364,7 +374,7 @@ struct AddModServerView: View {
         
         let libraries = serverInfo.libraryMap
             .sorted { $0.key < $1.key }
-            .map { CalibreLibrary(server: serverInfo.server, key: $0, name: $1) }
+            .map { CalibreLibrary(server: serverInfo.server, key: $0, name: $1, autoUpdate: calibreServerOffline) }
         
         modelData.addServer(server: newServer, libraries: libraries)
         if let url = URL(string: newServer.baseUrl) {
@@ -376,7 +386,7 @@ struct AddModServerView: View {
                 realm: modelData.realm)
         }
         
-        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: false, disableAutoThreshold: 999)
+        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
         
         server = newServer
         isActive = false

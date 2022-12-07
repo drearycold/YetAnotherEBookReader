@@ -219,7 +219,7 @@ struct ServerDetailView: View {
                     Text("\(cnt) books")
                 } else if let msg = modelData.librarySyncStatus[library.id]?.msg {
                     Text("processing\n\(msg)")
-                } else {
+                } else if modelData.librarySyncStatus[library.id]?.isSync == true {
                     Text("processing ...")
                 }
                 if modelData.librarySyncStatus[library.id]?.isError == true {

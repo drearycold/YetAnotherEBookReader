@@ -965,7 +965,7 @@ struct CalibreServerService {
         
         return CalibreBooksTask(
             library: library,
-            books: bookIds,
+            books: books.map{ $0.id },
             metadataUrl: endpointUrl,
             lastReadPositionUrl: lastReadPositionEndpointUrl,
             annotationsUrl: annotationsEndpointUrl,

@@ -1045,9 +1045,14 @@ struct CalibreBookTask {
     var url: URL
 }
 
+struct CalibreBooksMetadataRequest {
+    let library: CalibreLibrary
+    let books: [Int32]
+}
+
 struct CalibreBooksTask {
     var library: CalibreLibrary
-    var books: [String]
+    var books: [Int32]
     var metadataUrl: URL
     var lastReadPositionUrl: URL
     var annotationsUrl: URL
@@ -1544,7 +1549,6 @@ struct CalibreSyncLibraryRequest {
     let library: CalibreLibrary
     let autoUpdateOnly: Bool
     let incremental: Bool
-    let disableAutoThreshold: Int
 }
 
 struct CalibreSyncLibraryResult {
@@ -1554,6 +1558,30 @@ struct CalibreSyncLibraryResult {
     var errmsg = ""
     var categories: [CalibreLibraryCategory] = []
     var list = CalibreCdbCmdListResult()
+    
+    //parsed
+    var isError = false
+    var bookCount = 0
+    var bookNeedUpdateCount = 0
+    var bookDeleted = [Int32]()
+}
+
+struct CalibreSyncLibraryBooksMetadata {
+    enum Action {
+        case save([[String: Any]])
+        case updateDeleted([String: CalibreCdbCmdListResult.DateValue])
+        case complete(Date, [String: CalibreCustomColumnInfo])
+    }
+    
+    let library: CalibreLibrary
+    let action: Action
+    let preMsg: String
+    let postMsg: String
+    
+    //parsed
+    var bookCount = 0
+    var bookNeedUpdateCount = 0
+    var bookDeleted = [Int32]()
 }
 
 struct CalibreLibraryCategory: Codable {
