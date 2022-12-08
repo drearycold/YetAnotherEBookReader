@@ -370,8 +370,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 //            self.suspendNotificationHandler()
             
             self.shelfView.selectedBookIds.forEach { bookId in
-                guard let obj = self.modelData.realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId) ?? self.modelData.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId),
-                      let book = self.modelData.convert(bookRealm: obj),
+                guard let book = self.modelData.getBook(for: bookId),
                       let format = self.modelData.getPreferredFormat(for: book)
                 else { return }
                 

@@ -144,14 +144,19 @@ struct LibraryCategoryListResult: Codable {
 
 extension ModelData {
     func getBook(for primaryKey: String) -> CalibreBook? {
-        if let obj = getBookRealm(forPrimaryKey: primaryKey),
+        var bookLocal: CalibreBook? = nil
+        if let obj = getBookRealm(forPrimaryKey: primaryKey) {
+            bookLocal = convert(bookRealm: obj)
+            if bookLocal != nil, bookLocal?.lastSynced == bookLocal?.lastModified {
+                return bookLocal    //prefer up-to-date local data
+            }
+        }
+        
+        if let obj = searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
            let book = convert(bookRealm: obj) {
             return book
-        } else if let obj = searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
-                  let book = convert(bookRealm: obj) {
-            return book
         }
-        return nil
+        return bookLocal
     }
     
     var currentLibrarySearchCriteria: LibrarySearchCriteria {
@@ -263,8 +268,7 @@ extension ModelData {
                 id: searchResult.bookIds[headOffset].description
             )
             
-            guard let next = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
-            ?? realmSearch.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
+            guard let next = realmSearch.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
             else {
                 continue
             }

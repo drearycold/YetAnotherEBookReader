@@ -63,7 +63,7 @@ final class ModelData: ObservableObject {
     
     static let SearchLibraryResultsRealmQueue = DispatchQueue(label: "searchLibraryResultsRealm", qos: .userInitiated)
     
-    let searchLibraryResultsRealmMainThread = try? Realm(configuration: SearchLibraryResultsRealmConfiguration)
+    internal let searchLibraryResultsRealmMainThread = try? Realm(configuration: SearchLibraryResultsRealmConfiguration)
     
     var searchLibraryResultsRealmQueue: Realm?
     
@@ -129,16 +129,7 @@ final class ModelData: ObservableObject {
                 return
             }
             if readingBook?.inShelfId != readingBookInShelfId {
-                readingBook = booksInShelf[readingBookInShelfId]
-            }
-            if readingBook == nil,
-               let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
-                readingBook = convert(bookRealm: bookRealm)
-            }
-            
-            if readingBook == nil,
-               let bookRealm = self.searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: readingBookInShelfId) {
-                readingBook = convert(bookRealm: bookRealm)
+                readingBook = booksInShelf[readingBookInShelfId] ?? getBook(for: readingBookInShelfId)
             }
         }
     }

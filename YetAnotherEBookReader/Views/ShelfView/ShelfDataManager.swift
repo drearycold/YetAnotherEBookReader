@@ -162,8 +162,10 @@ extension ModelData {
                 
                 let sectionShelf = result.bookIds.compactMap { bookId -> ShelfModel? in
                     let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
-                    guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? self.searchLibraryResultsRealmQueue?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey),
-                          bookRealm.inShelf == false
+                    
+                    guard realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)?.inShelf != true else { return nil }
+                    
+                    guard let bookRealm = self.searchLibraryResultsRealmQueue?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
                     else { return nil }
                     
                     let book = self.convert(library: library, bookRealm: bookRealm)
