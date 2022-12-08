@@ -2141,8 +2141,6 @@ final class ModelData: ObservableObject {
                     status.isError = false
                     status.msg = ""
                     status.cnt = nil
-                    status.upd = nil
-                    status.del.removeAll()
                     self.librarySyncStatus[libraryId] = status
                 } else {
                     self.librarySyncStatus[libraryId] = .init(library: request.library, isSync: true)
@@ -2233,45 +2231,47 @@ final class ModelData: ObservableObject {
                     let postMsg = "\(progress) / \(total)"
                     self.saveBookMetadataSubject.send(.init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
                     
-                    lastModified = list.last?["lastModified"] as? Date
+                    result.lastModified = list.last?["lastModified"] as? Date
                 }
                 
                 if result.request.incremental == false {
                     self.saveBookMetadataSubject.send(.init(library: library, action: .updateDeleted(result.list.data.last_modified), preMsg: "", postMsg: ""))
                 }
                 
-                if let lastModified = lastModified {
-                    print("\(#function) updateLibraryLastModified \(library.name) \(library.lastModified) -> \(lastModified)")
-                    
-                    self.saveBookMetadataSubject.send(.init(library: library, action: .complete(lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
-                } else {
-                    self.saveBookMetadataSubject.send(.init(library: library, action: .complete(Date(timeIntervalSince1970: 0), [:]), preMsg: "", postMsg: "Empty"))
-                }
                 
                 return result
             }
             .receive(on: DispatchQueue.main)
             .sink { result in
+                let library = result.request.library
+                
+                self.saveBookMetadataSubject.send(
+                    .init(
+                        library: library,
+                        action: .complete(
+                            result.lastModified,
+                            result.result["result"] ?? [:]
+                        ),
+                        preMsg: "",
+                        postMsg: result.isError ? result.errmsg : "Success"
+                    )
+                )
+                
                 result.categories.filter {
                     $0.is_category //&& $0.name != "Authors"
                 }.forEach { category in
                     self.libraryCategorySubject.send(
                         .init(
-                            library: result.request.library,
+                            library: library,
                             category: category,
-                            reqId: (self.calibreLibraryCategories[.init(libraryId: result.request.library.id, categoryName: category.name)]?.reqId ?? 0) + 1,
+                            reqId: (self.calibreLibraryCategories[.init(libraryId: library.id, categoryName: category.name)]?.reqId ?? 0) + 1,
                             offset: 0,
                             num: 0
                         )
                     )   //get total_num
                 }
                 
-                self.librarySyncStatus[result.request.library.id]?.isError = result.isError
-                if result.isError, result.errmsg.isEmpty == false {
-                    self.librarySyncStatus[result.request.library.id]?.msg = result.errmsg
-                }
-                
-                
+                self.librarySyncStatus[library.id]?.isError = result.isError
             }.store(in: &calibreCancellables)
     }
     
@@ -2303,23 +2303,20 @@ final class ModelData: ObservableObject {
                         }
                         .map { $0.id }
                 case .complete:
-                    let objects = self.realmSaveBooksMetadata.objects(CalibreBookRealm.self).filter(
-                        "serverUUID = %@ AND libraryName = %@", booksMetadata.library.server.uuid.uuidString, booksMetadata.library.name
-                    )
-                    booksMetadata.bookCount = objects.count
+                    if booksMetadata.library.autoUpdate {
+                        let objects = self.realmSaveBooksMetadata.objects(CalibreBookRealm.self).filter(
+                            "serverUUID = %@ AND libraryName = %@", booksMetadata.library.server.uuid.uuidString, booksMetadata.library.name
+                        )
+                        booksMetadata.bookCount = objects.count
                     
-                    let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
-                    booksMetadata.bookNeedUpdateCount = objectsNeedUpdate.count
-                    
-//                    self.trySendGetBooksMetadataTask(library: booksMetadata.library)
-                    
-                    let books: [Int32] = objectsNeedUpdate
-                        .sorted(byKeyPath: "lastModified", ascending: false)
-                        .map { $0.id }
-                        .filter { self.librarySyncStatus[booksMetadata.library.id]?.err.contains($0) == false }
-                        
-                    books.chunks(size: 256).forEach { chunk in
-                        self.getBooksMetadataSubject.send(.init(library: booksMetadata.library, books: chunk))
+                        let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
+                        let libraryStatus = self.librarySyncStatus[booksMetadata.library.id]
+                        booksMetadata.bookToUpdate = objectsNeedUpdate
+                            .sorted(byKeyPath: "lastModified", ascending: false)
+                            .map { $0.id }
+                            .filter {
+                                libraryStatus == nil || libraryStatus?.upd.contains($0) == false
+                            }
                     }
                 }
                 
@@ -2331,15 +2328,23 @@ final class ModelData: ObservableObject {
                 
                 switch booksMetadata.action {
                 case let .complete(lastModified, columnInfos):
-                    library.customColumnInfos = columnInfos
-                    library.lastModified = lastModified
+                    if columnInfos.isEmpty == false {
+                        library.customColumnInfos = columnInfos
+                    }
+                    if let lastModified = lastModified {
+                        library.lastModified = lastModified
+                    }
                     
                     self.calibreLibraries[library.id] = library
                     try? self.updateLibraryRealm(library: library, realm: self.realm)
                     
                     self.librarySyncStatus[library.id]?.isSync = false
                     self.librarySyncStatus[library.id]?.cnt = booksMetadata.bookCount
-                    self.librarySyncStatus[library.id]?.upd = booksMetadata.bookNeedUpdateCount
+                    self.librarySyncStatus[library.id]?.upd.formUnion(booksMetadata.bookToUpdate)
+                    
+                    booksMetadata.bookToUpdate.chunks(size: 256).forEach { chunk in
+                        self.getBooksMetadataSubject.send(.init(library: booksMetadata.library, books: chunk))
+                    }
                 case .updateDeleted:
                     self.librarySyncStatus[library.id]?.del.formUnion(booksMetadata.bookDeleted)
                 default:
@@ -2358,15 +2363,24 @@ final class ModelData: ObservableObject {
     
     func registerGetBooksMetadataCancellable() {
         getBooksMetadataSubject
+            .receive(on: DispatchQueue.main)
+            .map { request -> CalibreBooksMetadataRequest in
+                self.librarySyncStatus[request.library.id]?.isUpd = true
+                return request
+            }
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
             .flatMap { request -> AnyPublisher<CalibreBooksTask, URLError> in
-                if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: request.books.map{ CalibreBook(id: $0, library: request.library) }) {
+                let books = request.books.map{ CalibreBook(id: $0, library: request.library) }
+                    
+                if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books) {
                     return self.calibreServerService.getBooksMetadata(task: task)
                 } else {
-                    return Just(CalibreBooksTask(library: request.library, books: [], metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                    return Just(CalibreBooksTask(library: request.library, books: request.books, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: URLError.self).eraseToAnyPublisher()
                 }
             }
             .receive(on: ModelData.SaveBooksMetadataRealmQueue)
             .map { result -> CalibreBooksTask in
+                var result = result
                 let serverUUID = result.library.server.uuid.uuidString
                 let libraryName = result.library.name
                 do {
@@ -2388,26 +2402,29 @@ final class ModelData: ObservableObject {
                             
                             if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
                                 self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
+                                result.booksUpdated.insert(obj.id)
                             } else {
                                 // null data, treat as delted, update lastSynced to lastModified to prevent further actions
                                 obj.lastSynced = obj.lastModified
+                                result.booksDeleted.insert(obj.id)
                             }
                         }
                     }
                     print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
                 } catch let DecodingError.keyNotFound(key, context) {
                     print("getBookMetadataCancellable decode keyNotFound \(result.library.name) \(key) \(context) \(result.data?.count ?? -1)")
-                    if key.stringValue == "path",
-                       let firstCodingPath = context.codingPath.first,
-                       let bookId = Int32(firstCodingPath.stringValue), bookId > 0 {
-                        DispatchQueue.main.sync {
-                            self.librarySyncStatus[result.library.id]?.err.insert(bookId)
-                            self.librarySyncStatus[result.library.id]?.isUpd = false
-                        }
-                        self.getBooksMetadataSubject.send(.init(library: result.library, books: result.books.filter{ $0 != bookId }))
+                    if let firstCodingPath = context.codingPath.first,
+                       let bookId = Int32(firstCodingPath.stringValue),
+                       bookId > 0 {
+                        result.booksError.insert(bookId)
+                    } else if result.books.count == 1 {
+                        result.booksError.formUnion(result.books)
                     }
                 } catch {
                     print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
+                    if result.books.count == 1 {
+                        result.booksError.formUnion(result.books)
+                    }
                 }
                 
                 return result
@@ -2417,12 +2434,25 @@ final class ModelData: ObservableObject {
                 
                 print("getBookMetadataCancellable error \(completion)")
             }, receiveValue: { result in
-    //            print("getBookMetadataCancellable response \(result.response)")
+                let booksHandled = result.booksUpdated.union(result.booksError).union(result.booksDeleted)
                 
-                if let upd = self.librarySyncStatus[result.library.id]?.upd {
-                    self.librarySyncStatus[result.library.id]?.upd = upd - result.books.count
+                self.librarySyncStatus[result.library.id]?.upd.subtract(booksHandled)
+                
+                if result.booksError.isEmpty == false {
+                    self.librarySyncStatus[result.library.id]?.err.formUnion(result.booksError)
+                    self.librarySyncStatus[result.library.id]?.del.formUnion(result.booksDeleted)
+                    let booksRetry = result.books.filter { booksHandled.contains($0) == false }
+                    
+                    if booksRetry.isEmpty == false {
+                        booksRetry.chunks(size: max(booksRetry.count / 16, 1)).forEach { chunk in
+                            self.getBooksMetadataSubject.send(.init(library: result.library, books: chunk))
+                        }
+                    }
                 }
+                
                 self.librarySyncStatus[result.library.id]?.isUpd = false
+                
+                
             }).store(in: &calibreCancellables)
     }
     

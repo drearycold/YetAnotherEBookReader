@@ -471,7 +471,7 @@ struct CalibreSyncStatus {
     var isError = false
     var msg: String? = nil
     var cnt: Int? = nil
-    var upd: Int? = nil
+    var upd = Set<Int32>()  //ongoing requests
     var del = Set<Int32>()
     var err = Set<Int32>()
 }
@@ -1065,6 +1065,10 @@ struct CalibreBooksTask {
     var booksMetadataJSON: NSDictionary? = nil
     var searchCriteria: LibrarySearchCriteria? = nil
     var searchTask: CalibreLibrarySearchTask? = nil
+    
+    var booksUpdated = Set<Int32>()
+    var booksError = Set<Int32>()
+    var booksDeleted = Set<Int32>()
 }
 
 struct CalibreLibrarySearchTask {
@@ -1564,13 +1568,14 @@ struct CalibreSyncLibraryResult {
     var bookCount = 0
     var bookNeedUpdateCount = 0
     var bookDeleted = [Int32]()
+    var lastModified: Date? = nil
 }
 
 struct CalibreSyncLibraryBooksMetadata {
     enum Action {
         case save([[String: Any]])
         case updateDeleted([String: CalibreCdbCmdListResult.DateValue])
-        case complete(Date, [String: CalibreCustomColumnInfo])
+        case complete(Date?, [String: CalibreCustomColumnInfo])
     }
     
     let library: CalibreLibrary
@@ -1581,6 +1586,7 @@ struct CalibreSyncLibraryBooksMetadata {
     //parsed
     var bookCount = 0
     var bookNeedUpdateCount = 0
+    var bookToUpdate = [Int32]()
     var bookDeleted = [Int32]()
 }
 

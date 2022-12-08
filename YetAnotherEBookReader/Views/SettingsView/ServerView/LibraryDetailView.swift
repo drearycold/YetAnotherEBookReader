@@ -137,7 +137,61 @@ struct LibraryDetailView: View {
                 ) {
                     Text("Activity Logs")
                 }
+                if let err = modelData.librarySyncStatus[library.id]?.err, err.isEmpty == false {
+                    NavigationLink {
+                        List {
+                            ForEach(err.map { $0 }.sorted(), id: \.self) { bookId in
+                                HStack {
+                                    Text(bookId.description)
+                                    
+                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)),
+                                       let title = obj.title {
+                                        Spacer()
+                                        Text(title)
+                                    }
+                                }
+                            }
+                        }.navigationTitle(Text("Book IDs Failed to Sync"))
+                    } label: {
+                        Text("Book IDs Failed to Sync")
+                    }
+                }
+                if let del = modelData.librarySyncStatus[library.id]?.del, del.isEmpty == false {
+                    NavigationLink {
+                        List {
+                            ForEach(del.map { $0 }.sorted(), id: \.self) { bookId in
+                                HStack {
+                                    Text(bookId.description)
+                                    
+                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)),
+                                       let title = obj.title {
+                                        Spacer()
+                                        Text(title)
+                                    }
+                                }
+                            }
+                        }.navigationTitle(Text("Book IDs Deleted on Server"))
+                    } label: {
+                        Text("Book IDs Deleted on Server")
+                    }
+                }
             }
+            
+            #if DEBUG
+            Section {
+                Text("isSync: \((modelData.librarySyncStatus[library.id]?.isSync ?? false) ? "true" : "false")")
+                Text("isUpd: \((modelData.librarySyncStatus[library.id]?.isUpd ?? false) ? "true" : "false")")
+                Text("isError: \((modelData.librarySyncStatus[library.id]?.isError ?? false) ? "true" : "false")")
+                Text("MSG: \(modelData.librarySyncStatus[library.id]?.msg ?? "nil")")
+                Text("CNT: \(modelData.librarySyncStatus[library.id]?.cnt ?? -1)")
+                Text("UPD: \(modelData.librarySyncStatus[library.id]?.upd.count ?? -1)")
+                Text("DEL: \(modelData.librarySyncStatus[library.id]?.del.count ?? -1)")
+                Text("ERR: \(modelData.librarySyncStatus[library.id]?.err.count ?? -1)")
+            } header: {
+                Text("DEBUG")
+            }
+
+            #endif
         }
         
     }

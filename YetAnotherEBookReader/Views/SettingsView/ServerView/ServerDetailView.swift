@@ -226,11 +226,11 @@ struct ServerDetailView: View {
                     Text(modelData.librarySyncStatus[library.id]?.msg ?? "Status Unknown")
                 } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt,
                           let upd = modelData.librarySyncStatus[library.id]?.upd {
-                    if upd > 0, cnt > upd {
+                    if upd.count > 0, cnt > upd.count {
                         if modelData.librarySyncStatus[library.id]?.isUpd == true {
-                            Text("Pulling book info, \(upd) to go")
+                            Text("Pulling book info, \(upd.count) to go")
                         } else {
-                            Text("\(upd) entries not up to date")
+                            Text("\(upd.count) entries not up to date")
                         }
                     } else if let del = modelData.librarySyncStatus[library.id]?.del, del.count > 0 {
                         Text("\(del.count) entries deleted from server")
