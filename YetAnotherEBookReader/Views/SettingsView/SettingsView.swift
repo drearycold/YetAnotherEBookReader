@@ -328,10 +328,6 @@ struct SettingsView: View {
     private func deleteServer() {
         guard let server = serverListDelete else { return }
         
-        modelData.calibreServiceCancellable?.cancel()
-        modelData.dshelperRefreshCancellable?.cancel()
-        modelData.syncLibrariesIncrementalCancellable?.cancel()
-        
         removeServerCancellable = [server].publisher
             .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .sink { output in

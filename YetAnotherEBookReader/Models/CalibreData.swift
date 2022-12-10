@@ -1549,6 +1549,19 @@ struct CalibreLibraryCategoryValue {
     var items: [LibraryCategoryListResult.Item]
 }
 
+struct CalibreProbeServerRequest: Identifiable {
+    var id: String {
+        server.id + " " + isPublic.description
+    }
+    
+    let server: CalibreServer
+    let isPublic: Bool
+    
+    let updateLibrary: Bool
+    let autoUpdateOnly: Bool
+    let incremental: Bool
+}
+
 struct CalibreSyncLibraryRequest {
     let library: CalibreLibrary
     let autoUpdateOnly: Bool

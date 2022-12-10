@@ -38,7 +38,7 @@ struct CalibreServerService {
         modelData.calibreServerInfo = nil
         modelData.calibreServerUpdatingStatus = "Initializing"
 
-        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, probing: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:])
+        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, probing: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:], request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
 
         guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
             modelData.calibreServerInfo = serverInfo
@@ -837,7 +837,7 @@ struct CalibreServerService {
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
         
         return urlSession(server: serverInfo.server, timeout: 10).dataTaskPublisher(for: url)
-            .tryMap { data, response in
+            .map { data, response in
                 guard let httpResponse = response as? HTTPURLResponse else {
                     serverInfo.errorMsg = "Cannot get HTTP response"
                     return serverInfo
@@ -1070,52 +1070,6 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
-    func getLastReadPosition(book: CalibreBook, formats: [Format]) -> Int {
-        guard formats.isEmpty == false,
-              var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
-            return -1
-        }
-        
-        let which = formats.map { "\(book.id)-\($0.rawValue)" }.joined(separator: "_")
-        
-        endpointURLComponent.path = "/book-get-last-read-position/\(book.library.key)/\(which)"
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
-        
-        modelData.calibreServiceCancellable = urlSession(server: book.library.server).dataTaskPublisher(for: endpointUrl)
-            .tryMap { output in
-                print("getLastReadPosition \(output.response.debugDescription) \(output.data.debugDescription)")
-                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
-                }
-                
-                return output.data
-            }
-            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
-            .replaceError(with: [:])
-            .eraseToAnyPublisher()
-            .sink(
-                receiveCompletion: { completion in
-                    print("getLastReadPosition \(completion)")
-                    switch completion {
-                    case .finished:
-                        break
-                    case .failure(let error):
-                        fatalError(error.localizedDescription)
-                    }
-                },
-                receiveValue: { results in
-                    print("getLastReadPosition count=\(results.count)")
-                    results.forEach { result in
-                        print("getLastReadPositionResult \(result)")
-                    }
-                }
-            )
-        
-        return 0
-    }
-    
     func buildUpdateAnnotationsTask(library: CalibreLibrary, bookId: Int32, format: Format, highlights: [CalibreBookAnnotationHighlightEntry], bookmarks: [CalibreBookAnnotationBookmarkEntry]) -> CalibreBookUpdateAnnotationsTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
@@ -1168,67 +1122,6 @@ struct CalibreServerService {
             }
             .replaceError(with: task)
             .eraseToAnyPublisher()
-    }
-    
-    func updateAnnotations(book: CalibreBook, format: Format, highlights: [CalibreBookAnnotationHighlightEntry]) -> Int {
-        guard highlights.isEmpty == false,
-              var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
-            return -1
-        }
-
-        endpointURLComponent.path = "/book-update-annotations/\(book.library.key)/\(book.id)/\(format.rawValue)"
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
-
-        let entry = ["\(book.id):\(format.rawValue)":highlights]
-        guard let postData = try? JSONEncoder().encode(entry) else {
-            return -2
-        }
-        
-        var urlRequest = URLRequest(url: endpointUrl)
-        urlRequest.httpMethod = "POST"
-        urlRequest.httpBody = postData
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
-
-        modelData.calibreServiceCancellable = urlSession(server: book.library.server).dataTaskPublisher(for: urlRequest)
-            .tryMap { output in
-                print("updateAnnotations \(output.response.debugDescription) \(output.data.debugDescription)")
-                guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
-                    throw NSError(domain: "HTTP", code: 0, userInfo: nil)
-                }
-
-                return output.data
-            }
-            .decode(type: [String: [CalibreBookLastReadPositionEntry]].self, decoder: JSONDecoder())
-            .replaceError(with: [:])
-            .eraseToAnyPublisher()
-            .sink(
-                receiveCompletion: { completion in
-                    print("updateAnnotations \(completion)")
-                    switch completion {
-                    case .finished:
-                        modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Empty Result")
-                        break
-                    case .failure(let error):
-                        modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
-                        break
-                    }
-                },
-                receiveValue: { results in
-                    print("updateAnnotations count=\(results.count)")
-                    results.forEach { result in
-                        print("updateAnnotations \(result)")
-                    }
-                    modelData.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Updated")
-                }
-            )
-        
-        return 0
     }
     
     func getCustomColumnsPublisher(request: CalibreSyncLibraryRequest) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
@@ -1345,11 +1238,13 @@ struct CalibreServerInfo: Identifiable {
     let server: CalibreServer
     let isPublic: Bool
     let url: URL
-    var reachable: Bool
-    var probing: Bool
-    var errorMsg: String
+    var reachable: Bool = false
+    var probing: Bool = false
+    var errorMsg: String = "Waiting to connect"
     var defaultLibrary: String
-    var libraryMap: [String:String]
+    var libraryMap: [String:String] = [:]
+    
+    var request: CalibreProbeServerRequest
 }
 
 class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {

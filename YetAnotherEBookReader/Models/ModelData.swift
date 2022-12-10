@@ -186,12 +186,14 @@ final class ModelData: ObservableObject {
 
     var calibreServiceCancellable: AnyCancellable?
     var shelfRefreshCancellable: AnyCancellable?
-    var dshelperRefreshCancellable: AnyCancellable?
+    
+    let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
+    let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
+    let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
     
     let syncLibrarySubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
     let saveBookMetadataSubject = PassthroughSubject<CalibreSyncLibraryBooksMetadata, Never>()
     let getBooksMetadataSubject = PassthroughSubject<CalibreBooksMetadataRequest, Never>()
-    var syncLibrariesIncrementalCancellable: AnyCancellable?
     
     lazy var metadataQueue: OperationQueue = {
         var queue = OperationQueue()
@@ -246,6 +248,8 @@ final class ModelData: ObservableObject {
         
         self.reloadCustomFonts()
         
+        registerProbeServerCancellable()
+        registerProbeServerResult()
         registerSyncLibraryCancellable()
         registerSaveBooksMetadataCancellable()
         registerGetBooksMetadataCancellable()
@@ -1244,10 +1248,7 @@ final class ModelData: ObservableObject {
     }
     
     func updateServerDSReaderHelper(dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        let obj = dsreaderHelper.managedObject()
-        try? realm.write {
-            realm.add(obj, update: .all)
-        }
+        
     }
     
     
@@ -1804,7 +1805,31 @@ final class ModelData: ObservableObject {
         probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
     }
     
-    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true, completion: ((String) -> Void)? = nil) {
+    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
+        
+        calibreServers.filter {
+            $0.value.isLocal == false
+            && (serverIds.isEmpty || serverIds.contains($0.value.id))
+        }.forEach { serverId, server in
+            self.probeServerSubject.send(.init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+            if server.hasPublicUrl {
+                self.probeServerSubject.send(.init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+            }
+//            [true, false].forEach { isPublic in
+//                self.probeServerSubject.send(.init(server: server, isPublic: isPublic))
+//
+//                let infoId = serverId + " " + isPublic.description
+//
+//                if calibreServerInfoStaging[infoId] == nil,
+//                   let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
+//                    calibreServerInfoStaging[infoId] =
+//                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:], request: .init(server: server, isPublic: isPublic))
+//                }
+//            }
+        }
+        
+        return;
+        
         guard calibreServerUpdating == false else { return }    //structural changing ongoing
         
         calibreServers.filter {
@@ -1816,7 +1841,7 @@ final class ModelData: ObservableObject {
                 if calibreServerInfoStaging[infoId] == nil,
                    let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
                     calibreServerInfoStaging[infoId] =
-                        CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:])
+                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:], request: .init(server: server, isPublic: isPublic, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
                 }
             }
         }
@@ -1854,9 +1879,9 @@ final class ModelData: ObservableObject {
             var serverReachableChanged = false
             
             results.forEach { newServerInfo in
-                defer {
-                    completion?(newServerInfo.server.id)
-                }
+//                defer {
+//                    completion?(newServerInfo.server.id)
+//                }
                 
                 guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
                 serverInfo.probing = false
@@ -1887,11 +1912,10 @@ final class ModelData: ObservableObject {
             self.refreshShelfMetadataV2(with: serverIds, serverReachableChanged: serverReachableChanged)
             
             if updateLibrary == true, autoUpdateOnly == false {
-                let ids = self.calibreServers.filter {
+                self.calibreServers.filter {
                     $0.value.isLocal == false && ( serverIds.isEmpty || serverIds.contains($0.key) )
-                }.map{ $0.key }
-                if ids.isEmpty == false {
-                    self.refreshServerDSHelperConfiguration(with: ids)
+                }.forEach {
+                    self.syncServerHelperConfigSubject.send($0.key)
                 }
             }
             
@@ -2077,36 +2101,126 @@ final class ModelData: ObservableObject {
             })
     }
     
-    func refreshServerDSHelperConfiguration(with serverIds: [String]) {
-        dshelperRefreshCancellable?.cancel()
-        
-        dshelperRefreshCancellable = serverIds.publisher.flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
-            guard let server = self.calibreServers[serverId],
-                  let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
-                  let publisher = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil).refreshConfiguration()
-            else {
-                return Just((id: serverId, port: 0, data: Data())).setFailureType(to: URLError.self).eraseToAnyPublisher()
+    func registerProbeServerCancellable() {
+        probeServerSubject
+            .receive(on: DispatchQueue.main)
+            .map { request -> CalibreServerInfo in
+                if var info = self.calibreServerInfoStaging[request.id] {
+                    info.probing = true
+                    info.reachable = false
+                    info.errorMsg = "Connecting"
+                    info.request = request
+                    self.calibreServerInfoStaging[request.id] = info
+                    return info
+                } else {
+                    let info = CalibreServerInfo(
+                        server: request.server,
+                        isPublic: request.isPublic,
+                        url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
+                        probing: true,
+                        errorMsg: "Connecting",
+                        defaultLibrary: request.server.defaultLibrary,
+                        request: request
+                    )
+                    self.calibreServerInfoStaging[request.id] = info
+                    return info
+                }
             }
-            
-            return publisher
-        }
-        .sink(receiveCompletion: { completion in
-            
-        }, receiveValue: { task in
-            let decoder = JSONDecoder()
-            var config: CalibreDSReaderHelperConfiguration? = nil
-            do {
-                config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: task.data)
-            } catch {
-                print(error)
+            .receive(on: DispatchQueue.global())
+            .flatMap { serverInfo -> AnyPublisher<CalibreServerInfo, Never> in
+                self.calibreServerService.probeServerReachabilityNew(serverInfo: serverInfo)
             }
-            print("\(#function) \(task.id) \(task.port)")
-            if let config = config, config.dsreader_helper_prefs != nil, let realm = try? Realm(configuration: self.realmConf) {
-                let dsreaderHelperServer = CalibreServerDSReaderHelper(id: task.id, port: task.port, configurationData: task.data, configuration: config)
+            .receive(on: DispatchQueue.main)
+            .sink { newServerInfo in
+                guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
+                serverInfo.probing = false
+                serverInfo.errorMsg = newServerInfo.errorMsg
+
+                if newServerInfo.libraryMap.isEmpty {
+                    serverInfo.reachable = false
+                    serverInfo.errorMsg = "Empty Server"
+                } else {
+                    serverInfo.reachable = newServerInfo.reachable
+                    serverInfo.libraryMap = newServerInfo.libraryMap
+                    serverInfo.defaultLibrary = newServerInfo.defaultLibrary
+                }
+                self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
                 
-                self.updateServerDSReaderHelper(dsreaderHelper: dsreaderHelperServer, realm: realm)
+                self.probeServerResultSubject.send(serverInfo)
+            }.store(in: &calibreCancellables)
+    }
+    
+    func registerProbeServerResult() {
+        probeServerResultSubject
+            .receive(on: DispatchQueue.main)
+            .filter {
+                $0.server.isLocal == false && $0.request.updateLibrary
             }
-        })
+            .map { serverInfo -> CalibreServerInfo in
+                serverInfo.libraryMap.forEach { key, name in
+                    let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
+                    if self.calibreLibraries[newLibrary.id] == nil {
+                        self.calibreLibraries[newLibrary.id] = newLibrary
+                        try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
+                    }
+                }
+                
+                return serverInfo
+            }
+            .sink { serverInfo in
+                if serverInfo.request.autoUpdateOnly == false {
+                    self.syncServerHelperConfigSubject.send(serverInfo.server.id)
+                }
+                
+                self.calibreLibraries.filter {
+                    $0.value.server.id == serverInfo.server.id
+                }.forEach { id, library in
+                    self.syncLibrarySubject.send(
+                        .init(
+                            library: library,
+                            autoUpdateOnly: serverInfo.request.autoUpdateOnly,
+                            incremental: serverInfo.request.incremental
+                        )
+                    )
+                }
+                
+                //TODO refresh shelf
+            }.store(in: &calibreCancellables)
+    }
+    
+    func registerSyncServerHelperConfigCancellable() {
+        syncServerHelperConfigSubject
+            .receive(on: DispatchQueue.global())
+            .flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
+                if let server = self.calibreServers[serverId],
+                   let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
+                   let publisher = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil).refreshConfiguration() {
+                    return publisher
+                } else {
+                    return Just((id: serverId, port: 0, data: Data())).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                }
+            }
+            .map { task -> (id: String, port: Int, data: Data, config: CalibreDSReaderHelperConfiguration?) in
+                return (
+                    id: task.id,
+                    port: task.port,
+                    data: task.data,
+                    config: try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data)
+                )
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { completion in
+                
+            } receiveValue: { task in
+                if let config = task.config, config.dsreader_helper_prefs != nil {
+                    let dsreaderHelper = CalibreServerDSReaderHelper(id: task.id, port: task.port, configurationData: task.data, configuration: config)
+                    
+                    let obj = dsreaderHelper.managedObject()
+                    try? self.realm.write {
+                        self.realm.add(obj, update: .all)
+                    }
+                }
+            }.store(in: &calibreCancellables)
     }
     
     func registerSyncLibraryCancellable() {
@@ -2203,7 +2317,6 @@ final class ModelData: ObservableObject {
                 
                 var progress = 0
                 let total = result.list.book_ids.count
-                var lastModified: Date? = nil
                 result.list.book_ids.chunks(size: 1024).forEach { chunk in
                     let preMsg = "\(progress) / \(total)"
                     let list = chunk.compactMap { id -> [String: Any]? in
