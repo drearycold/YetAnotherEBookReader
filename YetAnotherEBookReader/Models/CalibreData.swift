@@ -1048,11 +1048,17 @@ struct CalibreBookTask {
 struct CalibreBooksMetadataRequest {
     let library: CalibreLibrary
     let books: [Int32]
+    let getAnnotations: Bool
 }
 
 struct CalibreBooksTask {
-    var library: CalibreLibrary
-    var books: [Int32]
+    let request: CalibreBooksMetadataRequest
+    var library: CalibreLibrary {
+        request.library
+    }
+    var books: [Int32] {
+        request.books
+    }
     var metadataUrl: URL
     var lastReadPositionUrl: URL
     var annotationsUrl: URL
@@ -1061,14 +1067,19 @@ struct CalibreBooksTask {
     var response: URLResponse? = nil
     var lastReadPositionsData: Data? = nil
     var annotationsData: Data? = nil
+    
     var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
     var booksMetadataJSON: NSDictionary? = nil
+    
+    var booksAnnotationsEntry: [String:CalibreBookAnnotationsResult]? = nil
+    
     var searchCriteria: LibrarySearchCriteria? = nil
     var searchTask: CalibreLibrarySearchTask? = nil
     
     var booksUpdated = Set<Int32>()
     var booksError = Set<Int32>()
     var booksDeleted = Set<Int32>()
+    var booksInShelf = Set<Int32>()
 }
 
 struct CalibreLibrarySearchTask {

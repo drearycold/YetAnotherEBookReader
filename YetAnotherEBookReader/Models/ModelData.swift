@@ -1953,22 +1953,28 @@ final class ModelData: ObservableObject {
     func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
         shelfRefreshCancellable?.cancel()
         
-        let refreshTasks = booksInShelf.values
+        let libraryBooks = booksInShelf.values
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
+            .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
             .reduce(into: [CalibreLibrary: [CalibreBook]]()) { partialResult, book in
-                guard bookInShelfIds.isEmpty || bookInShelfIds.contains(book.inShelfId) else { return }
                 if partialResult[book.library] == nil {
                     partialResult[book.library] = []
                 }
                 partialResult[book.library]?.append(book)
             }
-            .compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1) }
         
-        if serverReachableChanged && refreshTasks.isEmpty {
+        if serverReachableChanged && libraryBooks.isEmpty {
             calibreUpdatedSubject.send(.shelf)
             return
         }
         
+        libraryBooks.forEach { library, books in
+            self.getBooksMetadataSubject.send(.init(library: library, books: books.map { $0.id }, getAnnotations: true))
+        }
+        
+        return ;
+        
+        let refreshTasks = libraryBooks.compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1, getAnnotations: true) }
         shelfRefreshCancellable = refreshTasks.publisher
             .flatMap { task in
                 self.calibreServerService.getBooksMetadata(task: task)
@@ -2450,7 +2456,7 @@ final class ModelData: ObservableObject {
                     self.librarySyncStatus[library.id]?.upd.formUnion(booksMetadata.bookToUpdate)
                     
                     booksMetadata.bookToUpdate.chunks(size: 256).forEach { chunk in
-                        self.getBooksMetadataSubject.send(.init(library: booksMetadata.library, books: chunk))
+                        self.getBooksMetadataSubject.send(.init(library: booksMetadata.library, books: chunk, getAnnotations: false))
                     }
                 case .updateDeleted:
                     self.librarySyncStatus[library.id]?.del.formUnion(booksMetadata.bookDeleted)
@@ -2477,60 +2483,112 @@ final class ModelData: ObservableObject {
             }
             .receive(on: DispatchQueue.global(qos: .userInitiated))
             .flatMap { request -> AnyPublisher<CalibreBooksTask, URLError> in
-                let books = request.books.map{ CalibreBook(id: $0, library: request.library) }
+                let books = request.books.map { bookId -> CalibreBook in
+                    let book = CalibreBook(id: bookId, library: request.library)
+                    return self.booksInShelf[book.inShelfId] ?? book
+                }
                     
-                if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books) {
+                if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) {
                     return self.calibreServerService.getBooksMetadata(task: task)
                 } else {
-                    return Just(CalibreBooksTask(library: request.library, books: request.books, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                    return Just(CalibreBooksTask(request: request, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                }
+            }
+            .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
+                if task.request.getAnnotations {
+                    return self.calibreServerService.getAnnotations(task: task)
+                } else {
+                    return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
                 }
             }
             .receive(on: ModelData.SaveBooksMetadataRealmQueue)
             .map { result -> CalibreBooksTask in
+                guard let entries = result.booksMetadataEntry,
+                      let json = result.booksMetadataJSON else {
+                    return result
+                }
+                
                 var result = result
                 let serverUUID = result.library.server.uuid.uuidString
                 let libraryName = result.library.name
-                do {
-                    let entries = try JSONDecoder().decode([String:CalibreBookEntry?].self, from: result.data ?? .init())
-                    let json = try JSONSerialization.jsonObject(with: result.data ?? .init(), options: []) as? NSDictionary
-                    
-                    try? self.realmSaveBooksMetadata.write {
-                        result.books.map {
-                            (
-                                obj: self.realmSaveBooksMetadata.object(
-                                    ofType: CalibreBookRealm.self,
-                                    forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: $0.description)
-                                ),
-                                entry: entries[$0.description],
-                                root: json?[$0.description] as? NSDictionary
-                            )
-                        }.forEach {
-                            guard let obj = $0.obj else { return }
-                            
-                            if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
-                                self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
-                                result.booksUpdated.insert(obj.id)
-                            } else {
-                                // null data, treat as delted, update lastSynced to lastModified to prevent further actions
-                                obj.lastSynced = obj.lastModified
-                                result.booksDeleted.insert(obj.id)
+                try? self.realmSaveBooksMetadata.write {
+                    result.books.map {
+                        (
+                            obj: self.realmSaveBooksMetadata.object(
+                                ofType: CalibreBookRealm.self,
+                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: $0.description)
+                            ),
+                            entry: entries[$0.description],
+                            root: json[$0.description] as? NSDictionary
+                        )
+                    }.forEach {
+                        guard let obj = $0.obj else { return }
+                        
+                        if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
+                            self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
+                            result.booksUpdated.insert(obj.id)
+                            if obj.inShelf {
+                                result.booksInShelf.insert(obj.id)
                             }
+                        } else {
+                            // null data, treat as delted, update lastSynced to lastModified to prevent further actions
+                            obj.lastSynced = obj.lastModified
+                            result.booksDeleted.insert(obj.id)
                         }
                     }
-                    print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
-                } catch let DecodingError.keyNotFound(key, context) {
-                    print("getBookMetadataCancellable decode keyNotFound \(result.library.name) \(key) \(context) \(result.data?.count ?? -1)")
-                    if let firstCodingPath = context.codingPath.first,
-                       let bookId = Int32(firstCodingPath.stringValue),
-                       bookId > 0 {
-                        result.booksError.insert(bookId)
-                    } else if result.books.count == 1 {
-                        result.booksError.formUnion(result.books)
-                    }
-                } catch {
-                    print("getBookMetadataCancellable decode \(result.library.name) \(error) \(result.data?.count ?? -1)")
-                    if result.books.count == 1 {
-                        result.booksError.formUnion(result.books)
+                }
+                print("getBookMetadataCancellable count \(result.library.name) \(entries.count)")
+                
+                return result
+            }
+            .map { result -> CalibreBooksTask in
+                guard result.request.getAnnotations,
+                      let annotationsResult = result.booksAnnotationsEntry
+                else {
+                    return result
+                }
+                
+                let serverUUID = result.library.server.uuid.uuidString
+                result.request.books.forEach { bookId in
+                    guard let book = self.booksInShelf[CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: result.library.name, id: bookId.description)]
+                    else { return }
+                    
+                    book.formats.forEach { formatKey, formatInfo in
+                        guard let format = Format(rawValue: formatKey),
+                              let entry = annotationsResult["\(bookId):\(formatKey)"]
+                        else { return }
+                        
+                        book.readPos.positions(added: entry.last_read_positions).forEach {
+                            guard let task = self.calibreServerService.buildSetLastReadPositionTask(
+                                library: result.library,
+                                bookId: bookId,
+                                format: format,
+                                entry: $0
+                            ) else { return }
+                            self.setLastReadPositionSubject.send(task)
+                        }
+                        
+                        var highlightPending = [CalibreBookAnnotationHighlightEntry]()
+                        var bookmarkPending = [CalibreBookAnnotationBookmarkEntry]()
+                        
+                        if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 {
+                            let highlights = book.readPos.highlights(excludeRemoved: false).compactMap {
+                                $0.toCalibreBookAnnotationHighlightEntry()
+                            }
+                            highlightPending.append(contentsOf: highlights)
+                        }
+                        
+                        if book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0 {
+                            let bookmarks = book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
+                            bookmarkPending.append(contentsOf: bookmarks)
+                        }
+                        
+                        if highlightPending.isEmpty == false || bookmarkPending.isEmpty == false,
+                           let task = self.calibreServerService.buildUpdateAnnotationsTask(
+                            library: result.library, bookId: bookId, format: format, highlights: highlightPending, bookmarks: bookmarkPending
+                           ) {
+                            self.updateAnnotationsSubject.send(task)
+                        }
                     }
                 }
                 
@@ -2552,12 +2610,22 @@ final class ModelData: ObservableObject {
                     
                     if booksRetry.isEmpty == false {
                         booksRetry.chunks(size: max(booksRetry.count / 16, 1)).forEach { chunk in
-                            self.getBooksMetadataSubject.send(.init(library: result.library, books: chunk))
+                            self.getBooksMetadataSubject.send(.init(library: result.library, books: chunk, getAnnotations: result.request.getAnnotations))
                         }
                     }
                 }
                 
                 self.librarySyncStatus[result.library.id]?.isUpd = false
+                
+                let serverUUID = result.library.server.uuid.uuidString
+                result.booksInShelf.forEach { bookId in
+                    guard let obj = self.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: result.library.name, id: bookId.description))
+                    else { return }
+                    
+                    let newBook = self.convert(library: result.library, bookRealm: obj)
+                    self.booksInShelf[newBook.inShelfId] = newBook
+                    self.calibreUpdatedSubject.send(.book(newBook))
+                }
                 
                 if result.booksUpdated.count == 1,
                    let book = self.getBook(
@@ -2623,6 +2691,11 @@ final class ModelData: ObservableObject {
             let book = subject.book
             let lastPosition = subject.position
             
+            book.formats.forEach {
+                guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
+                readPosToLastReadPosition(book: book, format: format, formatInfo: $0.value)
+            }
+
             self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
             
             guard let updatedReadingPosition = book.readPos.getDevices().first

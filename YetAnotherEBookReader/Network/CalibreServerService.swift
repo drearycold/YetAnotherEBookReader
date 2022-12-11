@@ -808,7 +808,7 @@ struct CalibreServerService {
             url: endpointUrl)
     }
     
-    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
+    func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], getAnnotations: Bool = false, searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
         let serverUrl = getServerUrlByReachability(server: library.server) ?? URL(fileURLWithPath: "/realm")
         
         let bookIds = books.map{ $0.id.description }
@@ -871,8 +871,7 @@ struct CalibreServerService {
         print("\(#function) endpointUrl=\(endpointUrl.absoluteString)")
         
         return CalibreBooksTask(
-            library: library,
-            books: books.map{ $0.id },
+            request: .init(library: library, books: books.map{ $0.id }, getAnnotations: getAnnotations),
             metadataUrl: endpointUrl,
             lastReadPositionUrl: lastReadPositionEndpointUrl,
             annotationsUrl: annotationsEndpointUrl,
@@ -908,8 +907,24 @@ struct CalibreServerService {
                 var task = task
                 task.data = result.data
                 task.response = result.response
-                task.booksMetadataEntry = try? JSONDecoder().decode([String:CalibreBookEntry?].self, from: result.data)
-                task.booksMetadataJSON = try? JSONSerialization.jsonObject(with: result.data, options: []) as? NSDictionary
+                do {
+                    task.booksMetadataEntry = try JSONDecoder().decode([String:CalibreBookEntry?].self, from: result.data)
+                    task.booksMetadataJSON = try JSONSerialization.jsonObject(with: result.data, options: []) as? NSDictionary
+                } catch let DecodingError.keyNotFound(key, context) {
+                    print("getBookMetadataCancellable decode keyNotFound \(task.library.name) \(key) \(context) \(task.data?.count ?? -1)")
+                    if let firstCodingPath = context.codingPath.first,
+                       let bookId = Int32(firstCodingPath.stringValue),
+                       bookId > 0 {
+                        task.booksError.insert(bookId)
+                    } else if task.books.count == 1 {
+                        task.booksError.formUnion(task.books)
+                    }
+                } catch {
+                    print("getBookMetadataCancellable decode \(task.library.name) \(error) \(task.data?.count ?? -1)")
+                    if task.books.count == 1 {
+                        task.booksError.formUnion(task.books)
+                    }
+                }
                 return task
             }
             .eraseToAnyPublisher()
@@ -930,6 +945,11 @@ struct CalibreServerService {
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.annotationsData = result.data
+                do {
+                    task.booksAnnotationsEntry = try JSONDecoder().decode([String:CalibreBookAnnotationsResult].self, from: result.data)
+                } catch {
+                    print("\(#function) annotationEntry error=\(error)")
+                }
                 return task
             }
             .eraseToAnyPublisher()

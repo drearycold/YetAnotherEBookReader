@@ -36,6 +36,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
     
+    let refreshBarButtonItem = BarButtonItem()
+
     override var canBecomeFirstResponder: Bool {
         true
     }
@@ -109,6 +111,14 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         navBarScrollApp.backgroundImage = navBarBackgroundImage
         self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
         self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
+        
+        refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
+            self.modelData.refreshShelfMetadataV2(serverReachableChanged: false)
+        })
+        
+        self.navigationItem.setLeftBarButtonItems([
+            refreshBarButtonItem
+        ], animated: false)
         
         self.navigationItem.setRightBarButtonItems([
             self.editButtonItem
