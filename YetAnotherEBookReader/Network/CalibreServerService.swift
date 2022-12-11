@@ -34,107 +34,6 @@ struct CalibreServerService {
         return urlSession
     }
     
-    func getServerLibraries(server: CalibreServer) -> URLSessionDataTask? {
-        modelData.calibreServerInfo = nil
-        modelData.calibreServerUpdatingStatus = "Initializing"
-
-        var serverInfo = CalibreServerInfo(server: server, isPublic: server.usePublic, url: URL(fileURLWithPath: "/"), reachable: false, probing: false, errorMsg: "Server URL Malformed", defaultLibrary: "", libraryMap: [:], request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
-
-        guard let serverUrl = getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) else {
-            modelData.calibreServerInfo = serverInfo
-            modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
-            modelData.calibreServerUpdating = false
-            return nil
-        }
-        
-        var urlComponents = URLComponents()
-        urlComponents.path = "ajax/library-info"
-        
-        guard let url = urlComponents.url(relativeTo: serverUrl)/*, let host = url.host*/ else {
-            modelData.calibreServerInfo = serverInfo
-            modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
-            modelData.calibreServerUpdating = false
-
-            return nil
-        }
-        //url.appendPathComponent("/ajax/library-info", isDirectory: false)
-        
-        let request = URLRequest(url: url)
-        let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, bookId: nil, libraryId: nil)
-
-        serverInfo.probing = true
-        let task = urlSession(server: server).dataTask(with: request) { data, response, error in
-            defer {
-                modelData.logFinishCalibreActivity(type: "List Libraries", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: serverInfo.errorMsg)
-                
-                DispatchQueue.main.async {
-                    serverInfo.probing = false
-                    modelData.calibreServerInfo = serverInfo
-                    modelData.calibreServerUpdatingStatus = serverInfo.errorMsg
-                    modelData.calibreServerUpdating = false
-                }
-            }
-            if let error = error {
-                if let urlError = error as? URLError {
-                    if urlError.code == .cancelled {
-                        serverInfo.errorMsg = "Cancelled\nPlease recheck username/password"
-                    } else {
-                        serverInfo.errorMsg = urlError.localizedDescription
-                    }
-                } else {
-                    serverInfo.errorMsg = error.localizedDescription
-                }
-                return
-            }
-            var dataAsString = ""
-            if let data = data, let s = String(data: data, encoding: .utf8) {
-                dataAsString = s
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                serverInfo.errorMsg = dataAsString + response.debugDescription
-                return
-            }
-            guard httpResponse.statusCode != 401 else {
-                serverInfo.errorMsg = httpResponse.statusCode.description
-                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-//                    + " " + dataAsString
-                return
-            }
-            guard (200...299).contains(httpResponse.statusCode) else {
-                serverInfo.errorMsg = httpResponse.statusCode.description
-                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-//                    + " " + dataAsString
-                return
-            }
-            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                  let data = data,
-                  let libraryInfo = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
-                serverInfo.errorMsg = "Failed to parse server response"
-                return
-            }
-
-            guard let libraryMap = libraryInfo["library_map"] as? [String: String] else {
-                serverInfo.errorMsg = "No library info found in server response"
-                return
-            }
-            defaultLog.info("libraryInfo: \(libraryInfo)")
-
-            let defaultLibrary = libraryInfo["default_library"] as? String ?? ""
-
-            serverInfo.defaultLibrary = defaultLibrary
-            serverInfo.libraryMap = libraryMap
-            serverInfo.reachable = true
-            serverInfo.errorMsg = "Success"
-        }
-
-        modelData.calibreServerUpdatingStatus = "Connecting"
-
-        task.resume()
-        
-        return task
-    }
-    
     func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, filter: String = "") -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server) else {
             var result = resultPrev
@@ -863,7 +762,15 @@ struct CalibreServerService {
 
                 return serverInfo
             }
-            .replaceError(with: serverInfo)
+            .catch({ error in
+                if error.errorCode == URLError.Code.cancelled.rawValue {
+                    serverInfo.errorMsg = "cancelled, server may require authentication"
+                } else {
+                    serverInfo.errorMsg = error.localizedDescription
+                }
+                
+                return Just(serverInfo).setFailureType(to: Never.self).eraseToAnyPublisher()
+            })
             .eraseToAnyPublisher()
     }
     

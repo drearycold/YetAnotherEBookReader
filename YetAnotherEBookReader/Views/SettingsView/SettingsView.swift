@@ -35,7 +35,7 @@ struct SettingsView: View {
                     Text("Refreshing")
                     ProgressView().progressViewStyle(CircularProgressViewStyle())
                 } else {
-                    Text(modelData.calibreServerUpdatingStatus ?? "")
+                    Text("")
                     ProgressView().progressViewStyle(CircularProgressViewStyle()).hidden()
                 }
             }) {
@@ -242,15 +242,14 @@ struct SettingsView: View {
                 modelData.calibreLibraries[libraryId]?.server = newServer
             }
             
-            modelData.calibreServerUpdatingStatus = "Updated"
+//            modelData.calibreServerUpdatingStatus = "Updated"
             return
         }
         
         serverListDelete = oldServer        //staging
         print("\(#function) staging finished \(oldServer.id) -> \(newServer.id)")
 
-        modelData.calibreServerUpdating = true
-        modelData.calibreServerUpdatingStatus = "Updating..."
+//        modelData.calibreServerUpdatingStatus = "Updating..."
         
         let newServerLibraries = modelData.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
             var newLibrary = library
@@ -315,8 +314,7 @@ struct SettingsView: View {
                 modelData.booksInShelf.removeAll(keepingCapacity: true)
                 modelData.populateBookShelf()
                 
-                modelData.calibreServerUpdating = false
-                modelData.calibreServerUpdatingStatus = "Finished"
+//                modelData.calibreServerUpdatingStatus = "Finished"
                 
                 serverListDelete = nil      //will trigger updateServerList
 

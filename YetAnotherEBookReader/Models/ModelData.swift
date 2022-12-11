@@ -25,16 +25,11 @@ final class ModelData: ObservableObject {
     @Published var deviceName = UIDevice.current.name
     
     @Published var calibreServers = [String: CalibreServer]()
-    @Published var calibreServerInfo: CalibreServerInfo?
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var calibreLibraryCategories = [CalibreLibraryCategoryKey: CalibreLibraryCategoryValue]()
     @Published var calibreLibraryCategoryMerged = [String: [String]]()
-    
-    /// Used for server level activities
-    @Published var calibreServerUpdating = false
-    @Published var calibreServerUpdatingStatus: String? = nil
     
     @Published var activeTab = 0
     var documentServer: CalibreServer?
@@ -1830,8 +1825,6 @@ final class ModelData: ObservableObject {
         
         return;
         
-        guard calibreServerUpdating == false else { return }    //structural changing ongoing
-        
         calibreServers.filter {
             $0.value.isLocal == false
         }.forEach { serverId, server in
@@ -1938,6 +1931,14 @@ final class ModelData: ObservableObject {
         return calibreServerInfoStaging.filter {
             $1.server.id == server.id && $1.isPublic == isPublic
         }.first?.value.reachable
+    }
+    
+    func isServerProbing(server: CalibreServer) -> Bool {
+        return calibreServerInfoStaging.filter {
+            $1.server.id == server.id
+        }.allSatisfy {
+            $1.probing == false
+        } != true
     }
     
     func getServerInfo(server: CalibreServer) -> CalibreServerInfo? {
@@ -2138,7 +2139,9 @@ final class ModelData: ObservableObject {
 
                 if newServerInfo.libraryMap.isEmpty {
                     serverInfo.reachable = false
-                    serverInfo.errorMsg = "Empty Server"
+                    if serverInfo.errorMsg.isEmpty {
+                        serverInfo.errorMsg = "Empty Server"
+                    }
                 } else {
                     serverInfo.reachable = newServerInfo.reachable
                     serverInfo.libraryMap = newServerInfo.libraryMap

@@ -7,6 +7,7 @@
 
 import SwiftUI
 import OSLog
+import Combine
 
 struct AddModServerView: View {
     @EnvironmentObject var modelData: ModelData
@@ -16,6 +17,7 @@ struct AddModServerView: View {
     @Binding var isActive: Bool
     
     // bindings for server editing
+    @State private var calibreServerUUID = UUID()
     @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
     @State private var calibreServerUrlWelformed = ""
@@ -29,10 +31,13 @@ struct AddModServerView: View {
     @State private var calibrePasswordVisible = false
     
     @State private var dataAction: String?
-    @State private var dataLoadingTask: URLSessionDataTask? = nil
     
     @State private var libraryList = [String]()
     
+    @State private var probeServerResultCancellable: AnyCancellable? = nil
+    
+    @State private var calibreServerInfo: CalibreServerInfo? = nil
+
     @State private var serverCalibreInfoPresenting = false {
         willSet { if newValue { modelData.presentingStack.append($serverCalibreInfoPresenting) } }
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
@@ -106,11 +111,11 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    if modelData.calibreServerUpdating {
+                    if modelData.isServerProbing(server: server) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
-                        Text(modelData.calibreServerUpdatingStatus ?? "Unknown")
+                        Text(modelData.getServerInfo(server: server)?.errorMsg ?? "Unknown")
                     }
                     
                     if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
@@ -144,9 +149,7 @@ struct AddModServerView: View {
         }
         .sheet(isPresented: $serverCalibreInfoPresenting, onDismiss: {
             dataAction = nil
-            dataLoadingTask?.cancel()
-            dataLoadingTask = nil
-            modelData.calibreServerUpdating = false
+            disableProbeServerCancellable()
         }, content: {
             serverCalibreInfoSheetView()
         })
@@ -179,7 +182,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "square.and.arrow.down")
                 }
-                .disabled(modelData.calibreServerUpdating)
+                .disabled(modelData.isServerProbing(server: server))
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -187,7 +190,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
-                .disabled(modelData.calibreServerUpdating)
+                .disabled(modelData.isServerProbing(server: server))
             }
         }
         
@@ -197,11 +200,15 @@ struct AddModServerView: View {
     func serverCalibreInfoSheetView() -> some View {
         List {
             Section(header: Text("Server Status")) {
-                Text(modelData.calibreServerUpdating ? "Connecting" : modelData.calibreServerUpdatingStatus ?? "Unexcepted Error")
+                if let serverInfo = calibreServerInfo {
+                    Text(serverInfo.errorMsg)
+                } else {
+                    Text("Connecting")
+                }
             }
             
             Section {
-                if modelData.calibreServerUpdatingStatus == "Success" {
+                if modelData.getServerInfo(server: server)?.errorMsg == "Success" {
                     Toggle(isOn: $calibreServerOffline) {
                         Text("Offline Browsable")
                     }
@@ -228,13 +235,12 @@ struct AddModServerView: View {
                     } else {
                         Text("OK")
                     }
-                }.disabled(modelData.calibreServerUpdatingStatus != "Success")
+                }.disabled(modelData.getServerInfo(server: server)?.errorMsg != "Success")
             }
             
             Section(header: Text("Library List")) {
-                if let updatingStatus = modelData.calibreServerUpdatingStatus,
-                   updatingStatus == "Success",
-                   let serverInfo = modelData.calibreServerInfo {
+                if let serverInfo = calibreServerInfo,
+                   serverInfo.errorMsg == "Success" {
                     ForEach(serverInfo.libraryMap.values.sorted(), id: \.self) {
                         Text($0)
                     }
@@ -348,25 +354,37 @@ struct AddModServerView: View {
                 calibreServerName = "Unnamed"
             }
         }
+        calibreServerUUID = .init()
         let calibreServer = CalibreServer(
-            uuid: .init(), name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
+            uuid: calibreServerUUID,
+            name: calibreServerName,
+            baseUrl: calibreServerUrl,
+            hasPublicUrl: calibreServerSetPublicAddress,
+            publicUrl: calibreServerUrlPublic,
+            hasAuth: calibreServerNeedAuth,
+            username: calibreUsername,
+            password: calibrePassword
+        )
         if let existingServer = modelData.calibreServers[calibreServer.id] {
             alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
             return
         }
 
         calibreServerOffline = false
-        modelData.calibreServerUpdating = true
-        if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
-            dataLoadingTask = task
-            serverCalibreInfoPresenting = true
-        } else {
-            alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
-        }
+//        modelData.calibreServerUpdating = true
+//        if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
+//            dataLoadingTask = task
+//            serverCalibreInfoPresenting = true
+//        } else {
+//            alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
+//        }
+        
+        enableProbeServerCancellable()
+        modelData.probeServerSubject.send(.init(server: calibreServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
     }
     
     private func addServerConfirmed() {
-        guard let serverInfo = modelData.calibreServerInfo else { return }
+        guard let serverInfo = calibreServerInfo else { return }
         
         var newServer = serverInfo.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
@@ -393,9 +411,17 @@ struct AddModServerView: View {
     }
     
     private func modServerConfirmButtonAction() {
+        calibreServerUUID = server.uuid
         let newServer = CalibreServer(
-            uuid: server.uuid,
-            name: calibreServerName, baseUrl: calibreServerUrl, hasPublicUrl: calibreServerSetPublicAddress, publicUrl: calibreServerUrlPublic, hasAuth: calibreServerNeedAuth, username: calibreUsername, password: calibrePassword)
+            uuid: calibreServerUUID,
+            name: calibreServerName,
+            baseUrl: calibreServerUrl,
+            hasPublicUrl: calibreServerSetPublicAddress,
+            publicUrl: calibreServerUrlPublic,
+            hasAuth: calibreServerNeedAuth,
+            username: calibreUsername,
+            password: calibrePassword
+        )
         
         if newServer.id == server.id {
             //minor changes
@@ -408,19 +434,22 @@ struct AddModServerView: View {
                 return
             }
 
-            modelData.calibreServerUpdating = true
+//            modelData.calibreServerUpdating = true
             
-            if let task = modelData.calibreServerService.getServerLibraries(server: newServer) {
-                dataLoadingTask = task
-                serverCalibreInfoPresenting = true
-            } else {
-                alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
-            }
+//            if let task = modelData.calibreServerService.getServerLibraries(server: newServer) {
+//                dataLoadingTask = task
+//                serverCalibreInfoPresenting = true
+//            } else {
+//                alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
+//            }
+            
+            enableProbeServerCancellable()
+            modelData.probeServerSubject.send(.init(server: newServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
         }
     }
     
     private func modServerConfirmed() {
-        guard let serverInfo = modelData.calibreServerInfo else {
+        guard let serverInfo = calibreServerInfo else {
             alertItem = AlertItem(id: "Error", msg: "Unexpected Error")
             return
         }
@@ -432,6 +461,20 @@ struct AddModServerView: View {
         server = newServer
         
         isActive = false
+    }
+    
+    private func enableProbeServerCancellable() {
+        self.probeServerResultCancellable = modelData.probeServerResultSubject
+            .receive(on: DispatchQueue.main)
+            .sink { serverInfo in
+                self.calibreServerInfo = serverInfo
+                self.serverCalibreInfoPresenting = true
+            }
+    }
+    
+    private func disableProbeServerCancellable() {
+        self.probeServerResultCancellable?.cancel()
+        self.calibreServerInfo = nil
     }
 }
 
