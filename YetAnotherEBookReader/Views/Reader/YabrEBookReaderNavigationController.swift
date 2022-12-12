@@ -43,7 +43,6 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                 case .YabrEPUB:
                     guard let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() else { break }
                     yabrEPub.folioReader.saveReaderState {
-                        yabrEPub.updateReadingPosition(yabrEPub.folioReader)
                         if let position = self.book.readPos.getPosition(self.modelData.deviceName) {
                             self.book.readPos.session(end: position)
                         }

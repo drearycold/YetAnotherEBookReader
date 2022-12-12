@@ -340,7 +340,7 @@ struct BookDetailView: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 20, height: 20)
                     Text("\(readProgressGR)%")
-                } else if let position = modelData.getSelectedReadingPosition(book: book) {
+                } else if let position = book.readPos.getPosition(modelData.deviceName) ?? book.readPos.getDevices().first {
                     Image(systemName: "book.circle")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -701,7 +701,7 @@ struct BookDetailView: View {
             return
         }
         
-        let readPosition = modelData.getInitialReadingPosition(book: book, format: format, reader: reader)
+        let readPosition = book.readPos.createInitial(deviceName: modelData.deviceName, reader: reader)
         
         modelData.prepareBookReading(
             url: bookFileUrl,

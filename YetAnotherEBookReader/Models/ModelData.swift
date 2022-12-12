@@ -91,12 +91,6 @@ final class ModelData: ObservableObject {
     
     @Published var selectedPosition = ""
     
-    @available(*, deprecated, message: "use readPos")
-    @Published var updatedReadingPosition = BookDeviceReadingPosition(id: UIDevice().name, readerName: "") {
-        didSet {
-            self.defaultLog.info("updatedReadingPosition=\(self.updatedReadingPosition.description)")
-        }
-    }
     let bookReaderClosedSubject = PassthroughSubject<(book: CalibreBook, position: BookDeviceReadingPosition), Never>()
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
     
@@ -398,8 +392,6 @@ final class ModelData: ObservableObject {
                             let components = bookId.components(separatedBy: " - ")
                             let newId = components.suffix(2).joined(separator: " - ")
                             newObject?.setValue(newId, forUndefinedKey: "bookId")
-                        } else {
-                            print("\(oldObject?.value(forKey: "bookId"))")
                         }
                     }
                 }
@@ -1329,7 +1321,7 @@ final class ModelData: ObservableObject {
         
         booksInShelf.removeValue(forKey: inShelfId)
         
-        if self.getLatestReadingPosition(book: book)?.id == deviceName,
+        if book.readPos.getDevices().first?.id == deviceName,
            let library = calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
            let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
@@ -1337,7 +1329,7 @@ final class ModelData: ObservableObject {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
-            if let position = getDeviceReadingPosition(book: book), position.lastProgress > 99 {
+            if let position = book.readPos.getPosition(deviceName), position.lastProgress > 99 {
                 connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
             }
         }
@@ -1461,79 +1453,9 @@ final class ModelData: ObservableObject {
     }
     
     
-    func getSelectedReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
-        return book.readPos.getPosition(selectedPosition)
-    }
-    
-    func getDeviceReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
-        var position = book.readPos.getPosition(deviceName)
-//        position = nil
-//
-//        book.formats.filter { $0.value.cached }.forEach {
-//            guard let format = Format(rawValue: $0.key),
-//                  let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
-//                  let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
-//                  let object = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: deviceName),
-//                  object.epoch > (position?.epoch ?? 0.0)
-//            else { return }
-//
-//            position = BookDeviceReadingPosition(managedObject: object)
-//        }
-        
-        return position
-    }
-    
-    func getInitialReadingPosition(book: CalibreBook, format: Format, reader: ReaderType) -> BookDeviceReadingPosition {
-        return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
-    }
-    
-    func getLatestReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
-        var position = book.readPos.getDevices().first
-//        position = nil
-//        
-//        position = book.formats.filter { $0.value.cached }.reduce(into: nil) { partialResult, format in
-//            let lastEpoch = partialResult?.epoch ?? 0.0
-//            guard let format = Format(rawValue: format.key),
-//                  let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
-//                  let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
-//                  let firstPosition = bookPrefRealm.objects(CalibreBookLastReadPositionRealm.self)
-//                    .sorted(byKeyPath: "epoch", ascending: false)
-//                    .filter({ $0.epoch > lastEpoch })
-//                    .compactMap({ BookDeviceReadingPosition(managedObject: $0) })
-//                    .first
-//            else { return }
-//            
-//            partialResult = firstPosition
-//        }
-        
-        return position
-    }
-    
-    func getFurthestReadingPosition(book: CalibreBook) -> BookDeviceReadingPosition? {
-        var position = book.readPos.getDevices().first
-//        position = nil
-//
-//        position = book.formats.filter { $0.value.cached }.reduce(into: nil) { partialResult, format in
-//            let lastProgress = partialResult?.lastProgress ?? 0.0
-//            guard let format = Format(rawValue: format.key),
-//                  let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
-//                  let bookPrefRealm = try? Realm(configuration: bookPrefConfig),
-//                  let firstPosition = bookPrefRealm.objects(CalibreBookLastReadPositionRealm.self)
-//                    .sorted(byKeyPath: "pos_frac", ascending: false)
-//                    .filter({ $0.pos_frac * 100 > lastProgress })
-//                    .compactMap({ BookDeviceReadingPosition(managedObject: $0) })
-//                    .first
-//            else { return }
-//
-//            partialResult = firstPosition
-//        }
-        
-        return position
-    }
-    
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard let readingBook = self.readingBook,
-              let updatedReadingPosition = getLatestReadingPosition(book: readingBook),
+              let updatedReadingPosition = readingBook.readPos.getDevices().first,
               let readerInfo = self.readerInfo
         else {
             return
@@ -1620,18 +1542,20 @@ final class ModelData: ObservableObject {
         var candidatePositions = [BookDeviceReadingPosition]()
 
         //preference: device, latest, selected, any
-        if let position = getDeviceReadingPosition(book: book) {
+        if let position = book.readPos.getPosition(deviceName) {
             candidatePositions.append(position)
         }
-        if let position = getLatestReadingPosition(book: book) {
-            candidatePositions.append(position)
-        }
-        if let position = getSelectedReadingPosition(book: book) {
+        if let position = book.readPos.getDevices().first {
             candidatePositions.append(position)
         }
 //        candidatePositions.append(contentsOf: book.readPos.getDevices())
         if let format = getPreferredFormat(for: book) {
-            candidatePositions.append(getInitialReadingPosition(book: book, format: format, reader: getPreferredReader(for: format)))
+            candidatePositions.append(
+                book.readPos.createInitial(
+                    deviceName: self.deviceName,
+                    reader: getPreferredReader(for: format)
+                )
+            )
         }
         
         let formatReaderPairArray: [(Format, ReaderType, BookDeviceReadingPosition)] = candidatePositions.compactMap { position in

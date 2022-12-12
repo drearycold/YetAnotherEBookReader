@@ -134,6 +134,10 @@ extension BookAnnotation {
         }.map { BookDeviceReadingPosition(managedObject: $0) } ?? []
     }
     
+    func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition {
+        return .init(id: deviceName, readerName: reader.rawValue)
+    }
+    
     /**
      sorted by epoch, newest first
      */

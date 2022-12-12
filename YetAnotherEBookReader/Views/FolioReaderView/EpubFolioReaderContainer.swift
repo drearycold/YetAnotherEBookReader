@@ -73,32 +73,6 @@ class EpubFolioReaderContainer: FolioReaderContainer {
     }
 
 
-    func updateReadingPosition(_ folioReader: FolioReader) {
-//        guard var updatedReadingPosition = modelData?.updatedReadingPosition else { return }
-        
-        guard let savedPosition = folioReader.savedPositionForCurrentBook else { return }
-        
-//        updatedReadingPosition.lastChapterProgress = savedPosition.chapterProgress
-//        updatedReadingPosition.lastProgress = savedPosition.structuralStyle == .bundle ? savedPosition.bundleProgress : savedPosition.bookProgress
-//        updatedReadingPosition.lastReadChapter = savedPosition.chapterName
-//
-//        updatedReadingPosition.lastPosition[0] = savedPosition.pageNumber
-//        updatedReadingPosition.lastPosition[1] = Int(savedPosition.pageOffset.x.rounded())
-//        updatedReadingPosition.lastPosition[2] = Int(savedPosition.pageOffset.y.rounded())
-//        updatedReadingPosition.lastReadPage = savedPosition.pageNumber
-//        updatedReadingPosition.maxPage = savedPosition.maxPage
-//
-//        updatedReadingPosition.cfi = savedPosition.cfi
-//
-//        updatedReadingPosition.readerName = ReaderType.YabrEPUB.rawValue
-//        updatedReadingPosition.epoch = savedPosition.epoch.timeIntervalSince1970
-        
-        let obj = BookDeviceReadingPositionRealm()
-        obj.fromFolioReaderReadPosition(savedPosition, bookId: "")
-
-        modelData?.updatedReadingPosition = BookDeviceReadingPosition(managedObject: obj)
-    }
-
     open func initializeWebServer() -> Void {
         dateFormatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
         dateFormatter.locale = Locale(identifier: "en_US")
@@ -243,7 +217,6 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
     }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
-        updateReadingPosition(folioReader)
         webServer.stop()
         
 //        if let bookId = readerConfig.identifier,

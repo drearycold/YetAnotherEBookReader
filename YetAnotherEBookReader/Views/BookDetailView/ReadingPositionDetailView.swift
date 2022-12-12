@@ -140,8 +140,6 @@ struct ReadingPositionDetailView: View {
             position: _VM.position
         )
     
-        _VM.modelData.updatedReadingPosition.update(with: _VM.position)
-        
         presentingReadSheet = true
     }
 

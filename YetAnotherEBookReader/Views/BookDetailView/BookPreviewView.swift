@@ -37,7 +37,7 @@ struct BookPreviewView: View {
                         missing: false,
                         format: _VM.format,
                         readerType: _VM.reader,
-                        position: _VM.modelData.getInitialReadingPosition(book: _VM.book, format: _VM.format, reader: _VM.reader)
+                        position: _VM.book.readPos.createInitial(deviceName: _VM.modelData.deviceName, reader: _VM.reader)                        
                     )
                 )
             }
