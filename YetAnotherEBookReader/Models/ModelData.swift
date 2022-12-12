@@ -179,9 +179,6 @@ final class ModelData: ObservableObject {
     lazy var calibreServerService = CalibreServerService(modelData: self)
     @Published var metadataSessions = [String: URLSession]()
 
-    var calibreServiceCancellable: AnyCancellable?
-    var shelfRefreshCancellable: AnyCancellable?
-    
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
@@ -1810,121 +1807,7 @@ final class ModelData: ObservableObject {
             if server.hasPublicUrl {
                 self.probeServerSubject.send(.init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
             }
-//            [true, false].forEach { isPublic in
-//                self.probeServerSubject.send(.init(server: server, isPublic: isPublic))
-//
-//                let infoId = serverId + " " + isPublic.description
-//
-//                if calibreServerInfoStaging[infoId] == nil,
-//                   let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
-//                    calibreServerInfoStaging[infoId] =
-//                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:], request: .init(server: server, isPublic: isPublic))
-//                }
-//            }
         }
-        
-        return;
-        
-        calibreServers.filter {
-            $0.value.isLocal == false
-        }.forEach { serverId, server in
-            [true, false].forEach { isPublic in
-                let infoId = serverId + " " + isPublic.description
-                
-                if calibreServerInfoStaging[infoId] == nil,
-                   let url = URL(string: isPublic ? server.publicUrl : server.baseUrl) {
-                    calibreServerInfoStaging[infoId] =
-                    CalibreServerInfo(server: server, isPublic: isPublic, url: url, reachable: false, probing: false, errorMsg: "Waiting to connect", defaultLibrary: server.defaultLibrary, libraryMap: [:], request: .init(server: server, isPublic: isPublic, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
-                }
-            }
-        }
-        
-        let probingList = calibreServerInfoStaging.filter {
-            if serverIds.isEmpty {
-                return true
-            } else {
-                return serverIds.contains($0.value.server.id)
-            }
-        }.sorted {
-            if $0.value.reachable == $1.value.reachable {
-                return $0.key < $1.key
-            }
-            return !$0.value.reachable  //put unreachable first
-        }
-        
-        calibreServiceCancellable?.cancel()
-        calibreServiceCancellable = probingList.publisher.flatMap { input -> AnyPublisher<CalibreServerInfo, Never> in
-            self.calibreServerInfoStaging[input.key]?.probing = true
-            self.calibreServerInfoStaging[input.key]?.errorMsg = "Connecting"
-            return self.calibreServerService.probeServerReachabilityNew(serverInfo: input.value)
-        }
-        .collect()
-        .eraseToAnyPublisher()
-        .receive(on: DispatchQueue.main)
-        .sink(receiveCompletion: { completion in
-            switch(completion) {
-            case .finished:
-                break
-            case .failure(_):
-                break
-            }
-        }, receiveValue: { results in
-            var serverReachableChanged = false
-            
-            results.forEach { newServerInfo in
-//                defer {
-//                    completion?(newServerInfo.server.id)
-//                }
-                
-                guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
-                serverInfo.probing = false
-                serverInfo.errorMsg = newServerInfo.errorMsg
-
-                if newServerInfo.libraryMap.isEmpty {
-                    serverReachableChanged = serverReachableChanged || (serverInfo.reachable != false)
-                    serverInfo.reachable = false
-                } else {
-                    serverReachableChanged = serverReachableChanged || (serverInfo.reachable != newServerInfo.reachable)
-                    serverInfo.reachable = newServerInfo.reachable
-                    serverInfo.libraryMap = newServerInfo.libraryMap
-                    serverInfo.defaultLibrary = newServerInfo.defaultLibrary
-                }
-                self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
-                
-                guard updateLibrary else { return }
-                //only auto adding new libraries upon self refreshing
-                serverInfo.libraryMap.forEach { key, name in
-                    let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-                    if self.calibreLibraries[newLibrary.id] == nil {
-                        self.calibreLibraries[newLibrary.id] = newLibrary
-                        try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
-                    }
-                }
-            }
-            
-            self.refreshShelfMetadataV2(with: serverIds, serverReachableChanged: serverReachableChanged)
-            
-            if updateLibrary == true, autoUpdateOnly == false {
-                self.calibreServers.filter {
-                    $0.value.isLocal == false && ( serverIds.isEmpty || serverIds.contains($0.key) )
-                }.forEach {
-                    self.syncServerHelperConfigSubject.send($0.key)
-                }
-            }
-            
-            let serverIds = self.calibreServers.filter { $0.value.isLocal == false }.map{ $0.key }
-            self.calibreLibraries.filter {
-                serverIds.contains( $0.value.server.id )
-            }.forEach { id, library in
-                self.syncLibrarySubject.send(
-                    .init(
-                        library: library,
-                        autoUpdateOnly: autoUpdateOnly,
-                        incremental: incremental
-                    )
-                )
-            }
-        })
     }
     
     func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
@@ -1951,8 +1834,6 @@ final class ModelData: ObservableObject {
     }
     
     func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
-        shelfRefreshCancellable?.cancel()
-        
         let libraryBooks = booksInShelf.values
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
             .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
@@ -1971,141 +1852,6 @@ final class ModelData: ObservableObject {
         libraryBooks.forEach { library, books in
             self.getBooksMetadataSubject.send(.init(library: library, books: books.map { $0.id }, getAnnotations: true))
         }
-        
-        return ;
-        
-        let refreshTasks = libraryBooks.compactMap { calibreServerService.buildBooksMetadataTask(library: $0.0, books: $0.1, getAnnotations: true) }
-        shelfRefreshCancellable = refreshTasks.publisher
-            .flatMap { task in
-                self.calibreServerService.getBooksMetadata(task: task)
-            }
-            .flatMap { task in
-                self.calibreServerService.getAnnotations(task: task)
-            }
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .collect()
-            .eraseToAnyPublisher()
-            .sink(receiveCompletion: { completion in
-                switch completion {
-                case .finished:
-                    self.defaultLog.info("Refresh Finished")
-                case .failure(let error):
-                    self.defaultLog.info("Refresh Failure \(error.localizedDescription)")
-                }
-            }, receiveValue: { tasks in
-                let decoder = JSONDecoder()
-                guard let realm = try? Realm(configuration: self.realmConf) else { return }
-                
-                var updated = 0
-                tasks.forEach { result in
-                    guard let entries = result.booksMetadataEntry,
-                          let json = result.booksMetadataJSON else {
-                              print("getBookMetadataCancellable nildata \(result.library.name)")
-                              return
-                          }
-                    
-                    let serverUUID = result.library.server.uuid.uuidString
-                    let libraryName = result.library.name
-                    
-                    try? realm.write {
-                        result.books.forEach { id in
-                            let idStr = id.description
-                            guard let obj = realm.object(
-                                ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: idStr)) else { return }
-                            guard let entryOptional = entries[idStr],
-                                  let entry = entryOptional,
-                                  let root = json[idStr] as? NSDictionary else {
-                                      // null data, treat as delted, update lastSynced to lastModified to prevent further actions
-                                      obj.lastSynced = obj.lastModified
-                                      return
-                                  }
-                            
-                            let needProcess = floor(obj.lastModified.timeIntervalSince1970) != floor(parseLastModified(entry.last_modified)?.timeIntervalSince1970 ?? 0)
-                            
-                            defer {
-                                let newBook = self.convert(library: result.library, bookRealm: obj)
-                                newBook.formats.forEach {
-                                    guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
-                                    readPosToLastReadPosition(book: newBook, format: format, formatInfo: $0.value)
-                                }
-                                
-                                if needProcess {
-                                    DispatchQueue.main.async {
-                                        self.booksInShelf[newBook.inShelfId] = newBook
-                                    }
-                                }
-                            }
-                            
-                            guard needProcess else { return }
-                            
-                            self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
-                            updated += 1
-                            self.defaultLog.info("Refreshed \(obj.id) \(result.library.id)")
-                        }
-                    }
-                    
-                    do {
-                        guard let annotationsData = result.annotationsData
-                        else { return }
-                        
-                        let annotationsResult = try JSONDecoder().decode([String:CalibreBookAnnotationsResult].self, from: annotationsData)
-                        
-                        annotationsResult.forEach { entry in
-//                            print("\(#function) annotationEntry=\(entry)")
-                            
-                            let keySplit = entry.key.split(separator: ":")
-                            guard keySplit.count == 2,
-                                  let bookId = Int32(keySplit[0]),
-                                  let format = Format(rawValue: String(keySplit[1]))
-                            else {
-                                return
-                            }
-                            
-                            guard let book = self.booksInShelf[CalibreBook(id: bookId, library: result.library).inShelfId]
-                            else { return }
-                            
-                            book.readPos.positions(added: entry.value.last_read_positions).forEach {
-                                guard let task = self.calibreServerService.buildSetLastReadPositionTask(
-                                    library: result.library,
-                                    bookId: bookId,
-                                    format: format,
-                                    entry: $0
-                                ) else { return }
-                                self.setLastReadPositionSubject.send(task)
-                            }
-                            
-                            var highlightPending = [CalibreBookAnnotationHighlightEntry]()
-                            var bookmarkPending = [CalibreBookAnnotationBookmarkEntry]()
-                            
-                            if book.readPos.highlights(added: entry.value.annotations_map.highlight ?? []) > 0 {
-                                let highlights = book.readPos.highlights(excludeRemoved: false).compactMap {
-                                    $0.toCalibreBookAnnotationHighlightEntry()
-                                }
-                                highlightPending.append(contentsOf: highlights)
-                            }
-                            
-                            if book.readPos.bookmarks(added: entry.value.annotations_map.bookmark ?? []) > 0 {
-                                let bookmarks = book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                                bookmarkPending.append(contentsOf: bookmarks)
-                            }
-                             
-                            if highlightPending.isEmpty == false || bookmarkPending.isEmpty == false,
-                               let task = self.calibreServerService.buildUpdateAnnotationsTask(
-                                library: result.library, bookId: bookId, format: format, highlights: highlightPending, bookmarks: bookmarkPending
-                               ) {
-                                self.updateAnnotationsSubject.send(task)
-                            }
-                        }
-                    } catch {
-                        print("\(#function) annotationEntry error=\(error)")
-                    }
-                }
-                
-                if updated > 0 || serverReachableChanged {
-                    self.calibreUpdatedSubject.send(.shelf)
-                }
-            })
     }
     
     func registerProbeServerCancellable() {
@@ -2114,7 +1860,6 @@ final class ModelData: ObservableObject {
             .map { request -> CalibreServerInfo in
                 if var info = self.calibreServerInfoStaging[request.id] {
                     info.probing = true
-                    info.reachable = false
                     info.errorMsg = "Connecting"
                     info.request = request
                     self.calibreServerInfoStaging[request.id] = info
@@ -2528,7 +2273,7 @@ final class ModelData: ObservableObject {
                             self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
                             result.booksUpdated.insert(obj.id)
                             if obj.inShelf {
-                                result.booksInShelf.insert(obj.id)
+                                result.booksInShelf.append(self.convert(library: result.library, bookRealm: obj))
                             }
                         } else {
                             // null data, treat as delted, update lastSynced to lastModified to prevent further actions
@@ -2549,43 +2294,31 @@ final class ModelData: ObservableObject {
                 }
                 
                 let serverUUID = result.library.server.uuid.uuidString
-                result.request.books.forEach { bookId in
-                    guard let book = self.booksInShelf[CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: result.library.name, id: bookId.description)]
-                    else { return }
-                    
+                result.booksInShelf.forEach { book in
                     book.formats.forEach { formatKey, formatInfo in
                         guard let format = Format(rawValue: formatKey),
-                              let entry = annotationsResult["\(bookId):\(formatKey)"]
+                              let entry = annotationsResult["\(book.id):\(formatKey)"]
                         else { return }
                         
                         book.readPos.positions(added: entry.last_read_positions).forEach {
                             guard let task = self.calibreServerService.buildSetLastReadPositionTask(
                                 library: result.library,
-                                bookId: bookId,
+                                bookId: book.id,
                                 format: format,
                                 entry: $0
                             ) else { return }
                             self.setLastReadPositionSubject.send(task)
                         }
                         
-                        var highlightPending = [CalibreBookAnnotationHighlightEntry]()
-                        var bookmarkPending = [CalibreBookAnnotationBookmarkEntry]()
-                        
-                        if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 {
-                            let highlights = book.readPos.highlights(excludeRemoved: false).compactMap {
-                                $0.toCalibreBookAnnotationHighlightEntry()
-                            }
-                            highlightPending.append(contentsOf: highlights)
-                        }
-                        
-                        if book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0 {
-                            let bookmarks = book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                            bookmarkPending.append(contentsOf: bookmarks)
-                        }
-                        
-                        if highlightPending.isEmpty == false || bookmarkPending.isEmpty == false,
+                        if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 || book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0,
                            let task = self.calibreServerService.buildUpdateAnnotationsTask(
-                            library: result.library, bookId: bookId, format: format, highlights: highlightPending, bookmarks: bookmarkPending
+                            library: result.library,
+                            bookId: book.id,
+                            format: format,
+                            highlights: book.readPos.highlights(excludeRemoved: false).compactMap {
+                                $0.toCalibreBookAnnotationHighlightEntry()
+                            },
+                            bookmarks: book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
                            ) {
                             self.updateAnnotationsSubject.send(task)
                         }
@@ -2617,12 +2350,7 @@ final class ModelData: ObservableObject {
                 
                 self.librarySyncStatus[result.library.id]?.isUpd = false
                 
-                let serverUUID = result.library.server.uuid.uuidString
-                result.booksInShelf.forEach { bookId in
-                    guard let obj = self.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: result.library.name, id: bookId.description))
-                    else { return }
-                    
-                    let newBook = self.convert(library: result.library, bookRealm: obj)
+                result.booksInShelf.forEach { newBook in
                     self.booksInShelf[newBook.inShelfId] = newBook
                     self.calibreUpdatedSubject.send(.book(newBook))
                 }

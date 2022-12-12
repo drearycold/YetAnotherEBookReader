@@ -1079,7 +1079,7 @@ struct CalibreBooksTask {
     var booksUpdated = Set<Int32>()
     var booksError = Set<Int32>()
     var booksDeleted = Set<Int32>()
-    var booksInShelf = Set<Int32>()
+    var booksInShelf = [CalibreBook]()
 }
 
 struct CalibreLibrarySearchTask {
