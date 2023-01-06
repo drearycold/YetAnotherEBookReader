@@ -96,6 +96,28 @@ extension ModelData {
                             )
                         )
                     )
+                    partialResult.insert(
+                        .init(
+                            libraryId: libraryEntry.key,
+                            criteria: .init(
+                                searchString: "",
+                                sortCriteria: .init(by: .Added, ascending: false),
+                                filterCriteriaCategory: [:],
+                                filterCriteriaLibraries: []
+                            )
+                        )
+                    )
+                    partialResult.insert(
+                        .init(
+                            libraryId: libraryEntry.key,
+                            criteria: .init(
+                                searchString: "",
+                                sortCriteria: .init(by: .Publication, ascending: false),
+                                filterCriteriaCategory: [:],
+                                filterCriteriaLibraries: []
+                            )
+                        )
+                    )
                 }
                 
                 self.booksInShelf.values.filter({ book in
@@ -155,7 +177,7 @@ extension ModelData {
 
                 if librarySearchKey.criteria.searchString == "",
                    librarySearchKey.criteria.hasEmptyFilter {
-                    let sectionId = "\(librarySearchKey)"
+                    let sectionId = "\(librarySearchKey.description)"
                     
                     let serverUUID = library.server.uuid.uuidString
                     
@@ -206,7 +228,7 @@ extension ModelData {
                     return emptyShelf
                 }
                 
-                let sectionId = "\(librarySearchKey)"
+                let sectionId = "\(librarySearchKey.description)"
                 
                 let serverUUID = library.server.uuid.uuidString
                 

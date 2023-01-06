@@ -91,6 +91,10 @@ struct LibrarySearchCriteriaResultMerged {
 struct LibrarySearchKey: Hashable {
     let libraryId: String
     let criteria: LibrarySearchCriteria
+    
+    var description: String {
+        "\(libraryId) || \(criteria)"
+    }
 }
 
 struct LibrarySearchResult {
@@ -540,7 +544,9 @@ extension CalibreServerService {
 //            }
             
             if let realm = try? Realm(configuration: modelData.realmConf) {
-                let allbooks = realm.objects(CalibreBookRealm.self).filter(libraryPredicate)
+                let allbooks = realm.objects(CalibreBookRealm.self)
+                    .filter(libraryPredicate)
+                    .sorted(byKeyPath: task.searchCriteria.sortCriteria.by.sortKeyPath, ascending: task.searchCriteria.sortCriteria.ascending)
                 let filteredBooks = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
                 
                 let offset = Int(urlComponents.queryItems?.first(where: { $0.name == "offset" })?.value ?? "0") ?? 0

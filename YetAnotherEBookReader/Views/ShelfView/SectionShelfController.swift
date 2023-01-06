@@ -34,6 +34,10 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     var generatingCancellable: AnyCancellable?
     var reloadShelfCancellable: AnyCancellable?
     
+    let topButton = UIButton(type: .system)
+    let topMenu = UIMenu(title: "Pick Library")
+    var librariesPicked = Set<String>()     //set of libraryId
+
     let refreshBarButtonItem = BarButtonItem()
     
     override var canBecomeFirstResponder: Bool {
@@ -144,7 +148,39 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         reloadShelfCancellable = modelData.discoverShelfModelSubject
             .receive(on: DispatchQueue.main)
             .sink { shelfModels in
-                self.shelfView.reloadBooks(bookModelSection: shelfModels)
+                let librarySet = Set<CalibreLibrary>(shelfModels.compactMap { shelfModel -> CalibreLibrary? in
+                    let sectionId = shelfModel.sectionId
+                    guard let sepRange = sectionId.range(of: " || ")
+                    else { return nil }
+                    
+                    let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
+                    return self.modelData.calibreLibraries[libraryId]
+                })
+                    
+                let topMenuItems = [
+                    UIAction(title: "    Reset") { action in
+                        self.librariesPicked.removeAll(keepingCapacity: true)
+                        self.modelData.discoverShelfModelSubject.send(self.modelData.bookModelSection)
+                    }
+                ] + librarySet.sorted(by: {
+                    $0.name < $1.name
+                })
+                .map { library -> UIAction in
+                    UIAction(title: (self.librariesPicked.contains(library.id) ? " ✓ " : "    " ) + library.name + " on " + library.server.name) { action in
+                        self.librariesPicked.formSymmetricDifference([library.id])
+                        self.modelData.discoverShelfModelSubject.send(self.modelData.bookModelSection)
+                    }
+                }
+                
+                self.topButton.menu = self.topMenu.replacingChildren(topMenuItems)
+                
+                self.shelfView.reloadBooks(bookModelSection: shelfModels.filter {
+                    let sectionId = $0.sectionId
+                    guard let sepRange = sectionId.range(of: " || ")
+                    else { return false }
+                    let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
+                    return self.librariesPicked.isEmpty || self.librariesPicked.contains(libraryId)
+                })
             }
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
@@ -154,6 +190,11 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         navBarScrollApp.backgroundImage = navBarBackgroundImage
         self.navigationController?.navigationBar.standardAppearance = navBarScrollApp
         self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
+        
+        topButton.setTitle("Libraries", for: .normal)
+        topButton.menu = topMenu
+        topButton.showsMenuAsPrimaryAction = true
+        self.navigationItem.titleView = topButton
         
         refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
             self.modelData.calibreUpdatedSubject.send(.shelf)
