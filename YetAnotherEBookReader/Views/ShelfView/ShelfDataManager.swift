@@ -84,6 +84,20 @@ extension ModelData {
             .receive(on: ModelData.SearchLibraryResultsRealmQueue)
             .sink { signals in
                 let signalSet = Set<calibreUpdatedSignal>(signals)
+                let librarySearchKeys = self.calibreLibraries.reduce(into: Set<LibrarySearchKey>()) { partialResult, libraryEntry in
+                    partialResult.insert(
+                        .init(
+                            libraryId: libraryEntry.key,
+                            criteria: .init(
+                                searchString: "",
+                                sortCriteria: .init(by: .Modified, ascending: false),
+                                filterCriteriaCategory: [:],
+                                filterCriteriaLibraries: []
+                            )
+                        )
+                    )
+                }
+                
                 self.booksInShelf.values.filter({ book in
                     book.library.server.isLocal == false &&
                     (
@@ -93,7 +107,7 @@ extension ModelData {
                         signalSet.contains(.library(book.library)) ||
                         signalSet.contains(.server(book.library.server))
                     )
-                }).reduce(into: Set<LibrarySearchKey>()) { libraryKeys, book in
+                }).reduce(into: librarySearchKeys) { libraryKeys, book in
                     if let author = book.authors.first {
                         libraryKeys.insert(.init(
                             libraryId: book.library.id,
@@ -131,15 +145,51 @@ extension ModelData {
             .receive(on: ModelData.SearchLibraryResultsRealmQueue)
             .map { librarySearchKey -> ShelfModelSection in
                 let emptyShelf = ShelfModelSection(sectionName: "", sectionId: "", sectionShelf: [])
-                guard librarySearchKey.criteria.filterCriteriaCategory.count == 1,
-                      let categoryFilter = librarySearchKey.criteria.filterCriteriaCategory.first,
-                      categoryFilter.value.count == 1,
-                      let categoryFilterValue = categoryFilter.value.first,
-                      let library = self.calibreLibraries[librarySearchKey.libraryId],
+                
+                guard let library = self.calibreLibraries[librarySearchKey.libraryId],
                       library.hidden == false,
                       library.discoverable == true,
                       let result = self.searchLibraryResults[librarySearchKey],
                       let realm = try? Realm(configuration: self.realmConf)
+                else { return emptyShelf }
+
+                if librarySearchKey.criteria.searchString == "",
+                   librarySearchKey.criteria.hasEmptyFilter {
+                    let sectionId = "\(librarySearchKey)"
+                    
+                    let serverUUID = library.server.uuid.uuidString
+                    
+                    let sectionShelf = result.bookIds.compactMap { bookId -> ShelfModel? in
+                        let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
+                        
+                        guard realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)?.inShelf != true else { return nil }
+                        
+                        guard let bookRealm = self.searchLibraryResultsRealmQueue?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
+                        else { return nil }
+                        
+                        let book = self.convert(library: library, bookRealm: bookRealm)
+                        
+                        return ShelfModel(
+                            bookCoverSource: book.coverURL?.absoluteString ?? ".",
+                            bookId: book.inShelfId,
+                            bookTitle: book.title,
+                            bookProgress: Int(
+                                book.readPos.getDevices().max { lhs, rhs in
+                                    lhs.lastProgress < rhs.lastProgress
+                                }?.lastProgress ?? 0.0),
+                            bookStatus: .READY,
+                            sectionId: sectionId
+                        )
+                    }
+                    
+                    let sectionName = "\(librarySearchKey.criteria.sortCriteria.description) in \(library.name)"
+                    
+                    return ShelfModelSection(sectionName: sectionName, sectionId: sectionId, sectionShelf: sectionShelf)
+                }
+                guard librarySearchKey.criteria.filterCriteriaCategory.count == 1,
+                      let categoryFilter = librarySearchKey.criteria.filterCriteriaCategory.first,
+                      categoryFilter.value.count == 1,
+                      let categoryFilterValue = categoryFilter.value.first
                 else { return emptyShelf }
                 
                 switch categoryFilter.key {

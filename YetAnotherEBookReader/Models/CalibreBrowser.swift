@@ -12,6 +12,10 @@ import Combine
 struct LibrarySearchSort: Hashable {
     var by = SortCriteria.Modified
     var ascending = false
+    
+    var description: String {
+        "\(ascending ? "First" : "Last") \(by.description)"
+    }
 }
 
 enum SortCriteria: String, CaseIterable, Identifiable {
@@ -696,7 +700,7 @@ extension CalibreServerService {
                 return task
             }
             .sink(receiveCompletion: { completion in
-                
+                print("\(#function) error \(completion)")
             }, receiveValue: { task in
                 guard let searchCriteria = task.searchTask?.searchCriteria else { return }
                 
