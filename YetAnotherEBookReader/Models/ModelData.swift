@@ -2253,7 +2253,7 @@ final class ModelData: ObservableObject {
             }
             .receive(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
-                
+                self.calibreUpdatedSubject.send(.shelf)
                 print("getBookMetadataCancellable error \(completion)")
             }, receiveValue: { result in
                 let booksHandled = result.booksUpdated.union(result.booksError).union(result.booksDeleted)
