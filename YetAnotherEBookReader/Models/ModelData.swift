@@ -2151,23 +2151,29 @@ final class ModelData: ObservableObject {
                 return request
             }
             .receive(on: DispatchQueue.global(qos: .userInitiated))
-            .flatMap { request -> AnyPublisher<CalibreBooksTask, URLError> in
+            .flatMap { request -> AnyPublisher<CalibreBooksTask, Never> in
                 let books = request.books.map { bookId -> CalibreBook in
                     let book = CalibreBook(id: bookId, library: request.library)
                     return self.booksInShelf[book.inShelfId] ?? book
                 }
                     
                 if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) {
-                    return self.calibreServerService.getBooksMetadata(task: task)
+                    return self.calibreServerService
+                        .getBooksMetadata(task: task)
+                        .replaceError(with: task)
+                        .eraseToAnyPublisher()
                 } else {
-                    return Just(CalibreBooksTask(request: request, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                    return Just(CalibreBooksTask(request: request, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
             }
-            .flatMap { task -> AnyPublisher<CalibreBooksTask, URLError> in
+            .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
                 if task.request.getAnnotations {
-                    return self.calibreServerService.getAnnotations(task: task)
+                    return self.calibreServerService
+                        .getAnnotations(task: task)
+                        .replaceError(with: task)
+                        .eraseToAnyPublisher()
                 } else {
-                    return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                    return Just(task).setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
             }
             .receive(on: ModelData.SaveBooksMetadataRealmQueue)
@@ -2217,7 +2223,6 @@ final class ModelData: ObservableObject {
                     return result
                 }
                 
-                let serverUUID = result.library.server.uuid.uuidString
                 result.booksInShelf.forEach { book in
                     book.formats.forEach { formatKey, formatInfo in
                         guard let format = Format(rawValue: formatKey),
@@ -2252,10 +2257,7 @@ final class ModelData: ObservableObject {
                 return result
             }
             .receive(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                self.calibreUpdatedSubject.send(.shelf)
-                print("getBookMetadataCancellable error \(completion)")
-            }, receiveValue: { result in
+            .sink { result in
                 let booksHandled = result.booksUpdated.union(result.booksError).union(result.booksDeleted)
                 
                 self.librarySyncStatus[result.library.id]?.upd.subtract(booksHandled)
@@ -2279,17 +2281,17 @@ final class ModelData: ObservableObject {
                     self.calibreUpdatedSubject.send(.book(newBook))
                 }
                 
-                if result.booksUpdated.count == 1,
+                if result.request.books.count == 1,
                    let book = self.getBook(
                     for: CalibreBookRealm.PrimaryKey(
                         serverUUID: result.library.server.uuid.uuidString,
                         libraryName: result.library.name,
-                        id: result.booksUpdated.first!.description
+                        id: result.request.books.first!.description
                     )
                    ) {
                     self.calibreUpdatedSubject.send(.book(book))
                 }
-            }).store(in: &calibreCancellables)
+            }.store(in: &calibreCancellables)
     }
     
     func registerSetLastReadPositionCancellable() {
