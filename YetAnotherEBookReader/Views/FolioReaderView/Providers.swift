@@ -667,6 +667,8 @@ fileprivate extension BookHighlight {
         highlight.cfiEnd = cfiEnd
         highlight.spineName = spineName
         
+        highlight.style = FolioReaderHighlightStyle.classForStyle(type)
+        
         return highlight
     }
 }
