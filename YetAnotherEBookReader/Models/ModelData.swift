@@ -1935,15 +1935,15 @@ final class ModelData: ObservableObject {
             }
             .receive(on: DispatchQueue.global())
             .flatMap { result -> AnyPublisher<CalibreSyncLibraryResult, Never> in
-                guard result.result["just_syncing"] == nil,
-                      result.result["auto_update"] == nil else {
+                guard result.request.library.hidden == false,
+                      result.result["just_syncing"] == nil else {
                     return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
                 }
                 
                 return self.calibreServerService.getLibraryCategoriesPublisher(resultPrev: result)
             }
             .flatMap { result -> AnyPublisher<CalibreSyncLibraryResult, Never> in
-                print("\(#function) syncLibraryPublisher \(result.request.library.id) \(result.categories)")
+                print("\(#function) syncLibraryPublisher categories \(result.request.library.id) \(result.categories)")
                 guard result.result["just_syncing"] == nil,
                       result.result["auto_update"] == nil else {
                     return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
@@ -1964,7 +1964,7 @@ final class ModelData: ObservableObject {
                     let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
                     filter = "last_modified:\">=\(lastModifiedStr)\""
                 }
-                print("\(#function) syncLibraryPublisher \(result.request.library.id) \(filter)")
+                print("\(#function) syncLibraryPublisher filter \(result.request.library.id) \(filter)")
                 
                 return self.calibreServerService.syncLibraryPublisher(resultPrev: result, filter: filter)
             }

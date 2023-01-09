@@ -115,7 +115,7 @@ struct AddModServerView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
-                        Text(modelData.getServerInfo(server: server)?.errorMsg ?? "Unknown")
+                        Text(calibreServerInfo?.errorMsg ?? "Unknown")
                     }
                     
                     if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
@@ -198,7 +198,7 @@ struct AddModServerView: View {
     
     @ViewBuilder
     func serverCalibreInfoSheetView() -> some View {
-        List {
+        Form {
             Section(header: Text("Server Status")) {
                 if let serverInfo = calibreServerInfo {
                     Text(serverInfo.errorMsg)
@@ -207,13 +207,24 @@ struct AddModServerView: View {
                 }
             }
             
-            Section {
-                if modelData.getServerInfo(server: server)?.errorMsg == "Success" {
-                    Toggle(isOn: $calibreServerOffline) {
-                        Text("Offline Browsable")
+            if calibreServerInfo?.errorMsg == "Success" {
+                Section {
+                    HStack {
+                        Toggle(isOn: $calibreServerOffline) {
+                            Text("Offline Browsable")
+                        }
+                        Button {
+                            
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                        }.buttonStyle(.borderless)
                     }
+                } header: {
+                    Text("Options")
                 }
-                
+            }
+            
+            Section {
                 Button(action: {
                     serverCalibreInfoPresenting = false
                 }) {
@@ -235,7 +246,7 @@ struct AddModServerView: View {
                     } else {
                         Text("OK")
                     }
-                }.disabled(modelData.getServerInfo(server: server)?.errorMsg != "Success")
+                }.disabled(calibreServerInfo?.errorMsg != "Success")
             }
             
             Section(header: Text("Library List")) {
