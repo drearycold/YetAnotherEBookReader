@@ -11,7 +11,7 @@ import UIKit
 import GoogleMobileAds
 #endif
 
-final private class BannerVC: UIViewControllerRepresentable  {
+private struct BannerVC: UIViewControllerRepresentable  {
 
     let adUnitID: String
     

@@ -49,6 +49,8 @@ struct AddModServerView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
+    @State private var popoverForOfflineBrowsable = false
+    
     @State private var updater = 0
     
     var defaultLog = Logger()
@@ -180,9 +182,13 @@ struct AddModServerView: View {
                         modServerConfirmButtonAction()
                     }
                 }) {
-                    Image(systemName: "square.and.arrow.down")
+                    if self.probeServerResultCancellable != nil {
+                        ProgressView().progressViewStyle(.circular)
+                    } else {
+                        Image(systemName: "square.and.arrow.down")
+                    }
                 }
-                .disabled(modelData.isServerProbing(server: server))
+                .disabled(self.probeServerResultCancellable != nil)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -214,10 +220,15 @@ struct AddModServerView: View {
                             Text("Offline Browsable")
                         }
                         Button {
-                            
+                            popoverForOfflineBrowsable = true
                         } label: {
                             Image(systemName: "questionmark.circle")
                         }.buttonStyle(.borderless)
+                            .popover(isPresented: $popoverForOfflineBrowsable) {
+                                Text("If enabled, you can browse and search for books when server is not reachable.\nNeed some time to sync book metadata after server is added.")
+                                    .lineLimit(nil)
+                                    .padding()
+                            }
                     }
                 } header: {
                     Text("Options")
@@ -365,6 +376,14 @@ struct AddModServerView: View {
                 calibreServerName = "Unnamed"
             }
         }
+        
+        if let existingServer = modelData.calibreServers.values.first(where: { server in
+            server.baseUrl == calibreServerUrl && server.username == calibreUsername
+        }) {
+            alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
+            return
+        }
+
         calibreServerUUID = .init()
         let calibreServer = CalibreServer(
             uuid: calibreServerUUID,
@@ -376,11 +395,7 @@ struct AddModServerView: View {
             username: calibreUsername,
             password: calibrePassword
         )
-        if let existingServer = modelData.calibreServers[calibreServer.id] {
-            alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
-            return
-        }
-
+        
         calibreServerOffline = false
 //        modelData.calibreServerUpdating = true
 //        if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
@@ -391,6 +406,7 @@ struct AddModServerView: View {
 //        }
         
         enableProbeServerCancellable()
+        
         modelData.probeServerSubject.send(.init(server: calibreServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
     }
     
@@ -485,6 +501,7 @@ struct AddModServerView: View {
     
     private func disableProbeServerCancellable() {
         self.probeServerResultCancellable?.cancel()
+        self.probeServerResultCancellable = nil
         self.calibreServerInfo = nil
     }
 }

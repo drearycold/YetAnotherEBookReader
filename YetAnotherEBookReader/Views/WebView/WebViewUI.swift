@@ -39,7 +39,9 @@ struct WebViewUI : UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: WKWebView, context: Context) {
-        uiView.loadHTMLString(headerString + content, baseURL: baseURL)
+        DispatchQueue.main.async {
+            uiView.loadHTMLString(headerString + content, baseURL: baseURL)
+        }
 //        print("WebViewUI \(content) \(baseURL?.absoluteString)")
     }
     
