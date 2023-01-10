@@ -171,7 +171,7 @@ final class ModelData: ObservableObject {
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
 
     lazy var calibreServerService = CalibreServerService(modelData: self)
-    @Published var metadataSessions = [String: URLSession]()
+    @Published var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
 
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
@@ -233,6 +233,9 @@ final class ModelData: ObservableObject {
         downloadService.modelData = self
         
         self.reloadCustomFonts()
+        
+//        calibreServerService.defaultUrlSessionConfiguration.timeoutIntervalForRequest = 600
+//        calibreServerService.defaultUrlSessionConfiguration.httpMaximumConnectionsPerHost = 2
         
         registerProbeServerCancellable()
         registerProbeServerResult()
@@ -1779,6 +1782,7 @@ final class ModelData: ObservableObject {
     }
     
     func registerProbeServerCancellable() {
+        let queue = DispatchQueue(label: "probe-server", qos: .userInitiated)
         probeServerSubject
             .receive(on: DispatchQueue.main)
             .map { request -> CalibreServerInfo in
@@ -1802,7 +1806,7 @@ final class ModelData: ObservableObject {
                     return info
                 }
             }
-            .receive(on: DispatchQueue.global())
+            .receive(on: queue)
             .flatMap { serverInfo -> AnyPublisher<CalibreServerInfo, Never> in
                 self.calibreServerService.probeServerReachabilityNew(serverInfo: serverInfo)
             }
@@ -1867,8 +1871,9 @@ final class ModelData: ObservableObject {
     }
     
     func registerSyncServerHelperConfigCancellable() {
+        let queue = DispatchQueue(label: "sync-server-helper", qos: .userInitiated)
         syncServerHelperConfigSubject
-            .receive(on: DispatchQueue.global())
+            .receive(on: queue)
             .flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
                 if let server = self.calibreServers[serverId],
                    let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
@@ -1902,6 +1907,7 @@ final class ModelData: ObservableObject {
     }
     
     func registerSyncLibraryCancellable() {
+        let queue = DispatchQueue(label: "sync-library", qos: .userInitiated)
         syncLibrarySubject
             .receive(on: DispatchQueue.main)
             .flatMap { request -> AnyPublisher<CalibreSyncLibraryResult, Never> in
@@ -1933,7 +1939,7 @@ final class ModelData: ObservableObject {
 
                 return self.calibreServerService.getCustomColumnsPublisher(request: request)
             }
-            .receive(on: DispatchQueue.global())
+            .receive(on: queue)
             .flatMap { result -> AnyPublisher<CalibreSyncLibraryResult, Never> in
                 guard result.request.library.hidden == false,
                       result.result["just_syncing"] == nil else {
@@ -2144,13 +2150,14 @@ final class ModelData: ObservableObject {
     }
     
     func registerGetBooksMetadataCancellable() {
+        let queue = DispatchQueue(label: "get-books-metadata", qos: .userInitiated)
         getBooksMetadataSubject
             .receive(on: DispatchQueue.main)
             .map { request -> CalibreBooksMetadataRequest in
                 self.librarySyncStatus[request.library.id]?.isUpd = true
                 return request
             }
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: queue)
             .flatMap { request -> AnyPublisher<CalibreBooksTask, Never> in
                 let books = request.books.map { bookId -> CalibreBook in
                     let book = CalibreBook(id: bookId, library: request.library)
@@ -2295,25 +2302,28 @@ final class ModelData: ObservableObject {
     }
     
     func registerSetLastReadPositionCancellable() {
+        let queue = DispatchQueue(label: "set-last-read-position", qos: .userInitiated)
         setLastReadPositionSubject
             .eraseToAnyPublisher()
+            .receive(on: queue)
             .flatMap { task in
                 return self.calibreServerService.setLastReadPositionByTask(task: task)
             }
-            .subscribe(on: DispatchQueue.global())
             .sink(receiveValue: { output in
                 print("\(#function) output=\(output)")
             }).store(in: &calibreCancellables)
     }
     
     func registerUpdateAnnotationsCancellable() {
+        let queue = DispatchQueue(label: "update-annotations", qos: .userInitiated)
         updateAnnotationsSubject
             .eraseToAnyPublisher()
+            .receive(on: queue)
             .flatMap { task -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> in
                 self.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
                 return self.calibreServerService.updateAnnotationByTask(task: task)
             }
-            .subscribe(on: DispatchQueue.global())
+            .receive(on: DispatchQueue.main)
             .sink(
                 receiveCompletion: { completion in
                     print("updateAnnotations \(completion)")

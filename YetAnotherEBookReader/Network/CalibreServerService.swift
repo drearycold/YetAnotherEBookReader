@@ -15,22 +15,23 @@ struct CalibreServerService {
     var defaultLog = Logger()
 
     func urlSession(server: CalibreServer, timeout: Double = 600) -> URLSession {
-        if let session = modelData.metadataSessions[server.id] {
+        let key = CalibreServerURLSessionKey(server: server, timeout: timeout)
+        if let session = modelData.metadataSessions[key] {
             return session
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
         urlSessionConfiguration.timeoutIntervalForRequest = timeout
-        urlSessionConfiguration.httpMaximumConnectionsPerHost = 2
+        urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
         let urlSessionDelegate = CalibreServerTaskDelegate(server)
         let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
         
-//        if Thread.isMainThread {
-//            modelData.metadataSessions[server.id] = urlSession
-//        } else {
-//            DispatchQueue.main.sync {
-//                modelData.metadataSessions[server.id] = urlSession
-//            }
-//        }
+        if Thread.isMainThread {
+            modelData.metadataSessions[key] = urlSession
+        } else {
+            DispatchQueue.main.sync {
+                modelData.metadataSessions[key] = urlSession
+            }
+        }
         return urlSession
     }
     
@@ -1145,6 +1146,11 @@ struct CalibreServerService {
             }
             .eraseToAnyPublisher()
     }
+}
+
+struct CalibreServerURLSessionKey: Hashable, Equatable {
+    let server: CalibreServer
+    let timeout: Double
 }
 
 struct CalibreServerLibraryInfo: Codable {

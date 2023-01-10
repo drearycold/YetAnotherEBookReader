@@ -571,8 +571,8 @@ extension CalibreServerService {
     }
     
     func registerLibrarySearchHandler() {
+        let queue = DispatchQueue(label: "library-search", qos: .userInitiated)
         modelData.librarySearchSubject
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
             .receive(on: DispatchQueue.main)
             .compactMap { librarySearchKey -> CalibreLibrarySearchTask? in
                 guard let library = modelData.calibreLibraries[librarySearchKey.libraryId]
@@ -600,7 +600,7 @@ extension CalibreServerService {
                 
                 return task
             }
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: queue)
             .flatMap({ task -> AnyPublisher<CalibreLibrarySearchTask, Never> in
                 var errorTask = task
                 errorTask.ajaxSearchError = true
@@ -643,7 +643,7 @@ extension CalibreServerService {
                 
                 return buildBooksMetadataTask(library: task.library, books: books, searchTask: task)
             }
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: queue)
             .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in
                 modelData.calibreServerService.getBooksMetadata(task: task)
                     .replaceError(with: task)
@@ -849,8 +849,9 @@ extension CalibreServerService {
     }
     
     func registerLibraryCategoryHandler() {
+        let queue = DispatchQueue.init(label: "library-category", qos: .userInitiated)
         modelData.libraryCategorySubject
-            .receive(on: DispatchQueue.global())
+            .receive(on: queue)
             .flatMap { request -> AnyPublisher<LibraryCategoryList, Never> in
                 let just = Just(request).setFailureType(to: Never.self).eraseToAnyPublisher()
                 guard let serverUrl = getServerUrlByReachability(server: request.library.server)
@@ -936,8 +937,9 @@ extension CalibreServerService {
     }
     
     func registerLibraryCategoryMergeHandler() {
+        let queue = DispatchQueue(label: "library-category-merge", qos: .userInitiated)
         modelData.libraryCategoryMergeSubject
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: queue)
             .map { categoryName -> (String, [String]) in
                 (
                     categoryName,
@@ -951,7 +953,7 @@ extension CalibreServerService {
                         .sorted()
                  )
             }
-            .subscribe(on: DispatchQueue.main)
+            .receive(on: DispatchQueue.main)
             .sink { entry in
                 modelData.calibreLibraryCategoryMerged[entry.0] = entry.1
                 

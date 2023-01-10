@@ -11,9 +11,10 @@ import RealmSwift
 
 extension ModelData {
     func registerRecentShelfUpdater() {
+        let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
         self.calibreUpdatedSubject
             .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .receive(on: queue)
             .map { signals -> [(key: String, value: CalibreBook)] in
                 self.booksInShelf
                     .sorted {
