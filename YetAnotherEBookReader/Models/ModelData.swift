@@ -2150,7 +2150,7 @@ final class ModelData: ObservableObject {
     }
     
     func registerGetBooksMetadataCancellable() {
-        let queue = DispatchQueue(label: "get-books-metadata", qos: .userInitiated)
+        let queue = DispatchQueue(label: "get-books-metadata", qos: .userInitiated, attributes: [.concurrent])
         getBooksMetadataSubject
             .receive(on: DispatchQueue.main)
             .map { request -> CalibreBooksMetadataRequest in
