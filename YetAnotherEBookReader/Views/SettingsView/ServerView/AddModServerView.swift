@@ -12,6 +12,7 @@ import Combine
 struct AddModServerView: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.openURL) var openURL
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     @Binding var server: CalibreServer
     @Binding var isActive: Bool
@@ -21,7 +22,6 @@ struct AddModServerView: View {
     @State private var calibreServerName = ""
     @State private var calibreServerUrl = ""
     @State private var calibreServerUrlWelformed = ""
-    @State private var calibreServerOffline = false
     
     @State private var calibreServerUrlPublic = ""
     @State private var calibreServerSetPublicAddress = false
@@ -49,6 +49,13 @@ struct AddModServerView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
+    //library control
+    @State private var calibreServerDiscover = true
+    @State private var calibreServerOffline = false
+    @State private var calibreTweakEachLibrary = false
+    @State private var calibreLibraryOptions = [String: (discover: Bool, offline: Bool)]()
+    
+    @State private var popoverForDiscover = false
     @State private var popoverForOfflineBrowsable = false
     
     @State private var updater = 0
@@ -56,6 +63,18 @@ struct AddModServerView: View {
     var defaultLog = Logger()
     
     @State private var alertItem: AlertItem?
+    
+    fileprivate func processInputAction() {
+        if server.baseUrl.isEmpty {
+            dataAction = "Add"
+            processUrlInputs()
+            addServerConfirmButtonAction()
+        } else {
+            dataAction = "Mod"
+            processUrlInputs()
+            modServerConfirmButtonAction()
+        }
+    }
     
     var body: some View {
         Form {
@@ -172,15 +191,7 @@ struct AddModServerView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
-                    if server.baseUrl.isEmpty {
-                        dataAction = "Add"
-                        processUrlInputs()
-                        addServerConfirmButtonAction()
-                    } else {
-                        dataAction = "Mod"
-                        processUrlInputs()
-                        modServerConfirmButtonAction()
-                    }
+                    processInputAction()
                 }) {
                     if self.probeServerResultCancellable != nil {
                         ProgressView().progressViewStyle(.circular)
@@ -216,20 +227,96 @@ struct AddModServerView: View {
             if calibreServerInfo?.errorMsg == "Success" {
                 Section {
                     HStack {
-                        Toggle(isOn: $calibreServerOffline) {
-                            Text("Offline Browsable")
+                        Toggle(isOn: $calibreTweakEachLibrary) {
+                            Text("Set for each library")
                         }
+                    }
+                    
+                    HStack {
+                        if calibreTweakEachLibrary {
+                            Text("Toggle All Discover Option")
+                            Spacer()
+                            Button {
+                                calibreLibraryOptions.keys.forEach {
+                                    calibreLibraryOptions[$0]?.discover = true
+                                }
+                            } label: {
+                                Text("On")
+                            }
+                            Divider()
+                            Button {
+                                calibreLibraryOptions.keys.forEach {
+                                    calibreLibraryOptions[$0]?.discover = false
+                                }
+                            } label: {
+                                Text("Off")
+                            }
+                        } else {
+                            Toggle(isOn: $calibreServerDiscover) {
+                                Text("Show in Discover")
+                            }
+                            .disabled(calibreTweakEachLibrary)
+                        }
+                        
+                        Divider()
+                        
+                        Button {
+                            popoverForDiscover = true
+                        } label: {
+                            Image(systemName: "questionmark.circle")
+                        }
+                        .popover(isPresented: $popoverForDiscover) {
+                            Text("If enabled, \"Discover\" tab will be populated by newly added/modified books and more books based on current reading authors/series/etc. for each library .")
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(9)
+                                .padding()
+                                .frame(width: horizontalSizeClass == .compact ? 350 : 500, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    
+                    HStack {
+                        if calibreTweakEachLibrary {
+                            Text("Toggle All Offline Option")
+                            Spacer()
+                            Button {
+                                calibreLibraryOptions.keys.forEach {
+                                    calibreLibraryOptions[$0]?.offline = true
+                                }
+                            } label: {
+                                Text("On")
+                            }
+                            Divider()
+                            Button {
+                                calibreLibraryOptions.keys.forEach {
+                                    calibreLibraryOptions[$0]?.offline = false
+                                }
+                            } label: {
+                                Text("Off")
+                            }
+                        } else {
+                            Toggle(isOn: $calibreServerOffline) {
+                                Text("Offline Browsable")
+                            }
+                            .disabled(calibreTweakEachLibrary)
+                        }
+                        
+                        Divider()
+                        
                         Button {
                             popoverForOfflineBrowsable = true
                         } label: {
                             Image(systemName: "questionmark.circle")
-                        }.buttonStyle(.borderless)
-                            .popover(isPresented: $popoverForOfflineBrowsable) {
-                                Text("If enabled, you can browse and search for books when server is not reachable.\nNeed some time to sync book metadata after server is added.")
-                                    .lineLimit(nil)
-                                    .padding()
-                            }
+                        }
+                        .popover(isPresented: $popoverForOfflineBrowsable) {
+                            Text("If enabled, you can browse and search for books when server is not reachable.Need some time to sync book metadata after server is added.")
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(9)
+                                .padding()
+                                .frame(width: horizontalSizeClass == .compact ? 350 : 500, alignment: .leading)
+                        }
                     }
+                    .buttonStyle(.borderless)
                 } header: {
                     Text("Options")
                 }
@@ -240,6 +327,15 @@ struct AddModServerView: View {
                     serverCalibreInfoPresenting = false
                 }) {
                     Text("Cancel")
+                }
+                
+                if calibreServerInfo?.errorMsg != "Success" {
+                    Button {
+                        calibreServerInfo?.errorMsg = "Connecting..."
+                        processInputAction()
+                    } label: {
+                        Text("Retry")
+                    }
                 }
                 
                 Button(action: {
@@ -263,8 +359,37 @@ struct AddModServerView: View {
             Section(header: Text("Library List")) {
                 if let serverInfo = calibreServerInfo,
                    serverInfo.errorMsg == "Success" {
-                    ForEach(serverInfo.libraryMap.values.sorted(), id: \.self) {
-                        Text($0)
+                    ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
+                        Text(libraryEntry.value)
+                        if calibreTweakEachLibrary {
+                            HStack {
+                                Toggle(isOn: Binding<Bool>(get: {
+                                    calibreLibraryOptions[libraryEntry.key]?.discover ?? calibreServerDiscover
+                                }, set: { newValue in
+                                    calibreLibraryOptions[libraryEntry.key]?.discover = newValue
+                                })) {
+                                    Text("Discover")
+                                }
+                                
+                                Divider()
+                                
+                                Toggle(isOn: Binding<Bool>(get: {
+                                    calibreLibraryOptions[libraryEntry.key]?.offline ?? calibreServerOffline
+                                }, set: { newValue in
+                                    calibreLibraryOptions[libraryEntry.key]?.offline = newValue
+                                })) {
+                                    Text("Offline")
+                                }
+                            }
+                        }
+//                        HStack {
+//                            Text($0.value)
+//                            if calibreTweakEachLibrary {
+//                                Toggle(isOn: $calibreLibraryOptions[$0.key]!.discover) {
+//                                    Text("")
+//                                }
+//                            }
+//                        }
                     }
                 } else {
                     Text("Cannot Fetch Library List")
@@ -417,9 +542,17 @@ struct AddModServerView: View {
         newServer.defaultLibrary = serverInfo.defaultLibrary
         newServer.lastLibrary = serverInfo.defaultLibrary
         
-        let libraries = serverInfo.libraryMap
+        let libraries: [CalibreLibrary] = serverInfo.libraryMap
             .sorted { $0.key < $1.key }
-            .map { CalibreLibrary(server: serverInfo.server, key: $0, name: $1, autoUpdate: calibreServerOffline) }
+            .map {
+                .init(
+                    server: serverInfo.server,
+                    key: $0,
+                    name: $1,
+                    autoUpdate: calibreTweakEachLibrary ? (calibreLibraryOptions[$0]?.offline ?? calibreServerOffline) : calibreServerOffline,
+                    discoverable: calibreTweakEachLibrary ? (calibreLibraryOptions[$0]?.discover ?? calibreServerDiscover) : calibreServerDiscover
+                )
+            }
         
         modelData.addServer(server: newServer, libraries: libraries)
         if let url = URL(string: newServer.baseUrl) {
@@ -494,6 +627,11 @@ struct AddModServerView: View {
         self.probeServerResultCancellable = modelData.probeServerResultSubject
             .receive(on: DispatchQueue.main)
             .sink { serverInfo in
+                serverInfo.libraryMap.filter {
+                    calibreLibraryOptions[$0.key] == nil
+                }.forEach {
+                    calibreLibraryOptions[$0.key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
+                }
                 self.calibreServerInfo = serverInfo
                 self.serverCalibreInfoPresenting = true
             }
