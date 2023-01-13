@@ -28,6 +28,8 @@ final class ModelData: ObservableObject {
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
     
     @Published var calibreLibraries = [String: CalibreLibrary]()
+    @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
+    
     @Published var calibreLibraryCategories = [CalibreLibraryCategoryKey: CalibreLibraryCategoryValue]()
     @Published var calibreLibraryCategoryMerged = [String: [String]]()
     
@@ -175,6 +177,7 @@ final class ModelData: ObservableObject {
 
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
+    let probeLibrarySubject = PassthroughSubject<CalibreProbeLibraryRequest, Never>()
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
     
     let syncLibrarySubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
@@ -239,6 +242,7 @@ final class ModelData: ObservableObject {
         
         registerProbeServerCancellable()
         registerProbeServerResult()
+        registerProbeLibraryCancellable()
         registerSyncLibraryCancellable()
         registerSaveBooksMetadataCancellable()
         registerGetBooksMetadataCancellable()
@@ -1783,8 +1787,7 @@ final class ModelData: ObservableObject {
     
     func registerProbeServerCancellable() {
         let queue = DispatchQueue(label: "probe-server", qos: .userInitiated)
-        probeServerSubject
-            .receive(on: DispatchQueue.main)
+        probeServerSubject.receive(on: DispatchQueue.main)
             .map { request -> CalibreServerInfo in
                 if var info = self.calibreServerInfoStaging[request.id] {
                     info.probing = true
@@ -1833,8 +1836,7 @@ final class ModelData: ObservableObject {
     }
     
     func registerProbeServerResult() {
-        probeServerResultSubject
-            .receive(on: DispatchQueue.main)
+        probeServerResultSubject.receive(on: DispatchQueue.main)
             .filter {
                 $0.server.isLocal == false && $0.request.updateLibrary
             }
@@ -1868,6 +1870,37 @@ final class ModelData: ObservableObject {
                 
                 //TODO refresh shelf
             }.store(in: &calibreCancellables)
+    }
+    
+    func registerProbeLibraryCancellable() {
+        let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
+        probeLibrarySubject.receive(on: queue)
+            .flatMap { request -> AnyPublisher<CalibreLibraryProbeTask, Never> in
+                if let task = self.calibreServerService.buildProbeLibraryTask(library: request.library) {
+                    return self.calibreServerService.urlSession(server: task.library.server).dataTaskPublisher(for: task.probeUrl)
+                        .map { response -> CalibreLibraryProbeTask in
+                            var task = task
+                            task.probeResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: response.data)
+                
+                            return task
+                        }
+                        .replaceError(with: task)
+                        .eraseToAnyPublisher()
+                } else {
+                    return Just(CalibreLibraryProbeTask(library: request.library, probeUrl: .init(fileURLWithPath: "/realm"), probeResult: nil))
+                        .setFailureType(to: Never.self)
+                        .eraseToAnyPublisher()
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { task in
+                if let probeResult = task.probeResult {
+                    self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: probeResult.total_num, errorMessage: "Success")
+                } else {
+                    self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: 0, errorMessage: "Failed")
+                }
+            }
+            .store(in: &calibreCancellables)
     }
     
     func registerSyncServerHelperConfigCancellable() {

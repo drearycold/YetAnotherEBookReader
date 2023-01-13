@@ -775,6 +775,38 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
+    func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {
+        guard let serverUrl =
+                modelData.librarySyncStatus[library.id]?.isError == true
+                ? URL(fileURLWithPath: "/realm")
+                : (
+                    getServerUrlByReachability(server: library.server) ?? (
+                        (library.autoUpdate || library.server.isLocal)
+                        ? URL(fileURLWithPath: "/realm")
+                        : nil
+                    )
+                )
+        else { return nil }
+        
+        var probeUrlComponents = URLComponents()
+        probeUrlComponents.path = "ajax/search/\(library.key)"
+        
+        var probeUrlQueryItems = [URLQueryItem]()
+        
+        probeUrlQueryItems.append(.init(name: "num", value: "0"))
+        
+        probeUrlComponents.queryItems = probeUrlQueryItems
+        
+        guard let probeUrl = probeUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+            return nil
+        }
+        
+        return .init(
+            library: library,
+            probeUrl: probeUrl
+        )
+    }
+    
     func buildMetadataTask(library: CalibreLibrary, bookId: Int32) -> CalibreBookTask? {
         guard let serverUrl = getServerUrlByReachability(server: library.server) else {
             return nil
@@ -1178,6 +1210,17 @@ struct CalibreServerInfo: Identifiable {
     var libraryMap: [String:String] = [:]
     
     var request: CalibreProbeServerRequest
+}
+
+struct CalibreLibraryInfo: Identifiable {
+    var id: String {
+        library.id
+    }
+    
+    let library: CalibreLibrary
+    
+    let totalNumber: Int
+    let errorMessage: String
 }
 
 class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {

@@ -25,6 +25,10 @@ struct CalibreServer: Hashable {
         uuid.uuidString
     }
     
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(self.uuid)
+    }
+    
     var isLocal: Bool {
         baseUrl.hasPrefix(".")
     }
@@ -91,7 +95,7 @@ struct CalibreLibrary: Hashable, Identifiable {
     var key: String
     var name: String
     
-    var autoUpdate = true
+    var autoUpdate = false
     var discoverable = true
     var hidden = false
     var lastModified = Date(timeIntervalSince1970: 0)
@@ -1082,6 +1086,13 @@ struct CalibreBooksTask {
     var booksInShelf = [CalibreBook]()
 }
 
+struct CalibreLibraryProbeTask {
+    let library: CalibreLibrary
+    let probeUrl: URL
+    
+    var probeResult: CalibreLibraryBooksResult.SearchResult?
+}
+
 struct CalibreLibrarySearchTask {
     var library: CalibreLibrary
     var searchCriteria: LibrarySearchCriteria
@@ -1571,6 +1582,14 @@ struct CalibreProbeServerRequest: Identifiable {
     let updateLibrary: Bool
     let autoUpdateOnly: Bool
     let incremental: Bool
+}
+
+struct CalibreProbeLibraryRequest: Identifiable {
+    var id: String {
+        library.id
+    }
+    
+    let library: CalibreLibrary
 }
 
 struct CalibreSyncLibraryRequest {

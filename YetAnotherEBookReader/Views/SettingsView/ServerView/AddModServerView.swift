@@ -74,6 +74,7 @@ struct AddModServerView: View {
             processUrlInputs()
             modServerConfirmButtonAction()
         }
+        self.serverCalibreInfoPresenting = true
     }
     
     var body: some View {
@@ -360,7 +361,15 @@ struct AddModServerView: View {
                 if let serverInfo = calibreServerInfo,
                    serverInfo.errorMsg == "Success" {
                     ForEach(serverInfo.libraryMap.sorted(by: { $0.value < $1.value}), id: \.key) { libraryEntry in
-                        Text(libraryEntry.value)
+                        HStack {
+                            Text(libraryEntry.value)
+                            Spacer()
+                            if let info = self.modelData.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
+                                Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
+                            } else {
+                                Text("Probing")
+                            }
+                        }
                         if calibreTweakEachLibrary {
                             HStack {
                                 Toggle(isOn: Binding<Bool>(get: {
@@ -627,13 +636,17 @@ struct AddModServerView: View {
         self.probeServerResultCancellable = modelData.probeServerResultSubject
             .receive(on: DispatchQueue.main)
             .sink { serverInfo in
-                serverInfo.libraryMap.filter {
-                    calibreLibraryOptions[$0.key] == nil
-                }.forEach {
-                    calibreLibraryOptions[$0.key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
-                }
+                serverInfo.libraryMap
+                    .map {
+                        self.modelData.probeLibrarySubject.send(.init(library: .init(server: serverInfo.server, key: $0.key, name: $0.value)))
+                        return $0
+                    }
+                    .filter {
+                        calibreLibraryOptions[$0.key] == nil
+                    }.forEach {
+                        calibreLibraryOptions[$0.key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
+                    }
                 self.calibreServerInfo = serverInfo
-                self.serverCalibreInfoPresenting = true
             }
     }
     
