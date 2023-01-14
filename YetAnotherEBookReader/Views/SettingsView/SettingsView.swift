@@ -204,7 +204,7 @@ struct SettingsView: View {
     
     private func updateServerList() {
         serverList = modelData.calibreServers
-            .filter { $1.isLocal == false && $1.id != serverListDelete?.id}
+            .filter { $1.isLocal == false && $1.id != serverListDelete?.id && $1.removed == false }
             .map { $0.value }
         sortServerList()
     }
@@ -326,17 +326,13 @@ struct SettingsView: View {
     private func deleteServer() {
         guard let server = serverListDelete else { return }
         
-        removeServerCancellable = [server].publisher
-            .subscribe(on: DispatchQueue.global(qos: .userInitiated))
-            .sink { output in
-                guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-                let isSuccess = modelData.removeServer(serverId: server.id, realm: realm)
-                if !isSuccess {
-                    alertItem = AlertItem(id: "DelServerFailed")
-                }
-                serverListDelete = nil
-                modelData.calibreUpdatedSubject.send(.shelf)
-            }
+        modelData.calibreServers[server.id]?.removed = true
+        if let server = modelData.calibreServers[server.id] {
+            try? modelData.updateServerRealm(server: server)
+        }
+        self.modelData.removeServerSubject.send(server)
+        
+        serverListDelete = nil
     }
     
 }

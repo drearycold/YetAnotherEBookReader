@@ -8,7 +8,7 @@
 import Foundation
 import UIKit
 
-struct CalibreServer: Hashable {
+struct CalibreServer: Hashable, Identifiable {
     static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
     
     var id: String {
@@ -60,7 +60,7 @@ struct CalibreServer: Hashable {
     var username: String
     var password: String
     var defaultLibrary = ""
-    var lastLibrary = ""
+    var removed = false
     
     var usePublic: Bool = false     //runtime only
     

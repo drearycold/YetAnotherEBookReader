@@ -177,7 +177,11 @@ final class ModelData: ObservableObject {
 
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
+    let removeServerSubject = PassthroughSubject<CalibreServer, Never>()
+    
     let probeLibrarySubject = PassthroughSubject<CalibreProbeLibraryRequest, Never>()
+    let removeLibrarySubject = PassthroughSubject<CalibreLibrary, Never>()
+    
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
     
     let syncLibrarySubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
@@ -242,7 +246,11 @@ final class ModelData: ObservableObject {
         
         registerProbeServerCancellable()
         registerProbeServerResult()
+        registerRemoveServerCancellable()
+        
         registerProbeLibraryCancellable()
+        registerRemoveLibraryCancellable()
+        
         registerSyncLibraryCancellable()
         registerSaveBooksMetadataCancellable()
         registerGetBooksMetadataCancellable()
@@ -643,7 +651,7 @@ final class ModelData: ObservableObject {
                 username: serverRealm.username ?? "",
                 password: serverRealm.password ?? "",
                 defaultLibrary: serverRealm.defaultLibrary ?? "",
-                lastLibrary: serverRealm.lastLibrary ?? ""
+                removed: serverRealm.removed
             )
             calibreServers[calibreServer.id] = calibreServer
             
@@ -1116,9 +1124,9 @@ final class ModelData: ObservableObject {
         serverRealm.username = server.username
         serverRealm.password = server.password
         serverRealm.defaultLibrary = server.defaultLibrary
-        serverRealm.lastLibrary = server.lastLibrary
+        serverRealm.removed = server.removed
         try realm.write {
-            realm.add(serverRealm, update: .all)
+            realm.add(serverRealm, update: .modified)
         }
     }
     
@@ -1591,101 +1599,6 @@ final class ModelData: ObservableObject {
         self.readerInfo = readerInfo
     }
     
-    func removeLibrary(libraryId: String, realm: Realm) -> Bool {
-        guard let library = calibreLibraries[libraryId] else { return false }
-        
-        //remove cached book files
-        let libraryBooksInShelf = booksInShelf.filter {
-            $0.value.library.id == libraryId
-        }
-        libraryBooksInShelf.forEach {
-            self.clearCache(inShelfId: $0.key)
-            self.removeFromShelf(inShelfId: $0.key)     //just in case
-        }
-        
-        //remove library info
-        do {
-            let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name)
-            var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self)
-                .filter(predicate)
-                .prefix(256)
-                .map{ $0 }
-            while booksCached.isEmpty == false {
-                print("\(#function) will delete \(booksCached.count) entries of \(libraryId)")
-                try realm.write {
-                    realm.delete(booksCached)
-                }
-                booksCached = realm.objects(CalibreBookRealm.self)
-                    .filter(predicate)
-                    .prefix(256)
-                    .map{ $0 }
-            }
-        } catch {
-            return false
-        }
-        
-        return true
-    }
-    
-    func removeServer(serverId: String, realm: Realm) -> Bool {
-        guard let server = calibreServers[serverId] else { return false }
-        
-        let libraries = calibreLibraries.filter {
-            $0.value.server == server
-        }
-        
-        DispatchQueue.main.async {
-            libraries.forEach {
-                self.hideLibrary(libraryId: $0.key)
-            }
-        }
-        
-        var isSuccess = true
-        libraries.forEach {
-            let result = removeLibrary(libraryId: $0.key, realm: realm)
-            isSuccess = isSuccess && result
-        }
-        if !isSuccess {
-            return false
-        }
-        
-        //remove library info
-        DispatchQueue.main.async {
-            libraries.forEach {
-                self.calibreLibraries.removeValue(forKey: $0.key)
-            }
-        }
-        do {
-            let serverLibraryRealms = realm.objects(CalibreLibraryRealm.self)
-                .filter("serverUUID = %@", server.uuid.uuidString)
-            try realm.write {
-                realm.delete(serverLibraryRealms)
-            }
-        } catch {
-            return false
-        }
-        
-        //remove server
-        DispatchQueue.main.async {
-            self.calibreServers.removeValue(forKey: serverId)
-        }
-        do {
-            let serverRealms = realm.objects(CalibreServerRealm.self).filter(
-                NSPredicate(format: "baseUrl = %@ AND username = %@",
-                            server.baseUrl,
-                            server.username
-                )
-            )
-            try realm.write {
-                realm.delete(serverRealms)
-            }
-        } catch {
-            return false
-        }
-        
-        return true
-    }
-    
     func removeDeleteBooksFromServer(server: CalibreServer) {
         librarySyncStatus.filter {
              $0.value.library.server.id == server.id && $0.value.del.count > 0
@@ -1869,7 +1782,47 @@ final class ModelData: ObservableObject {
                 }
                 
                 //TODO refresh shelf
+                if serverInfo.reachable {
+                    self.calibreUpdatedSubject.send(.server(serverInfo.server))
+                }
             }.store(in: &calibreCancellables)
+    }
+    
+    func registerRemoveServerCancellable() {
+        let queue = DispatchQueue(label: "remove-server", qos: .background)
+        removeServerSubject.receive(on: DispatchQueue.main)
+            .map { server -> CalibreServer in
+                
+                self.calibreLibraries.filter {
+                    $0.value.server.id == server.id
+                }.forEach {
+                    self.hideLibrary(libraryId: $0.key)
+                    
+                    self.removeLibrarySubject.send($0.value)
+                }
+                
+                self.calibreUpdatedSubject.send(.shelf)
+                
+                return server
+            }
+            .sink { server in
+                //FIXME: when to remove server from self?
+                return;
+                
+                //remove server
+                self.calibreServers.removeValue(forKey: server.id)
+                
+                let serverRealms = self.realm.objects(CalibreServerRealm.self).filter(
+                    NSPredicate(format: "baseUrl = %@ AND username = %@",
+                                server.baseUrl,
+                                server.username
+                               )
+                )
+                try? self.realm.write {
+                    self.realm.delete(serverRealms)
+                }
+            }
+            .store(in: &calibreCancellables)
     }
     
     func registerProbeLibraryCancellable() {
@@ -1899,6 +1852,55 @@ final class ModelData: ObservableObject {
                 } else {
                     self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: 0, errorMessage: "Failed")
                 }
+            }
+            .store(in: &calibreCancellables)
+    }
+    
+    func registerRemoveLibraryCancellable() {
+        let queue = DispatchQueue(label: "remove-library", qos: .background)
+        
+        removeLibrarySubject.receive(on: DispatchQueue.main)
+            .map { library -> CalibreLibrary in
+                self.librarySyncStatus[library.id]?.isSync = true
+                
+                //remove cached book files
+                let libraryBooksInShelf = self.booksInShelf.filter {
+                    $0.value.library.id == library.id
+                }
+                libraryBooksInShelf.forEach {
+                    self.clearCache(inShelfId: $0.key)
+                    self.removeFromShelf(inShelfId: $0.key)     //just in case
+                }
+                return library
+            }
+            .receive(on: queue)
+            .map { library -> CalibreLibrary in
+                guard let realm = try? Realm(configuration: self.realmConf)
+                else { return library }
+                
+                //remove library info
+                let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name)
+                var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self)
+                    .filter(predicate)
+                    .prefix(256)
+                    .map{ $0 }
+                while booksCached.isEmpty == false {
+                    print("\(#function) will delete \(booksCached.count) entries of \(library.id)")
+                    try? realm.write {
+                        realm.delete(booksCached)
+                    }
+                    booksCached = realm.objects(CalibreBookRealm.self)
+                        .filter(predicate)
+                        .prefix(256)
+                        .map{ $0 }
+                }
+                
+                return library
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { library in
+                self.librarySyncStatus[library.id]?.isSync = false
+//                self.calibreLibraries.removeValue(forKey: library.id)
             }
             .store(in: &calibreCancellables)
     }
@@ -1941,8 +1943,7 @@ final class ModelData: ObservableObject {
     
     func registerSyncLibraryCancellable() {
         let queue = DispatchQueue(label: "sync-library", qos: .userInitiated)
-        syncLibrarySubject
-            .receive(on: DispatchQueue.main)
+        syncLibrarySubject.receive(on: DispatchQueue.main)
             .flatMap { request -> AnyPublisher<CalibreSyncLibraryResult, Never> in
                 let libraryId = request.library.id
                 guard (self.librarySyncStatus[libraryId]?.isSync ?? false) == false else {

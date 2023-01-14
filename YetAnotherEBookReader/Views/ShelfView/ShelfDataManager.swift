@@ -12,9 +12,8 @@ import RealmSwift
 extension ModelData {
     func registerRecentShelfUpdater() {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
-        self.calibreUpdatedSubject
+        calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: queue)
             .map { signals -> [(key: String, value: CalibreBook)] in
                 self.booksInShelf
                     .sorted {
@@ -86,6 +85,8 @@ extension ModelData {
             .sink { signals in
                 let signalSet = Set<calibreUpdatedSignal>(signals)
                 let librarySearchKeys = self.calibreLibraries.reduce(into: Set<LibrarySearchKey>()) { partialResult, libraryEntry in
+                    guard self.calibreServers[libraryEntry.value.server.id]?.removed == false
+                    else { return }
                     partialResult.insert(
                         .init(
                             libraryId: libraryEntry.key,
@@ -122,8 +123,11 @@ extension ModelData {
                 }
                 
                 self.booksInShelf.values.filter({ book in
-                    book.library.server.isLocal == false &&
-                    (
+                    book.library.server.isLocal == false
+                    && self.calibreLibraries[book.library.id]?.hidden == false
+                    && self.calibreLibraries[book.library.id]?.discoverable == true
+                    && self.calibreServers[book.library.server.id]?.removed == false
+                    && (
                         signalSet.contains(.shelf) ||
                         signalSet.contains(.deleted(book.inShelfId)) ||
                         signalSet.contains(.book(book)) ||

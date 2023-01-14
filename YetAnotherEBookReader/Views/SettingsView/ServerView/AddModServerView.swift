@@ -512,7 +512,9 @@ struct AddModServerView: View {
         }
         
         if let existingServer = modelData.calibreServers.values.first(where: { server in
-            server.baseUrl == calibreServerUrl && server.username == calibreUsername
+            server.baseUrl == calibreServerUrl
+            && server.username == calibreUsername
+            && server.removed == false
         }) {
             alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
             return
@@ -549,7 +551,6 @@ struct AddModServerView: View {
         
         var newServer = serverInfo.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
-        newServer.lastLibrary = serverInfo.defaultLibrary
         
         let libraries: [CalibreLibrary] = serverInfo.libraryMap
             .sorted { $0.key < $1.key }
@@ -625,7 +626,7 @@ struct AddModServerView: View {
         
         var newServer = serverInfo.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
-        newServer.lastLibrary = server.lastLibrary
+        newServer.removed = server.removed
         
         server = newServer
         

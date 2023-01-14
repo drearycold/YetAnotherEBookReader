@@ -86,20 +86,13 @@ struct ServerDetailView: View {
                 }.onDelete(perform: { indexSet in
                     let deletedLibraryIds = indexSet.map { libraryList[$0] }
                     deletedLibraryIds.forEach { libraryId in
-                        modelData.hideLibrary(libraryId: libraryId)
-                        guard modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
+                        self.modelData.hideLibrary(libraryId: libraryId)
+                        guard self.modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
                         
-                        modelData.librarySyncStatus[libraryId]?.isSync = true
-                        updater += 1
-                        DispatchQueue.global(qos: .utility).async {
-                            guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-                            let success = modelData.removeLibrary(libraryId: libraryId, realm: realm)
-                            DispatchQueue.main.async {
-                                modelData.librarySyncStatus[libraryId]?.isSync = false
-                                modelData.librarySyncStatus[libraryId]?.isError = !success
-                                updater += 1
-                            }
-                        }
+                        guard let library = self.modelData.calibreLibraries[libraryId]
+                        else { return }
+                        
+                        self.modelData.removeLibrarySubject.send(library)
                     }
                     updateLibraryList()
                 })

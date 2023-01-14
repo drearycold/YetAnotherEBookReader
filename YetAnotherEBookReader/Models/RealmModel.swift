@@ -40,7 +40,7 @@ class CalibreServerRealm: Object {
     
     @objc dynamic var defaultLibrary: String?
     
-    @objc dynamic var lastLibrary: String?
+    @objc dynamic var removed = false
     
     override static func primaryKey() -> String? {
         return "primaryKey"
@@ -61,7 +61,7 @@ extension CalibreServer: Persistable {
         self.username = managedObject.username ?? ""
         self.password = managedObject.password ?? ""
         self.defaultLibrary = managedObject.defaultLibrary ?? ""
-        self.lastLibrary = managedObject.lastLibrary ?? ""
+        self.removed = managedObject.removed
         self.uuid = UUID(uuidString: managedObject.primaryKey ?? "") ?? .init()
     }
     
@@ -75,7 +75,7 @@ extension CalibreServer: Persistable {
         serverRealm.username = self.username
         serverRealm.password = self.password
         serverRealm.defaultLibrary = self.defaultLibrary
-        serverRealm.lastLibrary = self.lastLibrary
+        serverRealm.removed = self.removed
         serverRealm.primaryKey = self.uuid.uuidString
         
         return serverRealm
