@@ -149,11 +149,9 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             .receive(on: DispatchQueue.main)
             .sink { shelfModels in
                 let librarySet = Set<CalibreLibrary>(shelfModels.compactMap { shelfModel -> CalibreLibrary? in
-                    let sectionId = shelfModel.sectionId
-                    guard let sepRange = sectionId.range(of: " || ")
+                    guard let libraryId = ModelData.parseShelfSectionId(sectionId: shelfModel.sectionId)
                     else { return nil }
                     
-                    let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
                     return self.modelData.calibreLibraries[libraryId]
                 })
                     
@@ -174,11 +172,16 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 
                 self.topButton.menu = self.topMenu.replacingChildren(topMenuItems)
                 
+                self.librariesPicked.formIntersection(
+                    shelfModels.compactMap {
+                        ModelData.parseShelfSectionId(sectionId: $0.sectionId)
+                    }
+                )
+                
                 self.shelfView.reloadBooks(bookModelSection: shelfModels.filter {
-                    let sectionId = $0.sectionId
-                    guard let sepRange = sectionId.range(of: " || ")
+                    guard let libraryId = ModelData.parseShelfSectionId(sectionId: $0.sectionId)
                     else { return false }
-                    let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
+                    
                     return self.librariesPicked.isEmpty || self.librariesPicked.contains(libraryId)
                 })
             }

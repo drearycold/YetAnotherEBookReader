@@ -68,15 +68,19 @@ struct ServerDetailView: View {
                             discoverable: Binding<Bool>(get: {
                                 modelData.calibreLibraries[id]!.discoverable
                             }, set: { newValue in
-                                modelData.calibreLibraries[id]!.discoverable = newValue
-                                try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
-                                self.modelData.calibreUpdatedSubject.send(.shelf)
+                                modelData.calibreLibraries[id]?.discoverable = newValue
+                                if let library = modelData.calibreLibraries[id] {
+                                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
+                                    self.modelData.calibreUpdatedSubject.send(.library(library))
+                                }
                             }),
                             autoUpdate: Binding<Bool>(get: {
                                 modelData.calibreLibraries[id]!.autoUpdate
                             }, set: { newValue in
-                                modelData.calibreLibraries[id]!.autoUpdate = newValue
-                                try? modelData.updateLibraryRealm(library: modelData.calibreLibraries[id]!, realm: modelData.realm)
+                                modelData.calibreLibraries[id]?.autoUpdate = newValue
+                                if let library = modelData.calibreLibraries[id] {
+                                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
+                                }
                             })
                         ).navigationTitle(modelData.calibreLibraries[id]!.name),
                         tag: id,
@@ -87,10 +91,13 @@ struct ServerDetailView: View {
                     let deletedLibraryIds = indexSet.map { libraryList[$0] }
                     deletedLibraryIds.forEach { libraryId in
                         self.modelData.hideLibrary(libraryId: libraryId)
+                        
                         guard self.modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
                         
                         guard let library = self.modelData.calibreLibraries[libraryId]
                         else { return }
+                        
+                        self.modelData.calibreUpdatedSubject.send(.library(library))
                         
                         self.modelData.removeLibrarySubject.send(library)
                     }
@@ -173,6 +180,10 @@ struct ServerDetailView: View {
                 Button(action:{
                     libraryRestoreListSelection.forEach {
                         modelData.restoreLibrary(libraryId: $0)
+                        if let library =  self.modelData.calibreLibraries[$0],
+                           library.discoverable {
+                            self.modelData.calibreUpdatedSubject.send(.library(library))
+                        }
                     }
                     updater += 1
                     libraryRestoreListActive.toggle()

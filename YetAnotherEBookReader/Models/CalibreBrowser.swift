@@ -572,8 +572,7 @@ extension CalibreServerService {
     
     func registerLibrarySearchHandler() {
         let queue = DispatchQueue(label: "library-search", qos: .userInitiated)
-        modelData.librarySearchSubject
-            .receive(on: DispatchQueue.main)
+        modelData.librarySearchSubject.receive(on: DispatchQueue.main)
             .compactMap { librarySearchKey -> CalibreLibrarySearchTask? in
                 guard let library = modelData.calibreLibraries[librarySearchKey.libraryId]
                 else {

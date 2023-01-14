@@ -85,8 +85,10 @@ extension ModelData {
             .sink { signals in
                 let signalSet = Set<calibreUpdatedSignal>(signals)
                 let librarySearchKeys = self.calibreLibraries.reduce(into: Set<LibrarySearchKey>()) { partialResult, libraryEntry in
-                    guard self.calibreServers[libraryEntry.value.server.id]?.removed == false
+                    guard libraryEntry.value.hidden == false,
+                          libraryEntry.value.discoverable == true, self.calibreServers[libraryEntry.value.server.id]?.removed == false
                     else { return }
+                    
                     partialResult.insert(
                         .init(
                             libraryId: libraryEntry.key,
@@ -269,14 +271,37 @@ extension ModelData {
                 defer {
                     self.discoverShelfModelSubject.send(self.bookModelSection)
                 }
+                
                 self.bookModelSection.removeAll { shelfModelSection.sectionId == $0.sectionId }
                 
                 guard shelfModelSection.sectionShelf.count > 1 else { return }
                 
                 self.bookModelSection.append(shelfModelSection)
                 
+                self.bookModelSection.removeAll {
+                    guard let libraryId = ModelData.parseShelfSectionId(sectionId: $0.sectionId),
+                          let library = self.calibreLibraries[libraryId],
+                          library.hidden == false,
+                          library.discoverable == true,
+                          let server = self.calibreServers[library.server.id],
+                          server.removed == false
+                    else {
+                        return true     //no corresponding library
+                    }
+                    return false
+                }
+                
                 self.bookModelSection.sort { $0.sectionName < $1.sectionName }
             }
             .store(in: &calibreCancellables)
+    }
+}
+
+extension ModelData {
+    static func parseShelfSectionId(sectionId: String) -> String? {
+        guard let sepRange = sectionId.range(of: " || ")
+        else { return nil }
+        let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
+        return libraryId
     }
 }

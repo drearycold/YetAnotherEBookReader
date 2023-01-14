@@ -593,13 +593,12 @@ struct AddModServerView: View {
             password: calibrePassword
         )
         
-        if newServer.id == server.id {
-            //minor changes
-//            modelData.updateServer(oldServer: server, newServer: newServer)
-            server = newServer
-            isActive = false
-        } else {
-            if let existingServer = modelData.calibreServers[newServer.id] {
+            if let existingServer = modelData.calibreServers.values.first(where: { server in
+                server.uuid != newServer.uuid
+                && server.baseUrl == newServer.baseUrl
+                && server.username == newServer.username
+                && server.removed == false
+            }) {
                 alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
                 return
             }
@@ -615,7 +614,6 @@ struct AddModServerView: View {
             
             enableProbeServerCancellable()
             modelData.probeServerSubject.send(.init(server: newServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
-        }
     }
     
     private func modServerConfirmed() {
