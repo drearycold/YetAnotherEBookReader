@@ -208,7 +208,8 @@ final class ModelData: ObservableObject {
     @Published var bookModelSection = [ShelfModelSection]()
 
     var resourceFileDictionary: NSDictionary?
-
+    var yabrResourceFileDictionary: NSDictionary?
+    
     init(mock: Bool = false) {
         ModelData.shared = self
         
@@ -218,7 +219,9 @@ final class ModelData: ObservableObject {
         } else {
             resourceFileDictionary = try? NSDictionary(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Contents", isDirectory: true).appendingPathComponent("Info.plist", isDirectory: false), error: ())
         }
-        
+        if let path = Bundle.main.path(forResource: "YabrInfo", ofType: "plist", inDirectory: "YabrResources") {
+            yabrResourceFileDictionary = NSDictionary(contentsOfFile: path)
+        }
         
         kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
@@ -351,7 +354,7 @@ final class ModelData: ObservableObject {
     }
     
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-        ModelData.RealmSchemaVersion = UInt64(resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1") ?? 1
+        ModelData.RealmSchemaVersion = UInt64(self.yabrBuild) ?? 1
         realmConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
@@ -2477,21 +2480,21 @@ final class ModelData: ObservableObject {
             if let bookId = bookId {
                 pred = NSPredicate(
                     format: "startDatetime >= %@ AND libraryId = %@ AND bookId = %@",
-                    Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate,
+                    Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate,
                     libraryId,
                     NSNumber(value: bookId)
                 )
             } else {
                 pred = NSPredicate(
                     format: "startDatetime >= %@ AND libraryId = %@",
-                    Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate,
+                    Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate,
                     libraryId
                 )
             }
         } else {
             pred = NSPredicate(
                 format: "startDatetime > %@",
-                Date(timeIntervalSinceNow: TimeInterval(-86400)) as NSDate
+                Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate
             )
         }
         

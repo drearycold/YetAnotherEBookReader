@@ -111,8 +111,8 @@ struct SettingsView: View {
                 header: Text("Support"),
                 footer: HStack {
                     Spacer()
-                    Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
-                    Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
+                    Text("Version \(modelData.yarbVersion)")
+                    Text("Build \(modelData.yabrBuild)")
                     Spacer()
                 }
                 .font(.caption)

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>YABRNewIssueURL</key>
+	<string>https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&amp;assignees=drearycold</string>
+	<key>YABRNewEnhancementURL</key>
+	<string>https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=enhancement&amp;assignees=drearycold</string>
+	<key>GADBannerShelfUnitID</key>
+	<string>ca-app-pub-2603711004804215/2003928149</string>
+	<key>GADBannerShelfUnitIDTest</key>
+	<string>ca-app-pub-3940256099942544/2934735716</string>
+	<key>GADDeviceIdentifierTest</key>
+	<string>23e0202ad7a1682137a4ad8bccc0e35b</string>
+</dict>
+</plist>

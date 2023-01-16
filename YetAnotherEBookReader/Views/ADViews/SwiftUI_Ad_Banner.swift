@@ -44,19 +44,13 @@ struct Banner: View{
     @EnvironmentObject var modelData: ModelData
     
     var body: some View{
-        #if DEBUG
-        HStack{
-            Spacer()
-            BannerVC(adUnitID: "ca-app-pub-3940256099942544/2934735716").frame(width: 320, height: 50, alignment: .center)
-            Spacer()
+        HStack {
+            if let adUnitID = modelData.yabrGADBannerShelfUnitID {
+                Spacer()
+                BannerVC(adUnitID: adUnitID).frame(width: 320, height: 50, alignment: .center)
+                Spacer()
+            }
         }
-        #else
-        HStack{
-            Spacer()
-            BannerVC(adUnitID: modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716").frame(width: 320, height: 50, alignment: .center)
-            Spacer()
-        }
-        #endif
     }
 }
 

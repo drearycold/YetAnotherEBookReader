@@ -93,10 +93,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-2603711004804215~7977491314</string>
-	<key>GADBannerShelfUnitID</key>
-	<string>ca-app-pub-2603711004804215/2003928149</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationCategoryType</key>
@@ -114,6 +110,8 @@
 	<string>Allow App to Add Photos to Library?</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>This identifier will be used to deliver personalized ads to you.</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-2603711004804215~7977491314</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

@@ -27,10 +27,6 @@ struct AppInfoView: View {
                 Image("logo_1024")
                     .resizable().frame(width: 256, height: 256, alignment: .center)
                 Text("by Drearycold & Siyi")
-                //                    HStack {
-                //                        Text("Version \(modelData.resourceFileDictionary?.value(forKey: "CFBundleShortVersionString") as? String ?? "0.1.0")")
-                //                        Text("Build \(modelData.resourceFileDictionary?.value(forKey: "CFBundleVersion") as? String ?? "1")")
-                //                    }
             }
             
             VStack(spacing: 12) {

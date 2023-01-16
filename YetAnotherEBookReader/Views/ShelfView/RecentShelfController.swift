@@ -67,11 +67,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 width:  GADAdSizeBanner.size.width,
                 height: GADAdSizeBanner.size.height)
         )
+        bannerView.adUnitID = modelData.yabrGADBannerShelfUnitID
+
         #if DEBUG
-        bannerView.adUnitID = "ca-app-pub-3940256099942544/2934735716"
-        GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ "23e0202ad7a1682137a4ad8bccc0e35b" ]
-        #else
-        bannerView.adUnitID = modelData.resourceFileDictionary?.value(forKey: "GADBannerShelfUnitID") as? String ?? "ca-app-pub-3940256099942544/2934735716"
+        if let deviceId = modelData.yabrGADDeviceIdentifierTest {
+            GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ deviceId ]
+        }
         #endif
         bannerView.rootViewController = self
         
