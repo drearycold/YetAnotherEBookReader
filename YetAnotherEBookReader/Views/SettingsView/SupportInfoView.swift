@@ -18,39 +18,67 @@ struct SupportInfoView: View {
     @State private var privacyWebViewPresenting = false
     @State private var termsWebViewPresenting = false
     
+    @State private var yabrPrivacyHtml: String?
+    @State private var yabrTermsHtml: String?
+    @State private var yabrVersionHtml: String?
+    
     var body: some View {
         List {
+            Section {
+                
+                if let privacyHtml = modelData.yabrPrivacyHtml {
+                    NavigationLink {
+                        SupportInfoView.privacyWebView(content: privacyHtml)
+                    } label: {
+                        Text("Private Policy")
+                    }
+                }
+                
+                if let termsHtml = modelData.yabrTermsHtml {
+                    NavigationLink {
+                        SupportInfoView.termsWebView(content: termsHtml)
+                    } label: {
+                        Text("Terms & Conditions")
+                    }
+                }
+                
+                if let yabrVersionHtml = self.yabrVersionHtml {
+                    NavigationLink {
+                        WebViewUI(content: yabrVersionHtml, baseURL: URL(string:"https://github.com/drearycold/YetAnotherEBookReader/releases"))
+                    } label: {
+                        Text("Version History")
+                    }
+                }
+                
 #if canImport(UserMessagingPlatform)
-                Button(action: { UMPConsentInformation.sharedInstance.reset() }) {
+                NavigationLink {
+                    VStack {
+                        Button {
+                            UMPConsentInformation.sharedInstance.reset()
+                        } label: {
+                            Text("Reset")
+                        }
+                    }
+                } label: {
                     Text("Reset Tracking Consent")
-                }.padding()
+                }
 #endif
-            
-            if let privacyHtml = modelData.yabrPrivacyHtml {
-                Button(action: { privacyWebViewPresenting = true }) {
-                    Text("Private Policy")
-                }.sheet(isPresented: $privacyWebViewPresenting) {
-                    SupportInfoView.privacyWebView(content: privacyHtml)
-                }.padding()
             }
             
-            if let termsHtml = modelData.yabrTermsHtml {
-                Button(action: { termsWebViewPresenting = true }) {
-                    Text("Terms & Conditions")
-                }.sheet(isPresented: $termsWebViewPresenting) {
-                    SupportInfoView.termsWebView(content: termsHtml)
-                }.padding()
+            if let issueURL = modelData.yabrNewIssueUrl {
+                linkButtonBuilder(title: "Report an Issue", url: issueURL).padding()
             }
-            
-                if let issueURL = modelData.yabrNewIssueUrl {
-                    linkButtonBuilder(title: "Report an Issue", url: issueURL).padding()
-                }
-                if let enhancementURL = modelData.yabrNewEnhancementUrl {
-                    linkButtonBuilder(title: "Suggestion & Request", url: enhancementURL).padding()
-                }
+            if let enhancementURL = modelData.yabrNewEnhancementUrl {
+                linkButtonBuilder(title: "Suggestion & Request", url: enhancementURL).padding()
             }
+        }
         .navigationTitle("Support")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            self.yabrPrivacyHtml = modelData.yabrPrivacyHtml
+            self.yabrTermsHtml = modelData.yabrTermsHtml
+            self.yabrVersionHtml = modelData.yabrVersionHtml
+        }
     }
     
     @ViewBuilder

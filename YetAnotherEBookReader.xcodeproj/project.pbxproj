@@ -20,7 +20,6 @@
 		2A21BCE527017F9400825BBB /* Providers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A21BCE427017F9400825BBB /* Providers.swift */; };
 		2A25E245272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */; };
 		2A25E249272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */; };
-		2A264A3F27301EDE00C4CEFA /* VersionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */; };
 		2A264A4127311E8200C4CEFA /* ReadingPositionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A264A4027311E8200C4CEFA /* ReadingPositionHistoryView.swift */; };
 		2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A270B24272F7E07006552A3 /* ActivityList.swift */; };
 		2A2A853A275C699500C17825 /* YabrEBookReaderNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2A8539275C699500C17825 /* YabrEBookReaderNavigationController.swift */; };
@@ -178,7 +177,6 @@
 		6E7B80FB28FBA7AD008B075C /* ServerCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */; };
 		6E7B80FC28FBA7AD008B075C /* LibraryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */; };
 		6E7B80FD28FBA7AD008B075C /* SupportInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A0486271BF65A00589B87 /* SupportInfoView.swift */; };
-		6E7B80FE28FBA7AD008B075C /* VersionHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */; };
 		6E7B80FF28FBA7AD008B075C /* MDictViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */; };
 		6E7B810028FBA7AD008B075C /* CalibreDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */; };
 		6E7B810128FBA7AD008B075C /* FontsHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47879C271526BF009C8770 /* FontsHelper.swift */; };
@@ -404,7 +402,6 @@
 		2A21BCE427017F9400825BBB /* Providers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Providers.swift; sourceTree = "<group>"; };
 		2A25E244272BA7F5009D5341 /* LibraryOptionsReadingPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsReadingPosition.swift; sourceTree = "<group>"; };
 		2A25E248272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryOptionsGoodreadsSync.swift; sourceTree = "<group>"; };
-		2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionHistoryView.swift; sourceTree = "<group>"; };
 		2A264A4027311E8200C4CEFA /* ReadingPositionHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionHistoryView.swift; sourceTree = "<group>"; };
 		2A270B24272F7E07006552A3 /* ActivityList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityList.swift; sourceTree = "<group>"; };
 		2A2A8539275C699500C17825 /* YabrEBookReaderNavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderNavigationController.swift; sourceTree = "<group>"; };
@@ -728,7 +725,6 @@
 				2A47581527B9EF6800642AD1 /* ServerView */,
 				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
 				2A0A0486271BF65A00589B87 /* SupportInfoView.swift */,
-				2A264A3E27301EDE00C4CEFA /* VersionHistoryView.swift */,
 			);
 			path = SettingsView;
 			sourceTree = "<group>";
@@ -1589,7 +1585,6 @@
 				E769C5AA296BF4C60089C21E /* AboutTableViewController.swift in Sources */,
 				E769C5C4296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */,
 				2AAB29922712BB250080B0CB /* ReaderOptionsCbzView.swift in Sources */,
-				2A264A3F27301EDE00C4CEFA /* VersionHistoryView.swift in Sources */,
 				E769C5C6296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */,
 				E769C5F6296BF4C60089C21E /* ReaderViewController.swift in Sources */,
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
@@ -1817,7 +1812,6 @@
 				6E7B80FB28FBA7AD008B075C /* ServerCalibreIntroView.swift in Sources */,
 				6E7B80FC28FBA7AD008B075C /* LibraryDetailView.swift in Sources */,
 				6E7B80FD28FBA7AD008B075C /* SupportInfoView.swift in Sources */,
-				6E7B80FE28FBA7AD008B075C /* VersionHistoryView.swift in Sources */,
 				E769C5FB296BF4C60089C21E /* BookmarkCell.swift in Sources */,
 				6E7B80FF28FBA7AD008B075C /* MDictViewUIVC.swift in Sources */,
 				6E7B810028FBA7AD008B075C /* CalibreDateParser.swift in Sources */,

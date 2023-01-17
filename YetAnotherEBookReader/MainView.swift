@@ -36,9 +36,6 @@ struct MainView: View {
     
     @State private var umpFormLoaded = false
     
-    @State private var yabrPrivacyHtml: String?
-    @State private var yabrTermsHtml: String?
-    
     private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
 
     var body: some View {
@@ -182,14 +179,14 @@ struct MainView: View {
                     (Dismissing this notice means you will accept.")
                     """)
                 
-                if let yabrPrivacyHtml = yabrPrivacyHtml {
+                if let yabrPrivacyHtml = modelData.yabrPrivacyHtml {
                     Button(action: { privacyWebViewPresenting = true }) {
                         Text("Private Policy")
                     }.sheet(isPresented: $privacyWebViewPresenting) {
                         SupportInfoView.privacyWebView(content: yabrPrivacyHtml)
                     }
                 }
-                if let yabrTermsHtml = yabrTermsHtml {
+                if let yabrTermsHtml = modelData.yabrTermsHtml {
                     Button(action: { termsWebViewPresenting = true }) {
                         Text("Terms & Conditions")
                     }.sheet(isPresented: $termsWebViewPresenting) {
@@ -274,9 +271,6 @@ struct MainView: View {
             let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)            
             modelData.bookImportedSubject.send(result)
         }.onAppear {
-            self.yabrPrivacyHtml = modelData.yabrPrivacyHtml
-            self.yabrTermsHtml = modelData.yabrTermsHtml
-            
             let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
             if !termsAccepted {
                 initialTermsAgreementPresenting = true

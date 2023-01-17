@@ -118,7 +118,6 @@ struct SettingsView: View {
                 .font(.caption)
                 .foregroundColor(.gray)
             ) {
-                NavigationLink("Version History", destination: VersionHistoryView())
                 NavigationLink("Support", destination: SupportInfoView())
                 NavigationLink("About calibre Server", destination: ServerCalibreIntroView().frame(maxWidth: 600))
                 NavigationLink("About DSReader", destination: AppInfoView())

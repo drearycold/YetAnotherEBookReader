@@ -47,4 +47,10 @@ extension ModelData {
         else { return nil }
         return try? String(contentsOfFile: path)
     }
+    
+    var yabrVersionHtml: String? {
+        guard let path = Bundle.main.path(forResource: "Version", ofType: "html", inDirectory: "YabrResources")
+        else { return nil }
+        return try? String(contentsOfFile: path)
+    }
 }
