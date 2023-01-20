@@ -183,14 +183,14 @@ struct MainView: View {
                     Button(action: { privacyWebViewPresenting = true }) {
                         Text("Private Policy")
                     }.sheet(isPresented: $privacyWebViewPresenting) {
-                        SupportInfoView.privacyWebView(content: yabrPrivacyHtml)
+                        WebViewUI(content: yabrPrivacyHtml, baseURL: modelData.yabrBaseUrl)
                     }
                 }
                 if let yabrTermsHtml = modelData.yabrTermsHtml {
                     Button(action: { termsWebViewPresenting = true }) {
                         Text("Terms & Conditions")
                     }.sheet(isPresented: $termsWebViewPresenting) {
-                        SupportInfoView.termsWebView(content: yabrTermsHtml)
+                        WebViewUI(content: yabrTermsHtml, baseURL: modelData.yabrBaseUrl)
                     }
                 }
                 

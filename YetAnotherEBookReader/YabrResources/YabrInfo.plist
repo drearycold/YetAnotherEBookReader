@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>YABRBaseURL</key>
+	<string>https://github.com/drearycold/YetAnotherEBookReader</string>
 	<key>YABRNewIssueURL</key>
 	<string>https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&amp;assignees=drearycold</string>
 	<key>YABRNewEnhancementURL</key>

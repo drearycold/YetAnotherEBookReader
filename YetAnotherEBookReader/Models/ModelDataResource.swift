@@ -28,6 +28,13 @@ extension ModelData {
         self.yabrResourceFileDictionary?.value(forKey: "GADDeviceIdentifierTest") as? String
     }
     
+    var yabrBaseUrl: URL? {
+        guard let value = self.yabrResourceFileDictionary?.value(forKey: "YABRBaseURL") as? String
+        else { return nil }
+        
+        return URL(string: value)
+    }
+    
     var yabrNewIssueUrl: String? {
         self.yabrResourceFileDictionary?.value(forKey: "YABRNewIssueURL") as? String
     }

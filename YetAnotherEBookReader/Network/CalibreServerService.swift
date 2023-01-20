@@ -1183,6 +1183,11 @@ struct CalibreServerService {
 struct CalibreServerURLSessionKey: Hashable, Equatable {
     let server: CalibreServer
     let timeout: Double
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(server.uuid)
+        hasher.combine(timeout)
+    }
 }
 
 struct CalibreServerLibraryInfo: Codable {

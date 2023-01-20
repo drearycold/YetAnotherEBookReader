@@ -11,26 +11,25 @@ import Combine
 struct ReaderOptionsView: View {
     @EnvironmentObject var modelData: ModelData
 
-    @State private var optionsHelpPresenting: OptionItem?
-
+    @State private var optionsHelpFormat = false
+    @State private var optionsHelpReader = false
+    @State private var optionsHelpFont = false
+    
     @State private var fontsFolderPresenting = false
     @State private var fontsFolderPicked = [URL]()
     @State private var fontsDetailPresenting = false
     @State private var fontsCount = 0
     @State private var fontsImportNotice = ""
     
-    
-    @State private var updater = 0
-    
     @State private var dismissAllCancellable: AnyCancellable?
     
     var body: some View {
-        Form {
+        List {
             Section(header: HStack {
                 Text("Preferred Book Format")
                 Spacer()
                 Button(action:{
-                    optionsHelpPresenting = .BookFormat
+                    optionsHelpFormat = true
                 }) {
                     Image(systemName: "questionmark.circle")
                 }
@@ -41,23 +40,40 @@ struct ReaderOptionsView: View {
                     }
                 }
                 .pickerStyle(SegmentedPickerStyle())
+                .popover(isPresented: $optionsHelpFormat) {
+                    ReaderOptionsFormatHelpView()
+                        .frame(maxWidth: 600, minHeight: 420)
+                }
             }
             
-            ForEach(Format.allCases.dropFirst(), id: \.self) { format in
-                Section(header: HStack {
-                    Text("Prefered Reader for \(format.rawValue)")
+            Section {
+                VStack {
+                    ForEach(Format.allCases.filter { (modelData.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
+                        HStack {
+                            Text(format.rawValue)
+                                .frame(minWidth: 64, alignment: .leading)
+                                .padding([.leading], 8)
+                            Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
+                                ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
+                                    Text(reader.rawValue).tag(reader)
+                                }
+                            }.pickerStyle(SegmentedPickerStyle())
+                        }
+                    }
+                }
+                .popover(isPresented: $optionsHelpReader) {
+                    ReaderOptionsHelpView()
+                }
+            } header: {
+                HStack {
+                    Text("Prefered Reader")
                     Spacer()
                     Button(action: {
-                        optionsHelpPresenting = OptionItem(rawValue: "Reader\(format.rawValue)")
+                        optionsHelpReader = true
                     }) {
                         Image(systemName: "questionmark.circle")
                     }
-                }) {
-                    Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
-                        ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
-                            Text(reader.rawValue).tag(reader)
-                        }
-                    }.pickerStyle(SegmentedPickerStyle())
+                    
                 }
             }
 
@@ -65,7 +81,7 @@ struct ReaderOptionsView: View {
                 Text("Custom Fonts for \(ReaderType.YabrEPUB.rawValue)")
                 Spacer()
                 Button(action:{
-                    optionsHelpPresenting = .YabrEPUBFont
+                    optionsHelpFont = true
                 }) {
                     Image(systemName: "questionmark.circle")
                 }
@@ -83,8 +99,9 @@ struct ReaderOptionsView: View {
                         fontsDetailPresenting = true
                     }) {
                         Text("View")
-                            .disabled(modelData.userFontInfos.isEmpty)
                     }
+                    .disabled(modelData.userFontInfos.isEmpty)
+                    .buttonStyle(.borderless)
                     .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
                         fontsDetailPresenting = false
                         let newCount = modelData.userFontInfos.count
@@ -115,6 +132,10 @@ struct ReaderOptionsView: View {
                         }
                     }
                 }
+                .popover(isPresented: $optionsHelpFont, attachmentAnchor: .point(.bottom), content: {
+                    ReaderOptionsFontHelpView()
+                        .frame(maxWidth: 600, minHeight: 240)
+                })
                 
                 Button(action:{
                     fontsCount = modelData.userFontInfos.count
@@ -162,34 +183,14 @@ struct ReaderOptionsView: View {
             }
             
         }
-        .sheet(item: $optionsHelpPresenting) { item in
-            switch item {
-            case .BookFormat:
-                FormatOptionsView()
-            case .ReaderEPUB:
-                ReaderOptionsEpubView()
-            case .ReaderPDF:
-                ReaderOptionsPdfView()
-            case .ReaderCBZ:
-                ReaderOptionsCbzView()
-            case .YabrEPUBFont:
-                NavigationView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("About Custom Fonts for YabrEPUB Reader")
-                            .font(.title3).bold()
-                        Text("Don't get limited by eBook publisher's aesthetic. \(ReaderType.YabrEPUB.rawValue) supports substituting eBook content fonts with your favorite choosing.")
-                        Text("You can place font files inside \"Fonts\" folder of this App or import them directly from here. They will appear in the \"Font\" tab of \(ReaderType.YabrEPUB.rawValue)'s style menu.")
-                        Text("Currently supports TrueType (.ttf) and OpenType (.otf).")
-                    }.padding()
-                }
-            }
-        }
         .onAppear() {
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 fontsFolderPresenting = false
                 fontsDetailPresenting = false
-                optionsHelpPresenting = nil
+                optionsHelpFormat = false
+                optionsHelpReader = false
+                optionsHelpFont = false
             }
         }
         .navigationTitle("Reader Options")
@@ -275,16 +276,6 @@ struct ReaderOptionsView: View {
         modelData.removeCustomFonts(at: offsets)
         modelData.reloadCustomFonts()
     }
-}
-
-enum OptionItem: String, CaseIterable, Identifiable {
-    case BookFormat
-    case ReaderEPUB
-    case ReaderPDF
-    case ReaderCBZ
-    case YabrEPUBFont
-    
-    var id: String { self.rawValue }
 }
 
 struct ReaderOptionsView_Previews: PreviewProvider {

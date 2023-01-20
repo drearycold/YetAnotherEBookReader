@@ -101,8 +101,8 @@ struct SettingsView: View {
             }
             .disabled(serverListDelete != nil)
             
-            Section(header: Text("Options")) {
-                NavigationLink("Formats & Readers", destination: ReaderOptionsView())
+            Section(header: Text("More")) {
+                NavigationLink("Readers Options", destination: ReaderOptionsView())
                 NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: nil, bookId: nil))
                 NavigationLink("Activity Logs", destination: ActivityList(presenting: Binding<Bool>(get: { false }, set: { _ in } )))
             }

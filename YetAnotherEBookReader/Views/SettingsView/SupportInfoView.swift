@@ -28,7 +28,7 @@ struct SupportInfoView: View {
                 
                 if let privacyHtml = modelData.yabrPrivacyHtml {
                     NavigationLink {
-                        SupportInfoView.privacyWebView(content: privacyHtml)
+                        WebViewUI(content: privacyHtml, baseURL: modelData.yabrBaseUrl)
                     } label: {
                         Text("Private Policy")
                     }
@@ -36,7 +36,7 @@ struct SupportInfoView: View {
                 
                 if let termsHtml = modelData.yabrTermsHtml {
                     NavigationLink {
-                        SupportInfoView.termsWebView(content: termsHtml)
+                        WebViewUI(content: termsHtml, baseURL: modelData.yabrBaseUrl)
                     } label: {
                         Text("Terms & Conditions")
                     }
@@ -44,7 +44,7 @@ struct SupportInfoView: View {
                 
                 if let yabrVersionHtml = self.yabrVersionHtml {
                     NavigationLink {
-                        WebViewUI(content: yabrVersionHtml, baseURL: URL(string:"https://github.com/drearycold/YetAnotherEBookReader/releases"))
+                        WebViewUI(content: yabrVersionHtml, baseURL: modelData.yabrBaseUrl?.appendingPathComponent("releases"))
                     } label: {
                         Text("Version History")
                     }
@@ -52,12 +52,19 @@ struct SupportInfoView: View {
                 
 #if canImport(UserMessagingPlatform)
                 NavigationLink {
-                    VStack {
+                    List {
+                        HStack {
+                            Text("Status")
+                            Spacer()
+                            Text("\(UMPConsentInformation.sharedInstance.consentStatus.rawValue)")
+                            Text("/")
+                            Text("\(UMPConsentInformation.sharedInstance.formStatus.rawValue)")
+                        }
                         Button {
                             UMPConsentInformation.sharedInstance.reset()
                         } label: {
-                            Text("Reset")
-                        }
+                            Text("Reset Tracking Consent")
+                        }.disabled(UMPConsentInformation.sharedInstance.consentStatus != UMPConsentStatus.obtained)
                     }
                 } label: {
                     Text("Reset Tracking Consent")
@@ -92,16 +99,6 @@ struct SupportInfoView: View {
                 Image(systemName: "square.and.arrow.up")
             }
         }
-    }
-    
-    @ViewBuilder
-    static func privacyWebView(content: String) -> some View {
-        WebViewUI(content: content, baseURL: URL(string:"https://github.com/drearycold/YetAnotherEBookReader/blob/local_library_support/Privacy.md"))
-    }
-    
-    @ViewBuilder
-    static func termsWebView(content: String) -> some View {
-        WebViewUI(content: content, baseURL: URL(string: "https://github.com/drearycold/YetAnotherEBookReader/blob/local_library_support/Terms.md"))
     }
 }
 
