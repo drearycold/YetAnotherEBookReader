@@ -53,39 +53,12 @@ struct ServerDetailView: View {
             }
             
             Section(header: librarySectionHeader()) {
-                ForEach(libraryList, id: \.self) { id in
+                ForEach(libraryList.compactMap { modelData.calibreLibraries[$0] }, id: \.self) { library in
                     NavigationLink(
-                        destination: LibraryDetailView(
-                            library: Binding<CalibreLibrary>(
-                                get: {
-                                    modelData.calibreLibraries[id]!
-                                },
-                                set: { newLibrary in
-                                    modelData.calibreLibraries[id] = newLibrary
-                                    try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
-                                }
-                            ),
-                            discoverable: Binding<Bool>(get: {
-                                modelData.calibreLibraries[id]!.discoverable
-                            }, set: { newValue in
-                                modelData.calibreLibraries[id]?.discoverable = newValue
-                                if let library = modelData.calibreLibraries[id] {
-                                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
-                                    self.modelData.calibreUpdatedSubject.send(.library(library))
-                                }
-                            }),
-                            autoUpdate: Binding<Bool>(get: {
-                                modelData.calibreLibraries[id]!.autoUpdate
-                            }, set: { newValue in
-                                modelData.calibreLibraries[id]?.autoUpdate = newValue
-                                if let library = modelData.calibreLibraries[id] {
-                                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
-                                }
-                            })
-                        ).navigationTitle(modelData.calibreLibraries[id]!.name),
-                        tag: id,
+                        destination: libraryEntryDestination(library: library),
+                        tag: library.id,
                         selection: $selectedLibrary) {
-                        libraryRowBuilder(library: modelData.calibreLibraries[id]!)
+                        libraryRowBuilder(library: library)
                     }
                 }.onDelete(perform: { indexSet in
                     let deletedLibraryIds = indexSet.map { libraryList[$0] }
@@ -160,6 +133,72 @@ struct ServerDetailView: View {
                 ProgressView()
             }
         }
+    }
+    
+    @ViewBuilder
+    private func libraryEntryDestination(library: CalibreLibrary) -> some View {
+        LibraryDetailView(
+            library: Binding<CalibreLibrary>(
+                get: {
+                    library
+                },
+                set: { newLibrary in
+                    modelData.calibreLibraries[library.id] = newLibrary
+                    try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
+                }
+            ),
+            discoverable: Binding<Bool>(get: {
+                library.discoverable
+            }, set: { newValue in
+                modelData.calibreLibraries[library.id]?.discoverable = newValue
+                if let library = modelData.calibreLibraries[library.id] {
+                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
+                    self.modelData.calibreUpdatedSubject.send(.library(library))
+                }
+            }),
+            autoUpdate: Binding<Bool>(get: {
+                library.autoUpdate
+            }, set: { newValue in
+                modelData.calibreLibraries[library.id]?.autoUpdate = newValue
+                if let library = modelData.calibreLibraries[library.id] {
+                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
+                }
+            }),
+            dsreaderHelperLibrary: Binding<CalibreLibraryDSReaderHelper>(
+                get: {
+                    library.pluginDSReaderHelperWithDefault ?? .init()
+                },
+                set: { dsreaderHelperLibrary in
+                    if modelData.calibreLibraries[library.id]?.pluginDSReaderHelperWithDefault != dsreaderHelperLibrary {
+                        var newValue = dsreaderHelperLibrary
+                        newValue._isOverride = true
+                        if let newLibrary = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue) {
+                            modelData.calibreLibraries[library.id] = newLibrary
+                        }
+                    }
+                }
+            ),
+            goodreadsSync: Binding<CalibreLibraryGoodreadsSync>(
+                get: {
+                    return library.pluginGoodreadsSyncWithDefault ?? .init()
+                },
+                set: { _ in }
+            ),
+            countPages: Binding<CalibreLibraryCountPages>(
+                get: {
+                    return library.pluginCountPagesWithDefault ?? .init()
+                },
+                set: { newCountPage in
+                    if library.pluginCountPagesWithDefault != newCountPage {
+                        var newValue = newCountPage
+                        newValue._isOverride = true
+                        if let newLibrary = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue) {
+                            modelData.calibreLibraries[library.id] = newLibrary
+                        }
+                    }
+                }
+            )
+        ).navigationTitle(library.name)
     }
     
     @ViewBuilder

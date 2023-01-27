@@ -43,7 +43,7 @@
 		2AA07E9126D73239008CE451 /* BookDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */; };
 		2AA07E9326DB4ADD008CE451 /* BookPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */; };
 		2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */; };
-		2AAB29942713CB690080B0CB /* ServerCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */; };
+		2AAB29942713CB690080B0CB /* SupportCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* SupportCalibreIntroView.swift */; };
 		2AAB2996271411060080B0CB /* Settings.bundle in Resources */ = {isa = PBXBuildFile; fileRef = 2AAB2995271411060080B0CB /* Settings.bundle */; };
 		2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB2997271415E10080B0CB /* AppInfoView.swift */; };
 		2AAE409D267849E80058A501 /* LibraryInfoBookRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */; };
@@ -168,7 +168,7 @@
 		6E7B80F828FBA7AD008B075C /* AddModServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581A27BE250600642AD1 /* AddModServerView.swift */; };
 		6E7B80F928FBA7AD008B075C /* ServerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581627B9EF8400642AD1 /* ServerDetailView.swift */; };
 		6E7B80FA28FBA7AD008B075C /* ServerOptionsDSReaderHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */; };
-		6E7B80FB28FBA7AD008B075C /* ServerCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */; };
+		6E7B80FB28FBA7AD008B075C /* SupportCalibreIntroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB29932713CB690080B0CB /* SupportCalibreIntroView.swift */; };
 		6E7B80FC28FBA7AD008B075C /* LibraryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */; };
 		6E7B80FD28FBA7AD008B075C /* SupportInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A0486271BF65A00589B87 /* SupportInfoView.swift */; };
 		6E7B80FF28FBA7AD008B075C /* MDictViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */; };
@@ -422,7 +422,7 @@
 		2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailViewModel.swift; sourceTree = "<group>"; };
 		2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreviewView.swift; sourceTree = "<group>"; };
 		2AA07E9426DB4AEC008CE451 /* BookPreviewViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookPreviewViewModel.swift; sourceTree = "<group>"; };
-		2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCalibreIntroView.swift; sourceTree = "<group>"; };
+		2AAB29932713CB690080B0CB /* SupportCalibreIntroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportCalibreIntroView.swift; sourceTree = "<group>"; };
 		2AAB2995271411060080B0CB /* Settings.bundle */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.plug-in"; name = Settings.bundle; path = YetAnotherEBookReader/Settings.bundle; sourceTree = "<group>"; };
 		2AAB2997271415E10080B0CB /* AppInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInfoView.swift; sourceTree = "<group>"; };
 		2AAE409C267849E80058A501 /* LibraryInfoBookRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookRow.swift; sourceTree = "<group>"; };
@@ -702,7 +702,6 @@
 				2A47581A27BE250600642AD1 /* AddModServerView.swift */,
 				2A47581627B9EF8400642AD1 /* ServerDetailView.swift */,
 				2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */,
-				2AAB29932713CB690080B0CB /* ServerCalibreIntroView.swift */,
 				2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */,
 			);
 			path = ServerView;
@@ -718,6 +717,7 @@
 				2A25E246272BAC18009D5341 /* ReaderOptions */,
 				2A47581527B9EF6800642AD1 /* ServerView */,
 				2AF53FD02675F680006E92E0 /* SettingsView.swift */,
+				2AAB29932713CB690080B0CB /* SupportCalibreIntroView.swift */,
 				2A0A0486271BF65A00589B87 /* SupportInfoView.swift */,
 			);
 			path = SettingsView;
@@ -1683,7 +1683,7 @@
 				E769C5F2296BF4C60089C21E /* DRMManagementTableViewController.swift in Sources */,
 				2A21BCE327017A9900825BBB /* Configuration.swift in Sources */,
 				E769C61A296BF4C60089C21E /* FontSelectionViewController.swift in Sources */,
-				2AAB29942713CB690080B0CB /* ServerCalibreIntroView.swift in Sources */,
+				2AAB29942713CB690080B0CB /* SupportCalibreIntroView.swift in Sources */,
 				E792835328F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift in Sources */,
 				2A88D9AC275204FA00372660 /* LibraryOptionsOverrideCustomColumnMappings.swift in Sources */,
 				2A0A0487271BF65A00589B87 /* SupportInfoView.swift in Sources */,
@@ -1799,7 +1799,7 @@
 				6E7B80F828FBA7AD008B075C /* AddModServerView.swift in Sources */,
 				6E7B80F928FBA7AD008B075C /* ServerDetailView.swift in Sources */,
 				6E7B80FA28FBA7AD008B075C /* ServerOptionsDSReaderHelper.swift in Sources */,
-				6E7B80FB28FBA7AD008B075C /* ServerCalibreIntroView.swift in Sources */,
+				6E7B80FB28FBA7AD008B075C /* SupportCalibreIntroView.swift in Sources */,
 				6E7B80FC28FBA7AD008B075C /* LibraryDetailView.swift in Sources */,
 				6E7B80FD28FBA7AD008B075C /* SupportInfoView.swift in Sources */,
 				E769C5FB296BF4C60089C21E /* BookmarkCell.swift in Sources */,

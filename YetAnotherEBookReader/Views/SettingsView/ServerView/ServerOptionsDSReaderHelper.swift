@@ -38,16 +38,12 @@ struct ServerOptionsDSReaderHelper: View {
     
     var body: some View {
         Form {
+            Section {
                 HStack {
                     Text("Plugin Service Port")
+                    
                     Spacer()
-//                    Button(action:{
-//                        if dsreaderHelperServer.port > 1024 {
-//                            portStr = (dsreaderHelperServer.port-1).description
-//                        }
-//                    }) {
-//                        Image(systemName: "minus")
-//                    }
+                    
                     TextField("Plugin Service Port", text: $portStr)
                         .frame(idealWidth: 80, maxWidth: 80)
                         .multilineTextAlignment(.center)
@@ -68,55 +64,26 @@ struct ServerOptionsDSReaderHelper: View {
                             portStr = value.description
                         })
                     
-                    
-//                    Button(action:{
-//                        if dsreaderHelperServer.port < 65535 {
-//                            portStr = (dsreaderHelperServer.port+1).description
-//                        }
-//                    }) {
-//                        Image(systemName: "plus")
-//                    }
-                }
-            Section(header: Text("Helper Informations")) {
-                NavigationLink(
-                    destination: List {
-                        ForEach (
-                            configuration?.reading_position_prefs?.library_config.map {
-                                (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
-                        ) { library_entry in
-                            Section(header: Text("Library \(library_entry.key)")) {
-                                readingPositionDetailsUser(library_entry: library_entry)
-                                    .font(.callout)
-                            }
+                    Button(action:{
+                        if dsreaderHelperServer.port > 1024 {
+                            portStr = (dsreaderHelperServer.port-1).description
                         }
-                    }.navigationTitle("Reading Positions Configuration")
-                ) {
-                    HStack {
-                        Text("Reading Positions")
-                        Spacer()
-                        if configuration?.reading_position_prefs?.library_config.count ?? 0 > 0 {
-                            Text("enabled")
-                        } else {
-                            Text("missing")
-                        }
+                    }) {
+                        Image(systemName: "minus")
                     }
-                }.disabled(configuration?.reading_position_prefs?.library_config.count ?? 0 == 0)
-                
-                HStack {
-                    Text("Dictionary Viewer")
-                    Spacer()
-                    if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
-                       options.dictViewerEnabled,
-                       options.dictViewerLibraryName.count > 0 {
-                        Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
-                            .font(.caption2)
-                            .multilineTextAlignment(.trailing)
-                    } else {
-                        Text("missing")
-                    }
+                    .buttonStyle(.borderless)
                     
+                    Button(action:{
+                        if dsreaderHelperServer.port < 65535 {
+                            portStr = (dsreaderHelperServer.port+1).description
+                        }
+                    }) {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
+                
             Section(header: Text("Supported server plugins")) {
                 NavigationLink(
                     destination: List {
@@ -171,6 +138,21 @@ struct ServerOptionsDSReaderHelper: View {
                         } else {
                             Text("missing")
                         }
+                    }
+                    
+                }
+                
+                HStack {
+                    Text("Dictionary Viewer")
+                    Spacer()
+                    if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
+                       options.dictViewerEnabled,
+                       options.dictViewerLibraryName.count > 0 {
+                        Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
+                            .font(.caption2)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        Text("missing")
                     }
                     
                 }
