@@ -51,6 +51,8 @@ struct LibraryInfoView: View {
     @State private var filteredBookListRefreshingCancellable: AnyCancellable?
     @State private var filteredBookListRefreshing = false
     
+    @State private var savedFilterCriteriaCategory: [String: Set<String>]? = nil
+    
     private var defaultLog = Logger()
     
     var body: some View {
@@ -71,7 +73,7 @@ struct LibraryInfoView: View {
         .navigationViewStyle(ColumnNavigationViewStyle.columns)
         .listStyle(PlainListStyle())
         .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
-            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
         })
         .onAppear {
             libraryList = modelData.calibreLibraries.values
@@ -85,15 +87,45 @@ struct LibraryInfoView: View {
             
             filteredBookListRefreshingCancellable?.cancel()
             filteredBookListRefreshingCancellable = modelData.filteredBookListRefreshingSubject
-                .receive(on: RunLoop.main)
-                .map {
-                    let searchCriteria = modelData.currentLibrarySearchCriteria
-                    filteredBookListRefreshing = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }.isEmpty == false
-                    return $0
-                }
+                .receive(on: DispatchQueue.main)
                 .sink(receiveValue: { _ in
                     let searchCriteria = modelData.currentLibrarySearchCriteria
-                    filteredBookListRefreshing = filteredBookListRefreshing || (modelData.searchCriteriaResults[searchCriteria]?.merging == true)
+                    
+                    let refreshing =
+                    (
+                        modelData.searchCriteriaMergedResults[
+                            modelData.currentLibrarySearchResultKey
+                        ] == nil
+                    )
+                    ||
+                    (
+                        modelData.searchCriteriaMergedResults[
+                            modelData.currentLibrarySearchResultKey
+                        ]?.merging == true
+                    )
+                    ||
+                    (
+                        modelData.searchLibraryResults.filter {
+                            $0.value.loading
+                            &&
+                            (
+                                modelData.filterCriteriaLibraries.isEmpty
+                                ||
+                                modelData.filterCriteriaLibraries.contains($0.key.libraryId)
+                            )
+                            &&
+                            $0.key.criteria == searchCriteria
+                            &&
+                            modelData.currentLibrarySearchResultMerged?.mergedPageOffsets[$0.key.libraryId]?.beenCutOff == true
+                        }.isEmpty == false
+                    )
+                    
+                    if filteredBookListRefreshing != refreshing {
+                        if !refreshing {
+                            print("\(#function) filteredBookListRefreshing=\(filteredBookListRefreshing) refreshing=\(refreshing)")
+                        }
+                        filteredBookListRefreshing = refreshing
+                    }
                 })
             
             categoryItemListCancellable?.cancel()
@@ -139,7 +171,7 @@ struct LibraryInfoView: View {
                     categoryItemListUpdating = false
                 }
             
-            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
         }
         
         //Body
@@ -153,7 +185,8 @@ struct LibraryInfoView: View {
                     .navigationTitle("All Books")
                     .onAppear {
 //                        resetSearchCriteria()
-                        modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                        modelData.filterCriteriaLibraries.removeAll()
+                        resetToFirstPage()
                     }
                 
             } label: {
@@ -231,7 +264,8 @@ struct LibraryInfoView: View {
                                                     modelData.sortCriteria.by = .Modified
                                                     modelData.sortCriteria.ascending = false
                                                 }
-                                                modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                                                
+                                                resetToFirstPage()
                                             }
                                             .navigationTitle("\(categoryName): \(categoryItem)")
                                     } label: {
@@ -283,8 +317,12 @@ struct LibraryInfoView: View {
                         .navigationTitle(Text(library.name))
                         .onAppear {
                             resetSearchCriteria()
+                            if let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
+                                modelData.filterCriteriaCategory = savedFilterCriteriaCategory
+                                self.savedFilterCriteriaCategory = nil
+                            }
                             modelData.filterCriteriaLibraries.insert(library.id)
-                            modelData.filteredBookListMergeSubject.send(.init(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria))
+                            resetToFirstPage()
                         }
                 } label: {
                     HStack {
@@ -308,15 +346,15 @@ struct LibraryInfoView: View {
             bookListViewHeader()
             
             Divider()
-            
-            bookListViewContent()
+            if let result = modelData.currentLibrarySearchResultMerged {
+                bookListViewContent(books: result.booksForPage(page: modelData.filteredBookListPageNumber, pageSize: modelData.filteredBookListPageSize))
+            }
             
             Divider()
             
             bookListViewFooter()
             
         }
-        
         .statusBar(hidden: false)
     }
     
@@ -375,13 +413,15 @@ struct LibraryInfoView: View {
     }
     
     @ViewBuilder
-    private func bookListViewContent() -> some View {
+    private func bookListViewContent(books: ArraySlice<CalibreBook>) -> some View {
         ZStack {
             List(selection: $selectedBookIds) {
-                //ForEach(modelData.filteredBookList, id: \.self) { bookInShelfId in
-                ForEach(modelData.searchCriteriaResults[modelData.currentLibrarySearchCriteria]?.books ?? [], id: \.self) { book in
+                ForEach(books, id: \.self) { book in
                     NavigationLink (
-                        destination: BookDetailView(viewMode: .LIBRARY),
+                        destination: BookDetailView(viewMode: .LIBRARY)
+                            .onAppear {
+                                self.savedFilterCriteriaCategory = modelData.filterCriteriaCategory
+                            },
                         tag: book.inShelfId,
                         selection: $modelData.selectedBookId
                     ) {
@@ -394,7 +434,7 @@ struct LibraryInfoView: View {
                 }   //ForEach
             }
             .onAppear {
-                print("LIBRARYINFOVIEW books=\(modelData.searchCriteriaResults[modelData.currentLibrarySearchCriteria]?.books.count)")
+                print("LIBRARYINFOVIEW books=\(books.count)")
             }
             .disabled(filteredBookListRefreshing)
             .popover(isPresented: $batchDownloadSheetPresenting,
@@ -409,10 +449,8 @@ struct LibraryInfoView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
-                        guard let books = modelData.searchCriteriaResults[modelData.currentLibrarySearchCriteria]?.books else { return }
-                        
                         downloadBookList.removeAll(keepingCapacity: true)
-                        downloadBookList = books
+                        downloadBookList = Array(books)
                         batchDownloadSheetPresenting = true
                     } label: {
                         Image(systemName: "square.and.arrow.down.on.square")
@@ -516,6 +554,15 @@ struct LibraryInfoView: View {
             
             Spacer()
             
+            if #available(iOS 16, *),
+                modelData.filteredBookListPageNumber > 1 {
+                Button {
+                    modelData.filteredBookListPageNumber = 0
+                } label: {
+                    Image(systemName: "chevron.left.to.line")
+                }
+            }
+
             Button(action:{
                 if modelData.filteredBookListPageNumber > 0 {
                     modelData.filteredBookListPageNumber -= 1
@@ -539,11 +586,7 @@ struct LibraryInfoView: View {
         self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
         modelData.searchString = self.searchString
         
-        if modelData.filteredBookListPageNumber > 0 {
-            modelData.filteredBookListPageNumber = 0
-        } else {
-            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
-        }
+        resetToFirstPage()
     }
     
     func updateFilterCategory(key: String, value: String) {
@@ -552,13 +595,16 @@ struct LibraryInfoView: View {
         }
         modelData.filterCriteriaCategory[key]?.insert(value)
         
+        resetToFirstPage()
+    }
+    
+    func resetToFirstPage() {
         if modelData.filteredBookListPageNumber > 0 {
             modelData.filteredBookListPageNumber = 0
         } else {
-            modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
         }
     }
-    
     
     func resetSearchCriteria() {
         modelData.filterCriteriaCategory.removeAll()
@@ -766,7 +812,7 @@ struct LibraryInfoView: View {
         Menu {
             Button(action: {
                 resetSearchCriteria()
-                modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                resetToFirstPage()
             }) {
                 Text("Reset")
             }
@@ -779,7 +825,7 @@ struct LibraryInfoView: View {
                         } else {
                             modelData.filterCriteriaLibraries.insert(library.id)
                         }
-                        modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                        resetToFirstPage()
                     }, label: {
                         VStack(alignment: .leading) {
                             Text(getLibraryFilterText(library: library))
@@ -796,7 +842,7 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .shelvedOnly
                     }
-                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                    resetToFirstPage()
 
                 }, label: {
                     Text("Yes" + (modelData.filterCriteriaShelved == .shelvedOnly ? "✓" : ""))
@@ -807,7 +853,7 @@ struct LibraryInfoView: View {
                     } else {
                         modelData.filterCriteriaShelved = .notShelvedOnly
                     }
-                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                    resetToFirstPage()
 
                 }, label: {
                     Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
@@ -831,7 +877,7 @@ struct LibraryInfoView: View {
                         modelData.sortCriteria.by = sort
                         modelData.sortCriteria.ascending = sort == .Title ? true : false
                     }
-                    modelData.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: modelData.currentLibrarySearchCriteria))
+                    resetToFirstPage()
                 }) {
                     HStack {
                         if modelData.sortCriteria.by == sort {
@@ -855,6 +901,7 @@ struct LibraryInfoView: View {
     
     private func getLibraryFilterText(library: CalibreLibrary) -> String {
         let searchResult = modelData.searchLibraryResults[LibrarySearchKey(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria)]
+        let mergeResult = modelData.currentLibrarySearchResultMerged
         
         return library.name
         + " "
@@ -862,15 +909,19 @@ struct LibraryInfoView: View {
         + " "
         + (searchResult?.description ?? "")
         + " "
-        + (searchResult?.pageOffset[modelData.filteredBookListPageNumber]?.description ?? "0")
-        + "/"
-        + (searchResult?.pageOffset[modelData.filteredBookListPageNumber+1]?.description ?? "0")
+        + String(describing: mergeResult?.mergedPageOffsets[library.id])
     }
     
     private func getLibrarySearchingText() -> String {
         let searchCriteria = modelData.currentLibrarySearchCriteria
         
-        let searchResultsLoading = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.loading }
+        let searchResultsLoading = modelData.searchLibraryResults.filter {
+            modelData.filterCriteriaLibraries.contains($0.key.libraryId)
+            &&
+            $0.key.criteria == searchCriteria
+            &&
+            $0.value.loading
+        }
         if searchResultsLoading.count == 1,
            let libraryId = searchResultsLoading.first?.key.libraryId,
            let library = modelData.calibreLibraries[libraryId] {
@@ -879,7 +930,13 @@ struct LibraryInfoView: View {
         if searchResultsLoading.count > 1 {
             return "Searching \(searchResultsLoading.count) libraries..."
         }
-        let searchResultsError = modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.error }
+        let searchResultsError = modelData.searchLibraryResults.filter {
+            modelData.filterCriteriaLibraries.contains($0.key.libraryId)
+            &&
+            $0.key.criteria == searchCriteria
+            &&
+            $0.value.error
+        }
         if searchResultsError.isEmpty == false {
             return "Result Incomplete"
         }

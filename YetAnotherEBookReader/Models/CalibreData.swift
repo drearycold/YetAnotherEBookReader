@@ -1077,7 +1077,7 @@ struct CalibreBooksTask {
     
     var booksAnnotationsEntry: [String:CalibreBookAnnotationsResult]? = nil
     
-    var searchCriteria: LibrarySearchCriteria? = nil
+    var searchCriteria: SearchCriteria? = nil
     var searchTask: CalibreLibrarySearchTask? = nil
     
     var booksUpdated = Set<Int32>()
@@ -1095,8 +1095,12 @@ struct CalibreLibraryProbeTask {
 
 struct CalibreLibrarySearchTask {
     var library: CalibreLibrary
-    var searchCriteria: LibrarySearchCriteria
+    var searchCriteria: SearchCriteria
     var booksListUrl: URL
+    var offset: Int
+    var num: Int
+    
+    //results
     var data: Data? = nil
     var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
     var booksMetadataJSON: NSDictionary? = nil

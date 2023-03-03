@@ -95,8 +95,7 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .Modified, ascending: false),
-                                filterCriteriaCategory: [:],
-                                filterCriteriaLibraries: []
+                                filterCriteriaCategory: [:]
                             )
                         )
                     )
@@ -106,8 +105,7 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .Added, ascending: false),
-                                filterCriteriaCategory: [:],
-                                filterCriteriaLibraries: []
+                                filterCriteriaCategory: [:]
                             )
                         )
                     )
@@ -117,8 +115,7 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .Publication, ascending: false),
-                                filterCriteriaCategory: [:],
-                                filterCriteriaLibraries: []
+                                filterCriteriaCategory: [:]
                             )
                         )
                     )
@@ -143,8 +140,9 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .Title, ascending: true),
-                                filterCriteriaCategory: ["Authors": Set<String>([author])],
-                                filterCriteriaLibraries: [])))
+                                filterCriteriaCategory: ["Authors": Set<String>([author])]
+                            )
+                        ))
                     }
                     book.tags.forEach { tag in
                         libraryKeys.insert(.init(
@@ -152,8 +150,9 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .Modified, ascending: false),
-                                filterCriteriaCategory: ["Tags": Set<String>([tag])],
-                                filterCriteriaLibraries: [])))
+                                filterCriteriaCategory: ["Tags": Set<String>([tag])]
+                            )
+                        ))
                     }
                     if book.series.isEmpty == false {
                         libraryKeys.insert(.init(
@@ -161,20 +160,25 @@ extension ModelData {
                             criteria: .init(
                                 searchString: "",
                                 sortCriteria: .init(by: .SeriesIndex, ascending: true),
-                                filterCriteriaCategory: ["Series": Set<String>([book.series])],
-                                filterCriteriaLibraries: [])))
+                                filterCriteriaCategory: ["Series": Set<String>([book.series])]
+                            )
+                        ))
                     }
                 }.forEach {
-                    self.librarySearchSubject.send($0)
+                    if let library = self.calibreLibraries[$0.libraryId],
+                       let task = self.calibreServerService.buildLibrarySearchTask(library: library, searchCriteria: $0.criteria) {
+                        self.librarySearchRequestSubject.send(task)
+                    }
                 }
             }
             .store(in: &calibreCancellables)
         
-        librarySearchReturnedSubject
+        librarySearchResultSubject
             .receive(on: ModelData.SearchLibraryResultsRealmQueue)
-            .map { librarySearchKey -> ShelfModelSection in
+            .map { librarySearchTask -> ShelfModelSection in
                 let emptyShelf = ShelfModelSection(sectionName: "", sectionId: "", sectionShelf: [])
                 
+                let librarySearchKey = LibrarySearchKey(libraryId: librarySearchTask.library.id, criteria: librarySearchTask.searchCriteria)
                 guard let library = self.calibreLibraries[librarySearchKey.libraryId],
                       library.hidden == false,
                       library.discoverable == true,

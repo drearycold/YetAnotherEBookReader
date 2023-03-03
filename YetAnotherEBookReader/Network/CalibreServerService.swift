@@ -883,7 +883,9 @@ struct CalibreServerService {
             
             if let searchPreviousResult = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchTask.searchCriteria)] {
                 booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
-                let maxOffset = searchPreviousResult.pageOffset.values.max() ?? 0
+                let maxOffset = modelData.searchCriteriaMergedResults.compactMap {
+                    $0.value.mergedPageOffsets[library.id]?.offsets.last
+                }.max() ?? 0
                 let num = max(0, maxOffset + searchTask.searchCriteria.pageSize * 2 - searchPreviousResult.bookIds.count)
                 booksListUrlQueryItems.append(.init(name: "num", value: num.description))
             } else {
@@ -931,6 +933,9 @@ struct CalibreServerService {
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
         guard task.metadataUrl.isHTTP else {
+            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+        }
+        guard task.books.isEmpty == false else {
             return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
         }
         

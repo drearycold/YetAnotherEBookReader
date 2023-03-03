@@ -42,6 +42,7 @@ final class ModelData: ObservableObject {
     var formatReaderMap = [Format: [ReaderType]]()
     var formatList = [Format]()
     
+    //Search
     @Published var searchString = ""
     @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
     @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
@@ -50,7 +51,8 @@ final class ModelData: ObservableObject {
 
     @Published var filterCriteriaLibraries = Set<String>()
     
-    @Published var searchCriteriaResults = [LibrarySearchCriteria: LibrarySearchCriteriaResultMerged]()
+    //Merged
+    @Published var searchCriteriaMergedResults = [SearchCriteriaMergedKey: LibrarySearchCriteriaResultMerged]()
     
     @Published var filteredBookListPageCount = 0
     @Published var filteredBookListPageSize = 100
@@ -101,10 +103,10 @@ final class ModelData: ObservableObject {
     let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
     let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
     
-    let librarySearchSubject = PassthroughSubject<LibrarySearchKey, Never>()
-    let librarySearchReturnedSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    let librarySearchRequestSubject = PassthroughSubject<CalibreLibrarySearchTask, Never>()
+    let librarySearchResultSubject = PassthroughSubject<CalibreLibrarySearchTask, Never>()
     
-    let filteredBookListMergeSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    let filteredBookListMergeSubject = PassthroughSubject<SearchCriteriaMergedKey, Never>()
     let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListRefreshingSubject = PassthroughSubject<Any, Never>()
     
@@ -267,7 +269,7 @@ final class ModelData: ObservableObject {
         bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
             if self.activeTab == 2 {
-                self.filteredBookListMergeSubject.send(LibrarySearchKey(libraryId: "", criteria: self.currentLibrarySearchCriteria))
+                self.filteredBookListMergeSubject.send(self.currentLibrarySearchResultKey)
             }
         }.store(in: &calibreCancellables)
         
@@ -639,7 +641,10 @@ final class ModelData: ObservableObject {
     func populateServers() {
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
         serversCached.forEach { serverRealm in
-            guard serverRealm.baseUrl != nil else { return }
+            guard serverRealm.removed == false,
+                  serverRealm.baseUrl != nil
+            else { return }
+            
             guard let uuidString = serverRealm.primaryKey,
                   let uuid = UUID(uuidString: uuidString)
             else { return }
