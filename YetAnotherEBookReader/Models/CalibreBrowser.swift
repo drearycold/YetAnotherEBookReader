@@ -855,28 +855,35 @@ extension CalibreServerService {
                     let librarySearchKey = LibrarySearchKey(libraryId: mergedPageOffset.key, criteria: searchCriteriaMergedKey.criteria)
                     let searchResult = modelData.searchLibraryResults[librarySearchKey]
                     
-                    if searchCriteriaMergedKey.libraryIds.isEmpty || searchCriteriaMergedKey.libraryIds.contains(mergedPageOffset.key) {
+                    guard searchCriteriaMergedKey.libraryIds.isEmpty || searchCriteriaMergedKey.libraryIds.contains(mergedPageOffset.key)
+                    else { return }
                         
-                        if mergedPageOffset.value.beenCutOff
-                            ||
+                    if let searchResult = searchResult,
+                       searchResult.error == false,
+                       searchResult.totalNumber == searchResult.bookIds.count {
+                        //reached full list
+                        return
+                    }
+                    
+                    if mergedPageOffset.value.beenCutOff
+                        ||
+                        (
                             (
-                                (
-                                    (mergedPageOffset.value.offsets.last ?? 0)
-                                    +
-                                    modelData.filteredBookListPageSize
-                                )
-                                >=
-                                (searchResult?.bookIds.count ?? 0)
-                            ) {
-                            if let library = modelData.calibreLibraries[mergedPageOffset.key],
-                                let task = modelData.calibreServerService.buildLibrarySearchTask(library: library, searchCriteria: searchCriteriaMergedKey.criteria) {
-                                modelData.librarySearchRequestSubject.send(task)
-                            }
-                        } else {
-                            if searchCriteriaMergedKey.libraryIds.contains("Domestic"),
-                               mergedResult.mergedBooks.count <= 2 {
-                                print("\(#function) DISCONTINUE merged=\(mergedResult.mergedBooks.count) searchLibraryResults=\(modelData.searchLibraryResults)")
-                            }
+                                (mergedPageOffset.value.offsets.last ?? 0)
+                                +
+                                modelData.filteredBookListPageSize
+                            )
+                            >=
+                            (searchResult?.bookIds.count ?? 0)
+                        ) {
+                        if let library = modelData.calibreLibraries[mergedPageOffset.key],
+                           let task = modelData.calibreServerService.buildLibrarySearchTask(library: library, searchCriteria: searchCriteriaMergedKey.criteria) {
+                            modelData.librarySearchRequestSubject.send(task)
+                        }
+                    } else {
+                        if searchCriteriaMergedKey.libraryIds.contains("Domestic"),
+                           mergedResult.mergedBooks.count <= 2 {
+                            print("\(#function) DISCONTINUE merged=\(mergedResult.mergedBooks.count) searchLibraryResults=\(modelData.searchLibraryResults)")
                         }
                     }
                 }
@@ -887,11 +894,10 @@ extension CalibreServerService {
                 
                 return mergedResult
             }
-            .sink(receiveCompletion: { completion in
-                
-            }, receiveValue: { librarySearchMergeResult in
+            .sink(receiveValue: { librarySearchMergeResult in
                 modelData.filteredBookListRefreshingSubject.send("")
-            }).store(in: &modelData.calibreCancellables)
+            })
+            .store(in: &modelData.calibreCancellables)
     }
     
     

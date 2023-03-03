@@ -406,7 +406,13 @@ struct LibraryInfoView: View {
                     
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
-                        .foregroundColor(.gray)
+                        .foregroundColor(
+                            modelData.filterCriteriaCategory.filter({ categoryFilter in
+                                categoryFilter.value.filter({
+                                    categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
+                                }).isEmpty == false
+                            }).isEmpty ? .gray : .accentColor
+                        )
                 }
             }.padding([.leading, .trailing], 4)
         }
