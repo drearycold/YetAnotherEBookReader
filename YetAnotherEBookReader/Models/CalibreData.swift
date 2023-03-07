@@ -1063,22 +1063,22 @@ struct CalibreBooksTask {
     var books: [Int32] {
         request.books
     }
-    var metadataUrl: URL
-    var lastReadPositionUrl: URL
-    var annotationsUrl: URL
-    var booksListUrl: URL
-    var data: Data? = nil
-    var response: URLResponse? = nil
-    var lastReadPositionsData: Data? = nil
-    var annotationsData: Data? = nil
+    var metadataUrl: URL?
+    var lastReadPositionUrl: URL?
+    var annotationsUrl: URL?
+    var booksListUrl: URL?
+    var data: Data?
+    var response: URLResponse?
+    var lastReadPositionsData: Data?
+    var annotationsData: Data?
     
-    var booksMetadataEntry: [String: CalibreBookEntry?]? = nil
-    var booksMetadataJSON: NSDictionary? = nil
+    var booksMetadataEntry: [String: CalibreBookEntry?]?
+    var booksMetadataJSON: NSDictionary?
     
-    var booksAnnotationsEntry: [String:CalibreBookAnnotationsResult]? = nil
+    var booksAnnotationsEntry: [String:CalibreBookAnnotationsResult]?
     
-    var searchCriteria: SearchCriteria? = nil
-    var searchTask: CalibreLibrarySearchTask? = nil
+    var searchCriteria: SearchCriteria?
+    var searchTask: CalibreLibrarySearchTask?
     
     var booksUpdated = Set<Int32>()
     var booksError = Set<Int32>()

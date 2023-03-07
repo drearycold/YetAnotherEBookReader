@@ -2212,7 +2212,9 @@ final class ModelData: ObservableObject {
                         .replaceError(with: task)
                         .eraseToAnyPublisher()
                 } else {
-                    return Just(CalibreBooksTask(request: request, metadataUrl: URL(fileURLWithPath: "/"), lastReadPositionUrl: URL(fileURLWithPath: "/"), annotationsUrl: URL(fileURLWithPath: "/"), booksListUrl: URL(fileURLWithPath: "/"))).setFailureType(to: Never.self).eraseToAnyPublisher()
+                    return Just(CalibreBooksTask(request: request))
+                        .setFailureType(to: Never.self)
+                        .eraseToAnyPublisher()
                 }
             }
             .flatMap { task -> AnyPublisher<CalibreBooksTask, Never> in

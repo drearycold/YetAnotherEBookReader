@@ -173,8 +173,7 @@ extension ModelData {
             }
             .store(in: &calibreCancellables)
         
-        librarySearchResultSubject
-            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
+        librarySearchResultSubject.receive(on: ModelData.SearchLibraryResultsRealmQueue)
             .map { librarySearchTask -> ShelfModelSection in
                 let emptyShelf = ShelfModelSection(sectionName: "", sectionId: "", sectionShelf: [])
                 
@@ -242,6 +241,7 @@ extension ModelData {
                 let sectionId = "\(librarySearchKey.description)"
                 
                 let serverUUID = library.server.uuid.uuidString
+                var bookIds = Set<String>()
                 
                 let sectionShelf = result.bookIds.compactMap { bookId -> ShelfModel? in
                     let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
@@ -252,6 +252,12 @@ extension ModelData {
                     else { return nil }
                     
                     let book = self.convert(library: library, bookRealm: bookRealm)
+                    guard bookIds.contains(book.inShelfId) == false
+                    else {
+                        assertionFailure("duplicate book")
+                        return nil
+                    }
+                    bookIds.insert(book.inShelfId)
                     
                     return ShelfModel(
                         bookCoverSource: book.coverURL?.absoluteString ?? ".",

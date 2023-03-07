@@ -38,6 +38,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     let topMenu = UIMenu(title: "Pick Library")
     var librariesPicked = Set<String>()     //set of libraryId
 
+    let snaptshotQueue = DispatchQueue(label: "section-shelf-snapshot", qos: .userInitiated)
+    
     let refreshBarButtonItem = BarButtonItem()
     
     override var canBecomeFirstResponder: Bool {
@@ -147,16 +149,21 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         reloadShelfCancellable?.cancel()
         reloadShelfCancellable = modelData.discoverShelfModelSubject
-            .receive(on: DispatchQueue.main)
-            .sink { shelfModels in
+            .collect(.byTime(RunLoop.main, .seconds(2)))
+            .receive(on: snaptshotQueue)
+            .map { shelfModelsArray -> ([ShelfModelSection], [UIMenuElement]) in
+                guard let shelfModels = shelfModelsArray.last
+                else {
+                    return ([], [])
+                }
                 let librarySet = Set<CalibreLibrary>(shelfModels.compactMap { shelfModel -> CalibreLibrary? in
                     guard let libraryId = ModelData.parseShelfSectionId(sectionId: shelfModel.sectionId)
                     else { return nil }
                     
                     return self.modelData.calibreLibraries[libraryId]
                 })
-                    
-                let topMenuItems = [
+                
+                let topMenuElements = [
                     UIAction(title: "    Reset") { action in
                         self.librariesPicked.removeAll(keepingCapacity: true)
                         self.modelData.discoverShelfModelSubject.send(self.modelData.bookModelSection)
@@ -171,7 +178,11 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                     }
                 }
                 
-                self.topButton.menu = self.topMenu.replacingChildren(topMenuItems)
+                return (shelfModels, topMenuElements)
+            }
+            .receive(on: DispatchQueue.main)
+            .map { shelfModels, topMenuElements -> [ShelfModelSection] in
+                self.topButton.menu = self.topMenu.replacingChildren(topMenuElements)
                 
                 self.librariesPicked.formIntersection(
                     shelfModels.compactMap {
@@ -179,12 +190,33 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                     }
                 )
                 
-                self.shelfView.reloadBooks(bookModelSection: shelfModels.filter {
+                let shelfModelsSelected = shelfModels.filter {
                     guard let libraryId = ModelData.parseShelfSectionId(sectionId: $0.sectionId)
                     else { return false }
                     
                     return self.librariesPicked.isEmpty || self.librariesPicked.contains(libraryId)
-                })
+                }
+                
+                return shelfModelsSelected
+            }
+            .receive(on: snaptshotQueue)
+            .sink { shelfModels in
+                var snapshot = shelfModels.reduce(
+                    into: NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>(),
+                    { partialResult, section in
+                        var sectionShelf = section.sectionShelf
+                        
+                        sectionShelf[sectionShelf.startIndex].type = .left
+                        sectionShelf[sectionShelf.endIndex-1].type = .right
+                        
+                        partialResult.appendSections([ShelfModelSection(sectionName: section.sectionName, sectionId: section.sectionId, sectionShelf: [])])
+                        
+                        partialResult.appendItems(sectionShelf)
+                    })
+                
+                self.fillSnapshotToScreen(snapshot: &snapshot)
+                
+                self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
             }
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
@@ -225,8 +257,41 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             UIBarButtonItem.flexibleSpace(),
             .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
         ], animated: true)
+        
+        var snapshot = NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>()
+        self.fillSnapshotToScreen(snapshot: &snapshot)
+        self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
     }
-
+    
+    func fillSnapshotToScreen(snapshot: inout NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>) {
+        while snapshot.numberOfSections < Int(self.shelfView.grids.height) {
+            let sectionId = LibrarySearchKey(
+                libraryId: self.modelData.localLibrary?.id ?? "",
+                criteria: .init(
+                    searchString: "\(snapshot.numberOfSections)",
+                    sortCriteria: .init(),
+                    filterCriteriaCategory: [:]
+                )
+            ).description
+            
+            snapshot.appendSections([.init(
+                sectionName: "",
+                sectionId: sectionId,
+                sectionShelf: [])])
+            
+            snapshot.appendItems(
+                (0 ..< Int(self.shelfView.grids.width)).map {
+                    ShelfModel(
+                        bookId: "row-\(snapshot.numberOfSections)-\($0)",
+                        sectionId: sectionId,
+                        show: false,
+                        type: .center
+                    )
+                }
+            )
+        }
+    }
+    
     func resizeSubviews(to size: CGSize, to newCollection: UITraitCollection) {
         if let tabBarController = self.tabBarController {
             tabBarHeight = tabBarController.tabBar.frame.height

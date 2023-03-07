@@ -1,0 +1,30 @@
+diff --git a/Pods/R2Streamer/Sources/.DS_Store b/Pods/R2Streamer/Sources/.DS_Store
+new file mode 100644
+index 0000000..8288476
+Binary files /dev/null and b/Pods/R2Streamer/Sources/.DS_Store differ
+diff --git a/Pods/R2Streamer/Sources/Streamer/.DS_Store b/Pods/R2Streamer/Sources/Streamer/.DS_Store
+new file mode 100644
+index 0000000..f8ecde7
+Binary files /dev/null and b/Pods/R2Streamer/Sources/Streamer/.DS_Store differ
+diff --git a/Pods/R2Streamer/Sources/Streamer/Assets/.DS_Store b/Pods/R2Streamer/Sources/Streamer/Assets/.DS_Store
+new file mode 100644
+index 0000000..524c15f
+Binary files /dev/null and b/Pods/R2Streamer/Sources/Streamer/Assets/.DS_Store differ
+diff --git a/cocoapods-patch-20230305-81832-149jp0l/R2Streamer/Sources/Streamer/Toolkit/Extensions/Fetcher.swift b/Pods/R2Streamer/Sources/Streamer/Toolkit/Extensions/Fetcher.swift
+index 6dcbad4..1ed1526 100644
+--- a/cocoapods-patch-20230305-81832-149jp0l/R2Streamer/Sources/Streamer/Toolkit/Extensions/Fetcher.swift
++++ b/Pods/R2Streamer/Sources/Streamer/Toolkit/Extensions/Fetcher.swift
+@@ -41,11 +41,12 @@ extension Fetcher {
+         let directories = links
+             .filter { !ignoring($0) }
+             .compactMap { $0.href.removingPrefix("/").split(separator: "/", maxSplits: 1).first }
++            .map(String.init)
+             .removingDuplicates()
+         
+         guard
+             directories.count == 1,
+-            let title = directories.first.map(String.init),
++            let title = directories.first,//.map(String.init),
+             title != firstLink?.href.removingPrefix("/") else
+         {
+             return nil

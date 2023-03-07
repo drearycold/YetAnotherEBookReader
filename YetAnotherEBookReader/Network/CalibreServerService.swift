@@ -14,8 +14,8 @@ struct CalibreServerService {
 
     var defaultLog = Logger()
 
-    func urlSession(server: CalibreServer, timeout: Double = 600) -> URLSession {
-        let key = CalibreServerURLSessionKey(server: server, timeout: timeout)
+    func urlSession(server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> URLSession {
+        let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
         if let session = modelData.metadataSessions[key] {
             return session
         }
@@ -932,7 +932,8 @@ struct CalibreServerService {
     }
     
     func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        guard task.metadataUrl.isHTTP else {
+        guard let metadataUrl = task.metadataUrl,
+              metadataUrl.isHTTP else {
             return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
         }
         guard task.books.isEmpty == false else {
@@ -940,7 +941,7 @@ struct CalibreServerService {
         }
         
         return urlSession(server: task.library.server)
-            .dataTaskPublisher(for: task.metadataUrl)
+            .dataTaskPublisher(for: metadataUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.data = result.data
@@ -969,7 +970,14 @@ struct CalibreServerService {
     }
     
     func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        return urlSession(server: task.library.server).dataTaskPublisher(for: task.lastReadPositionUrl)
+        guard let lastReadPositionUrl = task.lastReadPositionUrl,
+              lastReadPositionUrl.isHTTP
+        else {
+            return Just(task)
+                .setFailureType(to: URLError.self)
+                .eraseToAnyPublisher()
+        }
+        return urlSession(server: task.library.server).dataTaskPublisher(for: lastReadPositionUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.lastReadPositionsData = result.data
@@ -979,7 +987,14 @@ struct CalibreServerService {
     }
     
     func getAnnotations(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        return urlSession(server: task.library.server).dataTaskPublisher(for: task.annotationsUrl)
+        guard let annotationsUrl = task.annotationsUrl,
+              annotationsUrl.isHTTP
+        else {
+            return Just(task)
+                .setFailureType(to: URLError.self)
+                .eraseToAnyPublisher()
+        }
+        return urlSession(server: task.library.server).dataTaskPublisher(for: annotationsUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.annotationsData = result.data
@@ -1188,10 +1203,12 @@ struct CalibreServerService {
 struct CalibreServerURLSessionKey: Hashable, Equatable {
     let server: CalibreServer
     let timeout: Double
+    let qos: DispatchQoS.QoSClass
     
     func hash(into hasher: inout Hasher) {
         hasher.combine(server.uuid)
         hasher.combine(timeout)
+        hasher.combine(qos)
     }
 }
 

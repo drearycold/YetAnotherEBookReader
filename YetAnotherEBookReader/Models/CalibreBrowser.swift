@@ -658,7 +658,12 @@ extension CalibreServerService {
                     modelData.searchLibraryResults[librarySearchKey] = .init(library: task.library, error: true)
                 }
                 
+                if let prevResult = modelData.searchLibraryResults[librarySearchKey] {
+                    print("\(#function) librarySearchKey=\(librarySearchKey) fire num=\(task.num) offset=\(task.offset) prevCount=\(prevResult.bookIds.count ?? 0) prevOffline=\(prevResult.offlineResult) offline=\(task.booksListUrl.isFileURL && !task.library.server.isLocal) prevLoading=\(prevResult.loading)")
+                }
+                
                 modelData.searchLibraryResults[librarySearchKey]?.offlineResult = (task.booksListUrl.isFileURL && !task.library.server.isLocal)
+                
                 modelData.searchLibraryResults[librarySearchKey]?.loading = true
 
                 modelData.filteredBookListRefreshingSubject.send("")
@@ -739,8 +744,8 @@ extension CalibreServerService {
                 return task
             }
             .receive(on: DispatchQueue.main)
-            .map { task -> CalibreBooksTask in
-                guard let searchTask = task.searchTask else { return task }
+            .sink { task in
+                guard let searchTask = task.searchTask else { return }
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchTask.searchCriteria)
                 if let searchResult = searchTask.ajaxSearchResult {
@@ -749,33 +754,41 @@ extension CalibreServerService {
                         modelData.searchLibraryResults[librarySearchKey]?.error = true  //trigger list remerge
                     }
                     modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
-                    if modelData.searchLibraryResults[librarySearchKey]?.bookIds.count == searchResult.offset {
-                        modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
-                    } else {
-                        print("\(#function) library=\(task.library.key) mismatch \(searchResult.num) \(searchResult.total_num) \(searchResult.offset) \(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
+                    
+                    print("\(#function) librarySearchKey=\(librarySearchKey) result num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0) offline=\(searchTask.booksListUrl.isFileURL && !searchTask.library.server.isLocal)")
+                    
+                    guard let prevResult = modelData.searchLibraryResults[librarySearchKey],
+                          prevResult.bookIds.count == searchResult.offset,
+                          Set(prevResult.bookIds).union(Set(searchResult.book_ids)).count == prevResult.bookIds.count + searchResult.book_ids.count
+                    else {
+                        //duplication, reset search result
+                        print("\(#function) librarySearchKey=\(librarySearchKey) mismatch_or_duplicate num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
+                        
+                        modelData.searchLibraryResults[librarySearchKey]?.loading = false
+                        modelData.searchLibraryResults[librarySearchKey]?.error = true
+                        modelData.searchLibraryResults[librarySearchKey]?.bookIds.removeAll(keepingCapacity: true)
+                        
+                        if let newTask = modelData.calibreServerService.buildLibrarySearchTask(library: searchTask.library, searchCriteria: searchTask.searchCriteria) {
+                            modelData.librarySearchRequestSubject.send(newTask)
+                        }
+                        
+                        return
                     }
+                        
+                    modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
                     
                     print("\(#function) finishLoading library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
-                } else if searchTask.ajaxSearchError {
                     
+                    modelData.librarySearchResultSubject.send(searchTask)
+
+                    modelData.searchLibraryResults[librarySearchKey]?.error = false
+                } else if searchTask.ajaxSearchError {
+                    modelData.searchLibraryResults[librarySearchKey]?.error = true
                 }
-                
-                return task
-            }
-            .sink { task in
-                guard let searchTask = task.searchTask else { return }
-                
-                let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchTask.searchCriteria)
-
-                modelData.librarySearchResultSubject.send(searchTask)
-
-                modelData.searchLibraryResults[librarySearchKey]?.error = false
             }.store(in: &modelData.calibreCancellables)
         
-        modelData.librarySearchResultSubject
-            .collect(.byTime(RunLoop.main, .seconds(2)))
+        modelData.librarySearchResultSubject.collect(.byTime(RunLoop.main, .seconds(2)))
             .sink { tasks in
-                
                 tasks.reduce(into: Set<SearchCriteriaMergedKey>()) { partialResult, task in
                     let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
                     partialResult.formUnion(
@@ -902,8 +915,7 @@ extension CalibreServerService {
     
     
     func registerLibrarySearchResetHandler() {
-        modelData.librarySearchResetSubject
-            .subscribe(on: DispatchQueue.main)
+        modelData.librarySearchResetSubject.subscribe(on: DispatchQueue.main)
             .sink(receiveCompletion: { completion in
                 
             }, receiveValue: { librarySearchKey in
