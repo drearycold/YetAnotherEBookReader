@@ -899,7 +899,7 @@ struct CalibreServerService {
             .eraseToAnyPublisher()
     }
     
-    func getBooksMetadata(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<CalibreBooksTask, URLError> {
         guard let metadataUrl = task.metadataUrl,
               metadataUrl.isHTTP else {
             return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
@@ -908,7 +908,7 @@ struct CalibreServerService {
             return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
         }
         
-        return urlSession(server: task.library.server)
+        return urlSession(server: task.library.server, qos: qos)
             .dataTaskPublisher(for: metadataUrl)
             .map { result -> CalibreBooksTask in
                 var task = task

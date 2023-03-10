@@ -9,16 +9,16 @@ import Foundation
 import RealmSwift
 import Combine
 
-struct LibrarySearchSort: Hashable {
+struct LibrarySearchSort: Hashable, CustomStringConvertible {
     var by = SortCriteria.Modified
     var ascending = false
     
     var description: String {
-        "\(ascending ? "First" : "Last") \(by.description)"
+        "\(ascending ? "First" : "Last") \(by)"
     }
 }
 
-enum SortCriteria: String, CaseIterable, Identifiable {
+enum SortCriteria: String, CaseIterable, Identifiable, CustomStringConvertible {
     var id: String { self.rawValue }
     
     case Title
@@ -78,7 +78,7 @@ struct SearchCriteria: Hashable, CustomStringConvertible {
     }
     
     var description: String {
-        "\(searchString)^\(sortCriteria)^\(filterCriteriaCategory.count)"
+        "\(searchString)^\(sortCriteria)^\(filterCriteriaCategory)"
     }
 }
 
@@ -833,7 +833,7 @@ extension CalibreServerService {
                     .map({ CalibreBook(id: $0, library: searchTask.library) }),
                    books.isEmpty == false,
                    let metaTask = buildBooksMetadataTask(library: searchTask.library, books: books, searchTask: searchTask) {
-                    return modelData.calibreServerService.getBooksMetadata(task: metaTask)
+                    return modelData.calibreServerService.getBooksMetadata(task: metaTask, qos: .userInitiated)
                         .replaceError(with: metaTask)
                         .eraseToAnyPublisher()
                 } else {
@@ -1115,7 +1115,7 @@ extension CalibreServerService {
                 guard let url = urlComponents?.url(relativeTo: serverUrl)
                 else { return just }
                 
-                return urlSession(server: request.library.server).dataTaskPublisher(for: url)
+                return urlSession(server: request.library.server, qos: .background).dataTaskPublisher(for: url)
                     .map {
                         $0.data
                     }
