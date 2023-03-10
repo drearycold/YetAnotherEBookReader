@@ -89,8 +89,6 @@ struct LibraryInfoView: View {
             filteredBookListRefreshingCancellable = modelData.filteredBookListRefreshingSubject
                 .receive(on: DispatchQueue.main)
                 .sink(receiveValue: { _ in
-                    let searchCriteria = modelData.currentLibrarySearchCriteria
-                    
                     let refreshing =
                     (
                         modelData.searchCriteriaMergedResults[
@@ -105,16 +103,11 @@ struct LibraryInfoView: View {
                     )
                     ||
                     (
-                        modelData.searchLibraryResults.filter {
+                        modelData.librarySearchCache.getCaches(
+                            for: modelData.filterCriteriaLibraries,
+                            of: modelData.currentLibrarySearchCriteria
+                        ).filter {
                             $0.value.loading
-                            &&
-                            (
-                                modelData.filterCriteriaLibraries.isEmpty
-                                ||
-                                modelData.filterCriteriaLibraries.contains($0.key.libraryId)
-                            )
-                            &&
-                            $0.key.criteria == searchCriteria
                             &&
                             modelData.currentLibrarySearchResultMerged?.mergedPageOffsets[$0.key.libraryId]?.beenCutOff == true
                         }.isEmpty == false
@@ -508,11 +501,12 @@ struct LibraryInfoView: View {
                                         Text("Searching for more, result incomplete.")
                                     } else if searchResult.1.error {
                                         Text("Error occured, result incomplete.")
-                                    } else if searchResult.1.offlineResult {
+                                    } else if searchResult.1.offlineResult,
+                                              !searchResult.1.library.server.isLocal {
                                         Text("Local cached result, may not up to date.")
                                     }
                                 }.font(.caption)
-                                    .foregroundColor(.red    )
+                                    .foregroundColor(.red)
                             }
                             
                         }
@@ -865,8 +859,6 @@ struct LibraryInfoView: View {
                     Text("No" + (modelData.filterCriteriaShelved == .notShelvedOnly ? "✓" : ""))
                 })
             }
-            
-            
         } label: {
             Image(systemName: "line.horizontal.3.decrease")
         }
@@ -899,35 +891,33 @@ struct LibraryInfoView: View {
                     }
                 }
             }
-            
         } label: {
             Image(systemName: "arrow.up.arrow.down")
         }
     }
     
     private func getLibraryFilterText(library: CalibreLibrary) -> String {
-        let searchResult = modelData.searchLibraryResults[LibrarySearchKey(libraryId: library.id, criteria: modelData.currentLibrarySearchCriteria)]
+        let searchResult = modelData.librarySearchCache.getCache(
+            for: library,
+            of: modelData.currentLibrarySearchCriteria
+        )
         let mergeResult = modelData.currentLibrarySearchResultMerged
         
         return library.name
         + " "
         + (modelData.filterCriteriaLibraries.contains(library.id) ? "✓" : "")
         + " "
-        + (searchResult?.description ?? "")
+        + (searchResult.description)
         + " "
         + String(describing: mergeResult?.mergedPageOffsets[library.id])
     }
     
     private func getLibrarySearchingText() -> String {
-        let searchCriteria = modelData.currentLibrarySearchCriteria
-        
-        let searchResultsLoading = modelData.searchLibraryResults.filter {
-            modelData.filterCriteriaLibraries.contains($0.key.libraryId)
-            &&
-            $0.key.criteria == searchCriteria
-            &&
-            $0.value.loading
-        }
+        let searchResults = modelData.librarySearchCache.getCaches(
+            for: modelData.filterCriteriaLibraries,
+            of: modelData.currentLibrarySearchCriteria
+        )
+        let searchResultsLoading = searchResults.filter { $0.value.loading }
         if searchResultsLoading.count == 1,
            let libraryId = searchResultsLoading.first?.key.libraryId,
            let library = modelData.calibreLibraries[libraryId] {
@@ -936,33 +926,12 @@ struct LibraryInfoView: View {
         if searchResultsLoading.count > 1 {
             return "Searching \(searchResultsLoading.count) libraries..."
         }
-        let searchResultsError = modelData.searchLibraryResults.filter {
-            modelData.filterCriteriaLibraries.contains($0.key.libraryId)
-            &&
-            $0.key.criteria == searchCriteria
-            &&
-            $0.value.error
-        }
+        let searchResultsError = searchResults.filter { $0.value.error }
         if searchResultsError.isEmpty == false {
             return "Result Incomplete"
         }
         
         return ""
-    }
-    
-    private func hasLibrarySearchError() -> Bool {
-        let a = modelData.calibreLibraryCategoryMerged.filter({ categoryMerged in
-            categoryMerged.value.count < 10000
-            && modelData.calibreLibraryCategories
-                .filter { $0.key.categoryName == categoryMerged.key }
-                .reduce(0) { result, libraryCategory in
-                    result + libraryCategory.value.totalNumber
-                } < 10000
-        }).keys.sorted()
-        
-        let searchCriteria = modelData.currentLibrarySearchCriteria
-        
-        return modelData.searchLibraryResults.filter { $0.key.criteria == searchCriteria && $0.value.error }.isEmpty == false
     }
 }
 

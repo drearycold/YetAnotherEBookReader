@@ -1093,7 +1093,9 @@ struct CalibreLibraryProbeTask {
     var probeResult: CalibreLibraryBooksResult.SearchResult?
 }
 
-struct CalibreLibrarySearchTask {
+struct CalibreLibrarySearchTask: Identifiable {
+    let id = UUID()
+    
     var library: CalibreLibrary
     var searchCriteria: SearchCriteria
     var booksListUrl: URL

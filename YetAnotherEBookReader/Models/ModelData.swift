@@ -44,13 +44,16 @@ final class ModelData: ObservableObject {
     
     //Search
     @Published var searchString = ""
-    @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
     @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
     @Published var filterCriteriaCategory = [String: Set<String>]()
     @Published var filterCriteriaShelved = FilterCriteriaShelved.none
 
     @Published var filterCriteriaLibraries = Set<String>()
-    
+
+    @available(*, deprecated, renamed: "librarySearchCache")
+    @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
+
+    @Published var librarySearchCache = LibrarySearchCache()
     //Merged
     @Published var searchCriteriaMergedResults = [SearchCriteriaMergedKey: LibrarySearchCriteriaResultMerged]()
     

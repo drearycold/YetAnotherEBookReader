@@ -258,9 +258,12 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
         ], animated: true)
         
-        var snapshot = NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>()
-        self.fillSnapshotToScreen(snapshot: &snapshot)
-        self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+        
+        self.snaptshotQueue.async {
+            var snapshot = NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>()
+            self.fillSnapshotToScreen(snapshot: &snapshot)
+            self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+        }
     }
     
     func fillSnapshotToScreen(snapshot: inout NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>) {

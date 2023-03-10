@@ -181,9 +181,13 @@ extension ModelData {
                 guard let library = self.calibreLibraries[librarySearchKey.libraryId],
                       library.hidden == false,
                       library.discoverable == true,
-                      let result = self.searchLibraryResults[librarySearchKey],
                       let realm = try? Realm(configuration: self.realmConf)
                 else { return emptyShelf }
+                
+                let result = self.librarySearchCache.getCache(
+                    for: library,
+                    of: librarySearchTask.searchCriteria
+                )
 
                 if librarySearchKey.criteria.searchString == "",
                    librarySearchKey.criteria.hasEmptyFilter {

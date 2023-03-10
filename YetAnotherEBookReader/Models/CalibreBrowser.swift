@@ -153,6 +153,110 @@ struct LibrarySearchResult {
     }
 }
 
+struct LibrarySearchCache {
+    enum CacheType: Comparable, CaseIterable {
+        case online
+        case onlineCache
+        case offline
+    }
+    struct CacheKey: Hashable {
+        let searchKey: LibrarySearchKey
+        let type: CacheType
+    }
+    
+    private var cache = [CacheKey: LibrarySearchResult]()
+    
+    /**
+     nil value for type means any available
+     */
+    func getCache(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType? = nil) -> LibrarySearchResult {
+        let searchKey = LibrarySearchKey(libraryId: library.id, criteria: criteria)
+        if let type = type {
+            let cacheKey = CacheKey(searchKey: searchKey, type: type)
+            if let result = cache[cacheKey] {
+                return result
+            } else {
+                return .init(library: library, offlineResult: type == .offline, error: true)
+            }
+        } else {
+            for type in CacheType.allCases {
+                if let result = cache[.init(searchKey: searchKey, type: type)] {
+                    return result
+                }
+            }
+            return .init(library: library, offlineResult: type == .offline, error: true)
+        }
+    }
+    
+    /**
+     first non-empty result for each library by preference ( online > onlineCache > offline )
+     */
+    func getCaches(for libraryIds: Set<String>, of criteria: SearchCriteria) -> [LibrarySearchKey: LibrarySearchResult] {
+        self.cache.filter {
+            (
+                libraryIds.isEmpty
+                ||
+                libraryIds.contains($0.key.searchKey.libraryId)
+            )
+            &&
+            $0.key.searchKey.criteria == criteria
+            &&
+            $0.value.bookIds.count > 0
+        }.sorted { lhs, rhs in
+            lhs.key.type < rhs.key.type
+        }.reduce(into: [:]) { partialResult, cacheEntry in
+            if partialResult[cacheEntry.key.searchKey] == nil {
+                partialResult[cacheEntry.key.searchKey] = cacheEntry.value
+            }
+        }
+    }
+    
+    mutating func resetCache(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        if var cacheVal = cache[cacheKey] {
+            cacheVal.loading = false
+            cacheVal.error = true
+            cacheVal.bookIds.removeAll(keepingCapacity: true)
+            cache[cacheKey] = cacheVal
+        } else {
+            cache[cacheKey] = .init(library: library, offlineResult: type == .offline, error: true)
+        }
+    }
+    
+    mutating func startLoading(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        if cache[cacheKey] == nil {
+            cache[cacheKey] = .init(library: library, offlineResult: type == .offline, error: true)
+        }
+        cache[cacheKey]?.loading = true
+    }
+    
+    mutating func finishLoading(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        cache[cacheKey]?.loading = false
+    }
+    
+    mutating func setIsError(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType, to error: Bool) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        if cache[cacheKey] == nil {
+            cache[cacheKey] = .init(library: library, offlineResult: type == .offline, error: error)
+        } else {
+            cache[cacheKey]?.error = error
+        }
+    }
+    
+    mutating func setTotalNumber(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType, to totalNumber: Int) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        cache[cacheKey]?.totalNumber = totalNumber
+    }
+    
+    mutating func appendResult(for library: CalibreLibrary, of criteria: SearchCriteria, by type: CacheType, contentsOf: [Int32]) {
+        let cacheKey = CacheKey(searchKey: .init(libraryId: library.id, criteria: criteria), type: type)
+        cache[cacheKey]?.bookIds.append(contentsOf: contentsOf)
+        cache[cacheKey]?.error = false
+    }
+}
+
 struct LibraryCategoryList {
     let library: CalibreLibrary
     let category: CalibreLibraryCategory
@@ -238,16 +342,10 @@ extension ModelData {
     }
     
     var currentSearchLibraryResults: [LibrarySearchKey: LibrarySearchResult] {
-        let searchCriteria = self.currentLibrarySearchCriteria
-        return self.searchLibraryResults.filter {
-            (
-                self.filterCriteriaLibraries.isEmpty
-                ||
-                self.filterCriteriaLibraries.contains($0.key.libraryId)
-            )
-            &&
-            $0.key.criteria == searchCriteria
-        }
+        librarySearchCache.getCaches(
+            for: self.filterCriteriaLibraries,
+            of: self.currentLibrarySearchCriteria
+        )
     }
     
     var currentSearchLibraryResultsCannotFurther: Bool {
@@ -277,10 +375,11 @@ extension ModelData {
               let realmSearch = searchLibraryResultsRealmQueue
         else { return mergedResult }
         
-        let searchResults: [String: LibrarySearchResult] = mergeKey.libraryIds.reduce(into: [:]) { partialResult, libraryId in
-            if let searchResult = self.searchLibraryResults[.init(libraryId: libraryId, criteria: mergeKey.criteria)] {
-                partialResult[libraryId] = searchResult
-            }
+        let searchResults: [String: LibrarySearchResult] = self.librarySearchCache.getCaches(
+            for: mergeKey.libraryIds,
+            of: mergeKey.criteria
+        ).reduce(into: [:]) { partialResult, entry in
+            partialResult[entry.key.libraryId] = entry.value
         }
         
         var startPage = page
@@ -451,12 +550,18 @@ extension CalibreServerService {
     func buildLibrarySearchTask(library: CalibreLibrary, searchCriteria: SearchCriteria) -> CalibreLibrarySearchTask? {
         guard let serverUrl =
                 modelData.librarySyncStatus[library.id]?.isError == true
-                ? URL(fileURLWithPath: "/realm")
-                : (
-                    getServerUrlByReachability(server: library.server) ?? (
+                ?
+                URL(fileURLWithPath: "/realm")
+                :
+                (
+                    getServerUrlByReachability(server: library.server)
+                    ??
+                    (
                         (library.autoUpdate || library.server.isLocal)
-                        ? URL(fileURLWithPath: "/realm")
-                        : nil
+                        ?
+                        URL(fileURLWithPath: "/realm")
+                        :
+                        nil
                     )
                 )
         else { return nil }
@@ -473,7 +578,11 @@ extension CalibreServerService {
             $0.value.mergedPageOffsets[library.id]?.offsets.last
         }.max() ?? 0
         
-        let searchedOffset = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchCriteria)]?.bookIds.count ?? 0
+        let searchedOffset = modelData.librarySearchCache.getCache(
+            for: library,
+            of: searchCriteria,
+            by: serverUrl.isFileURL ? .offline : .online
+        ).bookIds.count
         let searchNum = maxMergedOffset + searchCriteria.pageSize - searchedOffset
         
         booksListUrlQueryItems.append(.init(name: "offset", value: searchedOffset.description))
@@ -654,21 +763,23 @@ extension CalibreServerService {
             .map({ task -> CalibreLibrarySearchTask in
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
                 
-                if modelData.searchLibraryResults[librarySearchKey] == nil {
-                    modelData.searchLibraryResults[librarySearchKey] = .init(library: task.library, error: true)
-                }
+                modelData.librarySearchCache.startLoading(
+                    for: task.library,
+                    of: task.searchCriteria,
+                    by: task.booksListUrl.isFileURL ? .offline : .online
+                )
                 
-                if let prevResult = modelData.searchLibraryResults[librarySearchKey] {
-                    print("\(#function) librarySearchKey=\(librarySearchKey) fire num=\(task.num) offset=\(task.offset) prevCount=\(prevResult.bookIds.count ?? 0) prevOffline=\(prevResult.offlineResult) offline=\(task.booksListUrl.isFileURL && !task.library.server.isLocal) prevLoading=\(prevResult.loading)")
-                }
+                let prevResult = modelData.librarySearchCache.getCache(
+                    for: task.library,
+                    of: task.searchCriteria,
+                    by: task.booksListUrl.isFileURL ? .offline : .online
+                )
                 
-                modelData.searchLibraryResults[librarySearchKey]?.offlineResult = (task.booksListUrl.isFileURL && !task.library.server.isLocal)
+                print("\(#function) id=\(task.id) librarySearchKey=\(librarySearchKey) fire num=\(task.num) offset=\(task.offset) prevCount=\(prevResult.bookIds.count) prevOffline=\(prevResult.offlineResult) offline=\(task.booksListUrl.isFileURL && !task.library.server.isLocal) prevLoading=\(prevResult.loading)")
                 
-                modelData.searchLibraryResults[librarySearchKey]?.loading = true
-
                 modelData.filteredBookListRefreshingSubject.send("")
                 
-                print("\(#function) searchUrl=\(task.booksListUrl.absoluteString)")
+                print("\(#function) id=\(task.id) searchUrl=\(task.booksListUrl.absoluteString)")
                 
                 return task
             })
@@ -748,25 +859,39 @@ extension CalibreServerService {
                 guard let searchTask = task.searchTask else { return }
                 
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchTask.searchCriteria)
+                let prevResult = modelData.librarySearchCache.getCache(for: searchTask.library, of: searchTask.searchCriteria, by: searchTask.booksListUrl.isFileURL ? .offline : .online)
+                
                 if let searchResult = searchTask.ajaxSearchResult {
                     if searchResult.total_num > 0,
-                       (modelData.searchLibraryResults[librarySearchKey]?.totalNumber ?? 0) == 0 {
-                        modelData.searchLibraryResults[librarySearchKey]?.error = true  //trigger list remerge
+                        prevResult.totalNumber == 0 {
+                        //trigger list remerge
+                        modelData.librarySearchCache.setIsError(
+                            for: searchTask.library,
+                            of: searchTask.searchCriteria,
+                            by: searchTask.booksListUrl.isFileURL ? .offline : .online,
+                            to: true
+                        )
                     }
-                    modelData.searchLibraryResults[librarySearchKey]?.totalNumber = searchResult.total_num
+                    modelData.librarySearchCache.setTotalNumber(
+                        for: searchTask.library,
+                        of: searchTask.searchCriteria,
+                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
+                        to: searchResult.total_num
+                    )
                     
-                    print("\(#function) librarySearchKey=\(librarySearchKey) result num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0) offline=\(searchTask.booksListUrl.isFileURL && !searchTask.library.server.isLocal)")
+                    print("\(#function) id=\(searchTask.id) librarySearchKey=\(librarySearchKey) result num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(prevResult.bookIds.count) offline=\(searchTask.booksListUrl.isFileURL && !searchTask.library.server.isLocal)")
                     
-                    guard let prevResult = modelData.searchLibraryResults[librarySearchKey],
-                          prevResult.bookIds.count == searchResult.offset,
+                    guard prevResult.bookIds.count == searchResult.offset,
                           Set(prevResult.bookIds).union(Set(searchResult.book_ids)).count == prevResult.bookIds.count + searchResult.book_ids.count
                     else {
                         //duplication, reset search result
-                        print("\(#function) librarySearchKey=\(librarySearchKey) mismatch_or_duplicate num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(modelData.searchLibraryResults[librarySearchKey]?.bookIds.count ?? 0)")
+                        print("\(#function) duplicate id=\(searchTask.id) librarySearchKey=\(librarySearchKey) mismatch_or_duplicate num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(prevResult.bookIds.count)")
                         
-                        modelData.searchLibraryResults[librarySearchKey]?.loading = false
-                        modelData.searchLibraryResults[librarySearchKey]?.error = true
-                        modelData.searchLibraryResults[librarySearchKey]?.bookIds.removeAll(keepingCapacity: true)
+                        modelData.librarySearchCache.resetCache(
+                            for: searchTask.library,
+                            of: searchTask.searchCriteria,
+                            by: searchTask.booksListUrl.isFileURL ? .offline : .online
+                        )
                         
                         if let newTask = modelData.calibreServerService.buildLibrarySearchTask(library: searchTask.library, searchCriteria: searchTask.searchCriteria) {
                             modelData.librarySearchRequestSubject.send(newTask)
@@ -775,15 +900,31 @@ extension CalibreServerService {
                         return
                     }
                         
-                    modelData.searchLibraryResults[librarySearchKey]?.bookIds.append(contentsOf: searchResult.book_ids)
+                    modelData.librarySearchCache.appendResult(
+                        for: searchTask.library,
+                        of: searchTask.searchCriteria,
+                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
+                        contentsOf: searchResult.book_ids
+                    )
                     
-                    print("\(#function) finishLoading library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
+                    print("\(#function) finishLoading id=\(searchTask.id) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
                     
                     modelData.librarySearchResultSubject.send(searchTask)
-
-                    modelData.searchLibraryResults[librarySearchKey]?.error = false
                 } else if searchTask.ajaxSearchError {
-                    modelData.searchLibraryResults[librarySearchKey]?.error = true
+                    print("\(#function) ajaxSearchError id=\(searchTask.id) library=\(task.library.key)")
+                    
+                    modelData.librarySearchCache.setIsError(
+                        for: searchTask.library,
+                        of: searchTask.searchCriteria,
+                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
+                        to: searchTask.num > 0
+                    )
+                    
+                    modelData.librarySearchCache.finishLoading(
+                        for: searchTask.library,
+                        of: searchTask.searchCriteria,
+                        by: searchTask.booksListUrl.isFileURL ? .offline : .online
+                    )
                 }
             }.store(in: &modelData.calibreCancellables)
         
@@ -791,10 +932,14 @@ extension CalibreServerService {
             .sink { tasks in
                 tasks.reduce(into: Set<SearchCriteriaMergedKey>()) { partialResult, task in
                     let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
+                    let searchResult = modelData.librarySearchCache.getCache(
+                        for: task.library,
+                        of: task.searchCriteria,
+                        by: task.booksListUrl.isFileURL ? .offline : .online
+                    )
                     partialResult.formUnion(
                         self.modelData.searchCriteriaMergedResults.filter {
-                            guard let searchResult = modelData.searchLibraryResults[librarySearchKey],
-                                  let mergedPageOffset = $0.value.mergedPageOffsets[librarySearchKey.libraryId]
+                            guard let mergedPageOffset = $0.value.mergedPageOffsets[librarySearchKey.libraryId]
                             else { return false }
                             
                             return mergedPageOffset.beenCutOff == true
@@ -803,7 +948,11 @@ extension CalibreServerService {
                         }.keys
                     )
                     
-                    modelData.searchLibraryResults[librarySearchKey]?.loading = false
+                    modelData.librarySearchCache.finishLoading(
+                        for: task.library,
+                        of: task.searchCriteria,
+                        by: task.booksListUrl.isFileURL ? .offline : .online
+                    )
                 }.forEach {
                     //prevent animation gap in LibraryInfoView
                     modelData.searchCriteriaMergedResults[$0]?.merging = true
@@ -834,15 +983,10 @@ extension CalibreServerService {
                 
                 var mergedResult = modelData.searchCriteriaMergedResults[searchCriteriaMergedKey]!
                 
-                let searchResults = modelData.searchLibraryResults.filter {
-                    $0.key.criteria == searchCriteriaMergedKey.criteria
-                    &&
-                    (
-                        searchCriteriaMergedKey.libraryIds.isEmpty
-                        ||
-                        searchCriteriaMergedKey.libraryIds.contains($0.key.libraryId)
-                    )
-                }
+                let searchResults = modelData.librarySearchCache.getCaches(
+                    for: searchCriteriaMergedKey.libraryIds,
+                    of: searchCriteriaMergedKey.criteria
+                )
                 
                 mergedResult.totalNumber = searchResults.values.map { $0.totalNumber }
                     .reduce(0, +)
@@ -865,14 +1009,18 @@ extension CalibreServerService {
                 modelData.searchCriteriaMergedResults[searchCriteriaMergedKey]?.merging = false
                 
                 mergedResult.mergedPageOffsets.forEach { mergedPageOffset in
-                    let librarySearchKey = LibrarySearchKey(libraryId: mergedPageOffset.key, criteria: searchCriteriaMergedKey.criteria)
-                    let searchResult = modelData.searchLibraryResults[librarySearchKey]
+                    guard let library = modelData.calibreLibraries[mergedPageOffset.key]
+                    else { return }
+                    
+                    let searchResult = modelData.librarySearchCache.getCache(
+                        for: library,
+                        of: searchCriteriaMergedKey.criteria
+                    )
                     
                     guard searchCriteriaMergedKey.libraryIds.isEmpty || searchCriteriaMergedKey.libraryIds.contains(mergedPageOffset.key)
                     else { return }
                         
-                    if let searchResult = searchResult,
-                       searchResult.error == false,
+                    if searchResult.error == false,
                        searchResult.totalNumber == searchResult.bookIds.count {
                         //reached full list
                         return
@@ -887,16 +1035,11 @@ extension CalibreServerService {
                                 modelData.filteredBookListPageSize
                             )
                             >=
-                            (searchResult?.bookIds.count ?? 0)
+                            searchResult.bookIds.count
                         ) {
                         if let library = modelData.calibreLibraries[mergedPageOffset.key],
                            let task = modelData.calibreServerService.buildLibrarySearchTask(library: library, searchCriteria: searchCriteriaMergedKey.criteria) {
                             modelData.librarySearchRequestSubject.send(task)
-                        }
-                    } else {
-                        if searchCriteriaMergedKey.libraryIds.contains("Domestic"),
-                           mergedResult.mergedBooks.count <= 2 {
-                            print("\(#function) DISCONTINUE merged=\(mergedResult.mergedBooks.count) searchLibraryResults=\(modelData.searchLibraryResults)")
                         }
                     }
                 }
@@ -927,7 +1070,9 @@ extension CalibreServerService {
                         modelData.searchCriteriaMergedResults.removeValue(forKey: $0)
                     }
                 } else {
-                    modelData.searchLibraryResults.removeValue(forKey: librarySearchKey)
+                    if let library = modelData.calibreLibraries[librarySearchKey.libraryId] {
+                        modelData.librarySearchCache.resetCache(for: library, of: librarySearchKey.criteria, by: .online)
+                    }
                 }
             })
             .store(in: &modelData.calibreCancellables)
