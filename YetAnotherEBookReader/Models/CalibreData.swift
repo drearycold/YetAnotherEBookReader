@@ -1066,7 +1066,6 @@ struct CalibreBooksTask {
     var metadataUrl: URL?
     var lastReadPositionUrl: URL?
     var annotationsUrl: URL?
-    var booksListUrl: URL?
     var data: Data?
     var response: URLResponse?
     var lastReadPositionsData: Data?

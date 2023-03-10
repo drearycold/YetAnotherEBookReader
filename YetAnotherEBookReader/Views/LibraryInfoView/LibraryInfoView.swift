@@ -87,8 +87,8 @@ struct LibraryInfoView: View {
             
             filteredBookListRefreshingCancellable?.cancel()
             filteredBookListRefreshingCancellable = modelData.filteredBookListRefreshingSubject
-                .receive(on: DispatchQueue.main)
-                .sink(receiveValue: { _ in
+                .receive(on: DispatchQueue.global())
+                .map { _ -> Bool in
                     let refreshing =
                     (
                         modelData.searchCriteriaMergedResults[
@@ -105,7 +105,8 @@ struct LibraryInfoView: View {
                     (
                         modelData.librarySearchCache.getCaches(
                             for: modelData.filterCriteriaLibraries,
-                            of: modelData.currentLibrarySearchCriteria
+                            of: modelData.currentLibrarySearchCriteria,
+                            by: .online
                         ).filter {
                             $0.value.loading
                             &&
@@ -113,9 +114,20 @@ struct LibraryInfoView: View {
                         }.isEmpty == false
                     )
                     
+                    return refreshing
+                }
+                .receive(on: DispatchQueue.main)
+                .sink(receiveValue: { refreshing in
                     if filteredBookListRefreshing != refreshing {
                         if !refreshing {
                             print("\(#function) filteredBookListRefreshing=\(filteredBookListRefreshing) refreshing=\(refreshing)")
+                            modelData.librarySearchCache.getCaches(
+                                for: modelData.filterCriteriaLibraries,
+                                of: modelData.currentLibrarySearchCriteria
+                            )
+                            .forEach { entry in
+                                print("\(#function) filteredBookListRefreshing=\(filteredBookListRefreshing) loadingLibrary=\(entry.key.libraryId) loading=\(entry.value.loading) offline=\(entry.value.offlineResult) error=\(entry.value.error)")
+                            }
                         }
                         filteredBookListRefreshing = refreshing
                     }

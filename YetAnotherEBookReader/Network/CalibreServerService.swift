@@ -872,37 +872,6 @@ struct CalibreServerService {
             return nil
         }
         
-        var booksListUrlComponents = URLComponents()
-        booksListUrlComponents.path = "ajax/search/\(library.key)"
-        
-        var booksListUrlQueryItems = [URLQueryItem]()
-        
-        if let searchTask = searchTask {
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchTask.searchCriteria.sortCriteria.by.sortQueryParam))
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchTask.searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
-            
-            if let searchPreviousResult = modelData.searchLibraryResults[.init(libraryId: library.id, criteria: searchTask.searchCriteria)] {
-                booksListUrlQueryItems.append(URLQueryItem(name: "offset", value: searchPreviousResult.bookIds.count.description))
-                let maxOffset = modelData.searchCriteriaMergedResults.compactMap {
-                    $0.value.mergedPageOffsets[library.id]?.offsets.last
-                }.max() ?? 0
-                let num = max(0, maxOffset + searchTask.searchCriteria.pageSize * 2 - searchPreviousResult.bookIds.count)
-                booksListUrlQueryItems.append(.init(name: "num", value: num.description))
-            } else {
-                booksListUrlQueryItems.append(.init(name: "num", value: (searchTask.searchCriteria.pageSize * 2).description))
-            }
-        } else {
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: SortCriteria.Modified.sortQueryParam))
-            booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: "desc"))
-        }
-        
-        
-        booksListUrlComponents.queryItems = booksListUrlQueryItems
-        
-        guard let booksListUrl = booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
-            return nil
-        }
-        
         print("\(#function) endpointUrl=\(endpointUrl.absoluteString)")
         
         return CalibreBooksTask(
@@ -910,7 +879,6 @@ struct CalibreServerService {
             metadataUrl: endpointUrl,
             lastReadPositionUrl: lastReadPositionEndpointUrl,
             annotationsUrl: annotationsEndpointUrl,
-            booksListUrl: booksListUrl,
             searchTask: searchTask
         )
     }

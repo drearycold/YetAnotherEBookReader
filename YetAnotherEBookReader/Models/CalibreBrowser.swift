@@ -67,7 +67,7 @@ enum SortCriteria: String, CaseIterable, Identifiable {
     }
 }
 
-struct SearchCriteria: Hashable {
+struct SearchCriteria: Hashable, CustomStringConvertible {
     let searchString: String
     let sortCriteria: LibrarySearchSort
     let filterCriteriaCategory: [String: Set<String>]
@@ -75,6 +75,10 @@ struct SearchCriteria: Hashable {
     
     var hasEmptyFilter: Bool {
         filterCriteriaCategory.isEmpty
+    }
+    
+    var description: String {
+        "\(searchString)^\(sortCriteria)^\(filterCriteriaCategory.count)"
     }
 }
 
@@ -130,7 +134,7 @@ struct LibrarySearchCriteriaResultMerged {
     }
 }
 
-struct LibrarySearchKey: Hashable {
+struct LibrarySearchKey: Hashable, CustomStringConvertible {
     let libraryId: String
     let criteria: SearchCriteria
     
@@ -139,7 +143,7 @@ struct LibrarySearchKey: Hashable {
     }
 }
 
-struct LibrarySearchResult {
+struct LibrarySearchResult: CustomStringConvertible {
     let library: CalibreLibrary
     var loading = false
     var offlineResult = false
@@ -191,7 +195,7 @@ struct LibrarySearchCache {
     /**
      first non-empty result for each library by preference ( online > onlineCache > offline )
      */
-    func getCaches(for libraryIds: Set<String>, of criteria: SearchCriteria) -> [LibrarySearchKey: LibrarySearchResult] {
+    func getCaches(for libraryIds: Set<String>, of criteria: SearchCriteria, by type: CacheType? = nil) -> [LibrarySearchKey: LibrarySearchResult] {
         self.cache.filter {
             (
                 libraryIds.isEmpty
@@ -201,7 +205,11 @@ struct LibrarySearchCache {
             &&
             $0.key.searchKey.criteria == criteria
             &&
-            $0.value.bookIds.count > 0
+            (
+                (type == nil && $0.value.bookIds.count > 0)
+                ||
+                (type == $0.key.type)
+            )
         }.sorted { lhs, rhs in
             lhs.key.type < rhs.key.type
         }.reduce(into: [:]) { partialResult, cacheEntry in
@@ -566,6 +574,15 @@ extension CalibreServerService {
                 )
         else { return nil }
         
+        let searchPrevResult = modelData.librarySearchCache.getCache(
+            for: library,
+            of: searchCriteria,
+            by: serverUrl.isFileURL ? .offline : .online
+        )
+        
+        guard searchPrevResult.loading == false
+        else { return nil }
+        
         var booksListUrlComponents = URLComponents()
         booksListUrlComponents.path = "ajax/search/\(library.key)"
         
@@ -578,12 +595,11 @@ extension CalibreServerService {
             $0.value.mergedPageOffsets[library.id]?.offsets.last
         }.max() ?? 0
         
-        let searchedOffset = modelData.librarySearchCache.getCache(
-            for: library,
-            of: searchCriteria,
-            by: serverUrl.isFileURL ? .offline : .online
-        ).bookIds.count
+        let searchedOffset = searchPrevResult.bookIds.count
         let searchNum = maxMergedOffset + searchCriteria.pageSize - searchedOffset
+        guard searchNum >= 0 else {
+            return nil
+        }
         
         booksListUrlQueryItems.append(.init(name: "offset", value: searchedOffset.description))
         booksListUrlQueryItems.append(.init(name: "num", value: searchNum.description))
@@ -763,12 +779,6 @@ extension CalibreServerService {
             .map({ task -> CalibreLibrarySearchTask in
                 let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
                 
-                modelData.librarySearchCache.startLoading(
-                    for: task.library,
-                    of: task.searchCriteria,
-                    by: task.booksListUrl.isFileURL ? .offline : .online
-                )
-                
                 let prevResult = modelData.librarySearchCache.getCache(
                     for: task.library,
                     of: task.searchCriteria,
@@ -776,6 +786,16 @@ extension CalibreServerService {
                 )
                 
                 print("\(#function) id=\(task.id) librarySearchKey=\(librarySearchKey) fire num=\(task.num) offset=\(task.offset) prevCount=\(prevResult.bookIds.count) prevOffline=\(prevResult.offlineResult) offline=\(task.booksListUrl.isFileURL && !task.library.server.isLocal) prevLoading=\(prevResult.loading)")
+                
+                if librarySearchKey.libraryId == "Calibre-Default@0FB2EFE0-6C43-4E05-A86E-815E5B21D989", librarySearchKey.criteria == .init(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:]) {
+                    print()
+                }
+                
+                modelData.librarySearchCache.startLoading(
+                    for: task.library,
+                    of: task.searchCriteria,
+                    by: task.booksListUrl.isFileURL ? .offline : .online
+                )
                 
                 modelData.filteredBookListRefreshingSubject.send("")
                 
@@ -819,7 +839,7 @@ extension CalibreServerService {
                 } else {
                     let dummyURL = URL(fileURLWithPath: "/realm")
                     let metaTask = buildBooksMetadataTask(library: searchTask.library, books: [], searchTask: searchTask) ??
-                    CalibreBooksTask(request: .init(library: searchTask.library, books: [], getAnnotations: false), metadataUrl: dummyURL, lastReadPositionUrl: dummyURL, annotationsUrl: dummyURL, booksListUrl: dummyURL, searchTask: searchTask)
+                    CalibreBooksTask(request: .init(library: searchTask.library, books: [], getAnnotations: false), metadataUrl: dummyURL, lastReadPositionUrl: dummyURL, annotationsUrl: dummyURL, searchTask: searchTask)
                     return Just(metaTask)
                         .setFailureType(to: Never.self)
                         .eraseToAnyPublisher()
