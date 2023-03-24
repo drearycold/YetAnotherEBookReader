@@ -1095,11 +1095,13 @@ struct CalibreLibraryProbeTask {
 struct CalibreLibrarySearchTask: Identifiable {
     let id = UUID()
     
-    var library: CalibreLibrary
-    var searchCriteria: SearchCriteria
-    var booksListUrl: URL
-    var offset: Int
-    var num: Int
+    let generation: Date
+    
+    let library: CalibreLibrary
+    let searchCriteria: SearchCriteria
+    let booksListUrl: URL
+    let offset: Int
+    let num: Int
     
     //results
     var data: Data? = nil

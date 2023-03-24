@@ -9,6 +9,7 @@
 import ShelfView
 import SwiftUI
 import Combine
+import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -18,7 +19,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     var tabBarHeight = CGFloat(0)
     
     var shelfView: SectionShelfCompositionalView!
-    var shelfBookSink: AnyCancellable?
 
     let activityIndicatorView = UIActivityIndicatorView()
     
@@ -41,6 +41,10 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     let snaptshotQueue = DispatchQueue(label: "section-shelf-snapshot", qos: .userInitiated)
     
     let refreshBarButtonItem = BarButtonItem()
+    
+    ///
+    var shelfObjects: [SearchCriteriaMergedKey: CalibreUnifiedSearchObject] = [:]
+    var cancellables: Set<AnyCancellable> = []
     
     override var canBecomeFirstResponder: Bool {
         true
@@ -216,7 +220,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 
                 self.fillSnapshotToScreen(snapshot: &snapshot)
                 
-                self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+//                self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
             }
         
         let navBarBackgroundImage = Utils().loadImage(name: "header")?.resizableImage(withCapInsets: UIEdgeInsets(top: 0, left: 5, bottom: 0, right: 5))
@@ -260,10 +264,92 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         
         self.snaptshotQueue.async {
-            var snapshot = NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>()
+            var snapshot = self.buildSnapshot(shelf: self.modelData.shelfDataModel.discoverShelf)
+            
             self.fillSnapshotToScreen(snapshot: &snapshot)
             self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
         }
+        
+        ///
+        /*
+        modelData.librarySearchManager.cacheRealmQueue.sync {
+            let lastAdded = SearchCriteriaMergedKey(libraryIds: [], criteria: .init(searchString: "", sortCriteria: .init(by: .Added, ascending: false), filterCriteriaCategory: [:]))
+            
+            let lastAddedObject = modelData.librarySearchManager.getUnifiedResult(libraryIds: lastAdded.libraryIds, searchCriteria: lastAdded.criteria)
+            
+            shelfObjects[lastAdded] = lastAddedObject
+            
+            shelfObjects = modelData.booksInShelf.reduce(into: shelfObjects) { partialResult, bookEntry in
+                
+            }
+            
+            valuePublisher(lastAddedObject, keyPaths: ["books"])
+                .receive(on: modelData.librarySearchManager.cacheRealmQueue)
+                .map { object -> ShelfModelSection in
+                    print("\(#function) lastAddedObject changed books.count=\(object.books.count)")
+                    
+                    let shelfModels: [ShelfModel] = object.books.prefix(20).map { book -> ShelfModel in
+                            .init(bookCoverSource: "", bookId: book.primaryKey!, bookTitle: book.title, bookProgress: 0, bookStatus: .READY, sectionId: "last-added")
+                    }
+                    
+                    return .init(sectionName: "Last Added", sectionId: "last-added", sectionShelf: shelfModels)
+                }
+                .receive(on: snaptshotQueue)
+                .sink { completion in
+                    
+                } receiveValue: { section in
+                    let shelfModels = [section]
+                    var snapshot = shelfModels.reduce(
+                        into: NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>(),
+                        { partialResult, section in
+                            var sectionShelf = section.sectionShelf
+                            
+                            sectionShelf[sectionShelf.startIndex].type = .left
+                            sectionShelf[sectionShelf.endIndex-1].type = .right
+                            
+                            partialResult.appendSections([ShelfModelSection(sectionName: section.sectionName, sectionId: section.sectionId, sectionShelf: [])])
+                            
+                            partialResult.appendItems(sectionShelf)
+                        })
+                    
+                    self.fillSnapshotToScreen(snapshot: &snapshot)
+                    
+                    self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+                }
+                .store(in: &cancellables)
+        }
+        */
+        
+        
+        
+        modelData.shelfDataModel.$discoverShelf
+            .receive(on: snaptshotQueue)
+            .sink { discoverShelf in
+                print("\(#function) discoverShelf \(discoverShelf.count)")
+                
+                var snapshot = self.buildSnapshot(shelf: discoverShelf)
+                
+                self.fillSnapshotToScreen(snapshot: &snapshot)
+                self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+            }
+            .store(in: &cancellables)
+    }
+    
+    func buildSnapshot(shelf: [String: ShelfModelSection]) -> NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel> {
+        shelf.sorted(by: { $0.value.sectionName < $1.value.sectionName }).reduce(
+            into: .init(),
+            { partialResult, sectionEntry in
+                let section = sectionEntry.value
+                
+                var sectionShelf = section.sectionShelf
+                
+                sectionShelf[sectionShelf.startIndex].type = .left
+                sectionShelf[sectionShelf.endIndex-1].type = .right
+                
+                partialResult.appendSections([ShelfModelSection(sectionName: section.sectionName, sectionId: section.sectionId, sectionShelf: [])])
+                
+                partialResult.appendItems(sectionShelf)
+            })
     }
     
     func fillSnapshotToScreen(snapshot: inout NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>) {

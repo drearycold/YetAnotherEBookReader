@@ -53,7 +53,6 @@ final class ModelData: ObservableObject {
     @available(*, deprecated, renamed: "librarySearchCache")
     @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
 
-    @Published var librarySearchCache = LibrarySearchCache()
     //Merged
     @Published var searchCriteriaMergedResults = [SearchCriteriaMergedKey: LibrarySearchCriteriaResultMerged]()
     
@@ -180,6 +179,10 @@ final class ModelData: ObservableObject {
     lazy var calibreServerService = CalibreServerService(modelData: self)
     @Published var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
 
+    lazy var librarySearchManager = CalibreLibrarySearchManager(service: self.calibreServerService)
+    
+    lazy var shelfDataModel = YabrShelfDataModel(service: self.calibreServerService, searchManager: librarySearchManager)
+    
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
     let removeServerSubject = PassthroughSubject<CalibreServer, Never>()
@@ -636,6 +639,8 @@ final class ModelData: ObservableObject {
             }
             
             self.booksInShelf[book.inShelfId] = book
+            
+//            self.shelfDataModel.addToShelf(book: book)
             
             print("booksInShelfRealm \(book.inShelfId)")
         }

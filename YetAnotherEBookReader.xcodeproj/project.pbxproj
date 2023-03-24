@@ -337,6 +337,7 @@
 		E77B8D482973D16200363F39 /* ModelDataResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77B8D462973D16200363F39 /* ModelDataResource.swift */; };
 		E77B8D5029751C2A00363F39 /* YabrResources in Resources */ = {isa = PBXBuildFile; fileRef = E77B8D4F29751C2A00363F39 /* YabrResources */; };
 		E77B8D5129751C2A00363F39 /* YabrResources in Resources */ = {isa = PBXBuildFile; fileRef = E77B8D4F29751C2A00363F39 /* YabrResources */; };
+		E7804CCC29C0220D0066BD43 /* CalibreSearchCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */; };
 		E782836628EEA5BA0011438D /* YabrPDFTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E782836528EEA5BA0011438D /* YabrPDFTableViewController.swift */; };
 		E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */; };
 		E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7832D5E280D39D9006E6901 /* YabrPDFView.swift */; };
@@ -561,6 +562,7 @@
 		E769C597296BF4C60089C21E /* 2.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 2.epub; sourceTree = "<group>"; };
 		E77B8D462973D16200363F39 /* ModelDataResource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDataResource.swift; sourceTree = "<group>"; };
 		E77B8D4F29751C2A00363F39 /* YabrResources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = YabrResources; sourceTree = "<group>"; };
+		E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreSearchCache.swift; sourceTree = "<group>"; };
 		E782836528EEA5BA0011438D /* YabrPDFTableViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFTableViewController.swift; sourceTree = "<group>"; };
 		E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFModel.swift; sourceTree = "<group>"; };
 		E7832D5E280D39D9006E6901 /* YabrPDFView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFView.swift; sourceTree = "<group>"; };
@@ -872,6 +874,7 @@
 		2AC3EC5325BE7486004A6633 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				E7804CCA29C021BC0066BD43 /* CalibreBrowser */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 				2ABB913E261EC359004AA7C0 /* CalibreData.swift */,
@@ -884,7 +887,6 @@
 				2ACE265826A921230037FCB4 /* RealmModel.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
 				E730405B28EBDAB50013BA01 /* BookAnnotation.swift */,
-				E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1187,6 +1189,15 @@
 				E769C597296BF4C60089C21E /* 2.epub */,
 			);
 			path = Samples;
+			sourceTree = "<group>";
+		};
+		E7804CCA29C021BC0066BD43 /* CalibreBrowser */ = {
+			isa = PBXGroup;
+			children = (
+				E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */,
+				E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */,
+			);
+			path = CalibreBrowser;
 			sourceTree = "<group>";
 		};
 		E7C7779328ED322100939D63 /* ListViews */ = {
@@ -1603,6 +1614,7 @@
 				E769C5A0296BF4C60089C21E /* ScreenOrientation.swift in Sources */,
 				E769C5A6296BF4C60089C21E /* UIViewController.swift in Sources */,
 				2ABB9132261DE894004AA7C0 /* RecentShelfController.swift in Sources */,
+				E7804CCC29C0220D0066BD43 /* CalibreSearchCache.swift in Sources */,
 				2AD38F8726D637B70053D01D /* ReadingPositionDetailView.swift in Sources */,
 				2A63F74026C1136E00DB5E98 /* BookFormatDownload.swift in Sources */,
 				E769C5B2296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */,
@@ -2121,7 +2133,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 101;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2206,7 +2218,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 101;
+				CURRENT_PROJECT_VERSION = 103;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

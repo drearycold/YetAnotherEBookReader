@@ -6,8 +6,156 @@
 //
 
 import Foundation
+import Combine
 import ShelfView
 import RealmSwift
+
+class YabrShelfDataModel: ObservableObject {
+    
+    enum CategoryType: String {
+        case Last
+        case Author
+        case Series
+        case Tag
+    }
+    
+    class CategoryObject: ObservableObject, Hashable {
+        
+        let type: CategoryType
+        let category: String
+        
+        var inShelfBookIds: Set<String> = []
+        
+        var unifiedSearchObject: CalibreUnifiedSearchObject?
+        
+        init(type: CategoryType, category: String) {
+            self.type = type
+            self.category = category
+        }
+        
+        func hash(into: inout Hasher) {
+            into.combine(type)
+            into.combine(category)
+        }
+        
+        static func == (lhs: YabrShelfDataModel.CategoryObject, rhs: YabrShelfDataModel.CategoryObject) -> Bool {
+            lhs.type == rhs.type && lhs.category == rhs.category
+        }
+        
+    }
+    private let service: CalibreServerService
+    private let searchManager: CalibreLibrarySearchManager
+    
+    @Published var categories: Set<CategoryObject> = []
+    
+    @Published var discoverShelf = [String: ShelfModelSection]()
+    
+    var cancellables: Set<AnyCancellable> = []
+    
+    let dispatchQueue = DispatchQueue(label: "test-queue")
+    
+    init(service: CalibreServerService, searchManager: CalibreLibrarySearchManager) {
+        self.service = service
+        self.searchManager = searchManager
+        
+        service.modelData.$booksInShelf
+            .receive(on: DispatchQueue.main)
+            .sink { books in
+                books.forEach {
+                    self.addToShelf(book: $0.value)
+                }
+            }
+            .store(in: &cancellables)
+        
+        service.modelData.booksInShelf.forEach {
+            self.addToShelf(book: $0.value)
+        }
+        
+        Timer.publish(every: 60, on: .main, in: .default)
+            .autoconnect()
+            .receive(on: self.searchManager.cacheRealmQueue)
+            .sink { timer in
+                self.searchManager.refreshSearchResults()
+            }
+            .store(in: &cancellables)
+    }
+    
+    func addToShelf(book: CalibreBook) {
+        for categoryName in book.authors.prefix(3) {
+            let category = CategoryObject(type: .Author, category: categoryName)
+            if let index = categories.firstIndex(of: category) {
+                categories[index].inShelfBookIds.insert(book.inShelfId)
+            } else {
+                category.inShelfBookIds.insert(book.inShelfId)
+                
+                searchManager.cacheRealmQueue.sync { [self] in
+                    let unifiedSearchObject = searchManager.getUnifiedResult(
+                        libraryIds: [],
+                        searchCriteria: .init(
+                            searchString: "",
+//                            sortCriteria: .init(by: .Title, ascending: true),
+                            sortCriteria: .init(),
+                            filterCriteriaCategory: ["Authors" : Set([categoryName])]
+                        )
+                    )
+                    
+                    category.unifiedSearchObject = unifiedSearchObject
+                    
+                    unifiedSearchObject.books.changesetPublisher
+                        .subscribe(on: searchManager.cacheRealmQueue)
+                        .map { changeset -> ShelfModelSection in
+                            switch changeset {
+                            case .initial(_), .error(_):
+                                print("unifiedSearchObject changeset initial  \(unifiedSearchObject.books.count)")
+                                break
+                            case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
+                                print("unifiedSearchObject changeset update \(unifiedSearchObject.books.count)")
+                                break
+                            }
+                            
+                            return self.buildShelfModelSection(category: category)
+                        }
+                        .receive(on: DispatchQueue.main)
+                        .sink { discoverShelfSection in
+                            if discoverShelfSection.sectionShelf.count > 1 {
+                                self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
+                            }
+                        }
+                        .store(in: &cancellables)
+                }
+                
+                categories.insert(category)
+            }
+        }
+    }
+    
+    
+    func buildShelfModelSection(category: CategoryObject) -> ShelfModelSection {
+        let sectionName = "\(category.type.rawValue): \(category.category)"
+        
+        let sectionShelf: [ShelfModel] = category.unifiedSearchObject?.books.map {
+            var coverSource = ""
+            if let serverUUID = $0.serverUUID,
+               let server = self.service.modelData.calibreServers[serverUUID],
+               let serverUrl = service.getServerUrlByReachability(server: server) ?? URL(string: server.serverUrl),
+               let libraryName = $0.libraryName,
+               let library = self.service.modelData.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] {
+                
+                var coverRelativeURLComponent = URLComponents()
+                coverRelativeURLComponent.path = "get/thumb/\($0.id)/\(library.key)"
+                coverRelativeURLComponent.queryItems = [
+                    .init(name: "sz", value: "300x400"),
+                    .init(name: "username", value: server.username)
+                ]
+                
+                coverSource = coverRelativeURLComponent.url(relativeTo: serverUrl)?.absoluteString ?? ""
+            }
+            return ShelfModel(bookCoverSource: coverSource, bookId: $0.primaryKey!, bookTitle: $0.title, bookProgress: 0, bookStatus: .READY, sectionId: sectionName)
+        } ?? []
+        
+        return .init(sectionName: sectionName, sectionId: sectionName, sectionShelf: sectionShelf)
+    }
+}
 
 extension ModelData {
     func registerRecentShelfUpdater() {
@@ -173,21 +321,41 @@ extension ModelData {
             }
             .store(in: &calibreCancellables)
         
-        librarySearchResultSubject.receive(on: ModelData.SearchLibraryResultsRealmQueue)
-            .map { librarySearchTask -> ShelfModelSection in
-                let emptyShelf = ShelfModelSection(sectionName: "", sectionId: "", sectionShelf: [])
-                
+        return;
+        
+        librarySearchResultSubject.receive(on: DispatchQueue.main)
+            .map { librarySearchTask -> (LibrarySearchKey, LibrarySearchResult?) in
                 let librarySearchKey = LibrarySearchKey(libraryId: librarySearchTask.library.id, criteria: librarySearchTask.searchCriteria)
                 guard let library = self.calibreLibraries[librarySearchKey.libraryId],
                       library.hidden == false,
                       library.discoverable == true,
                       let realm = try? Realm(configuration: self.realmConf)
-                else { return emptyShelf }
+                else { return (librarySearchKey, nil) }
                 
-                let result = self.librarySearchCache.getCache(
+                let result = self.librarySearchManager.getCache(
                     for: library,
                     of: librarySearchTask.searchCriteria
                 )
+                
+                return (librarySearchKey, result)
+            }
+            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
+            .map { librarySearchKey, result -> ShelfModelSection in
+                let emptyShelf = ShelfModelSection(sectionName: "", sectionId: "", sectionShelf: [])
+                
+                guard let result = result else { return emptyShelf }
+                
+//                let librarySearchKey = LibrarySearchKey(libraryId: result.library.id, criteria: result.searchCriteria)
+                guard let library = self.calibreLibraries[librarySearchKey.libraryId],
+                      library.hidden == false,
+                      library.discoverable == true,
+                      let realm = try? Realm(configuration: self.realmConf)
+                else { return emptyShelf }
+//
+//                let result = self.librarySearchManager.getCache(
+//                    for: library,
+//                    of: librarySearchTask.searchCriteria
+//                )
 
                 if librarySearchKey.criteria.searchString == "",
                    librarySearchKey.criteria.hasEmptyFilter {

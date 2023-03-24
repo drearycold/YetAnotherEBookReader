@@ -103,7 +103,7 @@ struct LibraryInfoView: View {
                     )
                     ||
                     (
-                        modelData.librarySearchCache.getCaches(
+                        modelData.librarySearchManager.getCaches(
                             for: modelData.filterCriteriaLibraries,
                             of: modelData.currentLibrarySearchCriteria,
                             by: .online
@@ -121,7 +121,7 @@ struct LibraryInfoView: View {
                     if filteredBookListRefreshing != refreshing {
                         if !refreshing {
                             print("\(#function) filteredBookListRefreshing=\(filteredBookListRefreshing) refreshing=\(refreshing)")
-                            modelData.librarySearchCache.getCaches(
+                            modelData.librarySearchManager.getCaches(
                                 for: modelData.filterCriteriaLibraries,
                                 of: modelData.currentLibrarySearchCriteria
                             )
@@ -909,7 +909,7 @@ struct LibraryInfoView: View {
     }
     
     private func getLibraryFilterText(library: CalibreLibrary) -> String {
-        let searchResult = modelData.librarySearchCache.getCache(
+        let searchResult = modelData.librarySearchManager.getCache(
             for: library,
             of: modelData.currentLibrarySearchCriteria
         )
@@ -925,7 +925,7 @@ struct LibraryInfoView: View {
     }
     
     private func getLibrarySearchingText() -> String {
-        let searchResults = modelData.librarySearchCache.getCaches(
+        let searchResults = modelData.librarySearchManager.getCaches(
             for: modelData.filterCriteriaLibraries,
             of: modelData.currentLibrarySearchCriteria
         )
