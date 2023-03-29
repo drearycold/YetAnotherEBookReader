@@ -15,6 +15,8 @@ import struct Kingfisher.KFImage
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
+    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+    
     @State private var categoriesSelected : String? = nil
     @State private var categoryItemSelected: String? = nil
     
@@ -58,6 +60,16 @@ struct LibraryInfoView: View {
     var body: some View {
         NavigationView {
             List {
+//                Text("realm unifiedSearches \(unifiedSearches.count)")
+//                ForEach(unifiedSearches) { unifiedSearchObject in
+//                    NavigationLink {
+//                        LibraryInfoBookListView(unifiedSearchObject: unifiedSearchObject)
+//                    } label: {
+//                        Text(unifiedSearchObject.parameters)
+//                    }
+//                    .isDetailLink(false)
+//                }
+                
                 combinedListView()
                 
                 if modelData.calibreLibraryCategoryMerged.isEmpty == false {
@@ -70,7 +82,7 @@ struct LibraryInfoView: View {
             .padding(4)
             .navigationTitle(Text("Library Browser"))
         }   //NavigationView
-        .navigationViewStyle(ColumnNavigationViewStyle.columns)
+        .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
         .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
             modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
@@ -132,6 +144,7 @@ struct LibraryInfoView: View {
                         filteredBookListRefreshing = refreshing
                     }
                 })
+            filteredBookListRefreshingCancellable?.cancel()
             
             categoryItemListCancellable?.cancel()
             categoryItemListCancellable = modelData.categoryItemListSubject
@@ -348,11 +361,24 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         VStack {
-            bookListViewHeader()
+            /*bookListViewHeader()*/
             
             Divider()
-            if let result = modelData.currentLibrarySearchResultMerged {
-                bookListViewContent(books: result.booksForPage(page: modelData.filteredBookListPageNumber, pageSize: modelData.filteredBookListPageSize))
+//            if let result = modelData.currentLibrarySearchResultMerged {
+//                bookListViewContent(books: result.booksForPage(page: modelData.filteredBookListPageNumber, pageSize: modelData.filteredBookListPageSize))
+//            }
+            
+            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: modelData.filterCriteriaLibraries, searchCriteria: modelData.currentLibrarySearchCriteria),
+                let unifiedSearch = unifiedSearches.where({
+                $0._id == objectId
+            }).first {
+                LibraryInfoBookListView(
+                    unifiedSearchObject: unifiedSearch,
+                    categoriesSelected: $categoriesSelected,
+                    categoryItemSelected: $categoryItemSelected
+                )
+            } else {
+                Text("Cannot get unified search")
             }
             
             Divider()
@@ -363,66 +389,9 @@ struct LibraryInfoView: View {
         .statusBar(hidden: false)
     }
     
-    @ViewBuilder
-    private func bookListViewHeader() -> some View {
-        ZStack {
-            TextField("Search Title & Authors", text: $searchString)
-            .onSubmit {
-                searchStringChanged(searchString: searchString)
-            }
-            .keyboardType(.webSearch)
-            .padding([.leading, .trailing], 24)
-            HStack {
-                Button {
-                    searchHistoryPresenting = true
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .popover(isPresented: $searchHistoryPresenting) {
-                    Text("Search History")
-                }
-
-                Spacer()
-                Button {
-                    searchStringChanged(searchString: "")
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
-                }.disabled(searchString.isEmpty)
-                
-                Menu {
-                    ForEach(modelData.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
-                        ForEach(categoryFilter.value.filter({
-                            categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
-                        }).sorted(), id: \.self) { categoryFilterValue in
-                            Button {
-                                if modelData.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
-                                    searchStringChanged(searchString: self.searchString)
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundColor(.gray)
-                                    Text("\(categoryFilter.key): \(categoryFilterValue)")
-                                }
-                            }
-                        }
-                    }
-                    
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease.circle")
-                        .foregroundColor(
-                            modelData.filterCriteriaCategory.filter({ categoryFilter in
-                                categoryFilter.value.filter({
-                                    categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
-                                }).isEmpty == false
-                            }).isEmpty ? .gray : .accentColor
-                        )
-                }
-            }.padding([.leading, .trailing], 4)
-        }
-    }
     
+    
+    /*
     @ViewBuilder
     private func bookListViewContent(books: ArraySlice<CalibreBook>) -> some View {
         ZStack {
@@ -479,6 +448,7 @@ struct LibraryInfoView: View {
             }
         }
     }
+     */
     
     @ViewBuilder
     private func bookListViewFooter() -> some View {
@@ -625,199 +595,8 @@ struct LibraryInfoView: View {
         modelData.filterCriteriaShelved = .none
     }
     
-    @ViewBuilder
-    private func bookRowView(book: CalibreBook) -> some View {
-        HStack(alignment: .bottom) {
-            ZStack {
-                KFImage(book.coverURL)
-                    .placeholder {
-                        ProgressView().progressViewStyle(CircularProgressViewStyle())
-                    }
-                    .resizable()
-                    .frame(width: 72, height: 96, alignment: .center)
-                
-                if book.inShelf {
-                    Image(systemName: "books.vertical")
-                        .frame(width: 64 - 8, height: 96 - 8, alignment: .bottomTrailing)
-                        .foregroundColor(.primary)
-                        .opacity(0.8)
-                }
-                
-                if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
-                    ZStack {
-                        Rectangle()
-                            .frame(width: 64, height: 64, alignment: .center)
-                            .foregroundColor(.gray)
-                            .cornerRadius(4.0)
-                            .opacity(0.8)
-                        ProgressView(value: download.progress)
-                            .frame(width: 56, height: 64, alignment: .center)
-                            .progressViewStyle(.linear)
-                            .foregroundColor(.primary)
-                    }
-                    .frame(width: 64, height: 96 - 8, alignment: .bottom)
-                }
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(book.title)")
-                    .font(.callout)
-                    .lineLimit(3)
-                
-                Group {
-                    HStack {
-                        Text("\(book.authorsDescriptionShort)")
-                        Spacer()
-                    }
-                    
-                    HStack {
-                        Text(book.tags.first ?? "")
-                        Spacer()
-                        Text(book.library.name)
-                    }
-                }
-                .font(.caption)
-                .lineLimit(1)
-                
-                Spacer()
-                
-                HStack {
-                    if book.identifiers["goodreads"] != nil {
-                        Image("icon-goodreads")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("icon-goodreads")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    if book.identifiers["amazon"] != nil {
-                        Image("icon-amazon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("icon-amazon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    Spacer()
-                    
-                    Text(book.ratingDescription).font(.caption)
-                    
-                    Spacer()
-                    if book.formats["PDF"] != nil {
-                        Image("PDF")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("PDF")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    
-                    if book.formats["EPUB"] != nil {
-                        Image("EPUB")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("EPUB")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    
-                    if book.formats["CBZ"] != nil {
-                        Image("CBZ")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("CBZ")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                }
-            }
-        }
-    }
     
-    @ViewBuilder
-    private func bookRowContextMenuView(book: CalibreBook) -> some View {
-        if let authors = book.authors.filter({
-            modelData.filterCriteriaCategory["Authors"]?.contains($0) != true
-        }) as [String]?, authors.isEmpty == false {
-            Menu("More by Author ...") {
-                ForEach(authors, id: \.self) { author in
-                    Button {
-                        updateFilterCategory(key: "Authors", value: author)
-                    } label: {
-                        Text(author)
-                    }
-                }
-            }
-        }
-        
-        if let tags = book.tags.filter({
-            modelData.filterCriteriaCategory["Tags"]?.contains($0) != true
-        }) as [String]?, tags.isEmpty == false {
-            Menu("More of Tags ...") {
-                ForEach(tags, id: \.self) { tag in
-                    Button {
-                        updateFilterCategory(key: "Tags", value: tag)
-                    } label: {
-                        Text(tag)
-                    }
-                }
-            }
-        }
-        
-        if book.series.isEmpty == false,
-           modelData.filterCriteriaCategory["Series"]?.contains(book.series) != true {
-            Button {
-                modelData.sortCriteria.by = .SeriesIndex
-                modelData.sortCriteria.ascending = true
-                updateFilterCategory(key: "Series", value: book.series)
-            } label: {
-                Text("More in Series: \(book.series)")
-            }
-        }
-        
-        Menu("Download ...") {
-            ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
-                Button {
-                    if book.inShelf {
-                        modelData.startDownloadFormat(book: book, format: format, overwrite: true)
-                    } else {
-                        modelData.addToShelf(book: book, formats: [format])
-                    }
-                } label: {
-                    Text(
-                        format.rawValue
-                        + "\t\t\t"
-                        + ByteCountFormatter.string(
-                            fromByteCount: Int64(book.formats[format.rawValue]?.serverSize ?? 0),
-                            countStyle: .file
-                        )
-                    )
-                }
-            }
-        }
-    }
+    
     
     @ViewBuilder
     private func filterMenuView() -> some View {

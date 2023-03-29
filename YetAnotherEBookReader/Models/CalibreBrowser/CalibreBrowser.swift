@@ -177,7 +177,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     private var cacheUnifiedObjects = [SearchCriteriaMergedKey: CalibreUnifiedSearchObject]()
     
     private var cacheRealm: Realm!
-    private var cacheRealmConf = Realm.Configuration()
+    var cacheRealmConf: Realm.Configuration!
     let cacheRealmQueue = DispatchQueue(label: "search-cache-realm-queue", qos: .userInitiated)
     private let cacheWorkerQueue = DispatchQueue(label: "search-cache-worker-queue", qos: .utility, attributes: [.concurrent])
     
@@ -192,7 +192,10 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     init(service: CalibreServerService) {
         self.service = service
+        self.cacheRealmConf = service.modelData.realmConf
         
+        /*
+        var cacheRealmConf = Realm.Configuration()
         cacheRealmConf.schemaVersion = UInt64(service.modelData.yabrBuild) ?? 1
         cacheRealmConf.fileURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("cache.realm")
         
@@ -207,6 +210,9 @@ class CalibreLibrarySearchManager: ObservableObject {
             CalibreUnifiedOffsets.self,
             CalibreUnifiedSearchObject.self
         ]
+        
+        self.cacheRealmConf = cacheRealmConf
+        */
         
         cacheRealmQueue.sync {
             initCacheStore()
@@ -288,7 +294,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         return cacheObj
     }
     
-    private func initCacheUnifiedObject(key: SearchCriteriaMergedKey) -> CalibreUnifiedSearchObject {
+    private func initCacheUnifiedObject(key: SearchCriteriaMergedKey, requestMerge: Bool = false) -> CalibreUnifiedSearchObject {
         let cacheObj = CalibreUnifiedSearchObject()
         cacheObj.search = key.criteria.searchString
         cacheObj.sortBy = key.criteria.sortCriteria.by
@@ -307,6 +313,10 @@ class CalibreLibrarySearchManager: ObservableObject {
         cacheUnifiedObjects[key] = cacheObj
         
         registerCacheUnifiedChangeReceiver(unifiedKey: key, cacheObj: cacheObj)
+        
+        if requestMerge {
+            mergerRequestSubject.send(key)
+        }
         
         return cacheObj
     }
@@ -676,7 +686,7 @@ class CalibreLibrarySearchManager: ObservableObject {
             
             obj.serverUUID = serverUUID
             obj.libraryName = libraryName
-            obj.id = id
+            obj.idInLib = id
             
             cacheRealm?.add(obj)
             
@@ -697,7 +707,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         
         if let type = type {
             let cacheKey = CacheKey(searchKey: searchKey, type: type)
-            if let result = cache[cacheKey] {
+	            if let result = cache[cacheKey] {
                 return result
             } else {
                 return .init(library: library, offlineResult: type == .offline, error: true)
@@ -796,13 +806,25 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func getUnifiedResult(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> CalibreUnifiedSearchObject {
         let key = SearchCriteriaMergedKey(libraryIds: libraryIds, criteria: searchCriteria)
-        let cacheObj = cacheUnifiedObjects[key] ?? initCacheUnifiedObject(key: key)
+        let cacheObj = cacheUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: false)
         
         mergerRequestSubject.send(key)
         
         return cacheObj
     }
     
+    func getUnifiedResultObjectIdForSwiftUI(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> ObjectId? {
+        let key = SearchCriteriaMergedKey(libraryIds: libraryIds, criteria: searchCriteria)
+        
+        var objectId: ObjectId?
+        cacheRealmQueue.sync {
+//            let cacheObj =
+            
+            objectId = (cacheUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: true))._id
+        }
+        
+        return objectId
+    }
     
     private func mergeBookLists(mergedObj: CalibreUnifiedSearchObject, searchResults: [String: CalibreLibrarySearchObject], page: Int = 0, limit: Int = 100) {
         
@@ -1383,7 +1405,7 @@ extension CalibreServerService {
                 if offset <= filteredBooks.count {
                     let bookIds : [Int32] = filteredBooks[offset..<min(offset+num, filteredBooks.endIndex)]
                         .map {
-                            $0.id
+                            $0.idInLib
                         }
                     
                     task.ajaxSearchResult = .init(total_num: filteredBooks.count, sort_order: task.searchCriteria.sortCriteria.ascending ? "asc" : "desc", num_books_without_search: allbooks.count, offset: offset, num: bookIds.count, sort: task.searchCriteria.sortCriteria.by.sortQueryParam, base_url: "", library_id: task.library.key, book_ids: bookIds, vl: "")
@@ -1483,7 +1505,7 @@ extension CalibreServerService {
                         let obj = CalibreBookRealm()
                         obj.serverUUID = serverUUID
                         obj.libraryName = task.library.name
-                        obj.id = bookId
+                        obj.idInLib = bookId
                         
                         modelData.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: booksMetadataJSON)
                         

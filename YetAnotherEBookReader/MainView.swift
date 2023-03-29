@@ -61,12 +61,23 @@ struct MainView: View {
                         modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
                     }
                 
-                LibraryInfoView()
-                    .tabItem {
-                        Image(systemName: "building.columns.fill")
-                        Text("Browse")
-                    }
-                    .tag(2)
+//                if let realmConf = modelData.librarySearchManager.cacheRealmConf {
+                if let realmConf = modelData.realmConf {
+                    LibraryInfoView()
+                        .tabItem {
+                            Image(systemName: "building.columns.fill")
+                            Text("Browse")
+                        }
+                        .tag(2)
+                        .environment(\.realmConfiguration, realmConf)
+                } else {
+                    EmptyView()
+                        .tabItem {
+                            Image(systemName: "building.columns.fill")
+                            Text("Browse")
+                        }
+                        .tag(2)
+                }
                 
                 NavigationView {
                     SettingsView()

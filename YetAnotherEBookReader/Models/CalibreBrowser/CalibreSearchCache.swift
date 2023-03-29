@@ -78,4 +78,8 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
     var generation = Date.now
     var loading = false
     var error = false
+    
+    var parameters: String {
+        return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
+    }
 }

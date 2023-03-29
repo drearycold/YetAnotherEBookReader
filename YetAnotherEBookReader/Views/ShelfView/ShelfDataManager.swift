@@ -88,7 +88,7 @@ class YabrShelfDataModel: ObservableObject {
             } else {
                 category.inShelfBookIds.insert(book.inShelfId)
                 
-                searchManager.cacheRealmQueue.sync { [self] in
+                searchManager.cacheRealmQueue.async { [self] in
                     let unifiedSearchObject = searchManager.getUnifiedResult(
                         libraryIds: [],
                         searchCriteria: .init(
@@ -142,7 +142,7 @@ class YabrShelfDataModel: ObservableObject {
                let library = self.service.modelData.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] {
                 
                 var coverRelativeURLComponent = URLComponents()
-                coverRelativeURLComponent.path = "get/thumb/\($0.id)/\(library.key)"
+                coverRelativeURLComponent.path = "get/thumb/\($0.idInLib)/\(library.key)"
                 coverRelativeURLComponent.queryItems = [
                     .init(name: "sz", value: "300x400"),
                     .init(name: "username", value: server.username)
@@ -227,6 +227,9 @@ extension ModelData {
     }
     
     func registerDiscoverShelfUpdater() {
+        return;
+        
+        //MARK: TODO
         calibreUpdatedSubject
             .collect(.byTime(RunLoop.main, .seconds(1)))
             .receive(on: ModelData.SearchLibraryResultsRealmQueue)
@@ -320,8 +323,6 @@ extension ModelData {
                 }
             }
             .store(in: &calibreCancellables)
-        
-        return;
         
         librarySearchResultSubject.receive(on: DispatchQueue.main)
             .map { librarySearchTask -> (LibrarySearchKey, LibrarySearchResult?) in

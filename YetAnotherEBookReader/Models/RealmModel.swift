@@ -82,7 +82,7 @@ extension CalibreServer: Persistable {
     }
 }
 
-class CalibreLibraryRealm: Object {
+class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     @objc dynamic var primaryKey: String?
     
     @objc dynamic var key: String? {
@@ -139,7 +139,7 @@ class CalibreLibraryRealm: Object {
     @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
 }
 
-class CalibreBookRealm: Object {
+class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     @objc dynamic var primaryKey: String?
     
 //    @objc dynamic var serverUrl: String? {
@@ -157,7 +157,7 @@ class CalibreBookRealm: Object {
     
     @objc dynamic var libraryName: String?
     
-    @objc dynamic var id: Int32 = 0 {
+    @objc dynamic var idInLib: Int32 = 0 {
         didSet {
             updatePrimaryKey()
         }
@@ -210,7 +210,7 @@ class CalibreBookRealm: Object {
     }
     
     func readPos(library: CalibreLibrary) -> BookAnnotation {
-        let readPos = BookAnnotation(id: id, library: library)
+        let readPos = BookAnnotation(id: idInLib, library: library)
         
         let readPosObject = try? JSONSerialization.jsonObject(with: readPosData as Data? ?? Data(), options: [])
         let readPosDict = readPosObject as! NSDictionary? ?? NSDictionary()
@@ -265,7 +265,7 @@ class CalibreBookRealm: Object {
     }
     
     func updatePrimaryKey() {
-        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: id.description)
+        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: idInLib.description)
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
@@ -295,7 +295,7 @@ extension CalibreBook: Persistable {
         let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: managedObject.formatsData as Data? ?? .init()))
                 ?? formatsVer1
         
-        self.id = managedObject.id
+        self.id = managedObject.idInLib
         self.library = library
         self.title = managedObject.title
         self.comments = managedObject.comments
@@ -346,7 +346,7 @@ extension CalibreBook: Persistable {
         let bookRealm = CalibreBookRealm()
         bookRealm.serverUUID = self.library.server.uuid.uuidString
         bookRealm.libraryName = self.library.name
-        bookRealm.id = self.id
+        bookRealm.idInLib = self.id
 
         bookRealm.title = self.title
 

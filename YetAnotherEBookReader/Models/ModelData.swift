@@ -50,10 +50,7 @@ final class ModelData: ObservableObject {
 
     @Published var filterCriteriaLibraries = Set<String>()
 
-    @available(*, deprecated, renamed: "librarySearchCache")
-    @Published var searchLibraryResults = [LibrarySearchKey: LibrarySearchResult]()
-
-    //Merged
+    @available(*, deprecated, renamed: "librarySearchManager")
     @Published var searchCriteriaMergedResults = [SearchCriteriaMergedKey: LibrarySearchCriteriaResultMerged]()
     
     @Published var filteredBookListPageCount = 0
@@ -128,6 +125,8 @@ final class ModelData: ObservableObject {
             }
         }
     }
+    
+    @available(*, deprecated)
     @Published var readingBook: CalibreBook? = nil {
         didSet {
             guard let readingBook = readingBook else {
@@ -501,6 +500,10 @@ final class ModelData: ObservableObject {
 //                    fatalError("TODO")
                     statusHandler("Finalizing...")
                 }
+                
+                if oldSchemaVersion < 104 {
+                    migration.renameProperty(onType: CalibreBookRealm.className(), from: "id", to: "idInLib")
+                }
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize
@@ -519,6 +522,8 @@ final class ModelData: ObservableObject {
         
         let _ = try Realm(configuration: realmConf)
         realmConf.migrationBlock = nil
+        
+        Realm.Configuration.defaultConfiguration = realmConf
     }
     
     func initializeDatabase() {
@@ -1027,9 +1032,7 @@ final class ModelData: ObservableObject {
 //                return serverUrl
 //            }
 //        }()
-        guard let serverUUID = bookRealm.serverUUID,
-              let libraryName = bookRealm.libraryName,
-              let library = calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] else { return nil }
+        guard let library = queryLibrary(for: bookRealm) else { return nil }
         
         return convert(library: library, bookRealm: bookRealm)
     }
@@ -1038,6 +1041,14 @@ final class ModelData: ObservableObject {
         let calibreBook = CalibreBook(managedObject: bookRealm, library: library)
         
         return calibreBook
+    }
+    
+    func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {
+        guard let serverUUID = bookRealm.serverUUID,
+              let libraryName = bookRealm.libraryName
+        else { return nil }
+        
+        return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
     }
     
     func updateLibraryPluginColumnInfo(libraryId: String, columnInfo: CalibreLibraryPluginColumnInfo) -> CalibreLibrary? {
@@ -2137,9 +2148,9 @@ final class ModelData: ObservableObject {
                     )
                     booksMetadata.bookDeleted = objects
                         .filter {
-                            $0.inShelf == false && last_modified[$0.id.description] == nil
+                            $0.inShelf == false && last_modified[$0.idInLib.description] == nil
                         }
-                        .map { $0.id }
+                        .map { $0.idInLib }
                 case .complete:
                     if booksMetadata.library.autoUpdate {
                         let objects = self.realmSaveBooksMetadata.objects(CalibreBookRealm.self).filter(
@@ -2151,7 +2162,7 @@ final class ModelData: ObservableObject {
                         let libraryStatus = self.librarySyncStatus[booksMetadata.library.id]
                         booksMetadata.bookToUpdate = objectsNeedUpdate
                             .sorted(byKeyPath: "lastModified", ascending: false)
-                            .map { $0.id }
+                            .map { $0.idInLib }
                             .filter {
                                 libraryStatus == nil || libraryStatus?.upd.contains($0) == false
                             }
@@ -2260,14 +2271,14 @@ final class ModelData: ObservableObject {
                         
                         if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
                             self.calibreServerService.handleLibraryBookOne(library: result.library, bookRealm: obj, entry: entry, root: root)
-                            result.booksUpdated.insert(obj.id)
+                            result.booksUpdated.insert(obj.idInLib)
                             if obj.inShelf {
                                 result.booksInShelf.append(self.convert(library: result.library, bookRealm: obj))
                             }
                         } else {
                             // null data, treat as delted, update lastSynced to lastModified to prevent further actions
                             obj.lastSynced = obj.lastModified
-                            result.booksDeleted.insert(obj.id)
+                            result.booksDeleted.insert(obj.idInLib)
                         }
                     }
                 }
@@ -2275,7 +2286,7 @@ final class ModelData: ObservableObject {
                 
                 return result
             }
-            .map { result -> CalibreBooksTask in
+        .map { result -> CalibreBooksTask in
                 guard result.request.getAnnotations,
                       let annotationsResult = result.booksAnnotationsEntry
                 else {
@@ -2315,7 +2326,7 @@ final class ModelData: ObservableObject {
                 
                 return result
             }
-            .receive(on: DispatchQueue.main)
+        .receive(on: DispatchQueue.main)
             .sink { result in
                 let booksHandled = result.booksUpdated.union(result.booksError).union(result.booksDeleted)
                 
