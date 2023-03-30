@@ -800,6 +800,19 @@ class CalibreLibrarySearchManager: ObservableObject {
         }
     }
     
+    func refreshSearchResult(libraryIds: Set<String>, searchCriteria: SearchCriteria) {
+        cacheSearchObjects.keys
+            .filter({ key in
+                key.criteria == searchCriteria
+            })
+            .filter({ key in
+                libraryIds.isEmpty || libraryIds.contains(key.libraryId)
+            })
+            .forEach({ key in
+                self.refreshSubject.send(key)
+            })
+    }
+    
     /**
      merged search results
      */

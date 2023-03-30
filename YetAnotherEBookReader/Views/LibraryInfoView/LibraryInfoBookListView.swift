@@ -27,40 +27,31 @@ struct LibraryInfoBookListView: View {
     @State private var searchHistoryPresenting = false
     
     var body: some View {
-        
-//        List {
-//            ForEach(unifiedSearchObject.books) { book in
-//                NavigationLink {
-//                    BookDetailViewRealm(book: book, viewMode: .LIBRARY)
-//                } label: {
-//                    Text(book.title)
-//                }
-//            }
-//        }
-        ZStack {
-            VStack {
-                headerView()
+        GeometryReader { geometry in
+            ZStack {
+                VStack {
+                    headerView(geometry: geometry)
+                    
+                    Divider()
+                    
+                    contentView(geometry: geometry)
+                    
+                    Divider()
+                    
+                    footerView(geometry: geometry)
+                }
                 
-                Divider()
-                
-                contentView()
-                
-                Divider()
-                
-                footerView()
+                if unifiedSearchObject.loading {
+                    ProgressView()
+                        .scaleEffect(4, anchor: .center)
+                        .progressViewStyle(CircularProgressViewStyle())
+                }
             }
-            /*
-            if filteredBookListRefreshing {
-                ProgressView()
-                    .scaleEffect(4, anchor: .center)
-                    .progressViewStyle(CircularProgressViewStyle())
-            }
-            */
         }
     }
     
     @ViewBuilder
-    private func headerView() -> some View {
+    private func headerView(geometry: GeometryProxy) -> some View {
         ZStack {
             TextField("Search Title & Authors", text: $searchString)
             .onSubmit {
@@ -123,7 +114,16 @@ struct LibraryInfoBookListView: View {
     }
     
     @ViewBuilder
-    private func contentView() -> some View {
+    private func contentView(geometry: GeometryProxy) -> some View {
+//        #if DEBUG
+//        List {
+//            Text("count \(unifiedSearchObject.books.count)")
+//            ForEach(unifiedSearchObject.books) { bookRealm in
+//                Text(bookRealm.primaryKey!)
+//            }
+//        }
+//        #endif
+        
         List(selection: $selectedBookIds) {
             ForEach(unifiedSearchObject.books) { bookRealm in
                 NavigationLink (
@@ -132,7 +132,7 @@ struct LibraryInfoBookListView: View {
                     selection: $modelData.selectedBookId
                 ) {
                     if let book = modelData.convert(bookRealm: bookRealm) {
-                        bookRowView(book: book)
+                        bookRowView(book: book, bookRealm: bookRealm)
                     } else {
                         Text(bookRealm.title)
                     }
@@ -152,27 +152,10 @@ struct LibraryInfoBookListView: View {
         }
         
         .disabled(unifiedSearchObject.loading)
-        .popover(isPresented: $batchDownloadSheetPresenting,
-                 attachmentAnchor: .rect(.bounds),
-                 arrowEdge: .top
-        ) {
-            LibraryInfoBatchDownloadSheet(
-                presenting: $batchDownloadSheetPresenting,
-                downloadBookList: $downloadBookList
-            )
-        }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                Button {
-                    downloadBookList.removeAll(keepingCapacity: true)
-                    downloadBookList = unifiedSearchObject.books.compactMap({ bookRealm in
-                        modelData.convert(bookRealm: bookRealm)
-                    })
-                    batchDownloadSheetPresenting = true
-                } label: {
-                    Image(systemName: "square.and.arrow.down.on.square")
-                }
-                .disabled(unifiedSearchObject.loading)
+                downloadButton(geometry: geometry)
+                    .disabled(unifiedSearchObject.loading)
                 
                 sortMenuView()
                     .disabled(unifiedSearchObject.loading)
@@ -181,90 +164,24 @@ struct LibraryInfoBookListView: View {
     }
     
     @ViewBuilder
-    private func footerView() -> some View {
+    private func footerView(geometry: GeometryProxy) -> some View {
         HStack {
             Button {
                 booksListInfoPresenting = true
             } label: {
                 Image(systemName: "info.circle")
             }.popover(isPresented: $booksListInfoPresenting) {
-                NavigationView {
-                    List {
-                        ForEach(modelData.currentSearchLibraryResults
-                            .map({ (modelData.calibreLibraries[$0.key.libraryId]!, $0.value) })
-                            .sorted(by: { $0.0.id < $1.0.id}),
-                                id: \.0.id) { searchResult in
-                            Section {
-                                HStack {
-                                    Text("Books")
-                                    Spacer()
-                                    Text("\(searchResult.1.totalNumber)")
-                                }
-                            } header: {
-                                HStack {
-                                    Text(searchResult.0.name)
-                                    Spacer()
-                                    Text(searchResult.0.server.name)
-                                }
-                            } footer: {
-                                HStack {
-                                    Spacer()
-                                    if searchResult.1.loading {
-                                        Text("Searching for more, result incomplete.")
-                                    } else if searchResult.1.error {
-                                        Text("Error occured, result incomplete.")
-                                    } else if searchResult.1.offlineResult,
-                                              !searchResult.1.library.server.isLocal {
-                                        Text("Local cached result, may not up to date.")
-                                    }
-                                }.font(.caption)
-                                    .foregroundColor(.red)
-                            }
-                            
-                        }
-                    }
-                    .navigationTitle("Libraries")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button {
-                                booksListInfoPresenting = false
-                            } label: {
-                                Image(systemName: "xmark.circle")
-                            }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                let searchCriteria = modelData.currentLibrarySearchCriteria
-                                
-                                modelData.currentSearchLibraryResults
-                                    .filter {
-                                        $0.key.criteria == searchCriteria
-                                    }
-                                    .forEach {
-                                        modelData.librarySearchResetSubject.send($0.key)
-                                    }
-                                
-                                modelData.librarySearchResetSubject.send(.init(libraryId: "", criteria: searchCriteria))
-                                
-                                searchStringChanged(searchString: self.searchString)
-                                
-                                booksListInfoPresenting = false
-                            } label: {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                        }
-                    }
-                }
-                .navigationViewStyle(.stack)
+                LibraryInfoBookListInfoView(presenting: $booksListInfoPresenting)
+                    .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
             }
 
             Text(getLibrarySearchingText())
-            /* MARK: TODO
-            if filteredBookListRefreshing {
+            
+            if unifiedSearchObject.loading {
                 ProgressView()
                     .progressViewStyle(.circular)
             }
-            */
+            
             Spacer()
             
             if #available(iOS 16, *),
@@ -293,6 +210,30 @@ struct LibraryInfoBookListView: View {
             }.disabled(unifiedSearchObject.loading && modelData.currentSearchLibraryResultsCannotFurther)
         }
         .padding(4)    //bottom bar
+    }
+    
+    @ViewBuilder
+    private func downloadButton(geometry: GeometryProxy) -> some View {
+        Button {
+            downloadBookList.removeAll(keepingCapacity: true)
+            downloadBookList = unifiedSearchObject.books.compactMap({ bookRealm in
+                modelData.convert(bookRealm: bookRealm)
+            })
+            batchDownloadSheetPresenting = true
+        } label: {
+            Image(systemName: "square.and.arrow.down.on.square")
+        }
+        .disabled(unifiedSearchObject.loading)
+        .popover(isPresented: $batchDownloadSheetPresenting,
+                 attachmentAnchor: .point(.bottom),
+                 arrowEdge: .bottom
+        ) {
+            LibraryInfoBatchDownloadSheet(
+                presenting: $batchDownloadSheetPresenting,
+                downloadBookList: $downloadBookList
+            )
+            .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
+        }
     }
     
     @ViewBuilder
@@ -328,7 +269,7 @@ struct LibraryInfoBookListView: View {
     }
     
     @ViewBuilder
-    private func bookRowView(book: CalibreBook) -> some View {
+    private func bookRowView(book: CalibreBook, bookRealm: CalibreBookRealm) -> some View {
         HStack(alignment: .bottom) {
             ZStack {
                 KFImage(book.coverURL)
@@ -364,6 +305,21 @@ struct LibraryInfoBookListView: View {
             Spacer()
             
             VStack(alignment: .leading, spacing: 2) {
+//                #if DEBUG
+//                HStack {
+//                    Text("Book")
+//                    Text("\(book.id)")
+//                    Spacer()
+//                    Text(book.inShelfId)
+//                }
+//                HStack {
+//                    Text("BookRealm")
+//                    Text("\(bookRealm.idInLib)")
+//                    Spacer()
+//                    Text(bookRealm.primaryKey!)
+//                }
+//                #endif
+
                 Text("\(book.title)")
                     .font(.callout)
                     .lineLimit(3)
