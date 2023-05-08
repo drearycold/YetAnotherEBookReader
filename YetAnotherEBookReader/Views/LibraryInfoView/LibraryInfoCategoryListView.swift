@@ -15,10 +15,66 @@ struct LibraryInfoCategoryListView: View {
 
     @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
     
+    @ObservedResults(CalibreUnifiedCategoryObject.self, sortDescriptor: .init(keyPath: "categoryName")) var unifiedCategories
+    
     var body: some View {
         Section {
+            
+            ForEach(unifiedCategories) { unifiedCategory in
+                NavigationLink(tag: unifiedCategory.categoryName, selection: $viewModel.categoriesSelected) {
+//                NavigationLink {
+                    ZStack {
+                        TextField("Filter \(unifiedCategory.categoryName)", text: $viewModel.categoryFilterString, onCommit: {
+                            modelData.categoryItemListSubject.send(unifiedCategory.categoryName)
+                        })
+                        .keyboardType(.webSearch)
+                        .padding([.leading, .trailing], 24)
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                viewModel.categoryFilterString = ""
+                                modelData.categoryItemListSubject.send(unifiedCategory.categoryName)
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }.disabled(viewModel.categoryFilterString.isEmpty)
+                        }.padding([.leading, .trailing], 4)
+                    }
+                    
+                    Divider()
+                    
+                    ZStack {
+                        LibraryInfoCategoryItemsView(unifiedCategory: unifiedCategory)
+                            .environmentObject(viewModel)
+                    }
+                    .navigationTitle("Category: \(unifiedCategory.categoryName)")
+                    .onAppear {
+                        guard let categoryName = viewModel.categoriesSelected,
+                              categoryName != viewModel.categoryName
+                        else { return }
+                        
+                        viewModel.categoryFilterString = ""
+                        modelData.categoryItemListSubject.send(categoryName)
+                    }
+                    .onDisappear {
+                        if viewModel.categoriesSelected == nil {
+                            viewModel.categoryName = ""
+                            viewModel.categoryItems.removeAll(keepingCapacity: true)
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Text("\(unifiedCategory.categoryName)")
+                        Spacer()
+                        Text("\(unifiedCategory.items.count) (\(unifiedCategory.totalNumber))")
+                    }
+                }
+                .isDetailLink(false)
+            }.foregroundColor(.red)
+            
             ForEach(modelData.calibreLibraryCategoryMerged.keys.sorted(), id: \.self) { categoryName in
-                NavigationLink(tag: categoryName, selection: $viewModel.categoriesSelected) {
+//                NavigationLink(tag: categoryName, selection: $viewModel.categoriesSelected) {
+                NavigationLink {
                     ZStack {
                         TextField("Filter \(categoryName)", text: $viewModel.categoryFilterString, onCommit: {
                             modelData.categoryItemListSubject.send(categoryName)
@@ -133,13 +189,9 @@ struct LibraryInfoCategoryListView: View {
                 let unifiedSearch = unifiedSearches.where({
                 $0._id == objectId
             }).first {
-                LibraryInfoBookListView(
-                    unifiedSearchObject: unifiedSearch,
-                    categoriesSelected: $viewModel.categoriesSelected,
-                    categoryItemSelected: $viewModel.categoryItemSelected
-                )
+                LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
             } else {
-                Text("Cannot get unified search")
+                Text("Preparing Book List")
             }
         }
         .statusBar(hidden: false)
@@ -156,8 +208,6 @@ struct LibraryInfoCategoryListView: View {
     func resetSearchCriteria() {
         modelData.filterCriteriaCategory.removeAll()
         modelData.filterCriteriaLibraries.removeAll()
-        
-        modelData.filterCriteriaShelved = .none
     }
     
     

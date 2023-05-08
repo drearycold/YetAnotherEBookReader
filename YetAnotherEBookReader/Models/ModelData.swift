@@ -46,7 +46,6 @@ final class ModelData: ObservableObject {
     @Published var searchString = ""
     @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
     @Published var filterCriteriaCategory = [String: Set<String>]()
-    @Published var filterCriteriaShelved = FilterCriteriaShelved.none
 
     @Published var filterCriteriaLibraries = Set<String>()
 

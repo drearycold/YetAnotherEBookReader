@@ -39,6 +39,53 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     var error = false
 }
 
+class CalibreLibraryCategoryItemObject: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted(originProperty: "items") var assignee: LinkingObjects<CalibreLibraryCategoryObject>
+    
+    @Persisted var name: String
+    @Persisted var averageRating: Double
+    @Persisted var count: Int
+    @Persisted var url: String
+}
+
+class CalibreUnifiedCategoryItemObject: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted(originProperty: "items") var assignee: LinkingObjects<CalibreUnifiedCategoryObject>
+    
+    @Persisted var categoryName: String
+    @Persisted var name: String
+    @Persisted var averageRating: Double
+    @Persisted var count: Int
+    
+    @Persisted var items: MutableSet<CalibreLibraryCategoryItemObject>
+}
+
+
+class CalibreLibraryCategoryObject: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted var libraryId: String
+    @Persisted var categoryName: String
+    
+    @Persisted var generation: Date
+    @Persisted var totalNumber: Int
+    
+    @Persisted var items: List<CalibreLibraryCategoryItemObject>
+}
+
+class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted var categoryName: String
+    
+    @Persisted var totalNumber: Int
+    
+    @Persisted var items: List<CalibreUnifiedCategoryItemObject>
+}
+
 class CalibreUnifiedOffsets: Object {
     @Persisted var offsets: List<Int>
     @Persisted var beenCutOff = false

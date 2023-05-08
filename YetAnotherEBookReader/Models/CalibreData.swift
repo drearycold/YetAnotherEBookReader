@@ -1573,6 +1573,7 @@ struct CalibreLibraryCategoryKey: Hashable {
 }
 
 struct CalibreLibraryCategoryValue {
+    var category: CalibreLibraryCategory
     var reqId: Int
     var totalNumber: Int
     var items: [LibraryCategoryListResult.Item]

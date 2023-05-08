@@ -33,12 +33,9 @@ struct LibraryInfoView: View {
 
     @State private var lastSortCriteria = [LibrarySearchSort]()
     
-    @State private var searchString = ""
-    @State private var categoryFilterString = ""
+//    @State private var categoryFilterString = ""
     
     @State private var selectedBookIds = Set<String>()
-    @State private var downloadBookList = [CalibreBook]()
-    @State private var updater = 0
     
     @State private var booksListInfoPresenting = false
     @State private var searchHistoryPresenting = false
@@ -77,6 +74,32 @@ struct LibraryInfoView: View {
                 
                 libraryListView()
                 
+                #if DEBUG
+                Section("DEBUG") {
+                    HStack {
+                        Button {
+                            self.modelData.calibreLibraryCategories.forEach {
+                                print("category: \($0.key.libraryId) \($0.key.categoryName)")
+                                
+                                guard let library = self.modelData.calibreLibraries[$0.key.libraryId]
+                                else { return }
+                                
+                                self.modelData.librarySearchManager.refreshLibraryCategory(library: library, category: $0.value.category)
+                            }
+                            
+//                            let categoryKey = CalibreLibraryCategoryKey(libraryId: "Calibre-Manga@B23FD423-3211-4A1C-8D66-0861168BB065", categoryName: "Authors")
+//                            guard let library = self.modelData.calibreLibraries[categoryKey.libraryId],
+//                                  let categoryValue = self.modelData.calibreLibraryCategories[categoryKey]
+//                            else { return }
+//
+//                            self.modelData.librarySearchManager.refreshLibraryCategory(library: library, category: categoryValue.category)
+                        } label: {
+                            Text("CAT")
+                        }
+                    }
+                }
+                
+                #endif
             }
             .padding(4)
             .navigationTitle(Text("Library Browser"))
@@ -110,7 +133,7 @@ struct LibraryInfoView: View {
                     }
                     
                     viewModel.categoryName = categoryName
-                    viewModel.categoryFilter = self.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    viewModel.categoryFilter = viewModel.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
                     
                     viewModel.categoryItems.removeAll(keepingCapacity: true)
                     self.categoryItemListUpdating = true
@@ -206,23 +229,12 @@ struct LibraryInfoView: View {
                 let unifiedSearch = unifiedSearches.where({
                 $0._id == objectId
             }).first {
-                LibraryInfoBookListView(
-                    unifiedSearchObject: unifiedSearch,
-                    categoriesSelected: $viewModel.categoriesSelected,
-                    categoryItemSelected: $viewModel.categoryItemSelected
-                )
+                LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
             } else {
-                Text("Cannot get unified search")
+                Text("Preparing Book List")
             }
         }
         .statusBar(hidden: false)
-    }
-    
-    func searchStringChanged(searchString: String) {
-        self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
-        modelData.searchString = self.searchString
-        
-        resetToFirstPage()
     }
     
     func updateFilterCategory(key: String, value: String) {
@@ -245,8 +257,6 @@ struct LibraryInfoView: View {
     func resetSearchCriteria() {
         modelData.filterCriteriaCategory.removeAll()
         modelData.filterCriteriaLibraries.removeAll()
-        
-        modelData.filterCriteriaShelved = .none
     }
 }
 

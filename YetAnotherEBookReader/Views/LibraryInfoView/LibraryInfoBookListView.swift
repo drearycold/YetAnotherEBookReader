@@ -12,10 +12,9 @@ import struct Kingfisher.KFImage
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
     
+    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
-    
-    @Binding var categoriesSelected : String?
-    @Binding var categoryItemSelected: String?
     
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
@@ -80,7 +79,7 @@ struct LibraryInfoBookListView: View {
                 Menu {
                     ForEach(modelData.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
                         ForEach(categoryFilter.value.filter({
-                            categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
+                            categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
                         }).sorted(), id: \.self) { categoryFilterValue in
                             Button {
                                 if modelData.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
@@ -104,7 +103,7 @@ struct LibraryInfoBookListView: View {
                         .foregroundColor(
                             modelData.filterCriteriaCategory.filter({ categoryFilter in
                                 categoryFilter.value.filter({
-                                    categoryFilter.key != categoriesSelected || $0 != categoryItemSelected
+                                    categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
                                 }).isEmpty == false
                             }).isEmpty ? .gray : .accentColor
                         )
