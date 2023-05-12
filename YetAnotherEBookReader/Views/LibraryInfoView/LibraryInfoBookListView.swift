@@ -16,6 +16,8 @@ struct LibraryInfoBookListView: View {
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
+    @ObservedResults(CalibreLibrarySearchObject.self) var librarySearches
+    
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
     
@@ -53,11 +55,14 @@ struct LibraryInfoBookListView: View {
     private func headerView(geometry: GeometryProxy) -> some View {
         ZStack {
             TextField("Search Title & Authors", text: $searchString)
-            .onSubmit {
-                searchStringChanged(searchString: searchString)
-            }
-            .keyboardType(.webSearch)
-            .padding([.leading, .trailing], 24)
+                .onAppear {
+                    searchString = modelData.searchString
+                }
+                .onSubmit {
+                    searchStringChanged(searchString: searchString)
+                }
+                .keyboardType(.webSearch)
+                .padding([.leading, .trailing], 24)
             HStack {
                 Button {
                     searchHistoryPresenting = true
@@ -131,7 +136,23 @@ struct LibraryInfoBookListView: View {
                     selection: $modelData.selectedBookId
                 ) {
                     if let book = modelData.convert(bookRealm: bookRealm) {
-                        bookRowView(book: book, bookRealm: bookRealm)
+                        HStack {
+//                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
+//                                Text(index.description)
+//                            }
+                            if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: modelData.filterCriteriaLibraries, criteria: modelData.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
+                                Text(bookIndex.description)
+                                    .onAppear {
+                                        guard bookIndex > unifiedSearchObject.limitNumber - 20
+                                        else {
+                                            return
+                                        }
+                                        
+                                        expandSearchUnifiedBookLimit()
+                                    }
+                            }
+                            bookRowView(book: book, bookRealm: bookRealm)
+                        }
                     } else {
                         Text(bookRealm.title)
                     }
@@ -145,6 +166,47 @@ struct LibraryInfoBookListView: View {
                     }
                 }
             }   //ForEach
+            
+            #if DEBUG
+            Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
+            
+            Button {
+                expandSearchUnifiedBookLimit()
+            } label: {
+                Text("Expand")
+            }
+            
+            Button {
+                let realm = unifiedSearchObject.realm!.thaw()
+                let thawedObject = unifiedSearchObject.thaw()!
+                try! realm.write {
+                    thawedObject.resetList()
+                }
+            } label: {
+                Text("Reset")
+            }
+            
+            ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
+                HStack {
+                    Text("\(unifiedEntry.key)")
+                    if let unifiedOffset = unifiedEntry.value {
+                        Text("\(unifiedOffset.offset) \(unifiedOffset.beenConsumed.description) \(unifiedOffset.beenCutOff.description)")
+                    }
+                }
+                HStack {
+                    if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectIdForSwiftUI(libraryId: unifiedEntry.key, searchCriteria: modelData.currentLibrarySearchCriteria),
+                       let searchObj = librarySearches.where({ $0._id == objectId
+                       }).first {
+                        Text(searchObj.totalNumber.description)
+                        
+                        Text(searchObj.bookIds.count.description)
+                        
+                        Text(searchObj.books.count.description)
+                    }
+                }
+            }
+            
+            #endif
         }
         .onAppear {
             print("LIBRARYINFOVIEW books=\(unifiedSearchObject.books.count)")
@@ -522,7 +584,17 @@ struct LibraryInfoBookListView: View {
         }
     }
     
-    
+    func expandSearchUnifiedBookLimit() {
+        guard unifiedSearchObject.limitNumber < unifiedSearchObject.totalNumber,
+              let realm = unifiedSearchObject.realm?.thaw(),
+              let thawedObject = unifiedSearchObject.thaw()
+        else {
+            return
+        }
+        try! realm.write {
+            thawedObject.limitNumber = min(unifiedSearchObject.limitNumber + 100, unifiedSearchObject.totalNumber)
+        }
+    }
 }
 
 //struct LibraryInfoBookListView_Previews: PreviewProvider {

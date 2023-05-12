@@ -17,6 +17,8 @@ struct LibraryInfoView: View {
     
     @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
     
+    @ObservedResults(CalibreUnifiedCategoryObject.self, where: { $0.items.count > 0 }) var unifiedCategories
+    
     @StateObject var viewModel = ViewModel()
     
 //    @State private var categoriesSelected : String? = nil
@@ -46,9 +48,6 @@ struct LibraryInfoView: View {
     
     @State private var dismissAllCancellable: AnyCancellable?
     
-    @State private var categoryItemListCancellable: AnyCancellable?
-    @State private var categoryItemListUpdating = false
-    
     @State private var savedFilterCriteriaCategory: [String: Set<String>]? = nil
     
     private var defaultLog = Logger()
@@ -68,38 +67,11 @@ struct LibraryInfoView: View {
                 
                 combinedListView()
                 
-                if modelData.calibreLibraryCategoryMerged.isEmpty == false {
+                if unifiedCategories.isEmpty == false {
                     LibraryInfoCategoryListView()
                 }
                 
                 libraryListView()
-                
-                #if DEBUG
-                Section("DEBUG") {
-                    HStack {
-                        Button {
-                            self.modelData.calibreLibraryCategories.forEach {
-                                print("category: \($0.key.libraryId) \($0.key.categoryName)")
-                                
-                                guard let library = self.modelData.calibreLibraries[$0.key.libraryId]
-                                else { return }
-                                
-                                self.modelData.librarySearchManager.refreshLibraryCategory(library: library, category: $0.value.category)
-                            }
-                            
-//                            let categoryKey = CalibreLibraryCategoryKey(libraryId: "Calibre-Manga@B23FD423-3211-4A1C-8D66-0861168BB065", categoryName: "Authors")
-//                            guard let library = self.modelData.calibreLibraries[categoryKey.libraryId],
-//                                  let categoryValue = self.modelData.calibreLibraryCategories[categoryKey]
-//                            else { return }
-//
-//                            self.modelData.librarySearchManager.refreshLibraryCategory(library: library, category: categoryValue.category)
-                        } label: {
-                            Text("CAT")
-                        }
-                    }
-                }
-                
-                #endif
             }
             .padding(4)
             .navigationTitle(Text("Library Browser"))
@@ -119,49 +91,6 @@ struct LibraryInfoView: View {
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 batchDownloadSheetPresenting = false
             }
-            
-            categoryItemListCancellable?.cancel()
-            categoryItemListCancellable = modelData.categoryItemListSubject
-                .receive(on: DispatchQueue.main)
-                .compactMap { categoryName -> String? in
-                    guard categoryName == viewModel.categoriesSelected else { return nil }
-                    
-                    if categoryName == viewModel.categoryName,
-                       viewModel.categoryFilter == viewModel.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines),
-                       viewModel.categoryFilter.isEmpty == false {
-                        return nil
-                    }
-                    
-                    viewModel.categoryName = categoryName
-                    viewModel.categoryFilter = viewModel.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
-                    
-                    viewModel.categoryItems.removeAll(keepingCapacity: true)
-                    self.categoryItemListUpdating = true
-                    
-                    return categoryName
-                }
-                .receive(on: DispatchQueue.global(qos: .userInitiated))
-                .map { categoryName -> [String] in
-                    guard var categoryItems = modelData.calibreLibraryCategoryMerged[viewModel.categoryName]
-                    else { return [] }
-                    
-                    if viewModel.categoryFilter.isEmpty == false {
-                        categoryItems = categoryItems.filter { $0.localizedCaseInsensitiveContains(viewModel.categoryFilter) }
-                    }
-                    
-                    guard viewModel.categoryItems.count < 1000 else {
-                        return viewModel.categoryItemsTooLong
-                    }
-                    
-                    return categoryItems
-                }
-                .receive(on: DispatchQueue.main)
-                .sink { categoryItems in
-                    if categoryItems.isEmpty == false {
-                        viewModel.categoryItems.append(contentsOf: categoryItems)
-                    }
-                    categoryItemListUpdating = false
-                }
             
             modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
         }
@@ -230,6 +159,7 @@ struct LibraryInfoView: View {
                 $0._id == objectId
             }).first {
                 LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
+                    .environmentObject(viewModel)
             } else {
                 Text("Preparing Book List")
             }

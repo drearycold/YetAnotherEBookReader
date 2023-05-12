@@ -14,13 +14,11 @@ extension LibraryInfoView {
         
         @Published var categoryName: String = ""
         @Published var categoryFilter: String = ""
-        @Published var categoryItems: [String] = []
         
         @Published var lastSortCriteria: [LibrarySearchSort] = []
         
         @Published var categoryFilterString: String = ""
         
         let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
-        
     }
 }

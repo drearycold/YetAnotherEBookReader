@@ -34,7 +34,8 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     @Persisted var books: List<CalibreBookRealm>
     
     //runtime
-    var generation = Date.now
+    @Persisted var generation: Date
+    
     var loading = false
     var error = false
 }
@@ -87,10 +88,17 @@ class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
 }
 
 class CalibreUnifiedOffsets: Object {
+    @available(*, deprecated, message: "drop paging")
     @Persisted var offsets: List<Int>
-    @Persisted var beenCutOff = false
-    @Persisted var cutOffOffset = 0
     
+    @Persisted var beenCutOff = false
+    @Persisted var beenConsumed = false
+    @available(*, deprecated, message: "drop paging")
+    @Persisted var cutOffOffset = 0
+    @Persisted var offset = 0
+    @Persisted var generation: Date
+    
+    @available(*, deprecated, message: "drop paging")
     func setOffset(index: Int, offset: Int) {
         if index < offsets.endIndex {
             offsets[index] = offset
@@ -119,14 +127,41 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
     
     @Persisted var totalNumber = 0
     
+    @Persisted var limitNumber = 100
+    
     @Persisted var books: List<CalibreBookRealm>
     
     //runtime
-    var generation = Date.now
     var loading = false
     var error = false
+    var objectNotificationToken: NotificationToken?
     
     var parameters: String {
         return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
+    }
+    
+    var idMap: [String: Int] = [:]
+    
+    func getIndex(primaryKey: String) -> Int? {
+        if let index = idMap[primaryKey] {
+            return index
+        }
+//        else if let index = books.firstIndex(where: { $0.primaryKey == primaryKey }) {
+//            idMap[primaryKey] = index
+//            return index
+//        }
+        
+        return nil
+    }
+    
+    func resetList() {
+        self.idMap.removeAll()
+        self.books.removeAll()
+        self.unifiedOffsets.forEach {
+            $0.value?.beenCutOff = false
+            $0.value?.beenConsumed = false
+            $0.value?.offset = 0
+        }
+        self.limitNumber = 0
     }
 }

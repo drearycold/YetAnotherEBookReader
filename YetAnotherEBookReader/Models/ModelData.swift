@@ -30,9 +30,6 @@ final class ModelData: ObservableObject {
     @Published var calibreLibraries = [String: CalibreLibrary]()
     @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
     
-    @Published var calibreLibraryCategories = [CalibreLibraryCategoryKey: CalibreLibraryCategoryValue]()
-    @Published var calibreLibraryCategoryMerged = [String: [String]]()
-    
     @Published var activeTab = 0
     var documentServer: CalibreServer?
     var localLibrary: CalibreLibrary?
@@ -107,11 +104,6 @@ final class ModelData: ObservableObject {
     let filteredBookListMergeSubject = PassthroughSubject<SearchCriteriaMergedKey, Never>()
     let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
     let filteredBookListRefreshingSubject = PassthroughSubject<Any, Never>()
-    
-    let libraryCategorySubject = PassthroughSubject<LibraryCategoryList, Never>()
-    let libraryCategoryMergeSubject = PassthroughSubject<String, Never>()
-    
-    let categoryItemListSubject = PassthroughSubject<String, Never>()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -277,12 +269,10 @@ final class ModelData: ObservableObject {
             }
         }.store(in: &calibreCancellables)
         
-        self.calibreServerService.registerLibraryCategoryHandler()
         self.calibreServerService.registerLibrarySearchHandler()
         self.calibreServerService.registerLibrarySearchResetHandler()
         
         self.calibreServerService.registerFilteredBookListMergeHandler()
-        self.calibreServerService.registerLibraryCategoryMergeHandler()
         
         self.calibreServerService.registerBookFormatDownloadHandler()
         
@@ -2108,15 +2098,7 @@ final class ModelData: ObservableObject {
                 result.categories.filter {
                     $0.is_category //&& $0.name != "Authors"
                 }.forEach { category in
-                    self.libraryCategorySubject.send(
-                        .init(
-                            library: library,
-                            category: category,
-                            reqId: (self.calibreLibraryCategories[.init(libraryId: library.id, categoryName: category.name)]?.reqId ?? 0) + 1,
-                            offset: 0,
-                            num: 0
-                        )
-                    )   //get total_num
+                    self.librarySearchManager.refreshLibraryCategory(library: library, category: category)
                 }
                 
                 self.librarySyncStatus[library.id]?.isError = result.isError
