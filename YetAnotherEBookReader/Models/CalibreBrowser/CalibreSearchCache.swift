@@ -140,22 +140,22 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
         return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
     }
     
-    var idMap: [String: Int] = [:]
+//    var idMap: [String: Int] = [:]
     
-    func getIndex(primaryKey: String) -> Int? {
-        if let index = idMap[primaryKey] {
-            return index
-        }
-//        else if let index = books.firstIndex(where: { $0.primaryKey == primaryKey }) {
-//            idMap[primaryKey] = index
+//    func getIndex(primaryKey: String) -> Int? {
+//        if let index = idMap[primaryKey] {
 //            return index
 //        }
-        
-        return nil
-    }
+////        else if let index = books.firstIndex(where: { $0.primaryKey == primaryKey }) {
+////            idMap[primaryKey] = index
+////            return index
+////        }
+//
+//        return nil
+//    }
     
     func resetList() {
-        self.idMap.removeAll()
+//        self.idMap.removeAll()
         self.books.removeAll()
         self.unifiedOffsets.forEach {
             $0.value?.beenCutOff = false

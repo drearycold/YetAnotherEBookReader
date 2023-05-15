@@ -23,35 +23,33 @@ struct LibraryInfoCategoryItemsView: View {
                 NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
                     bookListView()
                         .onAppear {
-                            if modelData.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
+                            if viewModel.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
                                 return
                             }
                             
                             resetSearchCriteria()
                             
-                            modelData.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
+                            viewModel.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
                             
                             if viewModel.categoriesSelected == "Series" {
-                                if modelData.sortCriteria.by != .SeriesIndex {
-                                    viewModel.lastSortCriteria.append(modelData.sortCriteria)
+                                if viewModel.sortCriteria.by != .SeriesIndex {
+                                    viewModel.lastSortCriteria.append(viewModel.sortCriteria)
                                 }
                                 
-                                modelData.sortCriteria.by = .SeriesIndex
-                                modelData.sortCriteria.ascending = true
+                                viewModel.sortCriteria.by = .SeriesIndex
+                                viewModel.sortCriteria.ascending = true
                             } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
-                                if modelData.sortCriteria.by != .Publication {
-                                    viewModel.lastSortCriteria.append(modelData.sortCriteria)
+                                if viewModel.sortCriteria.by != .Publication {
+                                    viewModel.lastSortCriteria.append(viewModel.sortCriteria)
                                 }
                                 
-                                modelData.sortCriteria.by = .Publication
-                                modelData.sortCriteria.ascending = false
+                                viewModel.sortCriteria.by = .Publication
+                                viewModel.sortCriteria.ascending = false
                             }
                             else {
-                                modelData.sortCriteria.by = .Modified
-                                modelData.sortCriteria.ascending = false
+                                viewModel.sortCriteria.by = .Modified
+                                viewModel.sortCriteria.ascending = false
                             }
-                            
-                            resetToFirstPage()
                         }
                         .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
                 } label: {
@@ -65,7 +63,7 @@ struct LibraryInfoCategoryItemsView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: modelData.filterCriteriaLibraries, searchCriteria: modelData.currentLibrarySearchCriteria),
+            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
                 let unifiedSearch = unifiedSearches.where({
                 $0._id == objectId
             }).first {
@@ -78,17 +76,9 @@ struct LibraryInfoCategoryItemsView: View {
         .statusBar(hidden: false)
     }
     
-    func resetToFirstPage() {
-        if modelData.filteredBookListPageNumber > 0 {
-            modelData.filteredBookListPageNumber = 0
-        } else {
-            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
-        }
-    }
-    
     func resetSearchCriteria() {
-        modelData.filterCriteriaCategory.removeAll()
-        modelData.filterCriteriaLibraries.removeAll()
+        viewModel.filterCriteriaCategory.removeAll()
+        viewModel.filterCriteriaLibraries.removeAll()
     }
     
 }

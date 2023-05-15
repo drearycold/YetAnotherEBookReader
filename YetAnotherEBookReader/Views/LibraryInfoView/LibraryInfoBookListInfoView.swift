@@ -6,46 +6,68 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct LibraryInfoBookListInfoView: View {
     @EnvironmentObject var modelData: ModelData
+    
+    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+
+    @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
+    
+    @ObservedResults(CalibreLibrarySearchObject.self) var librarySearches
     
     @Binding var presenting: Bool
     
     var body: some View {
         NavigationView {
             List {
-                ForEach(modelData.currentSearchLibraryResults
-                    .map({ (modelData.calibreLibraries[$0.key.libraryId]!, $0.value) })
-                    .sorted(by: { $0.0.id < $1.0.id}),
-                        id: \.0.id) { searchResult in
-                    Section {
-                        HStack {
-                            Text("Books")
-                            Spacer()
-                            Text("\(searchResult.1.totalNumber)")
-                        }
-                    } header: {
-                        HStack {
-                            Text(searchResult.0.name)
-                            Spacer()
-                            Text(searchResult.0.server.name)
-                        }
-                    } footer: {
-                        HStack {
-                            Spacer()
-                            if searchResult.1.loading {
-                                Text("Searching for more, result incomplete.")
-                            } else if searchResult.1.error {
-                                Text("Error occured, result incomplete.")
-                            } else if searchResult.1.offlineResult,
-                                      !searchResult.1.library.server.isLocal {
-                                Text("Local cached result, may not up to date.")
+                ForEach(
+                    unifiedSearchObject.unifiedOffsets
+                        .sorted(by: { $0.key < $1.key })
+                        .map({ unifiedOffset in
+                            (
+                                unifiedOffset,
+                                modelData.calibreLibraries[unifiedOffset.key],
+                                librarySearches.where({
+                                    $0._id == self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedOffset.key, searchCriteria: viewModel.currentLibrarySearchCriteria) ?? ObjectId.generate()
+                                }).first
+                            )
+                        }), id: \.0.key) { searchResult in
+                            if let unifiedOffset = searchResult.0.value,
+                               let library = searchResult.1,
+                               let searchObject = searchResult.2 {
+                            Section {
+                                HStack {
+                                    Text("Books")
+                                    Spacer()
+                                    Text("\(searchObject.totalNumber)")
+                                }
+                                #if DEBUG
+                                HStack {
+                                Text(unifiedOffset.offset.description)
+                                    Text("/")
+                                    Text(unifiedOffset.beenConsumed.description)
+                                    Text("/")
+                                    Text(unifiedOffset.beenCutOff.description)
+
+                                    Spacer()
+
+                                    Text(searchObject.books.count.description)
+                                    Text("/")
+                                    Text(searchObject.bookIds.count.description)
+                                }
+                                #endif
+                            } header: {
+                                HStack {
+                                    Text(library.name)
+                                    Spacer()
+                                    Text(library.server.name)
+                                }
                             }
-                        }.font(.caption)
-                            .foregroundColor(.red)
-                    }
-                    
+                        } else {
+                            Text("Error \(searchResult.0.key)")
+                        }
                 }
             }
             .navigationTitle("Libraries")
@@ -59,23 +81,9 @@ struct LibraryInfoBookListInfoView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        let searchCriteria = modelData.currentLibrarySearchCriteria
+                        modelData.librarySearchManager.refreshSearchResult(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
                         
-//                                modelData.currentSearchLibraryResults
-//                                    .filter {
-//                                        $0.key.criteria == searchCriteria
-//                                    }
-//                                    .forEach {
-//                                        modelData.librarySearchResetSubject.send($0.key)
-//                                    }
-//
-//                                modelData.librarySearchResetSubject.send(.init(libraryId: "", criteria: searchCriteria))
-//
-//                                searchStringChanged(searchString: self.searchString)
-//
-//                                booksListInfoPresenting = false
-                        
-                        modelData.librarySearchManager.refreshSearchResult(libraryIds: modelData.filterCriteriaLibraries, searchCriteria: modelData.currentLibrarySearchCriteria)
+                        presenting = false
                     } label: {
                         Image(systemName: "arrow.triangle.2.circlepath")
                     }
@@ -86,10 +94,10 @@ struct LibraryInfoBookListInfoView: View {
     }
 }
 
-struct LibraryInfoBookListInfoView_Previews: PreviewProvider {
-    @State static var presenting = true
-    
-    static var previews: some View {
-        LibraryInfoBookListInfoView(presenting: $presenting)
-    }
-}
+//struct LibraryInfoBookListInfoView_Previews: PreviewProvider {
+//    @State static var presenting = true
+//
+//    static var previews: some View {
+//        LibraryInfoBookListInfoView(presenting: $presenting)
+//    }
+//}

@@ -173,8 +173,9 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     private var cache = [CacheKey: LibrarySearchResult]()
     
-    private var cacheSearchLibraryObjects = [LibrarySearchKey: CalibreLibrarySearchObject]()
-    private var cacheSearchUnifiedObjects = [SearchCriteriaMergedKey: CalibreUnifiedSearchObject]()
+    private var cacheSearchLibraryObjects = [LibrarySearchKey: ObjectId]()
+    private var cacheSearchUnifiedObjects = [SearchCriteriaMergedKey: ObjectId]()
+    private var cacheSearchUnifiedIndexMap = [SearchCriteriaMergedKey: [String: Int]]()
     
     private var cacheCategoryLibraryObjects: [CalibreLibraryCategoryKey: CalibreLibraryCategoryObject] = [:]
     private var cacheCategoryUnifiedObjects: [String: CalibreUnifiedCategoryObject] = [:]
@@ -268,7 +269,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
             }
             
-            cacheSearchLibraryObjects[librarySearchKey] = cacheObj
+            cacheSearchLibraryObjects[librarySearchKey] = cacheObj._id
             
             registerCacheSearchChangeReceiver(librarySearchKey: librarySearchKey, cacheObj: cacheObj)
         }
@@ -287,21 +288,26 @@ class CalibreLibrarySearchManager: ObservableObject {
                 )
             )
             
+            var idMap: [String: Int] = [:]
             for index in cacheObj.books.startIndex..<cacheObj.books.endIndex {
                 let book = cacheObj.books[index]
-                cacheObj.idMap[book.primaryKey!] = index
+                
+                idMap[book.primaryKey!] = index
                 print("\(#function) mergedKey=\(mergedKey) primaryKey=\(book.primaryKey!) title=\(book.title) index=\(index)")
             }
             
-            if cacheObj.idMap.count != cacheObj.books.count {
+            if idMap.count != cacheObj.books.count {
                 try! cacheRealm.write {
                     cacheObj.resetList()
                 }
+                cacheSearchUnifiedIndexMap[mergedKey] = [:]
+            } else {
+                cacheSearchUnifiedIndexMap[mergedKey] = idMap
             }
             
             assert(cacheSearchUnifiedObjects[mergedKey] == nil)
             
-            cacheSearchUnifiedObjects[mergedKey] = cacheObj
+            cacheSearchUnifiedObjects[mergedKey] = cacheObj._id
             
             registerCacheUnifiedChangeReceiver(unifiedKey: mergedKey, cacheObj: cacheObj)
         }
@@ -342,7 +348,7 @@ class CalibreLibrarySearchManager: ObservableObject {
             cacheRealm?.add(cacheObj)
         }
         
-        cacheSearchLibraryObjects[searchKey] = cacheObj
+        cacheSearchLibraryObjects[searchKey] = cacheObj._id
         
         registerCacheSearchChangeReceiver(librarySearchKey: searchKey, cacheObj: cacheObj)
         
@@ -365,7 +371,8 @@ class CalibreLibrarySearchManager: ObservableObject {
             cacheRealm.add(cacheObj)
         }
         
-        cacheSearchUnifiedObjects[key] = cacheObj
+        cacheSearchUnifiedObjects[key] = cacheObj._id
+        cacheSearchUnifiedIndexMap[key] = [:]
         
         registerCacheUnifiedChangeReceiver(unifiedKey: key, cacheObj: cacheObj)
         
@@ -477,7 +484,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                     self.logger.info("cacheRealm \(cacheObj._id) \(librarySearchKey) books changeset modifications \(modifications.map { $0.description }.joined(separator: ","))")
                     
                     //trigger unified result merger
-                    self.cacheSearchUnifiedObjects.forEach { mergedKey, mergedObj in
+                    self.cacheSearchUnifiedObjects.forEach { mergedKey, mergedObjId in
                         guard mergedKey.libraryIds.isEmpty || mergedKey.libraryIds.contains(cacheObj.libraryId)
                         else {
                             return
@@ -589,7 +596,8 @@ class CalibreLibrarySearchManager: ObservableObject {
     func registerSearchRefreshReceiver() {
         searchRefreshSubject.receive(on: cacheRealmQueue)
             .map { [self] searchKey -> (LibrarySearchKey, CalibreLibrarySearchObject) in
-                if let cacheObj = cacheSearchLibraryObjects[searchKey] {
+                if let cacheObjId = cacheSearchLibraryObjects[searchKey],
+                   let cacheObj = cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId){
                     return (searchKey, cacheObj)
                 } else {
                     return (searchKey, initCacheSearchObject(searchKey: searchKey))
@@ -624,9 +632,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     func registerSearchRequestReceiver() {
         searchRequestSubject.receive(on: cacheRealmQueue)
             .map { task -> CalibreLibrarySearchTask in
-                self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)]?.loading = true
-                
-                self.service.modelData.filteredBookListRefreshingSubject.send("")
+//                self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)]?.loading = true
                 
                 return task
             }
@@ -645,7 +651,8 @@ class CalibreLibrarySearchManager: ObservableObject {
             }
             .receive(on: cacheRealmQueue)
             .sink { task in
-                guard let cacheObj = self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)]
+                guard let cacheObjId = self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)],
+                      let cacheObj = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId)
                 else { return }
                 
                 guard let ajaxSearchResult = task.ajaxSearchResult
@@ -744,8 +751,9 @@ class CalibreLibrarySearchManager: ObservableObject {
             .sink { task in
                 let serverUUID = task.library.server.uuid.uuidString
                 
-                self.cacheSearchLibraryObjects.forEach { searchKey, cacheObj in
+                self.cacheSearchLibraryObjects.forEach { searchKey, cacheObjId in
                     guard searchKey.libraryId == task.library.id,
+                          let cacheObj = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId),
                           cacheObj.bookIds.count > cacheObj.books.count
                     else {
                         return
@@ -774,13 +782,13 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func regsiterUnifiedMergerRequestReceiver() {
         self.searchMergerRequestSubject.receive(on: cacheRealmQueue)
-            .map { mergedKey -> SearchCriteriaMergedKey in
-                self.cacheSearchUnifiedObjects[mergedKey]?.loading = true
-                
-                return mergedKey
-            }
+//            .map { mergedKey -> SearchCriteriaMergedKey in
+//                self.cacheSearchUnifiedObjects[mergedKey]?.loading = true
+//                return mergedKey
+//            }
             .sink { mergedKey in
-                guard let mergedObj = self.cacheSearchUnifiedObjects[mergedKey]
+                guard let mergedObjId = self.cacheSearchUnifiedObjects[mergedKey],
+                      let mergedObj = self.cacheRealm.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: mergedObjId)
                 else {
                     return
                 }
@@ -802,7 +810,8 @@ class CalibreLibrarySearchManager: ObservableObject {
                         
                         let searchKey = LibrarySearchKey(libraryId: libraryEntry.key, criteria: mergedKey.criteria)
                         
-                        if let searchObj = self.cacheSearchLibraryObjects[searchKey] {
+                        if let searchObjId = self.cacheSearchLibraryObjects[searchKey],
+                           let searchObj = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: searchObjId) {
                             partialResult[libraryEntry.key] = searchObj
                             
                             if mergedObj.unifiedOffsets[libraryEntry.key] == nil {
@@ -841,7 +850,7 @@ class CalibreLibrarySearchManager: ObservableObject {
 //                        }
 //                    }
                     
-                    self.mergeBookLists(mergedObj: mergedObj, searchResults: searchResults)
+                    self.mergeBookLists(mergedKey: mergedKey, mergedObj: mergedObj, searchResults: searchResults)
                     
                     mergedObj.totalNumber = searchResults.map { $0.value.totalNumber }.reduce(0, +)
                     
@@ -860,7 +869,18 @@ class CalibreLibrarySearchManager: ObservableObject {
                         }.compactMap {
                             self.service.modelData.calibreLibraries[$0.key]
                         }.map {
-                            ($0, self.cacheSearchLibraryObjects[.init(libraryId: $0.id, criteria: mergedKey.criteria)])
+                            (
+                                $0,
+                                self.cacheRealm.object(
+                                    ofType: CalibreLibrarySearchObject.self,
+                                    forPrimaryKey: self.cacheSearchLibraryObjects[
+                                        .init(
+                                            libraryId: $0.id,
+                                            criteria: mergedKey.criteria
+                                        )
+                                    ] ?? .init()
+                                )
+                            )
                         }.compactMap {
                             self.service.buildLibrarySearchTaskNew(
                                 library: $0.0,
@@ -1071,19 +1091,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     }
     
     func getMergedBookIndex(mergedKey: SearchCriteriaMergedKey, primaryKey: String) -> Int? {
-        self.cacheSearchUnifiedObjects[mergedKey]?.getIndex(primaryKey: primaryKey)
-    }
-    
-    func expandSearchUnifiedBookLimit(mergedKey: SearchCriteriaMergedKey) {
-        guard let cacheObj = self.cacheSearchUnifiedObjects[mergedKey]
-        else {
-            return
-        }
-        self.cacheRealmQueue.async {
-            try! self.cacheRealm.write {
-                
-            }
-        }
+        self.cacheSearchUnifiedIndexMap[mergedKey]?[primaryKey]
     }
     
     /**
@@ -1211,24 +1219,34 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func getUnifiedResult(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> CalibreUnifiedSearchObject {
         let key = SearchCriteriaMergedKey(libraryIds: libraryIds, criteria: searchCriteria)
-        let cacheObj = cacheSearchUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: false)
         
-        searchMergerRequestSubject.send(key)
-        
-        return cacheObj
+        if let cacheObjId = cacheSearchUnifiedObjects[key],
+           let cacheObj = cacheRealm.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: cacheObjId) {
+            return cacheObj
+        } else {
+            return initCacheUnifiedObject(key: key, requestMerge: true)
+        }
     }
     
-    func getLibraryResultObjectIdForSwiftUI(libraryId: String, searchCriteria: SearchCriteria) -> ObjectId? {
+    func getLibraryResultObjectId(libraryId: String, searchCriteria: SearchCriteria) -> ObjectId? {
         let key = LibrarySearchKey(libraryId: libraryId, criteria: searchCriteria)
         
         var objectId: ObjectId?
         cacheRealmQueue.sync {
 //            let cacheObj =
             
-            objectId = (cacheSearchLibraryObjects[key] ?? initCacheSearchObject(searchKey: key))._id
+            objectId = cacheSearchLibraryObjects[key] ?? initCacheSearchObject(searchKey: key)._id
         }
         
         return objectId
+    }
+    
+    func getLibraryResultObjectIds(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> [ObjectId] {
+        var objectIds: [ObjectId] = []
+        
+        
+        
+        return objectIds
     }
     
     func getUnifiedResultObjectIdForSwiftUI(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> ObjectId? {
@@ -1238,13 +1256,13 @@ class CalibreLibrarySearchManager: ObservableObject {
         cacheRealmQueue.sync {
 //            let cacheObj =
             
-            objectId = (cacheSearchUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: true))._id
+            objectId = cacheSearchUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: true)._id
         }
         
         return objectId
     }
     
-    private func mergeBookLists(mergedObj: CalibreUnifiedSearchObject, searchResults: [String: CalibreLibrarySearchObject]) {
+    private func mergeBookLists(mergedKey: SearchCriteriaMergedKey, mergedObj: CalibreUnifiedSearchObject, searchResults: [String: CalibreLibrarySearchObject]) {
         
         guard mergedObj.limitNumber > mergedObj.books.count
         else {
@@ -1285,7 +1303,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         
         while mergedObj.books.count < mergedObj.limitNumber,
               let head = heads.popLast() {
-            mergedObj.idMap[head.primaryKey!] = mergedObj.books.endIndex
+            self.cacheSearchUnifiedIndexMap[mergedKey]?[head.primaryKey!] = mergedObj.books.endIndex
             mergedObj.books.append(head)
             
             let headLibraryId = CalibreLibraryRealm.PrimaryKey(serverUUID: head.serverUUID!, libraryName: head.libraryName!)
@@ -1472,63 +1490,6 @@ extension ModelData {
         }
         
         return bookSearch
-    }
-    
-    var currentLibrarySearchCriteria: SearchCriteria {
-        SearchCriteria(
-            searchString: self.searchString,
-            sortCriteria: self.sortCriteria,
-            filterCriteriaCategory: self.filterCriteriaCategory
-        )
-    }
-    
-    var currentLibrarySearchResultKey: SearchCriteriaMergedKey {
-        .init(
-            libraryIds: filterCriteriaLibraries.isEmpty ? self.calibreLibraries.reduce(into: Set<String>(), { partialResult, entry in
-                if entry.value.hidden == false,
-                   entry.value.server.removed == false {
-                    partialResult.insert(entry.key)
-                }
-            }) : filterCriteriaLibraries,
-            criteria: .init(
-                searchString: self.searchString,
-                sortCriteria: self.sortCriteria,
-                filterCriteriaCategory: self.filterCriteriaCategory
-            )
-        )
-    }
-    
-    var currentLibrarySearchResultMerged: LibrarySearchCriteriaResultMerged? {
-        self.searchCriteriaMergedResults[self.currentLibrarySearchResultKey]
-    }
-    
-    var currentSearchLibraryResults: [LibrarySearchKey: LibrarySearchResult] {
-        librarySearchManager.getCaches(
-            for: self.filterCriteriaLibraries,
-            of: self.currentLibrarySearchCriteria
-        )
-    }
-    
-    var currentSearchLibraryResultsCannotFurther: Bool {
-        guard let currentLibrarySearchResultMerged = currentLibrarySearchResultMerged
-        else { return true }
-        
-        guard let maxPage = self.currentSearchLibraryResults
-            .compactMap({ result -> Int? in
-                let resultIsError = result.value.error || result.value.loading
-                if let libraryMergedPageOffset = currentLibrarySearchResultMerged.mergedPageOffsets[result.key.libraryId] {
-                    if resultIsError {
-                        return libraryMergedPageOffset.offsets.lastIndex { $0 < result.value.bookIds.count }
-                    } else {
-                        return libraryMergedPageOffset.offsets.endIndex
-                    }
-                } else {
-                    return 1
-                }
-            }).max()
-        else { return true }
-        
-        return self.filteredBookListPageNumber + 1 == maxPage
     }
     
     func mergeBookLists(mergeKey: SearchCriteriaMergedKey, mergedResult: LibrarySearchCriteriaResultMerged, page: Int = 0, limit: Int = 100) -> LibrarySearchCriteriaResultMerged {
@@ -1744,9 +1705,7 @@ extension CalibreServerService {
         booksListUrlQueryItems.append(URLQueryItem(name: "sort", value: searchCriteria.sortCriteria.by.sortQueryParam))
         booksListUrlQueryItems.append(URLQueryItem(name: "sort_order", value: searchCriteria.sortCriteria.ascending ? "asc" : "desc"))
         
-        let maxMergedOffset = modelData.searchCriteriaMergedResults.compactMap {
-            $0.value.mergedPageOffsets[library.id]?.offsets.last
-        }.max() ?? 0
+        let maxMergedOffset = 0
         
         let searchedOffset = searchPrevResult.bookIds.count
         let searchNum = maxMergedOffset + searchCriteria.pageSize - searchedOffset
@@ -1996,328 +1955,4 @@ extension CalibreServerService {
         return Fail(error: URLError(.badURL)).eraseToAnyPublisher()
     }
     
-    func registerLibrarySearchHandler() {
-        let queue = DispatchQueue(label: "library-search", qos: .userInitiated)
-        modelData.librarySearchRequestSubject.receive(on: DispatchQueue.main)
-            .map({ task -> CalibreLibrarySearchTask in
-                let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
-                
-                let prevResult = modelData.librarySearchManager.getCache(
-                    for: task.library,
-                    of: task.searchCriteria,
-                    by: task.booksListUrl.isFileURL ? .offline : .online
-                )
-                
-                print("\(#function) id=\(task.id) librarySearchKey=\(librarySearchKey) fire num=\(task.num) offset=\(task.offset) prevCount=\(prevResult.bookIds.count) prevOffline=\(prevResult.offlineResult) offline=\(task.booksListUrl.isFileURL && !task.library.server.isLocal) prevLoading=\(prevResult.loading)")
-                
-                if librarySearchKey.libraryId == "Calibre-Default@0FB2EFE0-6C43-4E05-A86E-815E5B21D989", librarySearchKey.criteria == .init(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:]) {
-                    print()
-                }
-                
-                modelData.librarySearchManager.startLoading(
-                    for: task.library,
-                    of: task.searchCriteria,
-                    by: task.booksListUrl.isFileURL ? .offline : .online
-                )
-                
-                modelData.filteredBookListRefreshingSubject.send("")
-                
-                print("\(#function) id=\(task.id) searchUrl=\(task.booksListUrl.absoluteString)")
-                
-                return task
-            })
-            .receive(on: queue)
-            .flatMap({ task -> AnyPublisher<CalibreLibrarySearchTask, Never> in
-                var errorTask = task
-                errorTask.ajaxSearchError = true
-                
-                if task.num > 0 {
-                    return modelData.calibreServerService.searchLibraryBooks(task: task)
-                        .replaceError(with: errorTask)
-                        .eraseToAnyPublisher()
-                } else {
-                    return Just(errorTask).setFailureType(to: Never.self).eraseToAnyPublisher()
-                }
-            })
-            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
-            .flatMap { searchTask -> AnyPublisher<CalibreBooksTask, Never> in
-                let serverUUID = searchTask.library.server.uuid.uuidString
-                
-                if let realm = modelData.searchLibraryResultsRealmQueue,
-                      let books = searchTask.ajaxSearchResult?.book_ids
-                    .filter({ realm.object(
-                        ofType: CalibreBookRealm.self,
-                        forPrimaryKey:
-                            CalibreBookRealm.PrimaryKey(
-                                serverUUID: serverUUID,
-                                libraryName: searchTask.library.name,
-                                id: $0.description
-                            )) == nil })
-                    .map({ CalibreBook(id: $0, library: searchTask.library) }),
-                   books.isEmpty == false,
-                   let metaTask = buildBooksMetadataTask(library: searchTask.library, books: books, searchTask: searchTask) {
-                    return modelData.calibreServerService.getBooksMetadata(task: metaTask, qos: .userInitiated)
-                        .replaceError(with: metaTask)
-                        .eraseToAnyPublisher()
-                } else {
-                    let dummyURL = URL(fileURLWithPath: "/realm")
-                    let metaTask = buildBooksMetadataTask(library: searchTask.library, books: [], searchTask: searchTask) ??
-                    CalibreBooksTask(request: .init(library: searchTask.library, books: [], getAnnotations: false), metadataUrl: dummyURL, lastReadPositionUrl: dummyURL, annotationsUrl: dummyURL, searchTask: searchTask)
-                    return Just(metaTask)
-                        .setFailureType(to: Never.self)
-                        .eraseToAnyPublisher()
-                }
-            }
-            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
-            .map { task -> CalibreBooksTask in
-                let serverUUID = task.library.server.uuid.uuidString
-                
-                if let booksMetadataEntry = task.booksMetadataEntry,
-                   let booksMetadataJSON = task.booksMetadataJSON,
-                   let searchLibraryResultsRealm = modelData.searchLibraryResultsRealmQueue {
-                    let realmBooks = booksMetadataEntry.compactMap { metadataEntry -> CalibreBookRealm? in
-                        guard let entry = metadataEntry.value,
-                              let bookId = Int32(metadataEntry.key)
-                        else { return nil }
-                        
-                        let obj = CalibreBookRealm()
-                        obj.serverUUID = serverUUID
-                        obj.libraryName = task.library.name
-                        obj.idInLib = bookId
-                        
-                        modelData.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: booksMetadataJSON)
-                        
-                        return obj
-                    }
-                    
-                    try? searchLibraryResultsRealm.write{
-                        searchLibraryResultsRealm.add(realmBooks, update: .modified)
-                    }
-                }
-                
-                return task
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { task in
-                guard let searchTask = task.searchTask else { return }
-                
-                let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: searchTask.searchCriteria)
-                let prevResult = modelData.librarySearchManager.getCache(for: searchTask.library, of: searchTask.searchCriteria, by: searchTask.booksListUrl.isFileURL ? .offline : .online)
-                
-                if let searchResult = searchTask.ajaxSearchResult {
-                    if searchResult.total_num > 0,
-                        prevResult.totalNumber == 0 {
-                        //trigger list remerge
-                        modelData.librarySearchManager.setIsError(
-                            for: searchTask.library,
-                            of: searchTask.searchCriteria,
-                            by: searchTask.booksListUrl.isFileURL ? .offline : .online,
-                            to: true
-                        )
-                    }
-                    modelData.librarySearchManager.setTotalNumber(
-                        for: searchTask.library,
-                        of: searchTask.searchCriteria,
-                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
-                        to: searchResult.total_num
-                    )
-                    
-                    print("\(#function) id=\(searchTask.id) librarySearchKey=\(librarySearchKey) result num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(prevResult.bookIds.count) offline=\(searchTask.booksListUrl.isFileURL && !searchTask.library.server.isLocal)")
-                    
-                    guard prevResult.bookIds.count == searchResult.offset,
-                          Set(prevResult.bookIds).union(Set(searchResult.book_ids)).count == prevResult.bookIds.count + searchResult.book_ids.count
-                    else {
-                        //duplication, reset search result
-                        print("\(#function) duplicate id=\(searchTask.id) librarySearchKey=\(librarySearchKey) mismatch_or_duplicate num=\(searchResult.num) tn=\(searchResult.total_num) offset=\(searchResult.offset) prevCount=\(prevResult.bookIds.count)")
-                        
-                        modelData.librarySearchManager.resetCache(
-                            for: searchTask.library,
-                            of: searchTask.searchCriteria,
-                            by: searchTask.booksListUrl.isFileURL ? .offline : .online
-                        )
-                        
-                        if let newTask = modelData.calibreServerService.buildLibrarySearchTask(library: searchTask.library, searchCriteria: searchTask.searchCriteria) {
-                            modelData.librarySearchRequestSubject.send(newTask)
-                        }
-                        
-                        return
-                    }
-                        
-                    modelData.librarySearchManager.appendResult(
-                        for: searchTask.library,
-                        of: searchTask.searchCriteria,
-                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
-                        contentsOf: searchResult.book_ids
-                    )
-                    
-                    print("\(#function) finishLoading id=\(searchTask.id) library=\(task.library.key) \(searchResult.num) \(searchResult.total_num)")
-                    
-                    modelData.librarySearchResultSubject.send(searchTask)
-                } else if searchTask.ajaxSearchError {
-                    print("\(#function) ajaxSearchError id=\(searchTask.id) library=\(task.library.key)")
-                    
-                    modelData.librarySearchManager.setIsError(
-                        for: searchTask.library,
-                        of: searchTask.searchCriteria,
-                        by: searchTask.booksListUrl.isFileURL ? .offline : .online,
-                        to: searchTask.num > 0
-                    )
-                    
-                    modelData.librarySearchManager.finishLoading(
-                        for: searchTask.library,
-                        of: searchTask.searchCriteria,
-                        by: searchTask.booksListUrl.isFileURL ? .offline : .online
-                    )
-                }
-            }.store(in: &modelData.calibreCancellables)
-        
-        modelData.librarySearchResultSubject.collect(.byTime(RunLoop.main, .seconds(2)))
-            .sink { tasks in
-                tasks.reduce(into: Set<SearchCriteriaMergedKey>()) { partialResult, task in
-                    let librarySearchKey = LibrarySearchKey(libraryId: task.library.id, criteria: task.searchCriteria)
-                    let searchResult = modelData.librarySearchManager.getCache(
-                        for: task.library,
-                        of: task.searchCriteria,
-                        by: task.booksListUrl.isFileURL ? .offline : .online
-                    )
-                    partialResult.formUnion(
-                        self.modelData.searchCriteriaMergedResults.filter {
-                            guard let mergedPageOffset = $0.value.mergedPageOffsets[librarySearchKey.libraryId]
-                            else { return false }
-                            
-                            return mergedPageOffset.beenCutOff == true
-                            &&
-                            mergedPageOffset.cutOffOffset < searchResult.bookIds.count
-                        }.keys
-                    )
-                    
-                    modelData.librarySearchManager.finishLoading(
-                        for: task.library,
-                        of: task.searchCriteria,
-                        by: task.booksListUrl.isFileURL ? .offline : .online
-                    )
-                }.forEach {
-                    //prevent animation gap in LibraryInfoView
-                    modelData.searchCriteriaMergedResults[$0]?.merging = true
-                    
-                    modelData.filteredBookListMergeSubject.send($0)
-                }
-                
-                modelData.filteredBookListRefreshingSubject.send("")
-            }.store(in: &modelData.calibreCancellables)
-    }
-    
-    func registerFilteredBookListMergeHandler() {
-        modelData.filteredBookListMergeSubject.receive(on: DispatchQueue.main)
-            .map { searchCriteriaResultKey -> SearchCriteriaMergedKey in
-                if modelData.searchCriteriaMergedResults[searchCriteriaResultKey] == nil {
-                    modelData.searchCriteriaMergedResults[searchCriteriaResultKey] = .init(libraryIds: searchCriteriaResultKey.libraryIds)
-                    
-                }
-                modelData.searchCriteriaMergedResults[searchCriteriaResultKey]?.merging = true
-                
-                modelData.filteredBookListRefreshingSubject.send("")
-                
-                return searchCriteriaResultKey
-            }
-            .receive(on: ModelData.SearchLibraryResultsRealmQueue)
-            .map { searchCriteriaMergedKey -> (SearchCriteriaMergedKey, LibrarySearchCriteriaResultMerged) in
-                print("\(#function) librarySearchKey=\(searchCriteriaMergedKey)")
-                
-                var mergedResult = modelData.searchCriteriaMergedResults[searchCriteriaMergedKey]!
-                
-                let searchResults = modelData.librarySearchManager.getCaches(
-                    for: searchCriteriaMergedKey.libraryIds,
-                    of: searchCriteriaMergedKey.criteria
-                )
-                
-                mergedResult.totalNumber = searchResults.values.map { $0.totalNumber }
-                    .reduce(0, +)
-
-                mergedResult = modelData.mergeBookLists(
-                    mergeKey: searchCriteriaMergedKey,
-                    mergedResult: mergedResult,
-                    page: modelData.filteredBookListPageNumber,
-                    limit: modelData.filteredBookListPageSize
-                )
-                
-                return (searchCriteriaMergedKey, mergedResult)
-            }
-            .receive(on: DispatchQueue.main)
-            .map { searchCriteriaMergedKey, mergedResult -> LibrarySearchCriteriaResultMerged in
-                
-                modelData.searchCriteriaMergedResults[searchCriteriaMergedKey] = mergedResult
-                print("\(#function) library=\(searchCriteriaMergedKey) merged=\(mergedResult.mergedBooks.count)")
-                
-                modelData.searchCriteriaMergedResults[searchCriteriaMergedKey]?.merging = false
-                
-                mergedResult.mergedPageOffsets.forEach { mergedPageOffset in
-                    guard let library = modelData.calibreLibraries[mergedPageOffset.key]
-                    else { return }
-                    
-                    let searchResult = modelData.librarySearchManager.getCache(
-                        for: library,
-                        of: searchCriteriaMergedKey.criteria
-                    )
-                    
-                    guard searchCriteriaMergedKey.libraryIds.isEmpty || searchCriteriaMergedKey.libraryIds.contains(mergedPageOffset.key)
-                    else { return }
-                        
-                    if searchResult.error == false,
-                       searchResult.totalNumber == searchResult.bookIds.count {
-                        //reached full list
-                        return
-                    }
-                    
-                    if mergedPageOffset.value.beenCutOff
-                        ||
-                        (
-                            (
-                                (mergedPageOffset.value.offsets.last ?? 0)
-                                +
-                                modelData.filteredBookListPageSize
-                            )
-                            >=
-                            searchResult.bookIds.count
-                        ) {
-                        if let library = modelData.calibreLibraries[mergedPageOffset.key],
-                           let task = modelData.calibreServerService.buildLibrarySearchTask(library: library, searchCriteria: searchCriteriaMergedKey.criteria) {
-                            modelData.librarySearchRequestSubject.send(task)
-                        }
-                    }
-                }
-                
-                if searchCriteriaMergedKey == modelData.currentLibrarySearchResultKey {
-                    modelData.filteredBookListPageCount = Int((Double(mergedResult.totalNumber) / Double(modelData.filteredBookListPageSize)).rounded(.up))
-                }
-                
-                return mergedResult
-            }
-            .sink(receiveValue: { librarySearchMergeResult in
-                modelData.filteredBookListRefreshingSubject.send("")
-            })
-            .store(in: &modelData.calibreCancellables)
-    }
-    
-    
-    func registerLibrarySearchResetHandler() {
-        modelData.librarySearchResetSubject.subscribe(on: DispatchQueue.main)
-            .sink(receiveCompletion: { completion in
-                
-            }, receiveValue: { librarySearchKey in
-                if librarySearchKey.libraryId.isEmpty {
-                    let keysToRemove = modelData.searchCriteriaMergedResults.filter {
-                        $0.key.criteria == librarySearchKey.criteria
-                    }.map { $0.key }
-                    keysToRemove.forEach {
-                        modelData.searchCriteriaMergedResults.removeValue(forKey: $0)
-                    }
-                } else {
-                    if let library = modelData.calibreLibraries[librarySearchKey.libraryId] {
-                        modelData.librarySearchManager.resetCache(for: library, of: librarySearchKey.criteria, by: .online)
-                    }
-                }
-            })
-            .store(in: &modelData.calibreCancellables)
-    }
 }

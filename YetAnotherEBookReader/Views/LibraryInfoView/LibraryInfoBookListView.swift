@@ -56,7 +56,7 @@ struct LibraryInfoBookListView: View {
         ZStack {
             TextField("Search Title & Authors", text: $searchString)
                 .onAppear {
-                    searchString = modelData.searchString
+                    searchString = viewModel.searchString
                 }
                 .onSubmit {
                     searchStringChanged(searchString: searchString)
@@ -82,14 +82,14 @@ struct LibraryInfoBookListView: View {
                 }.disabled(searchString.isEmpty)
                 
                 Menu {
-                    ForEach(modelData.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
+                    ForEach(viewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
                         ForEach(categoryFilter.value.filter({
                             categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
                         }).sorted(), id: \.self) { categoryFilterValue in
                             Button {
-                                if modelData.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
-                                    if modelData.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
-                                        modelData.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
+                                if viewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
+                                    if viewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
+                                        viewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
                                     }
                                     searchStringChanged(searchString: self.searchString)
                                 }
@@ -106,7 +106,7 @@ struct LibraryInfoBookListView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .foregroundColor(
-                            modelData.filterCriteriaCategory.filter({ categoryFilter in
+                            viewModel.filterCriteriaCategory.filter({ categoryFilter in
                                 categoryFilter.value.filter({
                                     categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
                                 }).isEmpty == false
@@ -127,99 +127,99 @@ struct LibraryInfoBookListView: View {
 //            }
 //        }
 //        #endif
-        
-        List(selection: $selectedBookIds) {
-            ForEach(unifiedSearchObject.books) { bookRealm in
-                NavigationLink (
-                    destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
-                    tag: bookRealm.primaryKey!,
-                    selection: $modelData.selectedBookId
-                ) {
-                    if let book = modelData.convert(bookRealm: bookRealm) {
-                        HStack {
-//                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
-//                                Text(index.description)
-//                            }
-                            if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: modelData.filterCriteriaLibraries, criteria: modelData.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
-                                Text(bookIndex.description)
-                                    .onAppear {
-                                        guard bookIndex > unifiedSearchObject.limitNumber - 20
-                                        else {
-                                            return
+        ScrollViewReader { proxy in
+            List(selection: $selectedBookIds) {
+                ForEach(unifiedSearchObject.books) { bookRealm in
+                    NavigationLink (
+                        destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
+                        tag: bookRealm.primaryKey!,
+                        selection: $modelData.selectedBookId
+                    ) {
+                        if let book = modelData.convert(bookRealm: bookRealm) {
+                            HStack {
+                                //                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
+                                //                                Text(index.description)
+                                //                            }
+                                if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: viewModel.filterCriteriaLibraries, criteria: viewModel.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
+                                    Text(bookIndex.description)
+                                        .onAppear {
+                                            guard bookIndex > unifiedSearchObject.limitNumber - 20
+                                            else {
+                                                return
+                                            }
+                                            
+                                            expandSearchUnifiedBookLimit()
                                         }
-                                        
-                                        expandSearchUnifiedBookLimit()
-                                    }
+                                }
+                                bookRowView(book: book, bookRealm: bookRealm)
                             }
-                            bookRowView(book: book, bookRealm: bookRealm)
+                        } else {
+                            Text(bookRealm.title)
                         }
-                    } else {
-                        Text(bookRealm.title)
                     }
-                }
-                .isDetailLink(true)
-                .contextMenu {
-                    if let book = modelData.convert(bookRealm: bookRealm) {
-                        bookRowContextMenuView(book: book)
-                    } else {
-                        EmptyView()
+                    .isDetailLink(true)
+                    .contextMenu {
+                        if let book = modelData.convert(bookRealm: bookRealm) {
+                            bookRowContextMenuView(book: book)
+                        } else {
+                            EmptyView()
+                        }
                     }
-                }
-            }   //ForEach
-            
-            #if DEBUG
-            Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
-            
-            Button {
-                expandSearchUnifiedBookLimit()
-            } label: {
-                Text("Expand")
-            }
-            
-            Button {
-                let realm = unifiedSearchObject.realm!.thaw()
-                let thawedObject = unifiedSearchObject.thaw()!
-                try! realm.write {
-                    thawedObject.resetList()
-                }
-            } label: {
-                Text("Reset")
-            }
-            
-            ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
-                HStack {
-                    Text("\(unifiedEntry.key)")
-                    if let unifiedOffset = unifiedEntry.value {
-                        Text("\(unifiedOffset.offset) \(unifiedOffset.beenConsumed.description) \(unifiedOffset.beenCutOff.description)")
-                    }
-                }
-                HStack {
-                    if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectIdForSwiftUI(libraryId: unifiedEntry.key, searchCriteria: modelData.currentLibrarySearchCriteria),
-                       let searchObj = librarySearches.where({ $0._id == objectId
-                       }).first {
-                        Text(searchObj.totalNumber.description)
-                        
-                        Text(searchObj.bookIds.count.description)
-                        
-                        Text(searchObj.books.count.description)
-                    }
-                }
-            }
-            
-            #endif
-        }
-        .onAppear {
-            print("LIBRARYINFOVIEW books=\(unifiedSearchObject.books.count)")
-        }
-        
-        .disabled(unifiedSearchObject.loading)
-        .toolbar {
-            ToolbarItemGroup(placement: .navigationBarTrailing) {
-                downloadButton(geometry: geometry)
-                    .disabled(unifiedSearchObject.loading)
+                }   //ForEach
                 
-                sortMenuView()
-                    .disabled(unifiedSearchObject.loading)
+#if DEBUG
+                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
+                
+                Button {
+                    expandSearchUnifiedBookLimit()
+                } label: {
+                    Text("Expand")
+                }
+                
+                Button {
+                    let realm = unifiedSearchObject.realm!.thaw()
+                    let thawedObject = unifiedSearchObject.thaw()!
+                    try! realm.write {
+                        thawedObject.resetList()
+                    }
+                } label: {
+                    Text("Reset")
+                }
+                
+                ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
+                    HStack {
+                        Text("\(unifiedEntry.key)")
+                        if let unifiedOffset = unifiedEntry.value {
+                            Text("\(unifiedOffset.offset) \(unifiedOffset.beenConsumed.description) \(unifiedOffset.beenCutOff.description)")
+                        }
+                    }
+                    HStack {
+                        if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
+                           let searchObj = librarySearches.where({ $0._id == objectId
+                           }).first {
+                            Text(searchObj.totalNumber.description)
+                            
+                            Text(searchObj.bookIds.count.description)
+                            
+                            Text(searchObj.books.count.description)
+                        }
+                    }
+                }
+                
+#endif
+            }
+            .onAppear {
+                print("LIBRARYINFOVIEW books=\(unifiedSearchObject.books.count)")
+            }
+            .disabled(unifiedSearchObject.loading)
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    downloadButton(geometry: geometry)
+                        .disabled(unifiedSearchObject.loading)
+                    
+                    sortMenuView()
+                        .disabled(unifiedSearchObject.loading)
+                }
             }
         }
     }
@@ -232,7 +232,7 @@ struct LibraryInfoBookListView: View {
             } label: {
                 Image(systemName: "info.circle")
             }.popover(isPresented: $booksListInfoPresenting) {
-                LibraryInfoBookListInfoView(presenting: $booksListInfoPresenting)
+                LibraryInfoBookListInfoView(unifiedSearchObject: unifiedSearchObject, presenting: $booksListInfoPresenting)
                     .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
             }
 
@@ -244,31 +244,6 @@ struct LibraryInfoBookListView: View {
             }
             
             Spacer()
-            
-            if #available(iOS 16, *),
-                modelData.filteredBookListPageNumber > 1 {
-                Button {
-                    modelData.filteredBookListPageNumber = 0
-                } label: {
-                    Image(systemName: "chevron.left.to.line")
-                }
-            }
-
-            Button(action:{
-                if modelData.filteredBookListPageNumber > 0 {
-                    modelData.filteredBookListPageNumber -= 1
-                }
-            }) {
-                Image(systemName: "chevron.backward")
-            }
-            Text("\(modelData.filteredBookListPageCount == 0 ? 0 : modelData.filteredBookListPageNumber+1) / \(modelData.filteredBookListPageCount)")
-            Button(action:{
-                if modelData.filteredBookListPageNumber + 1 < modelData.filteredBookListPageCount {
-                    modelData.filteredBookListPageNumber += 1
-                }
-            }) {
-                Image(systemName: "chevron.forward")
-            }.disabled(unifiedSearchObject.loading && modelData.currentSearchLibraryResultsCannotFurther)
         }
         .padding(4)    //bottom bar
     }
@@ -302,17 +277,17 @@ struct LibraryInfoBookListView: View {
         Menu {
             ForEach(SortCriteria.allCases, id: \.self) { sort in
                 Button(action: {
-                    if modelData.sortCriteria.by == sort {
-                        modelData.sortCriteria.ascending.toggle()
+                    if viewModel.sortCriteria.by == sort {
+                        viewModel.sortCriteria.ascending.toggle()
                     } else {
-                        modelData.sortCriteria.by = sort
-                        modelData.sortCriteria.ascending = sort == .Title ? true : false
+                        viewModel.sortCriteria.by = sort
+                        viewModel.sortCriteria.ascending = sort == .Title ? true : false
                     }
                     resetToFirstPage()
                 }) {
                     HStack {
-                        if modelData.sortCriteria.by == sort {
-                            if modelData.sortCriteria.ascending {
+                        if viewModel.sortCriteria.by == sort {
+                            if viewModel.sortCriteria.ascending {
                                 Image(systemName: "arrow.down")
                             } else {
                                 Image(systemName: "arrow.up")
@@ -478,7 +453,7 @@ struct LibraryInfoBookListView: View {
     @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         if let authors = book.authors.filter({
-            modelData.filterCriteriaCategory["Authors"]?.contains($0) != true
+            viewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
         }) as [String]?, authors.isEmpty == false {
             Menu("More by Author ...") {
                 ForEach(authors, id: \.self) { author in
@@ -492,7 +467,7 @@ struct LibraryInfoBookListView: View {
         }
         
         if let tags = book.tags.filter({
-            modelData.filterCriteriaCategory["Tags"]?.contains($0) != true
+            viewModel.filterCriteriaCategory["Tags"]?.contains($0) != true
         }) as [String]?, tags.isEmpty == false {
             Menu("More of Tags ...") {
                 ForEach(tags, id: \.self) { tag in
@@ -506,10 +481,10 @@ struct LibraryInfoBookListView: View {
         }
         
         if book.series.isEmpty == false,
-           modelData.filterCriteriaCategory["Series"]?.contains(book.series) != true {
+           viewModel.filterCriteriaCategory["Series"]?.contains(book.series) != true {
             Button {
-                modelData.sortCriteria.by = .SeriesIndex
-                modelData.sortCriteria.ascending = true
+                viewModel.sortCriteria.by = .SeriesIndex
+                viewModel.sortCriteria.ascending = true
                 updateFilterCategory(key: "Series", value: book.series)
             } label: {
                 Text("More in Series: \(book.series)")
@@ -540,13 +515,13 @@ struct LibraryInfoBookListView: View {
     
     private func getLibrarySearchingText() -> String {
         let searchResults = modelData.librarySearchManager.getCaches(
-            for: modelData.filterCriteriaLibraries,
-            of: modelData.currentLibrarySearchCriteria
+            for: viewModel.filterCriteriaLibraries,
+            of: viewModel.currentLibrarySearchCriteria
         )
         let searchResultsLoading = searchResults.filter { $0.value.loading }
         if searchResultsLoading.count == 1,
            let libraryId = searchResultsLoading.first?.key.libraryId,
-           let library = modelData.calibreLibraries[libraryId] {
+           let library = viewModel.calibreLibraries[libraryId] {
             return "Searching \(library.name)..."
         }
         if searchResultsLoading.count > 1 {
@@ -562,26 +537,22 @@ struct LibraryInfoBookListView: View {
     
     func searchStringChanged(searchString: String) {
         self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
-        modelData.searchString = self.searchString
+        viewModel.searchString = self.searchString
         
         resetToFirstPage()
     }
     
     func updateFilterCategory(key: String, value: String) {
-        if modelData.filterCriteriaCategory[key] == nil {
-            modelData.filterCriteriaCategory[key] = .init()
+        if viewModel.filterCriteriaCategory[key] == nil {
+            viewModel.filterCriteriaCategory[key] = .init()
         }
-        modelData.filterCriteriaCategory[key]?.insert(value)
+        viewModel.filterCriteriaCategory[key]?.insert(value)
         
         resetToFirstPage()
     }
     
     func resetToFirstPage() {
-        if modelData.filteredBookListPageNumber > 0 {
-            modelData.filteredBookListPageNumber = 0
-        } else {
-            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
-        }
+        //TODO
     }
     
     func expandSearchUnifiedBookLimit() {

@@ -79,10 +79,9 @@ struct LibraryInfoView: View {
         }   //NavigationView
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
-        .onChange(of: modelData.filteredBookListPageNumber, perform: { value in
-            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
-        })
         .onAppear {
+            viewModel.calibreLibraries = modelData.calibreLibraries
+            
             libraryList = modelData.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
@@ -91,8 +90,6 @@ struct LibraryInfoView: View {
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 batchDownloadSheetPresenting = false
             }
-            
-            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
         }
         
         //Body
@@ -106,7 +103,7 @@ struct LibraryInfoView: View {
                     .navigationTitle("All Books")
                     .onAppear {
 //                        resetSearchCriteria()
-                        modelData.filterCriteriaLibraries.removeAll()
+                        viewModel.filterCriteriaLibraries.removeAll()
                         resetToFirstPage()
                     }
                 
@@ -129,10 +126,10 @@ struct LibraryInfoView: View {
                         .onAppear {
                             resetSearchCriteria()
                             if let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
-                                modelData.filterCriteriaCategory = savedFilterCriteriaCategory
+                                viewModel.filterCriteriaCategory = savedFilterCriteriaCategory
                                 self.savedFilterCriteriaCategory = nil
                             }
-                            modelData.filterCriteriaLibraries.insert(library.id)
+                            viewModel.filterCriteriaLibraries.insert(library.id)
                             resetToFirstPage()
                         }
                 } label: {
@@ -154,7 +151,7 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: modelData.filterCriteriaLibraries, searchCriteria: modelData.currentLibrarySearchCriteria),
+            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
                 let unifiedSearch = unifiedSearches.where({
                 $0._id == objectId
             }).first {
@@ -168,25 +165,21 @@ struct LibraryInfoView: View {
     }
     
     func updateFilterCategory(key: String, value: String) {
-        if modelData.filterCriteriaCategory[key] == nil {
-            modelData.filterCriteriaCategory[key] = .init()
+        if viewModel.filterCriteriaCategory[key] == nil {
+            viewModel.filterCriteriaCategory[key] = .init()
         }
-        modelData.filterCriteriaCategory[key]?.insert(value)
+        viewModel.filterCriteriaCategory[key]?.insert(value)
         
         resetToFirstPage()
     }
     
     func resetToFirstPage() {
-        if modelData.filteredBookListPageNumber > 0 {
-            modelData.filteredBookListPageNumber = 0
-        } else {
-            modelData.filteredBookListMergeSubject.send(modelData.currentLibrarySearchResultKey)
-        }
+        //TODO
     }
     
     func resetSearchCriteria() {
-        modelData.filterCriteriaCategory.removeAll()
-        modelData.filterCriteriaLibraries.removeAll()
+        viewModel.filterCriteriaCategory.removeAll()
+        viewModel.filterCriteriaLibraries.removeAll()
     }
 }
 

@@ -39,20 +39,6 @@ final class ModelData: ObservableObject {
     var formatReaderMap = [Format: [ReaderType]]()
     var formatList = [Format]()
     
-    //Search
-    @Published var searchString = ""
-    @Published var sortCriteria = LibrarySearchSort(by: SortCriteria.Modified, ascending: false)
-    @Published var filterCriteriaCategory = [String: Set<String>]()
-
-    @Published var filterCriteriaLibraries = Set<String>()
-
-    @available(*, deprecated, renamed: "librarySearchManager")
-    @Published var searchCriteriaMergedResults = [SearchCriteriaMergedKey: LibrarySearchCriteriaResultMerged]()
-    
-    @Published var filteredBookListPageCount = 0
-    @Published var filteredBookListPageSize = 100
-    @Published var filteredBookListPageNumber = 0
-
     static let SearchLibraryResultsRealmConfiguration = Realm.Configuration(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm")
     
     static let SearchLibraryResultsRealmQueue = DispatchQueue(label: "searchLibraryResultsRealm", qos: .userInitiated)
@@ -97,13 +83,6 @@ final class ModelData: ObservableObject {
     
     let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
     let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
-    
-    let librarySearchRequestSubject = PassthroughSubject<CalibreLibrarySearchTask, Never>()
-    let librarySearchResultSubject = PassthroughSubject<CalibreLibrarySearchTask, Never>()
-    
-    let filteredBookListMergeSubject = PassthroughSubject<SearchCriteriaMergedKey, Never>()
-    let librarySearchResetSubject = PassthroughSubject<LibrarySearchKey, Never>()
-    let filteredBookListRefreshingSubject = PassthroughSubject<Any, Never>()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -260,19 +239,10 @@ final class ModelData: ObservableObject {
         registerBookReaderClosedCancellable()
         
         registerRecentShelfUpdater()
-        registerDiscoverShelfUpdater()
         
         bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
-            if self.activeTab == 2 {
-                self.filteredBookListMergeSubject.send(self.currentLibrarySearchResultKey)
-            }
         }.store(in: &calibreCancellables)
-        
-        self.calibreServerService.registerLibrarySearchHandler()
-        self.calibreServerService.registerLibrarySearchResetHandler()
-        
-        self.calibreServerService.registerFilteredBookListMergeHandler()
         
         self.calibreServerService.registerBookFormatDownloadHandler()
         
