@@ -12,6 +12,20 @@ class CalibreLibrarySearchFilterValues: Object {
     @Persisted var values: MutableSet<String>
 }
 
+class CalibreLibrarySearchValueObject: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+
+    @Persisted var generation: Date     //correspond to library's lastModified
+    
+    //search results
+    @Persisted var totalNumber = 0
+    
+    @Persisted var bookIds: List<Int32>
+    
+    //books after getting metadata and annotations
+    @Persisted var books: List<CalibreBookRealm>
+}
+
 class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
@@ -26,15 +40,20 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     @Persisted var filters: Map<String, CalibreLibrarySearchFilterValues?>
     
     //search results
+    @Persisted var sources: Map<String, CalibreLibrarySearchValueObject?>
+    
+    @available(*, deprecated, message: "use sources")
+    @Persisted var generation: Date
+    
+    @available(*, deprecated, message: "use sources")
     @Persisted var totalNumber = 0
     
+    @available(*, deprecated, message: "use sources")
     @Persisted var bookIds: List<Int32>
     
     //books after getting metadata and annotations
+    @available(*, deprecated, message: "use sources")
     @Persisted var books: List<CalibreBookRealm>
-    
-    //runtime
-    @Persisted var generation: Date
     
     var loading = false
     var error = false
@@ -88,24 +107,15 @@ class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
 }
 
 class CalibreUnifiedOffsets: Object {
-    @available(*, deprecated, message: "drop paging")
-    @Persisted var offsets: List<Int>
-    
     @Persisted var beenCutOff = false
     @Persisted var beenConsumed = false
-    @available(*, deprecated, message: "drop paging")
+
     @Persisted var cutOffOffset = 0
     @Persisted var offset = 0
     @Persisted var generation: Date
     
-    @available(*, deprecated, message: "drop paging")
-    func setOffset(index: Int, offset: Int) {
-        if index < offsets.endIndex {
-            offsets[index] = offset
-        } else {
-            offsets.append(offset)
-        }
-    }
+    @Persisted var searchObject: CalibreLibrarySearchObject?
+    @Persisted var searchObjectSource: String = ""
 }
 
 class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
@@ -133,8 +143,6 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
     
     //runtime
     var loading = false
-    var error = false
-    var objectNotificationToken: NotificationToken?
     
     var parameters: String {
         return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
@@ -164,4 +172,12 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
         }
         self.limitNumber = 0
     }
+}
+
+struct CalibreUnifiedSearchRuntime {
+    var indexMap: [String: Int] = [:]
+    var objectNotificationToken: NotificationToken?
+    
+    var loading = false
+    var error = false
 }

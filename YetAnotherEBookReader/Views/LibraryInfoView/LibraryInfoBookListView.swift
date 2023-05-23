@@ -129,6 +129,25 @@ struct LibraryInfoBookListView: View {
 //        #endif
         ScrollViewReader { proxy in
             List(selection: $selectedBookIds) {
+                #if DEBUG
+                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
+                
+                Button {
+                    expandSearchUnifiedBookLimit()
+                } label: {
+                    Text("Expand")
+                }
+                
+                Button {
+                    let realm = unifiedSearchObject.realm!.thaw()
+                    let thawedObject = unifiedSearchObject.thaw()!
+                    try! realm.write {
+                        thawedObject.resetList()
+                    }
+                } label: {
+                    Text("Reset")
+                }
+                #endif
                 ForEach(unifiedSearchObject.books) { bookRealm in
                     NavigationLink (
                         destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
@@ -193,17 +212,32 @@ struct LibraryInfoBookListView: View {
                             Text("\(unifiedOffset.offset) \(unifiedOffset.beenConsumed.description) \(unifiedOffset.beenCutOff.description)")
                         }
                     }
-                    HStack {
-                        if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
-                           let searchObj = librarySearches.where({ $0._id == objectId
-                           }).first {
-                            Text(searchObj.totalNumber.description)
-                            
-                            Text(searchObj.bookIds.count.description)
-                            
-                            Text(searchObj.books.count.description)
-                        }
+                    if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
+                       let searchObj = librarySearches.where({ $0._id == objectId
+                       }).first {
+                        
+                            ForEach(searchObj.sources.keys, id: \.self) { searchSource in
+                                HStack {
+                                    Text(searchSource)
+                                    Spacer()
+                                    Text(searchObj.sources[searchSource]??.totalNumber.description ?? "-1")
+                                    Text(searchObj.sources[searchSource]??.bookIds.count.description ?? "-1")
+                                    Text(searchObj.sources[searchSource]??.books.count.description ?? "-1")
+                                }.tag(searchObj.libraryId + "|" + searchSource)
+                            }
+                        
                     }
+//                    HStack {
+//                        if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
+//                           let searchObj = librarySearches.where({ $0._id == objectId
+//                           }).first {
+//                            Text(searchObj.totalNumber.description)
+//
+//                            Text(searchObj.bookIds.count.description)
+//
+//                            Text(searchObj.books.count.description)
+//                        }
+//                    }
                 }
                 
 #endif
@@ -514,23 +548,24 @@ struct LibraryInfoBookListView: View {
     }
     
     private func getLibrarySearchingText() -> String {
-        let searchResults = modelData.librarySearchManager.getCaches(
-            for: viewModel.filterCriteriaLibraries,
-            of: viewModel.currentLibrarySearchCriteria
-        )
-        let searchResultsLoading = searchResults.filter { $0.value.loading }
-        if searchResultsLoading.count == 1,
-           let libraryId = searchResultsLoading.first?.key.libraryId,
-           let library = viewModel.calibreLibraries[libraryId] {
-            return "Searching \(library.name)..."
-        }
-        if searchResultsLoading.count > 1 {
-            return "Searching \(searchResultsLoading.count) libraries..."
-        }
-        let searchResultsError = searchResults.filter { $0.value.error }
-        if searchResultsError.isEmpty == false {
-            return "Result Incomplete"
-        }
+//        let searchResults = modelData.librarySearchManager.getCaches(
+//            for: viewModel.filterCriteriaLibraries,
+//            of: viewModel.currentLibrarySearchCriteria
+//        )
+//        let searchResultsLoading = searchResults.filter { $0.value.loading }
+//        if searchResultsLoading.count == 1,
+//           let libraryId = searchResultsLoading.first?.key.libraryId,
+//           let library = viewModel.calibreLibraries[libraryId] {
+//            return "Searching \(library.name)..."
+//        }
+//        if searchResultsLoading.count > 1 {
+//            return "Searching \(searchResultsLoading.count) libraries..."
+//        }
+//        let searchResultsError = searchResults.filter { $0.value.error }
+//        if searchResultsError.isEmpty == false {
+//            return "Result Incomplete"
+//        }
+        
         
         return ""
     }

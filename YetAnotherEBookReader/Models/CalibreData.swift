@@ -1094,6 +1094,7 @@ struct CalibreLibraryProbeTask {
 
 struct CalibreLibrarySearchTask: Identifiable {
     let id = UUID()
+    let serverUrl: URL
     
     let generation: Date
     
