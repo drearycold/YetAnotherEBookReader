@@ -15,8 +15,6 @@ struct LibraryInfoBookListInfoView: View {
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
-    @ObservedResults(CalibreLibrarySearchObject.self) var librarySearches
-    
     @Binding var presenting: Bool
     
     var body: some View {
@@ -28,24 +26,31 @@ struct LibraryInfoBookListInfoView: View {
                         .map({ unifiedOffset in
                             (
                                 unifiedOffset,
-                                modelData.calibreLibraries[unifiedOffset.key],
-                                librarySearches.where({
-                                    $0._id == self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedOffset.key, searchCriteria: viewModel.currentLibrarySearchCriteria) ?? ObjectId.generate()
-                                }).first
+                                modelData.calibreLibraries[unifiedOffset.key]
                             )
                         }), id: \.0.key) { searchResult in
                             if let unifiedOffset = searchResult.0.value,
-                               let library = searchResult.1,
-                               let searchObject = searchResult.2 {
+                               let searchObjectSource = unifiedOffset.searchObjectSource,
+                               let sourceObjOpt = unifiedOffset.searchObject?.sources[searchObjectSource],
+                               let sourceObj = sourceObjOpt,
+                               let library = searchResult.1 {
                             Section {
                                 HStack {
                                     Text("Books")
                                     Spacer()
-                                    Text("\(searchObject.totalNumber)")
+                                    Text("\(sourceObj.totalNumber)")
                                 }
                                 #if DEBUG
                                 HStack {
-                                Text(unifiedOffset.offset.description)
+                                    Text(searchObjectSource)
+                                }
+                                HStack {
+                                    Text(sourceObj.generation.description)
+                                    Spacer()
+                                    Text(library.lastModified.description)
+                                }
+                                HStack {
+                                    Text(unifiedOffset.offset.description)
                                     Text("/")
                                     Text(unifiedOffset.beenConsumed.description)
                                     Text("/")
@@ -53,9 +58,9 @@ struct LibraryInfoBookListInfoView: View {
 
                                     Spacer()
 
-                                    Text(searchObject.books.count.description)
+                                    Text(sourceObj.books.count.description)
                                     Text("/")
-                                    Text(searchObject.bookIds.count.description)
+                                    Text(sourceObj.bookIds.count.description)
                                 }
                                 #endif
                             } header: {

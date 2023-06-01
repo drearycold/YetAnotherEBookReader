@@ -28,6 +28,8 @@ class YabrShelfDataModel: ObservableObject {
         
         var unifiedSearchObject: CalibreUnifiedSearchObject?
         
+        var cancellables: Set<AnyCancellable> = []
+        
         init(type: CategoryType, category: String) {
             self.type = type
             self.category = category
@@ -50,86 +52,188 @@ class YabrShelfDataModel: ObservableObject {
     
     @Published var discoverShelf = [String: ShelfModelSection]()
     
+    let discoverShelfSubject = PassthroughSubject<[String: ShelfModelSection], Never>()
+    
     var cancellables: Set<AnyCancellable> = []
     
-    let dispatchQueue = DispatchQueue(label: "test-queue")
+    let dispatchQueue = DispatchQueue(label: "shelf-queue")
+    
+    var realmOnQueue: Realm!
     
     init(service: CalibreServerService, searchManager: CalibreLibrarySearchManager) {
         self.service = service
         self.searchManager = searchManager
         
-        service.modelData.$booksInShelf
-            .receive(on: DispatchQueue.main)
-            .sink { books in
-                books.forEach {
-                    self.addToShelf(book: $0.value)
+        dispatchQueue.sync {
+            realmOnQueue = try! Realm(configuration: self.service.modelData.realm.configuration, queue: dispatchQueue)
+            
+            realmOnQueue.objects(CalibreBookRealm.self)
+                .changesetPublisher(keyPaths: ["inShelf"])
+                .subscribe(on: dispatchQueue)
+                .sink { changes in
+                    switch changes {
+                    case .initial(let results):
+                        results.where({
+                            $0.inShelf == true
+                        })
+                        .forEach(self.addToShelf(book:))
+                        break
+                    case .update(let results, deletions: _, insertions: _, modifications: let modifications):
+                        modifications
+                            .map { results[$0] }
+                            .forEach {
+                                if $0.inShelf {
+                                    self.addToShelf(book: $0)
+                                } else {
+                                    self.removeFromShelf(book: $0)
+                                }
+                            }
+                        break
+                    case .error(_):
+                        break
+                    }
                 }
-            }
-            .store(in: &cancellables)
-        
-        service.modelData.booksInShelf.forEach {
-            self.addToShelf(book: $0.value)
+                .store(in: &cancellables)
         }
         
-        Timer.publish(every: 300, on: .main, in: .default)
+//        service.modelData.$booksInShelf
+//            .receive(on: DispatchQueue.main)
+//            .sink { books in
+//                books.forEach {
+//                    self.addToShelf(book: $0.value)
+//                }
+//            }
+//            .store(in: &cancellables)
+        
+//        service.modelData.booksInShelf.forEach {
+//            self.addToShelf(book: $0.value)
+//        }
+        
+        /*
+        Timer.publish(every: 600, on: .main, in: .default)
             .autoconnect()
             .receive(on: self.searchManager.cacheRealmQueue)
             .sink { timer in
                 self.searchManager.refreshSearchResults()
             }
             .store(in: &cancellables)
+         */
     }
     
-    func addToShelf(book: CalibreBook) {
-        for categoryName in book.authors.prefix(3) {
-            let category = CategoryObject(type: .Author, category: categoryName)
-            if let index = categories.firstIndex(of: category) {
-                categories[index].inShelfBookIds.insert(book.inShelfId)
+    /**
+     run on dispatchQueue
+     */
+    func addToShelf(book: CalibreBookRealm) {
+        guard let inShelfId = book.primaryKey
+        else {
+            return
+        }
+        
+        for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
+            guard let categoryName = categoryName
+            else {
                 return
             }
             
-            category.inShelfBookIds.insert(book.inShelfId)
-            
-            searchManager.cacheRealmQueue.async { [self] in
-                let unifiedSearchObject = searchManager.getUnifiedResult(
-                    libraryIds: [],
-                    searchCriteria: .init(
-                        searchString: "",
-                        //                            sortCriteria: .init(by: .Title, ascending: true),
-                        sortCriteria: .init(),
-                        filterCriteriaCategory: ["Authors" : Set([categoryName])]
-                    )
-                )
-                
-                category.unifiedSearchObject = unifiedSearchObject
-                
-                unifiedSearchObject.books.changesetPublisher
-                    .subscribe(on: searchManager.cacheRealmQueue)
-                    .map { changeset -> ShelfModelSection in
-                        switch changeset {
-                        case .initial(_), .error(_):
-                            print("unifiedSearchObject changeset initial  \(unifiedSearchObject.books.count)")
-                            break
-                        case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                            print("unifiedSearchObject changeset update \(unifiedSearchObject.books.count)")
-                            break
-                        }
-                        
-                        return self.buildShelfModelSection(category: category)
-                    }
-                    .receive(on: DispatchQueue.main)
-                    .sink { discoverShelfSection in
-                        if discoverShelfSection.sectionShelf.count > 1 {
-                            self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
-                        }
-                    }
-                    .store(in: &cancellables)
+            let category = CategoryObject(type: .Author, category: categoryName)
+            if let index = categories.firstIndex(of: category) {
+                categories[index].inShelfBookIds.insert(inShelfId)
+                return
             }
             
+            category.inShelfBookIds.insert(inShelfId)
+            
+            guard let unifiedSearchObjectId = searchManager.getUnifiedResultObjectIdForSwiftUI(
+                libraryIds: [],
+                searchCriteria: .init(
+                    searchString: "",
+                    sortCriteria: .init(),
+                    filterCriteriaCategory: ["Authors" : Set([categoryName])]
+                )
+            )
+            else {
+                return
+            }
+            
+            guard let unifiedSearchObject = self.realmOnQueue.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: unifiedSearchObjectId)
+            else {
+                return
+            }
+            
+            category.unifiedSearchObject = unifiedSearchObject
+            
+            unifiedSearchObject.books.changesetPublisher
+                .subscribe(on: self.dispatchQueue)
+                .map { changeset -> ShelfModelSection in
+                    switch changeset {
+                    case .initial(_), .error(_):
+                        print("unifiedSearchObject changeset \(category.type.rawValue) \(category.category) initial \(unifiedSearchObject.books.count)")
+                        break
+                    case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
+                        print("unifiedSearchObject changeset \(category.type.rawValue) \(category.category) update \(unifiedSearchObject.books.count)")
+                        break
+                    }
+                    
+                    return self.buildShelfModelSection(category: category)
+                }
+                .receive(on: DispatchQueue.main)
+                .sink { discoverShelfSection in
+                    if discoverShelfSection.sectionShelf.count > 1 {
+                        self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
+                        self.discoverShelfSubject.send(self.discoverShelf)
+                    }
+                }
+                .store(in: &category.cancellables)
+                
             categories.insert(category)
+            
+            let discoverShelfSection = self.buildShelfModelSection(category: category)
+            DispatchQueue.main.async {
+                if discoverShelfSection.sectionShelf.count > 1 {
+                    self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
+                    self.discoverShelfSubject.send(self.discoverShelf)
+                }
+            }
         }
     }
     
+    func removeFromShelf(book: CalibreBookRealm) {
+        guard let inShelfId = book.primaryKey
+        else {
+            return
+        }
+        
+        for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
+            guard let categoryName = categoryName
+            else {
+                return
+            }
+            
+            guard let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName))
+            else {
+                return
+            }
+            
+            let category = categories[index]
+            category.inShelfBookIds.remove(inShelfId)
+            
+            guard category.inShelfBookIds.isEmpty
+            else {
+                return
+            }
+            
+            category.cancellables.removeAll()
+            category.unifiedSearchObject = nil
+            
+            let discoverShelfSection = self.buildShelfModelSection(category: category)
+            DispatchQueue.main.async {
+                self.discoverShelf.removeValue(forKey: discoverShelfSection.sectionId)
+                self.discoverShelfSubject.send(self.discoverShelf)
+            }
+            
+            categories.remove(at: index)
+        }
+    }
     
     func buildShelfModelSection(category: CategoryObject) -> ShelfModelSection {
         let sectionName = "\(category.type.rawValue): \(category.category)"
@@ -155,6 +259,16 @@ class YabrShelfDataModel: ObservableObject {
         } ?? []
         
         return .init(sectionName: sectionName, sectionId: sectionName, sectionShelf: sectionShelf)
+    }
+    
+    func refresh() {
+        dispatchQueue.async {
+            self.categories.compactMap {
+                $0.unifiedSearchObject
+            }.forEach(
+                self.searchManager.refreshUnifiedSearchResult(mergedObj:)
+            )
+        }
     }
 }
 

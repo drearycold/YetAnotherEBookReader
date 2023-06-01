@@ -1146,7 +1146,7 @@ struct CalibreBookUserMetadataEntry: Codable {
 }
 
 struct CalibreBookEntry: Codable {
-    var author_link_map: [String: String] = [:]
+//    var author_link_map: [String: String] = [:]   //removed as of calibre 6.18
     var user_metadata: [String: CalibreBookUserMetadataEntry] = [:]
     var tags: [String] = []
     var author_sort: String = ""

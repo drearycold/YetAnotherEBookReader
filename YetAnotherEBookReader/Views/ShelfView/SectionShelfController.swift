@@ -237,7 +237,8 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         self.navigationItem.titleView = topButton
         
         refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
-            self.modelData.calibreUpdatedSubject.send(.shelf)
+//            self.modelData.calibreUpdatedSubject.send(.shelf)
+            self.modelData.shelfDataModel.refresh()
         })
         
         self.navigationItem.setLeftBarButtonItems([
@@ -321,8 +322,21 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         */
         
         
-        
+        /*
         modelData.shelfDataModel.$discoverShelf
+            .receive(on: snaptshotQueue)
+            .sink { discoverShelf in
+                print("\(#function) discoverShelf \(discoverShelf.count)")
+                
+                var snapshot = self.buildSnapshot(shelf: discoverShelf)
+                
+                self.fillSnapshotToScreen(snapshot: &snapshot)
+                self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+            }
+            .store(in: &cancellables)
+        */
+        
+        modelData.shelfDataModel.discoverShelfSubject
             .receive(on: snaptshotQueue)
             .sink { discoverShelf in
                 print("\(#function) discoverShelf \(discoverShelf.count)")

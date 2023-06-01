@@ -16,8 +16,6 @@ struct LibraryInfoBookListView: View {
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
-    @ObservedResults(CalibreLibrarySearchObject.self) var librarySearches
-    
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
     
@@ -130,117 +128,57 @@ struct LibraryInfoBookListView: View {
         ScrollViewReader { proxy in
             List(selection: $selectedBookIds) {
                 #if DEBUG
-                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
-                
-                Button {
-                    expandSearchUnifiedBookLimit()
-                } label: {
-                    Text("Expand")
-                }
-                
-                Button {
-                    let realm = unifiedSearchObject.realm!.thaw()
-                    let thawedObject = unifiedSearchObject.thaw()!
-                    try! realm.write {
-                        thawedObject.resetList()
-                    }
-                } label: {
-                    Text("Reset")
-                }
+                debugView()
                 #endif
-                ForEach(unifiedSearchObject.books) { bookRealm in
-                    NavigationLink (
-                        destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
-                        tag: bookRealm.primaryKey!,
-                        selection: $modelData.selectedBookId
-                    ) {
-                        if let book = modelData.convert(bookRealm: bookRealm) {
-                            HStack {
-                                //                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
-                                //                                Text(index.description)
-                                //                            }
-                                if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: viewModel.filterCriteriaLibraries, criteria: viewModel.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
-                                    Text(bookIndex.description)
-                                        .onAppear {
-                                            guard bookIndex > unifiedSearchObject.limitNumber - 20
-                                            else {
-                                                return
-                                            }
-                                            
-                                            expandSearchUnifiedBookLimit()
-                                        }
-                                }
-                                bookRowView(book: book, bookRealm: bookRealm)
-                            }
-                        } else {
-                            Text(bookRealm.title)
-                        }
-                    }
-                    .isDetailLink(true)
-                    .contextMenu {
-                        if let book = modelData.convert(bookRealm: bookRealm) {
-                            bookRowContextMenuView(book: book)
-                        } else {
-                            EmptyView()
-                        }
-                    }
-                }   //ForEach
                 
-#if DEBUG
-                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
-                
-                Button {
-                    expandSearchUnifiedBookLimit()
-                } label: {
-                    Text("Expand")
-                }
-                
-                Button {
-                    let realm = unifiedSearchObject.realm!.thaw()
-                    let thawedObject = unifiedSearchObject.thaw()!
-                    try! realm.write {
-                        thawedObject.resetList()
+                if unifiedSearchObject.books.isEmpty {
+                    if unifiedSearchObject.unifiedOffsets.count == 0 {
+                        Text("Loading books...")
+                    } else {
+                        Text("Found no books.")
                     }
-                } label: {
-                    Text("Reset")
-                }
-                
-                ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
-                    HStack {
-                        Text("\(unifiedEntry.key)")
-                        if let unifiedOffset = unifiedEntry.value {
-                            Text("\(unifiedOffset.offset) \(unifiedOffset.beenConsumed.description) \(unifiedOffset.beenCutOff.description)")
-                        }
-                    }
-                    if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
-                       let searchObj = librarySearches.where({ $0._id == objectId
-                       }).first {
-                        
-                            ForEach(searchObj.sources.keys, id: \.self) { searchSource in
+                } else {
+                    ForEach(unifiedSearchObject.books) { bookRealm in
+                        NavigationLink (
+                            destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
+                            tag: bookRealm.primaryKey!,
+                            selection: $modelData.selectedBookId
+                        ) {
+                            if let book = modelData.convert(bookRealm: bookRealm) {
                                 HStack {
-                                    Text(searchSource)
-                                    Spacer()
-                                    Text(searchObj.sources[searchSource]??.totalNumber.description ?? "-1")
-                                    Text(searchObj.sources[searchSource]??.bookIds.count.description ?? "-1")
-                                    Text(searchObj.sources[searchSource]??.books.count.description ?? "-1")
-                                }.tag(searchObj.libraryId + "|" + searchSource)
+                                    //                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
+                                    //                                Text(index.description)
+                                    //                            }
+                                    if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: viewModel.filterCriteriaLibraries, criteria: viewModel.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
+                                        Text(bookIndex.description)
+                                            .onAppear {
+                                                guard bookIndex > unifiedSearchObject.limitNumber - 20
+                                                else {
+                                                    return
+                                                }
+                                                
+                                                expandSearchUnifiedBookLimit()
+                                            }
+                                    }
+                                    bookRowView(book: book, bookRealm: bookRealm)
+                                }
+                            } else {
+                                Text(bookRealm.title)
                             }
-                        
-                    }
-//                    HStack {
-//                        if let objectId = self.modelData.librarySearchManager.getLibraryResultObjectId(libraryId: unifiedEntry.key, searchCriteria: viewModel.currentLibrarySearchCriteria),
-//                           let searchObj = librarySearches.where({ $0._id == objectId
-//                           }).first {
-//                            Text(searchObj.totalNumber.description)
-//
-//                            Text(searchObj.bookIds.count.description)
-//
-//                            Text(searchObj.books.count.description)
-//                        }
-//                    }
+                        }
+                        .isDetailLink(true)
+                        .contextMenu {
+                            if let book = modelData.convert(bookRealm: bookRealm) {
+                                bookRowContextMenuView(book: book)
+                            } else {
+                                EmptyView()
+                            }
+                        }
+                    }   //ForEach
                 }
-                
-#endif
+                #if DEBUG
+                debugView()
+                #endif
             }
             .onAppear {
                 print("LIBRARYINFOVIEW books=\(unifiedSearchObject.books.count)")
@@ -265,10 +203,12 @@ struct LibraryInfoBookListView: View {
                 booksListInfoPresenting = true
             } label: {
                 Image(systemName: "info.circle")
-            }.popover(isPresented: $booksListInfoPresenting) {
+            }
+            .popover(isPresented: $booksListInfoPresenting) {
                 LibraryInfoBookListInfoView(unifiedSearchObject: unifiedSearchObject, presenting: $booksListInfoPresenting)
                     .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
             }
+            .padding([.leading, .trailing], 4)
 
             Text(getLibrarySearchingText())
             
@@ -278,6 +218,16 @@ struct LibraryInfoBookListView: View {
             }
             
             Spacer()
+            
+            if unifiedSearchObject.totalNumber > 0 {
+                Text("\(unifiedSearchObject.books.count) / \(unifiedSearchObject.totalNumber)")
+            }
+            
+            Button {
+                modelData.librarySearchManager.refreshSearchResult(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
         }
         .padding(4)    //bottom bar
     }
@@ -566,8 +516,24 @@ struct LibraryInfoBookListView: View {
 //            return "Result Incomplete"
 //        }
         
+        let offsets = unifiedSearchObject.unifiedOffsets.filter {
+            guard let unifiedOffset = $0.value,
+                  let searchSourceOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
+                  let searchSource = searchSourceOpt
+            else {
+                return false
+            }
+            
+            return searchSource.totalNumber > 0
+        }
         
-        return ""
+        if offsets.count < 1 {
+            return "Cannot find in any library"
+        } else if offsets.count < 2 {
+            return "Found in \(offsets.count) library"
+        } else {
+            return "Found in \(offsets.count) libraries"
+        }
     }
     
     func searchStringChanged(searchString: String) {
@@ -600,6 +566,54 @@ struct LibraryInfoBookListView: View {
         try! realm.write {
             thawedObject.limitNumber = min(unifiedSearchObject.limitNumber + 100, unifiedSearchObject.totalNumber)
         }
+    }
+    
+    @ViewBuilder
+    func debugView() -> some View {
+        Group {
+            Text("Object: \(unifiedSearchObject._id) \(unifiedSearchObject.libraryIds.count) \(unifiedSearchObject.unifiedOffsets.count)")
+            
+            Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
+            
+            Button {
+                expandSearchUnifiedBookLimit()
+            } label: {
+                Text("Expand")
+            }
+            
+            Button {
+                let realm = unifiedSearchObject.realm!.thaw()
+                let thawedObject = unifiedSearchObject.thaw()!
+                try! realm.write {
+                    thawedObject.resetList()
+                    thawedObject.limitNumber = 0
+                }
+            } label: {
+                Text("Reset")
+            }
+            
+            if unifiedSearchObject.unifiedOffsets.count > 0 {
+                ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
+                    HStack {
+                        Text("\(unifiedEntry.key) \(unifiedEntry.value?.description ?? "N/A")")
+                    }
+                    if let searchObj = unifiedEntry.value?.searchObject {
+                        ForEach(searchObj.sources.sorted(by: { $0.key < $1.key }), id: \.key) { searchSourceEntry in
+                            HStack {
+                                Text(searchSourceEntry.key)
+                                Spacer()
+                                Text(searchSourceEntry.value?.description ?? "N/A")
+                            }
+                            .tag(searchObj.libraryId + "|" + searchSourceEntry.key)
+                        }
+                        .padding([.leading, .trailing], 8)
+                    }
+                }
+            } else {
+                Text("No Unified Offset Object")
+            }
+        }
+            .foregroundColor(.red)
     }
 }
 

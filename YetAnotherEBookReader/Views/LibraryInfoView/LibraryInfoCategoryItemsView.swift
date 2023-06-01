@@ -67,8 +67,12 @@ struct LibraryInfoCategoryItemsView: View {
                 let unifiedSearch = unifiedSearches.where({
                 $0._id == objectId
             }).first {
-                LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
-                    .environmentObject(viewModel)
+//                if unifiedSearch.books.isEmpty {
+//                    Text("Found 0 books")
+//                } else {
+                    LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
+                        .environmentObject(viewModel)
+//                }
             } else {
                 Text("Preparing Book List")
             }

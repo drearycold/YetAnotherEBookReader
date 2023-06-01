@@ -24,6 +24,10 @@ class CalibreLibrarySearchValueObject: Object, ObjectKeyIdentifiable {
     
     //books after getting metadata and annotations
     @Persisted var books: List<CalibreBookRealm>
+    
+    override var description: String {
+        return "Total: \(totalNumber) / IDs: \(bookIds.count) / Books: \(books.count)"
+    }
 }
 
 class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
@@ -116,6 +120,12 @@ class CalibreUnifiedOffsets: Object {
     
     @Persisted var searchObject: CalibreLibrarySearchObject?
     @Persisted var searchObjectSource: String = ""
+    
+    @Persisted(originProperty: "unifiedOffsets") var assignee: LinkingObjects<CalibreUnifiedSearchObject>
+    
+    override var description: String {
+        return "O:\(offset) CO:\(beenCutOff) CS:\(beenConsumed) S:\(searchObjectSource)"
+    }
 }
 
 class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
@@ -148,29 +158,13 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
         return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
     }
     
-//    var idMap: [String: Int] = [:]
-    
-//    func getIndex(primaryKey: String) -> Int? {
-//        if let index = idMap[primaryKey] {
-//            return index
-//        }
-////        else if let index = books.firstIndex(where: { $0.primaryKey == primaryKey }) {
-////            idMap[primaryKey] = index
-////            return index
-////        }
-//
-//        return nil
-//    }
-    
     func resetList() {
-//        self.idMap.removeAll()
         self.books.removeAll()
         self.unifiedOffsets.forEach {
             $0.value?.beenCutOff = false
             $0.value?.beenConsumed = false
             $0.value?.offset = 0
         }
-        self.limitNumber = 0
     }
 }
 
