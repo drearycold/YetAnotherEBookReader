@@ -56,7 +56,14 @@ struct BookDetailViewRealm: View {
             ScrollView {
                 viewContent(book: book, isCompat: sizeClass == .compact)
                     .onAppear() {
-                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+//                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+                        modelData.getBooksMetadataSubject.send(
+                            .init(
+                                library: book.library,
+                                books: [book.id],
+                                getAnnotations: true
+                            )
+                        )
                     }
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                     .navigationTitle(Text(book.title))
@@ -605,7 +612,14 @@ struct BookDetailViewRealm: View {
                     if let coverUrl = book.coverURL {
                         modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                     }
-                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+//                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+                    modelData.getBooksMetadataSubject.send(
+                        .init(
+                            library: book.library,
+                            books: [book.id],
+                            getAnnotations: true
+                        )
+                    )
                 }
             }) {
                 if modelData.updatingMetadata {

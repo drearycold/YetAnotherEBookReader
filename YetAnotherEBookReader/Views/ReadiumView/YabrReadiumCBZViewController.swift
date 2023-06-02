@@ -65,7 +65,7 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         updatedReadingPosition.0 = locator.locations.progression ?? 0.0
         updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
         
-        if 1.0 / Double(locator.locations.position ?? Int.max) + updatedReadingPosition.1 > 0.999 {
+        if 1.0 / Double(self.publication.readingOrder.count > 0 ? self.publication.readingOrder.count : Int.max) + updatedReadingPosition.1 > 0.999 {
             updatedReadingPosition.1 = 1.0
         }
         

@@ -22,6 +22,7 @@ func getBookPreferenceConfig(bookFileURL: URL) -> Realm.Configuration? {
     )
 }
 
+@available(*, deprecated, message: "Remove CalibreBookLastReadPositionRealm")
 func readPosToLastReadPosition(book: CalibreBook, format: Format, formatInfo: FormatInfo) {
     guard formatInfo.cached,
           let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),

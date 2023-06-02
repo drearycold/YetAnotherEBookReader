@@ -11,7 +11,7 @@ import RealmSwift
 /**
  realm backed
  */
-struct BookAnnotation {
+class BookAnnotation {
     let id: Int32
     let library: CalibreLibrary
     let localFilename: String?
@@ -27,14 +27,51 @@ struct BookAnnotation {
         bookPrefId = "\(library.key) - \(id)"
     }
     
+    var ephemeralRealm: Realm?
+    var persistentRealm: Realm?
+    
     var realm: Realm? {
+        if Thread.isMainThread {
+            if let realm = persistentRealm {
+                return realm
+            }
+            
+            if let realm = ephemeralRealm {
+                return realm
+            }
+        }
+        
         guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
               let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
-              let basePrefUrl = bookPrefConf.fileURL,
-              FileManager.default.fileExists(atPath: basePrefUrl.path)
+              let basePrefUrl = bookPrefConf.fileURL
         else { return nil }
         
-        return try? Realm(configuration: bookPrefConf)
+        if FileManager.default.fileExists(atPath: basePrefUrl.path) {
+            let realm = try! Realm(configuration: bookPrefConf)
+            if Thread.isMainThread {
+                persistentRealm = realm
+            }
+            return realm
+        } else {
+            var bookPrefConf = bookPrefConf
+            bookPrefConf.inMemoryIdentifier = bookPrefId
+            let realm = try! Realm(configuration: bookPrefConf)
+            if Thread.isMainThread {
+                ephemeralRealm = realm
+            }
+            return realm
+        }
+    }
+    
+    func makePersistent() {
+        guard let realm = ephemeralRealm,
+              let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
+              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl)
+        else { return }
+        
+        try! realm.writeCopy(configuration: bookPrefConf)
+        
+        ephemeralRealm = nil
     }
 }
 
@@ -152,7 +189,7 @@ extension BookAnnotation {
                 .forEach { position in
                     updatePosition(position)
                 }
-            
+                
             try? realm.write {
                 realm.delete(realm.objects(FolioReaderReadPositionRealm.self))
             }

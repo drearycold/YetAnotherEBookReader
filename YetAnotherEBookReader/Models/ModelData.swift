@@ -602,6 +602,8 @@ final class ModelData: ObservableObject {
                 }
             }
             
+            book.readPos.makePersistent()
+            
             self.booksInShelf[book.inShelfId] = book
             
 //            self.shelfDataModel.addToShelf(book: book)
@@ -1295,6 +1297,7 @@ final class ModelData: ObservableObject {
         formats.forEach {
             book.formats[$0.rawValue]?.selected = true
         }
+        book.readPos.makePersistent()
         
         updateBook(book: book)
         
@@ -2165,17 +2168,25 @@ final class ModelData: ObservableObject {
         let queue = DispatchQueue(label: "get-books-metadata", qos: .userInitiated, attributes: [.concurrent])
         getBooksMetadataSubject
             .receive(on: DispatchQueue.main)
-            .map { request -> CalibreBooksMetadataRequest in
+            .map { request -> (request: CalibreBooksMetadataRequest, books: [CalibreBook]) in
                 self.librarySyncStatus[request.library.id]?.isUpd = true
-                return request
-            }
-            .receive(on: queue)
-            .flatMap { request -> AnyPublisher<CalibreBooksTask, Never> in
+                
                 let books = request.books.map { bookId -> CalibreBook in
                     let book = CalibreBook(id: bookId, library: request.library)
-                    return self.booksInShelf[book.inShelfId] ?? book
+                    if let book = self.booksInShelf[book.inShelfId] {
+                        return book
+                    }
+                    if request.getAnnotations,
+                       let book = self.getBook(for: book.inShelfId) {
+                        return book
+                    }
+                    return book
                 }
-                    
+                
+                return (request, books)
+            }
+            .receive(on: queue)
+            .flatMap { request, books -> AnyPublisher<CalibreBooksTask, Never> in
                 if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) {
                     return self.calibreServerService
                         .getBooksMetadata(task: task)
@@ -2225,6 +2236,8 @@ final class ModelData: ObservableObject {
                             result.booksUpdated.insert(obj.idInLib)
                             if obj.inShelf {
                                 result.booksInShelf.append(self.convert(library: result.library, bookRealm: obj))
+                            } else if result.annotationsData != nil {
+                                result.booksAnnotation.append(self.convert(library: result.library, bookRealm: obj))
                             }
                         } else {
                             // null data, treat as delted, update lastSynced to lastModified to prevent further actions
@@ -2237,7 +2250,7 @@ final class ModelData: ObservableObject {
                 
                 return result
             }
-        .map { result -> CalibreBooksTask in
+            .map { result -> CalibreBooksTask in
                 guard result.request.getAnnotations,
                       let annotationsResult = result.booksAnnotationsEntry
                 else {
@@ -2272,6 +2285,20 @@ final class ModelData: ObservableObject {
                            ) {
                             self.updateAnnotationsSubject.send(task)
                         }
+                    }
+                }
+                
+                result.booksAnnotation.forEach { book in
+                    book.formats.forEach { formatKey, formatInfo in
+                        guard let format = Format(rawValue: formatKey),
+                              let entry = annotationsResult["\(book.id):\(formatKey)"]
+                        else { return }
+                        
+                        book.readPos.positions(added: entry.last_read_positions)
+                        
+                        book.readPos.highlights(added: entry.annotations_map.highlight ?? [])
+                        
+                        book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? [])
                     }
                 }
                 
@@ -2369,10 +2396,12 @@ final class ModelData: ObservableObject {
             let book = subject.book
             let lastPosition = subject.position
             
+            /* deprecated
             book.formats.forEach {
                 guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
                 readPosToLastReadPosition(book: book, format: format, formatInfo: $0.value)
             }
+             */
 
             self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
             

@@ -277,6 +277,7 @@ extension ModelData {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
         calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
+            .receive(on: DispatchQueue.main)
             .map { signals -> [(key: String, value: CalibreBook)] in
                 self.booksInShelf
                     .sorted {
@@ -288,10 +289,16 @@ extension ModelData {
                         )
                     }
             }
+            .map { books -> [(key: String, value: CalibreBook, info: ReaderInfo)] in
+                books.map { inShelfId, book -> (key: String, value: CalibreBook, info: ReaderInfo) in
+                    (inShelfId, book, self.prepareBookReading(book: book))
+                }
+            }
+            .receive(on: queue)
             .map { books -> [BookModel] in
                 books
-                    .map { (inShelfId, book) -> BookModel in
-                        let readerInfo = self.prepareBookReading(book: book)
+                    .map { (inShelfId, book, readerInfo) -> BookModel in
+//                        let readerInfo = self.prepareBookReading(book: book)
                         
                         let bookUptoDate = book.formats.allSatisfy {
                             $1.cached == false ||

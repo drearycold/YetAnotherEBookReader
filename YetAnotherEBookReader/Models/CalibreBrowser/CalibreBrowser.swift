@@ -1246,6 +1246,15 @@ class CalibreLibrarySearchManager: ObservableObject {
                 
                 let nameItems = self.cacheCategoryLibraryObjects.filter {
                     $0.key.categoryName == categoryName
+                }.filter {
+                    guard let library = self.service.modelData.calibreLibraries[$0.key.libraryId],
+                          library.hidden == false,
+                          library.server.removed == false
+                    else {
+                        return false
+                    }
+                    
+                    return true
                 }.reduce(into: [String: [CalibreLibraryCategoryItemObject]]()) { partialResult, libraryCategoryEntry in
                     
                     libraryCategoryEntry.value.items.forEach { categoryItem in

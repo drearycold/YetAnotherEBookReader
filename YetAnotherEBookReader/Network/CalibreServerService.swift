@@ -860,9 +860,17 @@ struct CalibreServerService {
             return nil
         }
         
-        let which = books.map {
-            let id = $0.id.description
-            return $0.formats.filter { $0.value.cached }.map { "\(id)-\($0.key)" }.joined(separator: "_")
+        let which = books.map { book in
+            let id = book.id.description
+            if book.inShelf {
+                return book.formats.filter { $0.value.cached }.map { "\(id)-\($0.key)" }.joined(separator: "_")
+            } else {
+                if let format = modelData.getPreferredFormat(for: book) {
+                    return "\(id)-\(format.rawValue)"
+                } else {
+                    return ""
+                }
+            }
         }.joined(separator: "_")
         
         var lastReadPositionUrlComponents = URLComponents()
