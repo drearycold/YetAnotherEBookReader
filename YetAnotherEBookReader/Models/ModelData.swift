@@ -159,11 +159,15 @@ final class ModelData: ObservableObject {
     let probeLibrarySubject = PassthroughSubject<CalibreProbeLibraryRequest, Never>()
     let removeLibrarySubject = PassthroughSubject<CalibreLibrary, Never>()
     
+    let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
+    
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
     
     let syncLibrarySubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
     let saveBookMetadataSubject = PassthroughSubject<CalibreSyncLibraryBooksMetadata, Never>()
     let getBooksMetadataSubject = PassthroughSubject<CalibreBooksMetadataRequest, Never>()
+    
+    var probeTimer: AnyCancellable?
     
     lazy var metadataQueue: OperationQueue = {
         var queue = OperationQueue()
@@ -230,6 +234,8 @@ final class ModelData: ObservableObject {
         
         registerProbeLibraryCancellable()
         registerRemoveLibraryCancellable()
+        
+        registerProbeLibraryLastModifiedCancellable()
         
         registerSyncLibraryCancellable()
         registerSaveBooksMetadataCancellable()
@@ -462,6 +468,16 @@ final class ModelData: ObservableObject {
                 
                 if oldSchemaVersion < 104 {
                     migration.renameProperty(onType: CalibreBookRealm.className(), from: "id", to: "idInLib")
+                }
+                
+                if oldSchemaVersion < 109 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
+                        if let oldObject = oldObject,
+                           let deviceId = oldObject["id"] as? String {
+                            newObject?["deviceId"] = deviceId
+                        }
+                        newObject?["_id"] = ObjectId.generate()
+                    }
                 }
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
@@ -1643,6 +1659,14 @@ final class ModelData: ObservableObject {
         }
     }
     
+    func isServerReachable(server: CalibreServer) -> Bool {
+        return calibreServerInfoStaging.filter {
+            $1.server.id == server.id
+        }.reduce(false) { partialResult, entry in
+            partialResult || entry.value.reachable
+        }
+    }
+    
     func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
         return calibreServerInfoStaging.filter {
             $1.server.id == server.id && $1.isPublic == isPublic
@@ -1758,6 +1782,7 @@ final class ModelData: ObservableObject {
                     self.syncServerHelperConfigSubject.send(serverInfo.server.id)
                 }
                 
+                // TODO: replace sync library with library search
                 self.calibreLibraries.filter {
                     $0.value.server.id == serverInfo.server.id
                 }.forEach { id, library in
@@ -1770,10 +1795,25 @@ final class ModelData: ObservableObject {
                     )
                 }
                 
-                //TODO refresh shelf
+                /*
+                self.librarySearchManager.refreshSearchResult(
+                    libraryIds: Set(self.calibreLibraries.filter({ $0.value.server.id == serverInfo.server.id }).keys),
+                    searchCriteria: .init(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
+                )
+                 */
+                
+                //TODO: refresh shelf
                 if serverInfo.reachable {
                     self.calibreUpdatedSubject.send(.server(serverInfo.server))
+                    
+                    self.calibreLibraries.filter {
+                        $0.value.server.id == serverInfo.server.id
+                    }.forEach { id, library in
+                        self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+                    }
+                    
                 }
+                
             }.store(in: &calibreCancellables)
     }
     
@@ -1890,6 +1930,41 @@ final class ModelData: ObservableObject {
             .sink { library in
                 self.librarySyncStatus[library.id]?.isSync = false
 //                self.calibreLibraries.removeValue(forKey: library.id)
+            }
+            .store(in: &calibreCancellables)
+    }
+    
+    func registerProbeLibraryLastModifiedCancellable() {
+        let dateFormatter = ISO8601DateFormatter()
+        let dateFormatter2 = ISO8601DateFormatter()
+        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+        
+        let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
+        probeLibraryLastModifiedSubject.receive(on: queue)
+            .flatMap { request -> AnyPublisher<CalibreSyncLibraryResult, Never> in
+                self.calibreServerService.syncLibraryPublisher(
+                    resultPrev: .init(request: request, result: [:]),
+                    order: "",
+                    filter: "",
+                    limit: 1
+                )
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { result in
+                guard var library = self.calibreLibraries[result.request.library.id],
+                      let lastModifiedStr = result.list.data.last_modified.first?.value.v,
+                      let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
+                else {
+                    return
+                }
+                
+                if lastModified > library.lastModified {
+                    library.lastModified = lastModified
+                    self.calibreLibraries[result.request.library.id] = library
+                    try! self.updateLibraryRealm(library: library, realm: self.realm)
+                }
+                
+                self.calibreUpdatedSubject.send(.library(library))
             }
             .store(in: &calibreCancellables)
     }
@@ -2188,6 +2263,9 @@ final class ModelData: ObservableObject {
             .receive(on: queue)
             .flatMap { request, books -> AnyPublisher<CalibreBooksTask, Never> in
                 if let task = self.calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) {
+                    if task.books.count > 20000 {
+                        print("")
+                    }
                     return self.calibreServerService
                         .getBooksMetadata(task: task)
                         .replaceError(with: task)

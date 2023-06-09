@@ -789,7 +789,7 @@ class FolioReaderReadPositionRealm: Object {
 extension BookDeviceReadingPositionRealm {
     func fromFolioReaderReadPosition(_ position: FolioReaderReadPosition, bookId: String) {
         self.bookId = bookId
-        self.id = position.deviceId
+        self.deviceId = position.deviceId
         
         self.readerName = ReaderType.YabrEPUB.rawValue
         self.maxPage = position.maxPage
@@ -816,7 +816,7 @@ extension BookDeviceReadingPositionRealm {
     
     func toFolioReaderReadPosition() -> FolioReaderReadPosition? {
         let position = FolioReaderReadPosition(
-            deviceId: id,
+            deviceId: deviceId,
             structuralStyle: FolioReaderStructuralStyle(rawValue: structuralStyle) ?? .atom,
             positionTrackingStyle: FolioReaderPositionTrackingStyle(rawValue: positionTrackingStyle) ?? .linear,
             structuralRootPageNumber: structuralRootPageNumber,

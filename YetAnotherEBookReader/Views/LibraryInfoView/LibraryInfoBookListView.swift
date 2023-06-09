@@ -16,6 +16,8 @@ struct LibraryInfoBookListView: View {
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
+    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
     
@@ -140,7 +142,7 @@ struct LibraryInfoBookListView: View {
                 } else {
                     ForEach(unifiedSearchObject.books) { bookRealm in
                         NavigationLink (
-                            destination: BookDetailViewRealm(book: bookRealm, viewMode: .LIBRARY),
+                            destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
                             tag: bookRealm.primaryKey!,
                             selection: $modelData.selectedBookId
                         ) {
@@ -553,7 +555,7 @@ struct LibraryInfoBookListView: View {
     }
     
     func resetToFirstPage() {
-        //TODO
+        viewModel.updateUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
     }
     
     func expandSearchUnifiedBookLimit() {

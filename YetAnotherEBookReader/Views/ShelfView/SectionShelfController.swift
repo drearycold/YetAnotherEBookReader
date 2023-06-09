@@ -506,7 +506,12 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 //        becomeFirstResponder()
 //        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
+        guard let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId)
+        else {
+            return
+        }
+        
+        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
@@ -531,7 +536,12 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 //        becomeFirstResponder()
 //        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
+        guard let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId)
+        else {
+            return
+        }
+        
+        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF).environmentObject(modelData)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )

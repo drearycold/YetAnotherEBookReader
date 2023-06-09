@@ -7,6 +7,12 @@
 
 import Foundation
 
+extension BookDetailView {
+    @MainActor class ViewModel: ObservableObject {
+        
+    }
+}
+
 class BookDetailViewModel: ObservableObject {
     
     var listVM: ReadingPositionListViewModel!

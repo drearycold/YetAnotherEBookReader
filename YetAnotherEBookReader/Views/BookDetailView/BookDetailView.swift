@@ -8,30 +8,19 @@
 import Foundation
 import OSLog
 import SwiftUI
+import RealmSwift
 import struct Kingfisher.KFImage
 
-enum DownloadStatus: String, CaseIterable, Identifiable {
-    case INITIAL
-    case DOWNLOADING
-    case DOWNLOADED
-    
-    var id: String { self.rawValue }
-}
-
-enum BookDetailViewMode: String, CaseIterable, Identifiable {
-    case SHELF
-    case LIBRARY
-    
-    var id: String { self.rawValue }
-}
-
-@available(macCatalyst 14.0, *)
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.openURL) var openURL
     
-    var viewMode: BookDetailViewMode
+    @ObservedRealmObject var book: CalibreBookRealm
+    
+    @ObservedResults(BookDeviceReadingPositionRealm.self) var readingPositions
+    
+    var viewMode: Mode
     
     @StateObject private var previewViewModel = BookPreviewViewModel()
     
@@ -64,26 +53,33 @@ struct BookDetailView: View {
     @StateObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
+        
         ScrollView {
-            if let book = modelData.readingBook {
+            Text(book.title)
+            if let book = modelData.convert(bookRealm: book) {
                 viewContent(book: book, isCompat: sizeClass == .compact)
-                .onAppear() {
-                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
-                }
-                .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-                .navigationTitle(Text(book.title))
-                
+                    .onAppear() {
+                        //                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+                        modelData.getBooksMetadataSubject.send(
+                            .init(
+                                library: book.library,
+                                books: [book.id],
+                                getAnnotations: true
+                            )
+                        )
+                    }
+                    .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
+                    .navigationTitle(Text(book.title))
+                    .toolbar {
+                        toolbarContent(book: book)
+                    }
+                    .alert(item: $alertItem) { item in
+                        return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
+                    }
             } else {
                 EmptyView()
             }
         }
-        .toolbar {
-            toolbarContent()
-        }
-        .alert(item: $alertItem) { item in
-            return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
-        }
-        .disabled(modelData.readingBook == nil)
     }
     
     @ViewBuilder
@@ -193,11 +189,10 @@ struct BookDetailView: View {
             }
             .opacity(0.8)
             .fullScreenCover(isPresented: $presentingReadingSheet) {
-                if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
-                    YabrEBookReader(book: book, readerInfo: readerInfo)
-                } else {
-                    Text("Nil Book")
-                }
+                YabrEBookReader(
+                    book: book,
+                    readerInfo: modelData.prepareBookReading(book: book)
+                )
             }
         }
         .frame(width: 300, height: 400)
@@ -356,20 +351,16 @@ struct BookDetailView: View {
             readingPositionHistoryViewPresenting = false
         }, content: {
             NavigationView {
-                if let book = modelData.readingBook {
-                    ReadingPositionHistoryView(presenting: $readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction, content: {
-                                Button(action: {
-                                    readingPositionHistoryViewPresenting = false
-                                }) {
-                                    Image(systemName: "xmark")
-                                }
-                            })
-                        }
-                } else {
-                    Text("Unexpected Internal Error")
-                }
+                ReadingPositionHistoryView(presenting: $readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction, content: {
+                            Button(action: {
+                                readingPositionHistoryViewPresenting = false
+                            }) {
+                                Image(systemName: "xmark")
+                            }
+                        })
+                    }
             }
         })
     }
@@ -614,18 +605,23 @@ struct BookDetailView: View {
     }
     
     @ToolbarContentBuilder
-    private func toolbarContent() -> some ToolbarContent {
+    private func toolbarContent(book: CalibreBook) -> some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button(action: {
                 if modelData.updatingMetadata {
                     //TODO cancel
                 } else {
-                    if let book = modelData.readingBook {
-                        if let coverUrl = book.coverURL {
-                            modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
-                        }
-                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+                    if let coverUrl = book.coverURL {
+                        modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                     }
+//                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
+                    modelData.getBooksMetadataSubject.send(
+                        .init(
+                            library: book.library,
+                            books: [book.id],
+                            getAnnotations: true
+                        )
+                    )
                 }
             }) {
                 if modelData.updatingMetadata {
@@ -638,10 +634,6 @@ struct BookDetailView: View {
         
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                guard let book = modelData.readingBook else {
-                    assert(false, "modelData.readingBook is nil")
-                    return
-                }
                 if book.inShelf {
                     modelData.clearCache(inShelfId: book.inShelfId)
                 } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
@@ -654,10 +646,10 @@ struct BookDetailView: View {
                 }
                 updater += 1
             }) {
-                if let download = modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == modelData.readingBook?.id} ).first {
+                if let download = modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
-                } else if modelData.readingBook != nil, modelData.readingBook!.inShelf {
+                } else if book.inShelf {
                     Image(systemName: "star.slash")
                 } else {
                     Image(systemName: "star")
@@ -667,7 +659,6 @@ struct BookDetailView: View {
         
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                guard modelData.readingBook != nil else { return }
                 readingPositionHistoryViewPresenting = true
             }) {
                 Image(systemName: "clock")
@@ -779,12 +770,22 @@ extension BookDetailView : AlertDelegate {
     }
 }
 
+extension BookDetailView {
+    enum Mode: String, CaseIterable, Identifiable {
+        case SHELF
+        case LIBRARY
+        
+        var id: String { self.rawValue }
+    }
+}
+/*
 @available(macCatalyst 14.0, *)
-struct BookDetailView_Previews: PreviewProvider {
+struct BookDetailViewRealm_Previews: PreviewProvider {
     static var modelData = ModelData(mock: true)
      
     static var previews: some View {
-        BookDetailView(viewMode: .LIBRARY)
+        BookDetailViewRealm(viewMode: .LIBRARY)
             .environmentObject(modelData)
     }
 }
+*/

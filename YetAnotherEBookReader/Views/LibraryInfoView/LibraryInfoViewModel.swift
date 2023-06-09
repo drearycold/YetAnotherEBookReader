@@ -6,6 +6,8 @@
 //
 
 import Foundation
+import RealmSwift
+import Combine
 
 extension LibraryInfoView {
     @MainActor class ViewModel: ObservableObject {
@@ -42,7 +44,9 @@ extension LibraryInfoView {
             )
         }
         
+        @Published var unifiedSearchObject: CalibreUnifiedSearchObject?
         
+        var libraryUpdateCancellable: AnyCancellable?
         
         //category filters
         @Published var categoriesSelected: String? = nil
@@ -56,5 +60,38 @@ extension LibraryInfoView {
         @Published var categoryFilterString: String = ""
         
         let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
+        
+        func updateUnifiedSearchObject(modelData: ModelData, unifiedSearches: Results<CalibreUnifiedSearchObject>) {
+            let searchCriteria = currentLibrarySearchCriteria
+            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: filterCriteriaLibraries, searchCriteria: searchCriteria) {
+                unifiedSearchObject = unifiedSearches.where { $0._id == objectId }.first
+            } else {
+                unifiedSearchObject = nil
+            }
+            
+            libraryUpdateCancellable?.cancel()
+            libraryUpdateCancellable = nil
+            
+            if let unifiedSearchObject = unifiedSearchObject {
+                libraryUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
+                    .sink(receiveValue: { calibreUpdatedSignal in
+                        switch calibreUpdatedSignal {
+                        case .shelf:
+                            break
+                        case .deleted(_):
+                            break
+                        case .book(_):
+                            break
+                        case .library(let library):
+                            if unifiedSearchObject.unifiedOffsets[library.id] != nil {
+                                modelData.librarySearchManager.refreshSearchResult(libraryIds: [library.id], searchCriteria: searchCriteria)
+                            }
+                            break
+                        case .server(_):
+                            break
+                        }
+                    })
+            }
+        }
     }
 }

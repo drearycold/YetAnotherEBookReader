@@ -18,8 +18,17 @@ func getBookPreferenceConfig(book: CalibreBook, format: Format) -> Realm.Configu
 func getBookPreferenceConfig(bookFileURL: URL) -> Realm.Configuration? {
     return Realm.Configuration(
         fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
-        schemaVersion: ModelData.RealmSchemaVersion
-    )
+        schemaVersion: ModelData.RealmSchemaVersion) { migration, oldSchemaVersion in
+            if oldSchemaVersion < 109 {
+                migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
+                    if let oldObject = oldObject,
+                       let deviceId = oldObject["id"] as? String {
+                        newObject?["deviceId"] = deviceId
+                    }
+                    newObject?["_id"] = ObjectId.generate()
+                }
+            }
+        }
 }
 
 @available(*, deprecated, message: "Remove CalibreBookLastReadPositionRealm")

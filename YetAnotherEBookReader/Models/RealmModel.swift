@@ -641,32 +641,35 @@ class CalibreActivityLogEntry: Object {
     }
 }
 
-class BookDeviceReadingPositionRealm: Object {
-    @objc dynamic var bookId: String = .init()
-    @objc dynamic var id = ""
+class BookDeviceReadingPositionRealm: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
     
-    @objc dynamic var readerName = ""
-    @objc dynamic var maxPage = 0
-    @objc dynamic var lastReadPage = 0
-    @objc dynamic var lastReadChapter = ""
-    /// range 0 - 100
-    @objc dynamic var lastChapterProgress = 0.0
-    /// range 0 - 100
-    @objc dynamic var lastProgress = 0.0
-    @objc dynamic var furthestReadPage = 0
-    @objc dynamic var furthestReadChapter = ""
-    let lastPosition = List<Int>()
-    @objc dynamic var cfi = "/"
-    @objc dynamic var epoch = 0.0
+    @Persisted var bookId: String = .init()
+//    @Persisted var id = ""
+    @Persisted var deviceId: String
     
-    @objc dynamic var takePrecedence: Bool = false
+    @Persisted var readerName: String
+    @Persisted var maxPage = 0
+    @Persisted var lastReadPage = 0
+    @Persisted var lastReadChapter = ""
+    /// range 0 - 100
+    @Persisted var lastChapterProgress = 0.0
+    /// range 0 - 100
+    @Persisted var lastProgress = 0.0
+    @Persisted var furthestReadPage = 0
+    @Persisted var furthestReadChapter = ""
+    @Persisted var lastPosition: List<Int>
+    @Persisted var cfi = "/"
+    @Persisted var epoch = 0.0
+    
+    @Persisted var takePrecedence: Bool = false
     
     //for non-linear book structure
-    @objc dynamic var structuralStyle: Int = .zero
-    @objc dynamic var structuralRootPageNumber: Int = 1
-    @objc dynamic var positionTrackingStyle: Int = .zero
-    @objc dynamic var lastReadBook = ""
-    @objc dynamic var lastBundleProgress: Double = .zero
+    @Persisted var structuralStyle: Int = .zero
+    @Persisted var structuralRootPageNumber: Int = 1
+    @Persisted var positionTrackingStyle: Int = .zero
+    @Persisted var lastReadBook = ""
+    @Persisted var lastBundleProgress: Double = .zero
     
     var epochByLocale: String {
         let dateFormatter = DateFormatter()
@@ -687,7 +690,7 @@ class BookDeviceReadingPositionRealm: Object {
 
 extension BookDeviceReadingPosition: Persistable {
     public init(managedObject: BookDeviceReadingPositionRealm) {
-        id = managedObject.id
+        id = managedObject.deviceId
         readerName = managedObject.readerName
         maxPage = managedObject.maxPage
         lastReadPage = managedObject.lastReadPage
@@ -709,7 +712,7 @@ extension BookDeviceReadingPosition: Persistable {
     
     public func managedObject() -> BookDeviceReadingPositionRealm {
         let obj = BookDeviceReadingPositionRealm()
-        obj.id = id
+        obj.deviceId = id
         obj.readerName = readerName
         obj.maxPage = maxPage
         obj.lastReadPage = lastReadPage

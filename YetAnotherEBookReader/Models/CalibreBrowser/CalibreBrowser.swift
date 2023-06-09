@@ -227,6 +227,8 @@ class CalibreLibrarySearchManager: ObservableObject {
             
             registerCategoryRefreshReceiver()
             registerCategoryMergeReceiver()
+            
+            registerLibraryUpdateReceiver()
         }
     }
     
@@ -313,7 +315,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 let book = cacheObj.books[index]
                 
                 idMap[book.primaryKey!] = index
-                print("\(#function) mergedKey=\(mergedKey) primaryKey=\(book.primaryKey!) title=\(book.title) index=\(index)")
+//                print("\(#function) mergedKey=\(mergedKey) primaryKey=\(book.primaryKey!) title=\(book.title) index=\(index)")
             }
             
             if cacheSearchUnifiedRuntime[mergedKey] == nil {
@@ -454,14 +456,14 @@ class CalibreLibrarySearchManager: ObservableObject {
     func registerCacheSearchValueChangeReceiver(librarySearchKey: LibrarySearchKey, cacheObj: CalibreLibrarySearchObject, sourceObj: CalibreLibrarySearchValueObject) {
         sourceObj.bookIds.changesetPublisher
             .subscribe(on: cacheRealmQueue)
-            .map { changes -> (library: CalibreLibrary?, books: [CalibreBookRealm], toFetchIDs: [Int32]) in
+            .map { changes -> (library: CalibreLibrary?, insertedBookIds: [Int32]) in
                 var insertedBookIds = [Int32]()
                 
                 switch changes {
                 case .initial(_):
                     guard sourceObj.bookIds.count > sourceObj.books.count
                     else {
-                        return (nil, [], [])
+                        return (nil, [])
                     }
                     insertedBookIds.append(contentsOf: sourceObj.bookIds[ sourceObj.books.count...])
                 case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
@@ -473,13 +475,22 @@ class CalibreLibrarySearchManager: ObservableObject {
                         sourceObj.bookIds[$0]
                     })
                 case .error(_):
-                    return (nil, [], [])
+                    return (nil, [])
                 }
                 
                 //trigger book metadata fetcher
                 guard let library = self.service.modelData.calibreLibraries[librarySearchKey.libraryId]
                 else {
-                    return (nil, [], [])
+                    return (nil, [])
+                }
+                
+                return (library, insertedBookIds)
+            }
+            .receive(on: self.cacheRealmQueue)
+            .sink { library, insertedBookIds in
+                guard let library = library
+                else {
+                    return
                 }
                 
                 let serverUUID = library.server.uuid.uuidString
@@ -487,7 +498,13 @@ class CalibreLibrarySearchManager: ObservableObject {
                 var books = [CalibreBookRealm]()
                 var toFetchIDs = [Int32]()
                 
-                insertedBookIds.forEach { bookId in
+//                insertedBookIds.forEach { bookId in
+                guard sourceObj.books.count < sourceObj.bookIds.count
+                else {
+                    return
+                }
+                
+                sourceObj.bookIds[sourceObj.books.count...].forEach { bookId in
                     if let obj = self.cacheRealm.object(
                         ofType: CalibreBookRealm.self,
                         forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
@@ -496,15 +513,6 @@ class CalibreLibrarySearchManager: ObservableObject {
                     } else {
                         toFetchIDs.append(bookId)
                     }
-                }
-                
-                return (library, books, toFetchIDs)
-            }
-            .receive(on: self.cacheRealmQueue)
-            .sink { library, books, toFetchIDs in
-                guard let library = library
-                else {
-                    return
                 }
                 
                 if toFetchIDs.isEmpty {
@@ -532,7 +540,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 case .error(_):
                     break
                 case .initial(_):
-                    insertedBooks.append(contentsOf: sourceObj.books)
+//                    insertedBooks.append(contentsOf: sourceObj.books)
                     break
                 case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
                     self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) books changeset insertions \(insertions.map { $0.description }.joined(separator: ","))")
@@ -737,7 +745,8 @@ class CalibreLibrarySearchManager: ObservableObject {
                     case .error(_):
                         break
                     case .initial(_):
-                        count += cacheObj.items.count
+//                        count += cacheObj.items.count
+                        break
                     case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) deletion count=\(deletions.count)")
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) insertions count=\(insertions.count)")
@@ -889,7 +898,10 @@ class CalibreLibrarySearchManager: ObservableObject {
                     if task.generation == sourceObj.generation {
                         sourceObj.totalNumber = ajaxSearchResult.total_num
                         if sourceObj.bookIds.count == task.offset {
-                            assert(sourceObj.books.count <= sourceObj.bookIds.count)
+                            guard sourceObj.books.count <= sourceObj.bookIds.count
+                            else {
+                                fatalError("\(task.booksListUrl.absoluteString) \(sourceObj.description) books.count beyond bookIds.count")
+                            }
                             sourceObj.bookIds.append(objectsIn: ajaxSearchResult.book_ids)
                         } else {
                             //redundant request, discard
@@ -921,6 +933,9 @@ class CalibreLibrarySearchManager: ObservableObject {
                 if let task = self.service.buildBooksMetadataTask(library: request.library, books: request.books.map({ bookId in
                     CalibreBook(id: bookId, library: request.library)
                 }), getAnnotations: request.getAnnotations) {
+                    if task.books.count > 20000 {
+                        print("")
+                    }
                     return self.service
                         .getBooksMetadata(task: task)
                         .replaceError(with: task)
@@ -1296,6 +1311,99 @@ class CalibreLibrarySearchManager: ObservableObject {
             .store(in: &cancellables)
     }
     
+    func registerLibraryUpdateReceiver() {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
+        formatter.timeZone = .current
+        
+        self.service.modelData.calibreUpdatedSubject.receive(on: cacheRealmQueue)
+            .compactMap({ calibreUpdatedSignal -> (library: CalibreLibrary, lastModified: Date)? in
+                switch calibreUpdatedSignal {
+                case .library(let library):
+                    guard let bookMostRecentObj = self.cacheRealm.objects(CalibreBookRealm.self)
+                        .where({
+                            $0.libraryName == library.name
+                            &&
+                            $0.serverUUID == library.server.uuid.uuidString
+                        })
+                        .sorted(byKeyPath: "lastModified", ascending: false).first,
+                          bookMostRecentObj.lastModified < library.lastModified
+                    else {
+                       return nil
+                    }
+                    
+                    return (library, bookMostRecentObj.lastModified)
+                    
+                default:
+                    return nil
+                }
+            })
+            .receive(on: cacheWorkerQueue)
+            .flatMap { library, lastModified -> AnyPublisher<CalibreSyncLibraryResult, Never> in
+
+                let lastModifiedStr = formatter.string(from: lastModified)
+                let filter = "last_modified:\">\(lastModifiedStr)\""
+                
+                return self.service.syncLibraryPublisher(
+                    resultPrev: .init(
+                        request: .init(
+                            library: library,
+                            autoUpdateOnly: false,
+                            incremental: false
+                        ),
+                        result: [:]
+                    ),
+                    filter: filter
+                )
+            }
+//            .flatMap { result -> AnyPublisher<CalibreBooksTask, Never> in
+//                let request = CalibreBooksMetadataRequest (
+//                    library: result.request.library,
+//                    books: result.list.book_ids,
+//                    getAnnotations: false
+//                )
+//                let task = CalibreBooksTask(request: request)
+//                return self.service.getBooksMetadata(task: task)
+//                    .replaceError(with: task)
+//                    .eraseToAnyPublisher()
+//            }
+            .sink(receiveValue: { result in
+                if result.list.book_ids.count > 2000 {
+                    guard let initialBookId = result.list.book_ids.first,
+                          var initialLastModified = result.list.data.last_modified[initialBookId.description]
+                    else {
+                        return
+                    }
+                    var total = 0
+                    let partialList: [Int32] = result.list.book_ids.prefix { bookId in
+                        guard let lastModified = result.list.data.last_modified[bookId.description]
+                        else {
+                            return false
+                        }
+                        
+                        if lastModified.v <= initialLastModified.v {
+                            total += 1
+                            return true
+                        }
+                        
+                        guard total < 1024
+                        else {
+                            return false
+                        }
+                        
+                        initialLastModified = lastModified
+                        total += 1
+                        return true
+                    }
+                    
+                    self.metadataRequestSubject.send(.init(library: result.request.library, books: partialList, getAnnotations: false))
+                } else {
+                    self.metadataRequestSubject.send(.init(library: result.request.library, books: result.list.book_ids, getAnnotations: false))
+                }
+            })
+            .store(in: &cancellables)
+    }
+    
     func getOrCreateBookMetadat(serverUUID: String, libraryName: String, id: Int32, idStr: String) -> CalibreBookRealm {
         if let existing = cacheRealm?.object(
             ofType: CalibreBookRealm.self,
@@ -1567,7 +1675,9 @@ class CalibreLibrarySearchManager: ObservableObject {
         mergedObj.totalNumber = 0
         
         var heads = mergedObj.unifiedOffsets.compactMap { unifiedOffsetEntry -> (CalibreUnifiedOffsets, CalibreLibrarySearchValueObject)? in
-            guard let unifiedOffset = unifiedOffsetEntry.value
+            
+            guard let library = service.modelData.calibreLibraries[unifiedOffsetEntry.key],
+                  let unifiedOffset = unifiedOffsetEntry.value
             else {
                 fatalError("Shouldn't missing unifiedOffset")
             }
@@ -1577,7 +1687,21 @@ class CalibreLibrarySearchManager: ObservableObject {
                 return nil
             }
             
-            guard let sourceEntry = searchObj.sources.sorted(by: { lhs, rhs in
+            guard let sourceEntry = searchObj.sources.filter({
+                if $0.key == library.server.publicUrl.replacingOccurrences(of: ".", with: "_"),
+                    service.modelData.isServerReachable(server: library.server, isPublic: true) == true {
+                    return true
+                }
+                if $0.key == library.server.baseUrl.replacingOccurrences(of: ".", with: "_"),
+                    service.modelData.isServerReachable(server: library.server, isPublic: false) == true {
+                    return true
+                }
+                if $0.key == URL(fileURLWithPath: "/realm").absoluteString,
+                   service.modelData.isServerReachable(server: library.server) == false {
+                    return true
+                }
+                return false
+            }).sorted(by: { lhs, rhs in
                 (lhs.value?.books.count ?? 0) > (rhs.value?.books.count ?? 0)
             }).first,
                   let sourceObj = sourceEntry.value

@@ -90,10 +90,9 @@ struct LibraryDetailView: View {
                                 HStack {
                                     Text(bookId.description)
                                     
-                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)),
-                                       let title = obj.title {
+                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)) {
                                         Spacer()
-                                        Text(title)
+                                        Text(obj.title)
                                     }
                                 }
                             }
@@ -109,10 +108,9 @@ struct LibraryDetailView: View {
                                 HStack {
                                     Text(bookId.description)
                                     
-                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)),
-                                       let title = obj.title {
+                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)) {
                                         Spacer()
-                                        Text(title)
+                                        Text(obj.title)
                                     }
                                 }
                             }

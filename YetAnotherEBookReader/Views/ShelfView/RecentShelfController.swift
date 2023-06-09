@@ -115,6 +115,8 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
             self.modelData.refreshShelfMetadataV2(serverReachableChanged: false)
+            
+            self.modelData.probeServersReachability(with: [], updateLibrary: true)
         })
         
         self.navigationItem.setLeftBarButtonItems([
@@ -298,8 +300,13 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         if book.library.server.isLocal {
             //same as options
             onBookOptionsClicked(shelfView, index: index, bookId: bookId, bookTitle: bookTitle, frame: inShelfView)
-        } else {
-            let bookDetailView = BookDetailView(viewMode: .SHELF).environmentObject(modelData)
+        } else if let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId),
+                  let bookAnnoRealm = book.readPos.realm {
+            
+            let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
+                .environmentObject(modelData)
+                .environment(\.realm, bookAnnoRealm)
+            
             let detailView = UIHostingController(
                 rootView: bookDetailView
             )

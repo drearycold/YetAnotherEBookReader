@@ -20,6 +20,7 @@ struct CalibreServerService {
             return session
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
+        urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         urlSessionConfiguration.timeoutIntervalForRequest = timeout
         urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
         let urlSessionDelegate = CalibreServerTaskDelegate(server)
@@ -35,7 +36,7 @@ struct CalibreServerService {
         return urlSession
     }
     
-    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, filter: String = "") -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server) else {
             var result = resultPrev
             result.errmsg = "Server not Reachable"
@@ -58,7 +59,7 @@ struct CalibreServerService {
         }
         
 //        let json:[Any] = [["title", "authors", "formats", "rating", "series", "series_index", "identifiers", "last_modified", "timestamp", "pubdate", "tags"], "last_modified", "ascending", filter, -1]
-        let json:[Any] = [["last_modified"], "last_modified", "ascending", filter, -1]
+        let json:[Any] = [["last_modified"], "last_modified", order, filter, limit]
         
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             var result = resultPrev
@@ -457,6 +458,7 @@ struct CalibreServerService {
             
         }
         
+        /* FIXME: deprecated
         let encoder = JSONEncoder()
         let deviceMapSerialize = readPos.getCopy().compactMapValues { (value) -> Any? in
             try? JSONSerialization.jsonObject(with: encoder.encode(value))
@@ -466,6 +468,7 @@ struct CalibreServerService {
         bookRealm.lastProgress = readPos.getDevices().max(by: { lbdrp, rbdrp in
             lbdrp.lastProgress < rbdrp.lastProgress
         })?.lastProgress ?? 0.0
+         */
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {

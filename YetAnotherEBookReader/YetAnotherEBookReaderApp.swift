@@ -49,7 +49,7 @@ struct YetAnotherEBookReaderApp: App {
                                 modelData.initializeDatabase()
                                 upgradingDatabase = false
                                 
-                                modelData.probeServersReachability(with: [], updateLibrary: true)
+                                enableProbeTimer()
                                 modelData.bookReaderActivitySubject.send(newScenePhase)
                             }
                         } catch {
@@ -57,18 +57,32 @@ struct YetAnotherEBookReaderApp: App {
                         }
                     }
                 } else {
-                    modelData.probeServersReachability(with: [], updateLibrary: true)
+                    enableProbeTimer()
                     modelData.bookReaderActivitySubject.send(newScenePhase)
                 }
-                break
             case .inactive:
                 break
             case .background:
+                disableProbeTimer()
                 modelData.bookReaderActivitySubject.send(newScenePhase)
                 break
             @unknown default:
                 break
             }
         }
+    }
+    
+    func enableProbeTimer() {
+        modelData.probeServersReachability(with: [], updateLibrary: true)
+        modelData.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
+            .autoconnect()
+            .receive(on: DispatchQueue.main)
+            .sink { timer in
+//                modelData.probeServersReachability(with: [], updateLibrary: true)
+            }
+    }
+    
+    func disableProbeTimer() {
+        modelData.probeTimer?.cancel()
     }
 }

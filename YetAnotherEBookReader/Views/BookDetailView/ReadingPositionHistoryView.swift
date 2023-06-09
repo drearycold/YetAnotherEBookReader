@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import RealmSwift
+
 #if canImport(SwiftUICharts)
 import SwiftUICharts
 #endif
@@ -15,6 +17,8 @@ struct ReadingPositionHistoryView: View {
     
     @Binding var presenting: Bool
     
+    @ObservedResults(BookDeviceReadingPositionRealm.self) var readingPositions
+
     let library: CalibreLibrary?
     let bookId: Int32?
     

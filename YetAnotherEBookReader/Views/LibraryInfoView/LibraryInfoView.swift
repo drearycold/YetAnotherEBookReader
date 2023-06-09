@@ -151,10 +151,11 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
-                let unifiedSearch = unifiedSearches.where({
-                $0._id == objectId
-            }).first {
+//            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
+//                let unifiedSearch = unifiedSearches.where({
+//                $0._id == objectId
+//            }).first {
+            if let unifiedSearch = viewModel.unifiedSearchObject {
                 LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
                     .environmentObject(viewModel)
             } else {
@@ -174,7 +175,7 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        //TODO
+        viewModel.updateUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
     }
     
     func resetSearchCriteria() {

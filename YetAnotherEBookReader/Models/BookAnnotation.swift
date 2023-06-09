@@ -84,7 +84,7 @@ extension BookAnnotation {
         guard var objects = get() else { return nil }
         
         if let deviceName = deviceName {
-            objects = objects.filter(NSPredicate(format: "id = %@", deviceName))
+            objects = objects.filter(NSPredicate(format: "deviceId = %@", deviceName))
         }
         
         return objects.filter(NSPredicate(format: "takePrecedence = true"))
@@ -105,7 +105,7 @@ extension BookAnnotation {
             let existing = realm.objects(BookDeviceReadingPositionRealm.self)
                 .filter(
                     NSPredicate(
-                        format: "bookId = %@ AND id = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                        format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
                         bookPrefId,
                         newPosition.id,
                         newPosition.readerName,
@@ -124,7 +124,7 @@ extension BookAnnotation {
         guard let realm = realm else { return }
 
         let objs = realm.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ and id = %@", bookPrefId, deviceName))
+            .filter(NSPredicate(format: "bookId = %@ and deviceId = %@", bookPrefId, deviceName))
         if objs.isEmpty == false {
             try? realm.write {
                 realm.delete(objs)
@@ -138,7 +138,7 @@ extension BookAnnotation {
         try? realm.write {
             let existing = realm.objects(BookDeviceReadingPositionRealm.self)
                 .filter(NSPredicate(
-                    format: "bookId = %@ AND id = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@ AND epoch < %@",
+                    format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@ AND epoch < %@",
                     bookPrefId,
                     position.id,
                     position.readerName,
@@ -155,8 +155,8 @@ extension BookAnnotation {
     
     func getCopy() -> [String: BookDeviceReadingPosition] {
         return get()?.reduce(into: [String: BookDeviceReadingPosition](), { partialResult, obj in
-            if (partialResult[obj.id]?.epoch ?? Date.distantPast.timeIntervalSince1970) < obj.epoch {
-                partialResult[obj.id] = BookDeviceReadingPosition(managedObject: obj)
+            if (partialResult[obj.deviceId]?.epoch ?? Date.distantPast.timeIntervalSince1970) < obj.epoch {
+                partialResult[obj.deviceId] = BookDeviceReadingPosition(managedObject: obj)
             }
         }) ?? [:]
     }

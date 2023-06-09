@@ -30,8 +30,7 @@ struct LibraryInfoBookListInfoView: View {
                             )
                         }), id: \.0.key) { searchResult in
                             if let unifiedOffset = searchResult.0.value,
-                               let searchObjectSource = unifiedOffset.searchObjectSource,
-                               let sourceObjOpt = unifiedOffset.searchObject?.sources[searchObjectSource],
+                               let sourceObjOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
                                let sourceObj = sourceObjOpt,
                                let library = searchResult.1 {
                             Section {
@@ -42,7 +41,7 @@ struct LibraryInfoBookListInfoView: View {
                                 }
                                 #if DEBUG
                                 HStack {
-                                    Text(searchObjectSource)
+                                    Text(unifiedOffset.searchObjectSource)
                                 }
                                 HStack {
                                     Text(sourceObj.generation.description)
