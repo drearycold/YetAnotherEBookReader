@@ -6,10 +6,13 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct LibraryDetailView: View {
     @EnvironmentObject var modelData: ModelData
 
+    @ObservedResults(CalibreBookRealm.self) var books
+    
     @Binding var library: CalibreLibrary
     @Binding var discoverable: Bool
     @Binding var autoUpdate: Bool
@@ -122,6 +125,20 @@ struct LibraryDetailView: View {
             }
             
             #if DEBUG
+            Section {
+                Button("Reset Books") {
+                    try! modelData.realm.write {
+                        modelData.realm.objects(CalibreBookRealm.self).forEach {
+                            $0.lastModified = .init(timeIntervalSince1970: 0)
+                            $0.lastSynced = .init(timeIntervalSince1970: 0)
+                            $0.title = "__RESET__"
+                        }
+                    }
+                }
+            } header: {
+                Text("OP")
+            }
+            
             Section {
                 Text("isSync: \((modelData.librarySyncStatus[library.id]?.isSync ?? false) ? "true" : "false")")
                 Text("isUpd: \((modelData.librarySyncStatus[library.id]?.isUpd ?? false) ? "true" : "false")")

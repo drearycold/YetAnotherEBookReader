@@ -2110,7 +2110,7 @@ final class ModelData: ObservableObject {
                             "serverUUID": serverUUID,
                             "libraryName": library.name,
                             "lastModified": lastModified,
-                            "id": id
+                            "idInLib": id
                         ]
                     }
                     progress += chunk.count
@@ -2195,6 +2195,9 @@ final class ModelData: ObservableObject {
                             .filter {
                                 libraryStatus == nil || libraryStatus?.upd.contains($0) == false
                             }
+                        if booksMetadata.bookToUpdate.count > 0 {
+                            print("\(booksMetadata.bookToUpdate)")
+                        }
                     }
                 }
                 

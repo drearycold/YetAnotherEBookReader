@@ -350,6 +350,7 @@ struct LibraryInfoBookListView: View {
                     HStack {
                         Text("\(book.authorsDescriptionShort)")
                         Spacer()
+                        Text(book.lastModifiedByLocale)
                     }
                     
                     HStack {

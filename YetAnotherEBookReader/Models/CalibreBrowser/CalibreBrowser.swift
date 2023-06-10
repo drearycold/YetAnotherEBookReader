@@ -1316,18 +1316,37 @@ class CalibreLibrarySearchManager: ObservableObject {
         formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
         formatter.timeZone = .current
         
+        let dateFormatter = ISO8601DateFormatter()
+        let dateFormatter2 = ISO8601DateFormatter()
+        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+        
         self.service.modelData.calibreUpdatedSubject.receive(on: cacheRealmQueue)
             .compactMap({ calibreUpdatedSignal -> (library: CalibreLibrary, lastModified: Date)? in
                 switch calibreUpdatedSignal {
                 case .library(let library):
-                    guard let bookMostRecentObj = self.cacheRealm.objects(CalibreBookRealm.self)
+                    let result = self.cacheRealm.objects(CalibreBookRealm.self)
                         .where({
                             $0.libraryName == library.name
                             &&
                             $0.serverUUID == library.server.uuid.uuidString
                         })
-                        .sorted(byKeyPath: "lastModified", ascending: false).first,
+                        .sorted(byKeyPath: "lastModified", ascending: false)
+                    
+                    let resultSync = result
+                        .where { $0.lastSynced < $0.lastModified }
+                    
+                    print("\(#function) library name=\(library.name) result=\(result.count) sync=\(resultSync.count)")
+                    
+                    if resultSync.count > 0 {
+                        let ids: [Int32] = resultSync.map { $0.idInLib }
+                        ids.chunks(size: 256).forEach {
+                            self.metadataRequestSubject.send(.init(library: library, books: $0, getAnnotations: false))
+                        }
+                    }
+                    
+                    guard let bookMostRecentObj = result.first,
                           bookMostRecentObj.lastModified < library.lastModified
+                          
                     else {
                        return nil
                     }
@@ -1343,7 +1362,7 @@ class CalibreLibrarySearchManager: ObservableObject {
 
                 let lastModifiedStr = formatter.string(from: lastModified)
                 let filter = "last_modified:\">\(lastModifiedStr)\""
-                
+
                 return self.service.syncLibraryPublisher(
                     resultPrev: .init(
                         request: .init(
@@ -1356,50 +1375,34 @@ class CalibreLibrarySearchManager: ObservableObject {
                     filter: filter
                 )
             }
-//            .flatMap { result -> AnyPublisher<CalibreBooksTask, Never> in
-//                let request = CalibreBooksMetadataRequest (
-//                    library: result.request.library,
-//                    books: result.list.book_ids,
-//                    getAnnotations: false
-//                )
-//                let task = CalibreBooksTask(request: request)
-//                return self.service.getBooksMetadata(task: task)
-//                    .replaceError(with: task)
-//                    .eraseToAnyPublisher()
-//            }
+            .receive(on: cacheRealmQueue)
             .sink(receiveValue: { result in
-                if result.list.book_ids.count > 2000 {
-                    guard let initialBookId = result.list.book_ids.first,
-                          var initialLastModified = result.list.data.last_modified[initialBookId.description]
-                    else {
-                        return
-                    }
-                    var total = 0
-                    let partialList: [Int32] = result.list.book_ids.prefix { bookId in
-                        guard let lastModified = result.list.data.last_modified[bookId.description]
-                        else {
-                            return false
-                        }
-                        
-                        if lastModified.v <= initialLastModified.v {
-                            total += 1
-                            return true
-                        }
-                        
-                        guard total < 1024
-                        else {
-                            return false
-                        }
-                        
-                        initialLastModified = lastModified
-                        total += 1
-                        return true
-                    }
-                    
-                    self.metadataRequestSubject.send(.init(library: result.request.library, books: partialList, getAnnotations: false))
-                } else {
-                    self.metadataRequestSubject.send(.init(library: result.request.library, books: result.list.book_ids, getAnnotations: false))
+                guard result.list.book_ids.isEmpty == false
+                else {
+                    return
                 }
+
+                let library = result.request.library
+                let serverUUID = library.server.uuid.uuidString
+
+                result.list.book_ids.chunks(size: 1024).forEach { ids in
+                    try! self.cacheRealm.write {
+                        ids.forEach { id in
+                            let idStr = id.description
+                            guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
+                                  let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
+                            else {
+                                return
+                            }
+
+                            let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: idStr)
+
+                            self.cacheRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)?.lastModified = lastModified
+                        }
+                    }
+                }
+
+                self.service.modelData.calibreUpdatedSubject.send(.library(library))
             })
             .store(in: &cancellables)
     }

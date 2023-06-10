@@ -273,7 +273,7 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     }
     
     override static func indexedProperties() -> [String] {
-        return ["serverUrl", "serverUsername", "libraryName", "id", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
+        return ["serverUrl", "serverUsername", "libraryName", "idInLib", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
     }
 }
 
