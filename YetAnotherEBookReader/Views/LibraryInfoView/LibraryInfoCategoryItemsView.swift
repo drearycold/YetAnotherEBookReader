@@ -50,6 +50,8 @@ struct LibraryInfoCategoryItemsView: View {
                                 viewModel.sortCriteria.by = .Modified
                                 viewModel.sortCriteria.ascending = false
                             }
+                            
+                            resetToFirstPage()
                         }
                         .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
                 } label: {
@@ -63,10 +65,11 @@ struct LibraryInfoCategoryItemsView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
-                let unifiedSearch = unifiedSearches.where({
-                $0._id == objectId
-            }).first {
+//            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
+//                let unifiedSearch = unifiedSearches.where({
+//                $0._id == objectId
+//            }).first {
+            if let unifiedSearch = viewModel.unifiedSearchObject {
 //                if unifiedSearch.books.isEmpty {
 //                    Text("Found 0 books")
 //                } else {
@@ -85,6 +88,19 @@ struct LibraryInfoCategoryItemsView: View {
         viewModel.filterCriteriaLibraries.removeAll()
     }
     
+    func resetToFirstPage() {
+        guard let cacheObj = viewModel.retrieveUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
+        else {
+            return
+            
+        }
+        
+        if cacheObj.realm == nil {
+            $unifiedSearches.append(cacheObj)
+        }
+        
+        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
+    }
 }
 
 struct LibraryInfoCategoryItemsView_Previews: PreviewProvider {

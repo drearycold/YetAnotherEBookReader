@@ -142,22 +142,42 @@ class YabrShelfDataModel: ObservableObject {
             }
             
             category.inShelfBookIds.insert(inShelfId)
+            categories.insert(category)
             
-            guard let unifiedSearchObjectId = searchManager.getUnifiedResultObjectIdForSwiftUI(
-                libraryIds: [],
-                searchCriteria: .init(
+//            guard let unifiedSearchObjectId = searchManager.getUnifiedResultObjectIdForSwiftUI(
+//                libraryIds: [],
+//                searchCriteria: .init(
+//                    searchString: "",
+//                    sortCriteria: .init(),
+//                    filterCriteriaCategory: ["Authors" : Set([categoryName])]
+//                )
+//            )
+//            else {
+//                return
+//            }
+//
+//            guard let unifiedSearchObject = self.realmOnQueue.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: unifiedSearchObjectId)
+//            else {
+//                return
+//            }
+            
+            guard let unifiedSearchObject = searchManager.retrieveUnifiedSearchObject(
+                [],
+                .init(
                     searchString: "",
                     sortCriteria: .init(),
                     filterCriteriaCategory: ["Authors" : Set([categoryName])]
-                )
+                ),
+                realmOnQueue.objects(CalibreUnifiedSearchObject.self)
             )
             else {
                 return
             }
             
-            guard let unifiedSearchObject = self.realmOnQueue.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: unifiedSearchObjectId)
-            else {
-                return
+            if unifiedSearchObject.realm == nil {
+                try! realmOnQueue.write {
+                    realmOnQueue.add(unifiedSearchObject)
+                }
             }
             
             category.unifiedSearchObject = unifiedSearchObject
@@ -185,8 +205,6 @@ class YabrShelfDataModel: ObservableObject {
                 }
                 .store(in: &category.cancellables)
                 
-            categories.insert(category)
-            
             let discoverShelfSection = self.buildShelfModelSection(category: category)
             DispatchQueue.main.async {
                 if discoverShelfSection.sectionShelf.count > 1 {

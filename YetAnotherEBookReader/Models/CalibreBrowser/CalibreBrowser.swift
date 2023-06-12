@@ -276,67 +276,39 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
             }
             
-//            guard cacheObj.books.count <= cacheObj.bookIds.count,
-//                  cacheSearchLibraryObjects[librarySearchKey] == nil
-//            else {
-//                try! cacheRealm.write {
-//                    cacheRealm.delete(cacheObj)
-//                }
-//                return
-//            }
-            
-//            if cacheObj.bookIds.count > cacheObj.books.count {
-//                try! cacheRealm.write {
-//                    cacheObj.bookIds.removeLast(cacheObj.bookIds.count - cacheObj.books.count)
-//                }
-//            }
-            
             cacheSearchLibraryObjects[librarySearchKey] = cacheObj._id
             
             registerCacheSearchChangeReceiver(librarySearchKey: librarySearchKey, cacheObj: cacheObj)
         }
         
-        cacheRealm.objects(CalibreUnifiedSearchObject.self).forEach { cacheObj in
-            let mergedKey = SearchCriteriaMergedKey(
-                libraryIds: Set(cacheObj.libraryIds),
-                criteria: .init(
-                    searchString: cacheObj.search,
-                    sortCriteria: .init(by: cacheObj.sortBy, ascending: cacheObj.sortAsc),
-                    filterCriteriaCategory: cacheObj.filters.reduce(into: [:], { partialResult, filter in
-                        if let values = filter.value?.values {
-                            partialResult[filter.key] = Set(values)
-                        }
-                    })
-                )
-            )
-            
-            var idMap: [String: Int] = [:]
-            for index in cacheObj.books.startIndex..<cacheObj.books.endIndex {
-                let book = cacheObj.books[index]
-                
-                idMap[book.primaryKey!] = index
-//                print("\(#function) mergedKey=\(mergedKey) primaryKey=\(book.primaryKey!) title=\(book.title) index=\(index)")
-            }
-            
-            if cacheSearchUnifiedRuntime[mergedKey] == nil {
-                cacheSearchUnifiedRuntime[mergedKey] = .init()
-            }
-            
-            if idMap.count != cacheObj.books.count {
-                try! cacheRealm.write {
-                    cacheObj.resetList()
-                }
-                cacheSearchUnifiedRuntime[mergedKey]?.indexMap = [:]
-            } else {
-                cacheSearchUnifiedRuntime[mergedKey]?.indexMap = idMap
-            }
-            
-            assert(cacheSearchUnifiedObjects[mergedKey] == nil)
-            
-            cacheSearchUnifiedObjects[mergedKey] = cacheObj._id
-            
-            registerCacheUnifiedChangeReceiver(unifiedKey: mergedKey, cacheObj: cacheObj)
+        try! cacheRealm.write {
+            cacheRealm.delete(cacheRealm.objects(CalibreUnifiedSearchObject.self))
+            cacheRealm.delete(cacheRealm.objects(CalibreUnifiedOffsets.self))
         }
+        
+        cacheRealm.objects(CalibreUnifiedSearchObject.self).changesetPublisher
+            .receive(on: cacheRealmQueue)
+            .sink { changes in
+                switch changes {
+                case .initial(let result):
+                    result.forEach {
+                        self.registerCacheUnifiedSearchObject($0)
+                    }
+                case .update(let result, deletions: _, insertions: let insertions, modifications: _):
+                    insertions.forEach {
+                        let object = result[$0]
+                        
+                        self.registerCacheUnifiedSearchObject(object, requestMerge: true)
+                    }
+                case .error(_):
+                    break
+                }
+            }
+            .store(in: &cancellables)
+        
+//        cacheRealm.objects(CalibreUnifiedSearchObject.self).forEach { cacheObj in
+//            registerCacheUnifiedSearchObject(cacheObj)
+//        }
         
         cacheRealm.objects(CalibreLibraryCategoryObject.self).forEach { cacheObj in
             let categoryKey = CalibreLibraryCategoryKey(libraryId: cacheObj.libraryId, categoryName: cacheObj.categoryName)
@@ -707,6 +679,92 @@ class CalibreLibrarySearchManager: ObservableObject {
             }
             .store(in: &cancellables)
          */
+    }
+    
+    fileprivate func registerCacheUnifiedSearchObject(_ cacheObj: CalibreUnifiedSearchObject, requestMerge: Bool = false) {
+        let mergedKey = SearchCriteriaMergedKey(
+            libraryIds: Set(cacheObj.libraryIds),
+            criteria: .init(
+                searchString: cacheObj.search,
+                sortCriteria: .init(by: cacheObj.sortBy, ascending: cacheObj.sortAsc),
+                filterCriteriaCategory: cacheObj.filters.reduce(into: [:], { partialResult, filter in
+                    if let values = filter.value?.values {
+                        partialResult[filter.key] = Set(values)
+                    }
+                })
+            )
+        )
+        
+        assert(cacheSearchUnifiedObjects[mergedKey] == nil)
+        
+        cacheSearchUnifiedObjects[mergedKey] = cacheObj._id
+        
+        var idMap: [String: Int] = [:]
+        for index in cacheObj.books.startIndex..<cacheObj.books.endIndex {
+            let book = cacheObj.books[index]
+            
+            idMap[book.primaryKey!] = index
+            //                print("\(#function) mergedKey=\(mergedKey) primaryKey=\(book.primaryKey!) title=\(book.title) index=\(index)")
+        }
+        
+        if cacheSearchUnifiedRuntime[mergedKey] == nil {
+            cacheSearchUnifiedRuntime[mergedKey] = .init()
+        }
+        
+        if idMap.count != cacheObj.books.count {
+            try! cacheRealm.write {
+                cacheObj.resetList()
+            }
+            cacheSearchUnifiedRuntime[mergedKey]?.indexMap = [:]
+        } else {
+            cacheSearchUnifiedRuntime[mergedKey]?.indexMap = idMap
+        }
+        
+        registerCacheUnifiedChangeReceiver(unifiedKey: mergedKey, cacheObj: cacheObj)
+        
+        guard requestMerge else { return }
+        
+        cacheRealmQueue.asyncAfter(deadline: .now() + 5.0) { [self] in
+            if cacheObj.limitNumber == 0 {
+                try! cacheRealm.write {
+                    cacheObj.limitNumber = 100
+                }
+            }
+            
+            if cacheObj.unifiedOffsets.keys.isEmpty {
+                searchMergerRequestSubject.send(mergedKey)
+                return
+            }
+            
+            if cacheObj.totalNumber > 0,
+               cacheObj.books.isEmpty {
+                searchMergerRequestSubject.send(mergedKey)
+                return
+            }
+            
+            var merged = true
+            cacheObj.unifiedOffsets.forEach {
+                //                print("\(#function) \($0.key) \($0.value?.description ?? "nil")")
+                guard merged,
+                      let library = self.service.modelData.calibreLibraries[$0.key],
+                      library.hidden == false,
+                      library.server.removed == false,
+                      let unifiedOffset = $0.value,
+                      unifiedOffset.searchObjectSource.isEmpty == false,
+                      let sourceObjOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
+                      let sourceObj = sourceObjOpt
+                else {
+                    merged = false
+                    return
+                }
+            }
+            
+            guard merged
+            else {
+                searchMergerRequestSubject.send(mergedKey)
+                return
+            }
+        }
     }
     
     func registerCacheUnifiedChangeReceiver(unifiedKey: SearchCriteriaMergedKey, cacheObj: CalibreUnifiedSearchObject) {
@@ -1521,27 +1579,17 @@ class CalibreLibrarySearchManager: ObservableObject {
      merged search results
      */
     
-    func getUnifiedResult(libraryIds: Set<String>, searchCriteria: SearchCriteria) -> CalibreUnifiedSearchObject {
-        let key = SearchCriteriaMergedKey(libraryIds: libraryIds, criteria: searchCriteria)
-        
-        if let cacheObjId = cacheSearchUnifiedObjects[key],
-           let cacheObj = cacheRealm.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: cacheObjId) {
-            return cacheObj
-        } else {
-            return initCacheUnifiedObject(key: key, requestMerge: true)
-        }
-    }
-    
-    func getUnifiedResultObjectIdForSwiftUI(libraryIds: Set<String>, searchCriteria: SearchCriteria, requestMerge: Bool = true) -> ObjectId? {
+    func getUnifiedResultObjectIdForSwiftUI(libraryIds: Set<String>, searchCriteria: SearchCriteria, createIfNotExist: Bool = true, requestMerge: Bool = true) -> ObjectId? {
         let key = SearchCriteriaMergedKey(libraryIds: libraryIds, criteria: searchCriteria)
         
         var objectId: ObjectId?
         cacheRealmQueue.sync {
 //            let cacheObj =
             
-            objectId = cacheSearchUnifiedObjects[key] ?? initCacheUnifiedObject(key: key, requestMerge: false)._id
+            objectId = cacheSearchUnifiedObjects[key] ?? (createIfNotExist ?  initCacheUnifiedObject(key: key, requestMerge: false)._id : nil)
             
-            guard let object = cacheRealm.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: objectId)
+            guard let objectId = objectId,
+                  let object = cacheRealm.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: objectId)
             else {
                 objectId = nil
                 return
@@ -1595,6 +1643,61 @@ class CalibreLibrarySearchManager: ObservableObject {
         
         return objectId
     }
+    
+    func retrieveUnifiedSearchObject(_ criteriaLibraries: Set<String>, _ searchCriteria: SearchCriteria, _ unifiedSearches: Results<CalibreUnifiedSearchObject>) -> CalibreUnifiedSearchObject? {
+        if let objectId = getUnifiedResultObjectIdForSwiftUI(libraryIds: criteriaLibraries, searchCriteria: searchCriteria, createIfNotExist: false) {
+            return unifiedSearches.where({ $0._id == objectId }).first
+        }
+        
+        let existingObjs = unifiedSearches.where {
+            $0.search == searchCriteria.searchString
+            &&
+            $0.sortBy == searchCriteria.sortCriteria.by
+            &&
+            $0.sortAsc == searchCriteria.sortCriteria.ascending
+        }.filter({ object in
+            guard criteriaLibraries.count == object.libraryIds.count,
+                  criteriaLibraries == Set(object.libraryIds)
+            else {
+                return false
+            }
+            
+            guard object.filters.count == searchCriteria.filterCriteriaCategory.count,
+                  object.filters.allSatisfy({ filterEntry in
+                      guard let filterValues = filterEntry.value,
+                            let searchFilterValues = searchCriteria.filterCriteriaCategory[filterEntry.key],
+                            filterValues.values.count == searchFilterValues.count
+                      else {
+                          return false
+                      }
+                      
+                      return searchFilterValues == Set(filterValues.values)
+                  })
+            else {
+                return false
+            }
+            
+            return true
+        })
+        
+        if let cacheObj = existingObjs.first {
+            return cacheObj
+        }
+        
+        let cacheObj = CalibreUnifiedSearchObject()
+        cacheObj.search = searchCriteria.searchString
+        cacheObj.sortBy = searchCriteria.sortCriteria.by
+        cacheObj.sortAsc = searchCriteria.sortCriteria.ascending
+        cacheObj.filters = searchCriteria.filterCriteriaCategory.reduce(into: Map<String, CalibreLibrarySearchFilterValues?>()) { partialResult, entry in
+            let values = CalibreLibrarySearchFilterValues()
+            values.values.insert(objectsIn: entry.value)
+            partialResult[entry.key] = values
+        }
+        cacheObj.libraryIds.insert(objectsIn: criteriaLibraries)
+        
+        return cacheObj
+    }
+    
     
     /*
     private func mergeBookLists(mergedKey: SearchCriteriaMergedKey, mergedObj: CalibreUnifiedSearchObject, searchResults: [String: CalibreLibrarySearchObject]) {

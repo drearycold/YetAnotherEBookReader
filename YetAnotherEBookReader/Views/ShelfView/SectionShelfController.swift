@@ -264,13 +264,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         ], animated: true)
         
         
-        self.snaptshotQueue.async {
-            var snapshot = self.buildSnapshot(shelf: self.modelData.shelfDataModel.discoverShelf)
-            
-            self.fillSnapshotToScreen(snapshot: &snapshot)
-            self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
-        }
-        
         ///
         /*
         modelData.librarySearchManager.cacheRealmQueue.sync {
@@ -347,6 +340,13 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
             }
             .store(in: &cancellables)
+        
+        self.snaptshotQueue.async {
+            var snapshot = self.buildSnapshot(shelf: self.modelData.shelfDataModel.discoverShelf)
+            
+            self.fillSnapshotToScreen(snapshot: &snapshot)
+            self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
+        }
     }
     
     func buildSnapshot(shelf: [String: ShelfModelSection]) -> NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel> {

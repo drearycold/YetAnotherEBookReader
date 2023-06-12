@@ -44,7 +44,7 @@ extension LibraryInfoView {
             )
         }
         
-        @Published var unifiedSearchObject: CalibreUnifiedSearchObject?
+        @Published private(set) var unifiedSearchObject: CalibreUnifiedSearchObject?
         
         var libraryUpdateCancellable: AnyCancellable?
         
@@ -61,37 +61,51 @@ extension LibraryInfoView {
         
         let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
         
-        func updateUnifiedSearchObject(modelData: ModelData, unifiedSearches: Results<CalibreUnifiedSearchObject>) {
+        func retrieveUnifiedSearchObject(modelData: ModelData, unifiedSearches: Results<CalibreUnifiedSearchObject>) -> CalibreUnifiedSearchObject? {
             let searchCriteria = currentLibrarySearchCriteria
-            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: filterCriteriaLibraries, searchCriteria: searchCriteria) {
-                unifiedSearchObject = unifiedSearches.where { $0._id == objectId }.first
-            } else {
-                unifiedSearchObject = nil
-            }
+            let criteriaLibraries = filterCriteriaLibraries
             
+            return modelData.librarySearchManager.retrieveUnifiedSearchObject(criteriaLibraries, searchCriteria, unifiedSearches)
+        }
+        
+        func setUnifiedSearchObject(modelData: ModelData, unifiedSearchObject: CalibreUnifiedSearchObject?) {
             libraryUpdateCancellable?.cancel()
             libraryUpdateCancellable = nil
             
-            if let unifiedSearchObject = unifiedSearchObject {
-                libraryUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
-                    .sink(receiveValue: { calibreUpdatedSignal in
-                        switch calibreUpdatedSignal {
-                        case .shelf:
-                            break
-                        case .deleted(_):
-                            break
-                        case .book(_):
-                            break
-                        case .library(let library):
-                            if unifiedSearchObject.unifiedOffsets[library.id] != nil {
-                                modelData.librarySearchManager.refreshSearchResult(libraryIds: [library.id], searchCriteria: searchCriteria)
-                            }
-                            break
-                        case .server(_):
-                            break
-                        }
-                    })
+            self.unifiedSearchObject = unifiedSearchObject
+            
+            guard let unifiedSearchObject = unifiedSearchObject
+            else {
+                return
             }
+            
+            let searchCriteria = SearchCriteria(
+                searchString: unifiedSearchObject.search,
+                sortCriteria: .init(by: unifiedSearchObject.sortBy, ascending: unifiedSearchObject.sortAsc),
+                filterCriteriaCategory: unifiedSearchObject.filters.reduce(into: [:], { partialResult, filter in
+                    if let values = filter.value?.values {
+                        partialResult[filter.key] = Set(values)
+                    }
+                })
+            )
+            libraryUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
+                .sink(receiveValue: { calibreUpdatedSignal in
+                    switch calibreUpdatedSignal {
+                    case .shelf:
+                        break
+                    case .deleted(_):
+                        break
+                    case .book(_):
+                        break
+                    case .library(let library):
+                        if unifiedSearchObject.unifiedOffsets[library.id] != nil {
+                            modelData.librarySearchManager.refreshSearchResult(libraryIds: [library.id], searchCriteria: searchCriteria)
+                        }
+                        break
+                    case .server(_):
+                        break
+                    }
+                })
         }
     }
 }

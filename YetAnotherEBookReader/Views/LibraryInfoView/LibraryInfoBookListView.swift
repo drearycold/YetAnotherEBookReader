@@ -556,7 +556,17 @@ struct LibraryInfoBookListView: View {
     }
     
     func resetToFirstPage() {
-        viewModel.updateUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
+        guard let cacheObj = viewModel.retrieveUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
+        else {
+            return
+            
+        }
+        
+        if cacheObj.realm == nil {
+            $unifiedSearches.append(cacheObj)
+        }
+        
+        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
     }
     
     func expandSearchUnifiedBookLimit() {

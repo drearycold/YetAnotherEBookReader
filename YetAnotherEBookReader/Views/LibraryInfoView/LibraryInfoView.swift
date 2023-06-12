@@ -55,16 +55,6 @@ struct LibraryInfoView: View {
     var body: some View {
         NavigationView {
             List {
-//                Text("realm unifiedSearches \(unifiedSearches.count)")
-//                ForEach(unifiedSearches) { unifiedSearchObject in
-//                    NavigationLink {
-//                        LibraryInfoBookListView(unifiedSearchObject: unifiedSearchObject)
-//                    } label: {
-//                        Text(unifiedSearchObject.parameters)
-//                    }
-//                    .isDetailLink(false)
-//                }
-                
                 combinedListView()
                 
                 if unifiedCategories.isEmpty == false {
@@ -175,7 +165,17 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        viewModel.updateUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
+        guard let cacheObj = viewModel.retrieveUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
+        else {
+            return
+            
+        }
+        
+        if cacheObj.realm == nil {
+            $unifiedSearches.append(cacheObj)
+        }
+        
+        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
     }
     
     func resetSearchCriteria() {
