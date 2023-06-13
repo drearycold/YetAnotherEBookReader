@@ -226,7 +226,7 @@ struct LibraryInfoBookListView: View {
             }
             
             Button {
-                modelData.librarySearchManager.refreshSearchResult(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
+                modelData.librarySearchManager.refreshSearchResults(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
@@ -610,16 +610,20 @@ struct LibraryInfoBookListView: View {
                     HStack {
                         Text("\(unifiedEntry.key) \(unifiedEntry.value?.description ?? "N/A")")
                     }
-                    if let searchObj = unifiedEntry.value?.searchObject {
+                    if let searchObj = unifiedEntry.value?.searchObject,
+                       let library = modelData.calibreLibraries[searchObj.libraryId] {
                         ForEach(searchObj.sources.sorted(by: { $0.key < $1.key }), id: \.key) { searchSourceEntry in
                             HStack {
-                                Text(searchSourceEntry.key)
+                                Text(library.name)
+                                Text("\(library.lastModified)")
                                 Spacer()
                                 Text(searchSourceEntry.value?.description ?? "N/A")
                             }
                             .tag(searchObj.libraryId + "|" + searchSourceEntry.key)
                         }
                         .padding([.leading, .trailing], 8)
+                    } else {
+                        Text("Missing searchObj & Library")
                     }
                 }
             } else {

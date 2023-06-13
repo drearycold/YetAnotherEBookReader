@@ -99,7 +99,7 @@ extension LibraryInfoView {
                         break
                     case .library(let library):
                         if unifiedSearchObject.unifiedOffsets[library.id] != nil {
-                            modelData.librarySearchManager.refreshSearchResult(libraryIds: [library.id], searchCriteria: searchCriteria)
+                            modelData.librarySearchManager.refreshSearchResults(libraryIds: [library.id], searchCriteria: searchCriteria)
                         }
                         break
                     case .server(_):

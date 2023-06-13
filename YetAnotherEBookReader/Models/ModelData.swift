@@ -2204,20 +2204,28 @@ final class ModelData: ObservableObject {
                 return booksMetadata
             }
             .receive(on: DispatchQueue.main)
-            .map { booksMetadata -> CalibreSyncLibraryBooksMetadata in
-                var library = booksMetadata.library
+            .map { booksMetadata -> (booksMetadata: CalibreSyncLibraryBooksMetadata, library: CalibreLibrary?) in
+                let library = booksMetadata.library
+                var libraryUpdated: CalibreLibrary? = nil
                 
                 switch booksMetadata.action {
                 case let .complete(lastModified, columnInfos):
-                    if columnInfos.isEmpty == false {
-                        library.customColumnInfos = columnInfos
+                    if columnInfos.isEmpty == false,
+                       library.customColumnInfos != columnInfos {
+                        if libraryUpdated == nil {
+                            libraryUpdated = library
+                        }
+                        libraryUpdated!.customColumnInfos = columnInfos
                     }
-                    if let lastModified = lastModified {
-                        library.lastModified = lastModified
+                    if let lastModified = lastModified,
+                       library.lastModified != lastModified {
+                        if libraryUpdated == nil {
+                            libraryUpdated = library
+                        }
+                        libraryUpdated!.lastModified = lastModified
                     }
                     
                     self.calibreLibraries[library.id] = library
-                    try? self.updateLibraryRealm(library: library, realm: self.realm)
                     
                     self.librarySyncStatus[library.id]?.isSync = false
                     self.librarySyncStatus[library.id]?.cnt = booksMetadata.bookCount
@@ -2232,8 +2240,16 @@ final class ModelData: ObservableObject {
                     break
                 }
                 
+                return (booksMetadata, libraryUpdated)
+            }
+            .receive(on: ModelData.SaveBooksMetadataRealmQueue)
+            .map { booksMetadata, library -> CalibreSyncLibraryBooksMetadata in
+                if let library = library {
+                    try! self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
+                }
                 return booksMetadata
             }
+            .receive(on: DispatchQueue.main)
             .sink { booksMetadata in
                 let library = booksMetadata.library
                 

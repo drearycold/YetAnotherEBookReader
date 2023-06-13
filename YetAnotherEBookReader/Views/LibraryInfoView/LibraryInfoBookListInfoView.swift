@@ -85,7 +85,7 @@ struct LibraryInfoBookListInfoView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        modelData.librarySearchManager.refreshSearchResult(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
+                        modelData.librarySearchManager.refreshSearchResults(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
                         
                         presenting = false
                     } label: {
