@@ -479,6 +479,12 @@ final class ModelData: ObservableObject {
                         newObject?["_id"] = ObjectId.generate()
                     }
                 }
+                
+                if oldSchemaVersion < 110 {
+                    migration.enumerateObjects(ofType: CalibreUnifiedCategoryObject.className()) { oldObject, newObject in
+                        newObject?["search"] = ""
+                    }
+                }
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize

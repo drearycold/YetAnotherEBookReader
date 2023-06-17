@@ -1650,6 +1650,11 @@ struct CalibreLibraryCategoryKey: Hashable {
     let categoryName: String
 }
 
+struct CalibreUnifiedCategoryKey: Hashable {
+    let categoryName: String
+    let search: String
+}
+
 struct CalibreLibraryCategoryValue {
     var category: CalibreLibraryCategory
     var reqId: Int

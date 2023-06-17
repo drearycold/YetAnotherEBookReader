@@ -46,7 +46,7 @@ extension LibraryInfoView {
         
         @Published private(set) var unifiedSearchObject: CalibreUnifiedSearchObject?
         
-        var libraryUpdateCancellable: AnyCancellable?
+        var unifiedSearchUpdateCancellable: AnyCancellable?
         
         //category filters
         @Published var categoriesSelected: String? = nil
@@ -59,18 +59,13 @@ extension LibraryInfoView {
         
         @Published var categoryFilterString: String = ""
         
-        let categoryItemsTooLong = ["__TOO_LONG__CATEGORY_LIST__"]
+        @Published private(set) var unifiedCategoryObject: CalibreUnifiedCategoryObject?
         
-        func retrieveUnifiedSearchObject(modelData: ModelData, unifiedSearches: Results<CalibreUnifiedSearchObject>) -> CalibreUnifiedSearchObject? {
-            let searchCriteria = currentLibrarySearchCriteria
-            let criteriaLibraries = filterCriteriaLibraries
-            
-            return modelData.librarySearchManager.retrieveUnifiedSearchObject(criteriaLibraries, searchCriteria, unifiedSearches)
-        }
+        var unifiedCategoryUpdateCancellable: AnyCancellable?
         
         func setUnifiedSearchObject(modelData: ModelData, unifiedSearchObject: CalibreUnifiedSearchObject?) {
-            libraryUpdateCancellable?.cancel()
-            libraryUpdateCancellable = nil
+            unifiedSearchUpdateCancellable?.cancel()
+            unifiedSearchUpdateCancellable = nil
             
             self.unifiedSearchObject = unifiedSearchObject
             
@@ -88,7 +83,7 @@ extension LibraryInfoView {
                     }
                 })
             )
-            libraryUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
+            unifiedSearchUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
                 .sink(receiveValue: { calibreUpdatedSignal in
                     switch calibreUpdatedSignal {
                     case .shelf:
@@ -106,6 +101,32 @@ extension LibraryInfoView {
                         break
                     }
                 })
+        }
+        
+        func setUnifiedCategoryObject(_ modelData: ModelData, _ unifiedCategoryObject: CalibreUnifiedCategoryObject?) {
+            unifiedCategoryUpdateCancellable?.cancel()
+            unifiedCategoryUpdateCancellable = nil
+            
+            self.unifiedCategoryObject = unifiedCategoryObject
+            
+            guard let unifiedCategoryObject = unifiedCategoryObject
+            else {
+                return
+            }
+            
+            self.unifiedCategoryUpdateCancellable =  modelData.realm.objects(CalibreLibraryCategoryObject.self)
+                .where {
+                    $0.categoryName == unifiedCategoryObject.categoryName
+                }
+                .changesetPublisher(keyPaths: ["items"])
+                .sink { changes in
+                    switch changes {
+                    case .initial(_), .error(_):
+                        break
+                    case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
+                        modelData.librarySearchManager.refreshUnifiedCategoryResult(unifiedCategoryObject.key)
+                    }
+                }
         }
     }
 }

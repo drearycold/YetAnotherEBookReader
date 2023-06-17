@@ -68,10 +68,10 @@ class CalibreLibraryCategoryItemObject: Object, ObjectKeyIdentifiable {
     
     @Persisted(originProperty: "items") var assignee: LinkingObjects<CalibreLibraryCategoryObject>
     
-    @Persisted var name: String
+    @Persisted(indexed: true) var name: String
     @Persisted var averageRating: Double
     @Persisted var count: Int
-    @Persisted var url: String
+    @Persisted(indexed: true) var url: String
 }
 
 class CalibreUnifiedCategoryItemObject: Object, ObjectKeyIdentifiable {
@@ -79,8 +79,8 @@ class CalibreUnifiedCategoryItemObject: Object, ObjectKeyIdentifiable {
     
     @Persisted(originProperty: "items") var assignee: LinkingObjects<CalibreUnifiedCategoryObject>
     
-    @Persisted var categoryName: String
-    @Persisted var name: String
+    @Persisted(indexed: true) var categoryName: String
+    @Persisted(indexed: true) var name: String
     @Persisted var averageRating: Double
     @Persisted var count: Int
     
@@ -103,11 +103,16 @@ class CalibreLibraryCategoryObject: Object, ObjectKeyIdentifiable {
 class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
-    @Persisted var categoryName: String
+    @Persisted(indexed: true) var categoryName: String
+    @Persisted(indexed: true) var search: String
     
     @Persisted var totalNumber: Int
     
     @Persisted var items: List<CalibreUnifiedCategoryItemObject>
+    
+    var key: CalibreUnifiedCategoryKey {
+        .init(categoryName: categoryName, search: search)
+    }
 }
 
 class CalibreUnifiedOffsets: Object {

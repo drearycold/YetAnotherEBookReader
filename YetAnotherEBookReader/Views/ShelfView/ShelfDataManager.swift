@@ -54,6 +54,8 @@ class YabrShelfDataModel: ObservableObject {
     
     let discoverShelfSubject = PassthroughSubject<[String: ShelfModelSection], Never>()
     
+    let addToShelfSubject = PassthroughSubject<CalibreBookRealm, Never>()
+    
     var cancellables: Set<AnyCancellable> = []
     
     let dispatchQueue = DispatchQueue(label: "shelf-queue")
@@ -76,14 +78,16 @@ class YabrShelfDataModel: ObservableObject {
                         results.where({
                             $0.inShelf == true
                         })
-                        .forEach(self.addToShelf(book:))
+                        .forEach {
+                            self.addToShelfSubject.send($0)
+                        }
                         break
                     case .update(let results, deletions: _, insertions: _, modifications: let modifications):
                         modifications
                             .map { results[$0] }
                             .forEach {
                                 if $0.inShelf {
-                                    self.addToShelf(book: $0)
+                                    self.addToShelfSubject.send($0)
                                 } else {
                                     self.removeFromShelf(book: $0)
                                 }
@@ -94,6 +98,11 @@ class YabrShelfDataModel: ObservableObject {
                     }
                 }
                 .store(in: &cancellables)
+            
+            addToShelfSubject.receive(on: dispatchQueue)
+                .sink { book in
+                    self.addToShelf(book: book)
+                }.store(in: &cancellables)
         }
         
 //        service.modelData.$booksInShelf
@@ -161,7 +170,7 @@ class YabrShelfDataModel: ObservableObject {
 //                return
 //            }
             
-            guard let unifiedSearchObject = searchManager.retrieveUnifiedSearchObject(
+            let unifiedSearchObject = searchManager.retrieveUnifiedSearchObject(
                 [],
                 .init(
                     searchString: "",
@@ -170,9 +179,6 @@ class YabrShelfDataModel: ObservableObject {
                 ),
                 realmOnQueue.objects(CalibreUnifiedSearchObject.self)
             )
-            else {
-                return
-            }
             
             if unifiedSearchObject.realm == nil {
                 try! realmOnQueue.write {
@@ -295,20 +301,27 @@ extension ModelData {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
         calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: DispatchQueue.main)
-            .map { signals -> [(key: String, value: CalibreBook)] in
-                self.booksInShelf
-                    .sorted {
-                        max($0.value.lastModified,
+            .receive(on: queue)
+            .map { signals -> [(key: String, value: CalibreBook, ts: Date)] in
+                self.booksInShelf.map {
+                    (
+                        key: $0.key,
+                        value: $0.value,
+                        ts: max(
+                            $0.value.lastModified,
                             $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
-                        ) > max(
-                            $1.value.lastModified,
-                            $1.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $1.value.lastUpdated
                         )
-                    }
+                    )
+                }
             }
+            .map { books -> [(key: String, value: CalibreBook, ts: Date)] in
+                books.sorted {
+                    $0.ts > $1.ts
+                }
+            }
+            .receive(on: DispatchQueue.main)
             .map { books -> [(key: String, value: CalibreBook, info: ReaderInfo)] in
-                books.map { inShelfId, book -> (key: String, value: CalibreBook, info: ReaderInfo) in
+                books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
                     (inShelfId, book, self.prepareBookReading(book: book))
                 }
             }

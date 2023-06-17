@@ -18,47 +18,65 @@ struct LibraryInfoCategoryItemsView: View {
     @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
     
     var body: some View {
-        List {
-            ForEach(unifiedCategory.items.filter({ viewModel.categoryFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(viewModel.categoryFilter) })) { categoryItem in
-                NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
-                    bookListView()
-                        .onAppear {
-                            if viewModel.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
-                                return
-                            }
-                            
-                            resetSearchCriteria()
-                            
-                            viewModel.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
-                            
-                            if viewModel.categoriesSelected == "Series" {
-                                if viewModel.sortCriteria.by != .SeriesIndex {
-                                    viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+        ZStack {
+            List {
+                ForEach(unifiedCategory.items.filter({ viewModel.categoryFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(viewModel.categoryFilter) })) { categoryItem in
+                    NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
+                        bookListView()
+                            .onAppear {
+                                if viewModel.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
+                                    return
                                 }
                                 
-                                viewModel.sortCriteria.by = .SeriesIndex
-                                viewModel.sortCriteria.ascending = true
-                            } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
-                                if viewModel.sortCriteria.by != .Publication {
-                                    viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+                                resetSearchCriteria()
+                                
+                                viewModel.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
+                                
+                                if viewModel.categoriesSelected == "Series" {
+                                    if viewModel.sortCriteria.by != .SeriesIndex {
+                                        viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+                                    }
+                                    
+                                    viewModel.sortCriteria.by = .SeriesIndex
+                                    viewModel.sortCriteria.ascending = true
+                                } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
+                                    if viewModel.sortCriteria.by != .Publication {
+                                        viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+                                    }
+                                    
+                                    viewModel.sortCriteria.by = .Publication
+                                    viewModel.sortCriteria.ascending = false
+                                }
+                                else {
+                                    viewModel.sortCriteria.by = .Modified
+                                    viewModel.sortCriteria.ascending = false
                                 }
                                 
-                                viewModel.sortCriteria.by = .Publication
-                                viewModel.sortCriteria.ascending = false
+                                resetToFirstPage()
                             }
-                            else {
-                                viewModel.sortCriteria.by = .Modified
-                                viewModel.sortCriteria.ascending = false
-                            }
-                            
-                            resetToFirstPage()
-                        }
-                        .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
-                } label: {
-                    Text(categoryItem.name)
+                            .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
+                    } label: {
+                        Text(categoryItem.name)
+                    }
+                    .isDetailLink(false)
                 }
-                .isDetailLink(false)
             }
+            
+            if unifiedCategory.items.isEmpty,
+               unifiedCategory.totalNumber > 999 {
+                VStack {
+                    Text("Too many items, please use filter")
+                }
+            }
+               
+        }
+        .toolbar {
+            Button {
+                modelData.librarySearchManager.refreshUnifiedCategoryResult(unifiedCategory.key)
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+            }
+
         }
     }
     
@@ -89,11 +107,11 @@ struct LibraryInfoCategoryItemsView: View {
     }
     
     func resetToFirstPage() {
-        guard let cacheObj = viewModel.retrieveUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
-        else {
-            return
-            
-        }
+        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
+            viewModel.filterCriteriaLibraries,
+            viewModel.currentLibrarySearchCriteria,
+            unifiedSearches
+        )
         
         if cacheObj.realm == nil {
             $unifiedSearches.append(cacheObj)

@@ -165,11 +165,11 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        guard let cacheObj = viewModel.retrieveUnifiedSearchObject(modelData: modelData, unifiedSearches: unifiedSearches)
-        else {
-            return
-            
-        }
+        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
+            viewModel.filterCriteriaLibraries,
+            viewModel.currentLibrarySearchCriteria,
+            unifiedSearches
+        )
         
         if cacheObj.realm == nil {
             $unifiedSearches.append(cacheObj)

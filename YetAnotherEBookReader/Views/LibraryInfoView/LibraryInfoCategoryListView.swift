@@ -17,15 +17,16 @@ struct LibraryInfoCategoryListView: View {
     
     @ObservedResults(CalibreUnifiedCategoryObject.self, sortDescriptor: .init(keyPath: "categoryName")) var unifiedCategories
     
+    @ObservedResults(CalibreUnifiedCategoryObject.self, where: { $0.search == "" }, sortDescriptor: .init(keyPath: "categoryName")) var unifiedCategoriesKeys
+    
     var body: some View {
         Section {
-            ForEach(unifiedCategories) { unifiedCategory in
-                NavigationLink(tag: unifiedCategory.categoryName, selection: $viewModel.categoriesSelected) {
+            ForEach(unifiedCategoriesKeys) { unifiedCategoryKey in
+                NavigationLink(tag: unifiedCategoryKey.categoryName, selection: $viewModel.categoriesSelected) {
 //                NavigationLink {
                     ZStack {
-                        TextField("Filter \(unifiedCategory.categoryName)", text: $viewModel.categoryFilterString, onCommit: {
-//                            modelData.categoryItemListSubject.send(unifiedCategory.categoryName)
-                            
+                        TextField("Filter \(unifiedCategoryKey.categoryName)", text: $viewModel.categoryFilterString, onCommit: {
+                            updateViewModel()
                         })
                         .keyboardType(.webSearch)
                         .padding([.leading, .trailing], 24)
@@ -34,30 +35,36 @@ struct LibraryInfoCategoryListView: View {
                         }
                         HStack {
                             Spacer()
-                            Button(action: {
+                            Button {
                                 viewModel.categoryFilterString = ""
-//                                modelData.categoryItemListSubject.send(unifiedCategory.categoryName)
-                            }) {
+                                updateViewModel()
+                            } label: {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.gray)
-                            }.disabled(viewModel.categoryFilterString.isEmpty)
+                            }
+                            .disabled(viewModel.categoryFilterString.isEmpty)
+                            
                         }.padding([.leading, .trailing], 4)
                     }
                     
                     Divider()
                     
                     ZStack {
-                        LibraryInfoCategoryItemsView(unifiedCategory: unifiedCategory)
-                            .environmentObject(viewModel)
+                        if let unifiedCategory = viewModel.unifiedCategoryObject {
+                            LibraryInfoCategoryItemsView(unifiedCategory: unifiedCategory)
+                                .environmentObject(viewModel)
+                        } else {
+                            Text("Missing List")
+                        }
                     }
-                    .navigationTitle("Category: \(unifiedCategory.categoryName)")
+                    .navigationTitle("Category: \(unifiedCategoryKey.categoryName)")
                     .onAppear {
                         guard let categoryName = viewModel.categoriesSelected,
                               categoryName != viewModel.categoryName
                         else { return }
                         
                         viewModel.categoryFilterString = ""
-//                        modelData.categoryItemListSubject.send(categoryName)
+                        updateViewModel()
                     }
                     .onDisappear {
                         if viewModel.categoriesSelected == nil {
@@ -67,13 +74,13 @@ struct LibraryInfoCategoryListView: View {
                 } label: {
                     #if DEBUG
                     HStack {
-                        Text("\(unifiedCategory.categoryName)")
+                        Text("\(unifiedCategoryKey.categoryName)")
                         Spacer()
-                        Text("\(unifiedCategory.items.count) (\(unifiedCategory.totalNumber))")
+                        Text("\(unifiedCategoryKey.items.count) (\(unifiedCategoryKey.totalNumber))")
                         
                     }
                     #else
-                    Text("\(unifiedCategory.categoryName)")
+                    Text("\(unifiedCategoryKey.categoryName)")
                     #endif
                 }
                 .isDetailLink(false)
@@ -81,6 +88,24 @@ struct LibraryInfoCategoryListView: View {
         } header: {
             Text("Browse by Category")
         }
+    }
+    
+    func updateViewModel() {
+        guard let categoryName = viewModel.categoriesSelected,
+              categoryName.isEmpty == false
+        else {
+            return
+        }
+        
+        viewModel.categoryName = categoryName
+        
+        let object = modelData.librarySearchManager.retrieveUnifiedCategoryObject(viewModel.categoryName, viewModel.categoryFilter, unifiedCategories)
+        
+        if object.realm == nil {
+            $unifiedCategories.append(object)
+        }
+        
+        viewModel.setUnifiedCategoryObject(modelData, object)
     }
 }
 
