@@ -17,7 +17,7 @@ struct LibraryInfoView: View {
     
     @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
     
-    @ObservedResults(CalibreUnifiedCategoryObject.self, where: { $0.items.count > 0 }) var unifiedCategories
+    @ObservedResults(CalibreUnifiedCategoryObject.self, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
     

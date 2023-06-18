@@ -76,7 +76,7 @@ struct LibraryInfoCategoryListView: View {
                     HStack {
                         Text("\(unifiedCategoryKey.categoryName)")
                         Spacer()
-                        Text("\(unifiedCategoryKey.items.count) (\(unifiedCategoryKey.totalNumber))")
+                        Text("\(unifiedCategoryKey.itemsCount) (\(unifiedCategoryKey.items.count)) (\(unifiedCategoryKey.totalNumber))")
                         
                     }
                     #else

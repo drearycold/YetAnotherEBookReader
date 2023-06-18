@@ -483,6 +483,9 @@ final class ModelData: ObservableObject {
                 if oldSchemaVersion < 110 {
                     migration.enumerateObjects(ofType: CalibreUnifiedCategoryObject.className()) { oldObject, newObject in
                         newObject?["search"] = ""
+                        if let items = oldObject?["items"] as? RealmSwift.List<DynamicObject> {
+                            newObject?["itemsCount"] = items.count
+                        }
                     }
                 }
             },

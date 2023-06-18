@@ -107,7 +107,7 @@ class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
     @Persisted(indexed: true) var search: String
     
     @Persisted var totalNumber: Int
-    
+    @Persisted var itemsCount: Int
     @Persisted var items: List<CalibreUnifiedCategoryItemObject>
     
     var key: CalibreUnifiedCategoryKey {

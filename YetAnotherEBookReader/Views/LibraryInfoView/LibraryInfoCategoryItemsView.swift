@@ -20,7 +20,7 @@ struct LibraryInfoCategoryItemsView: View {
     var body: some View {
         ZStack {
             List {
-                ForEach(unifiedCategory.items.filter({ viewModel.categoryFilter.isEmpty || $0.name.localizedCaseInsensitiveContains(viewModel.categoryFilter) })) { categoryItem in
+                ForEach(unifiedCategory.items) { categoryItem in
                     NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
                         bookListView()
                             .onAppear {
@@ -63,6 +63,7 @@ struct LibraryInfoCategoryItemsView: View {
             }
             
             if unifiedCategory.items.isEmpty,
+               unifiedCategory.itemsCount > 999,
                unifiedCategory.totalNumber > 999 {
                 VStack {
                     Text("Too many items, please use filter")

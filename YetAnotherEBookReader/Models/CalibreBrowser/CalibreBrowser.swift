@@ -332,10 +332,15 @@ class CalibreLibrarySearchManager: ObservableObject {
             .sink { [self] changes in
                 switch changes {
                 case .initial(let result):
-                    result.forEach {
-                        cacheCategoryUnifiedObjects[$0.key] = $0
+                    result.forEach { cacheObj in
+                        cacheCategoryUnifiedObjects[cacheObj.key] = cacheObj
                         
-                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: $0)
+                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
+                        
+                        if cacheObj.itemsCount == 0,
+                           cacheObj.totalNumber < 999 {
+                            refreshUnifiedCategoryResult(cacheObj.key)
+                        }
                     }
                 case .update(let result, deletions: let deletions, insertions: let insertions, modifications: let modifications):
                     insertions.forEach {
@@ -343,11 +348,12 @@ class CalibreLibrarySearchManager: ObservableObject {
                         
                         cacheCategoryUnifiedObjects[cacheObj.key] = cacheObj
                         
-                        if cacheObj.items.isEmpty || cacheObj.totalNumber < 999 {
+                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
+                        
+                        if cacheObj.itemsCount == 0,
+                           cacheObj.totalNumber < 999 {
                             refreshUnifiedCategoryResult(cacheObj.key)
                         }
-                        
-                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
                     }
                 case .error(_):
                     break
@@ -433,8 +439,10 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     private func initCacheLibraryCategoryObject(categoryKey: CalibreLibraryCategoryKey) -> CalibreLibraryCategoryObject {
         let cacheObj = CalibreLibraryCategoryObject()
+        
         cacheObj.libraryId = categoryKey.libraryId
         cacheObj.categoryName = categoryKey.categoryName
+        cacheObj.generation = .distantPast
         
         try! cacheRealm.write {
             cacheRealm.add(cacheObj)
@@ -720,13 +728,13 @@ class CalibreLibrarySearchManager: ObservableObject {
                     case .error(_):
                         break
                     case .initial(_):
-//                        count += cacheObj.items.count
+                        count += cacheObj.items.count
                         break
                     case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) deletion count=\(deletions.count)")
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) insertions count=\(insertions.count)")
                         
-                        count += deletions.count + insertions.count
+                        count += deletions.count + insertions.count + modifications.count
                     }
                 }
                 
@@ -1124,11 +1132,23 @@ class CalibreLibrarySearchManager: ObservableObject {
     }
     
     func registerCategoryRefreshReceiver() {
-        categoryRequestSubject.receive(on: cacheWorkerQueue)
+        categoryRequestSubject
+            .receive(on: cacheRealmQueue)
             .flatMap { request -> AnyPublisher<LibraryCategoryList, Never> in
-                let just = Just(request).setFailureType(to: Never.self).eraseToAnyPublisher()
+                var justRequest = request
+                justRequest.retries = 0
+                
+                let just = Just(justRequest).setFailureType(to: Never.self).eraseToAnyPublisher()
+                
                 guard let serverUrl = self.service.getServerUrlByReachability(server: request.library.server)
                 else { return just }
+                
+                if let object = self.cacheCategoryLibraryObjects[.init(libraryId: request.library.id, categoryName: request.category.name)] {
+                    guard object.generation < request.library.lastModified
+                    else {
+                        return just
+                    }
+                }
                 
                 var urlComponents = URLComponents(string: request.category.url)
                 urlComponents?.queryItems = [
@@ -1181,7 +1201,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 
                 var categoryList = categoryList
                 
-                try? cacheRealm.write({
+                try! cacheRealm.write({
                     result.items.forEach { item in
                         let itemObj = cacheRealm
                             .objects(CalibreLibraryCategoryItemObject.self)
@@ -1264,47 +1284,47 @@ class CalibreLibrarySearchManager: ObservableObject {
                 return (categoryKey, nameItems)
             }
             .sink { categoryKey, nameItems in
-                guard let cacheObj = self.cacheCategoryUnifiedObjects[categoryKey]
-                else {
-                    return
-                }
+                let cacheObj = self.retrieveUnifiedCategoryObject(categoryKey.categoryName, categoryKey.search, self.cacheRealm.objects(CalibreUnifiedCategoryObject.self))
                 
                 try! self.cacheRealm.write {
-                    cacheObj.items.removeAll()
-                    cacheObj.totalNumber = 0
-                }
-                
-                if nameItems.count > 999 {
-                    try! self.cacheRealm.write {
+                    if cacheObj.realm == nil {
+                        self.cacheRealm.add(cacheObj)
+                    } else {
+                        cacheObj.items.removeAll()
+                        cacheObj.itemsCount = 0
+                        cacheObj.totalNumber = 0
+                    }
+                    
+                    guard nameItems.count < 1000
+                    else {
                         nameItems.forEach {
                             cacheObj.totalNumber += $0.value.reduce(0, { partialResult, itemObj in
                                 partialResult + itemObj.count
                             })
                         }
+                        cacheObj.itemsCount = nameItems.count
+                        
+                        return
                     }
-                } else {
-                    nameItems.sorted(by: { $0.key < $1.key})
-                        .chunks(size: 256)
-                        .forEach({ chunk in
-                            try! self.cacheRealm.write {
-                                chunk.forEach { nameItemEntry in
-                                    let unifiedItemObj = self.getOrCreateUnifiedCategoryItem(categoryName: categoryKey.categoryName, name: nameItemEntry.key)
-                                    
-                                    unifiedItemObj.items.removeAll()
-                                    unifiedItemObj.items.insert(objectsIn: nameItemEntry.value)
-                                    
-                                    let stats = unifiedItemObj.items.reduce((0, 0.0)) { partialResult, itemObj in
-                                        (partialResult.0 + itemObj.count, partialResult.1 + itemObj.averageRating * Double(itemObj.count))
-                                    }
-                                    unifiedItemObj.count = stats.0
-                                    unifiedItemObj.averageRating = stats.1 / Double(stats.0)
-                                    
-                                    cacheObj.items.append(unifiedItemObj)
-                                    
-                                    cacheObj.totalNumber += stats.0
-                                }
+                    
+                    nameItems
+                        .sorted { $0.key < $1.key }
+                        .forEach { nameItemEntry in
+                            let unifiedItemObj = self.getOrCreateUnifiedCategoryItem(categoryName: categoryKey.categoryName, name: nameItemEntry.key)
+                            
+                            unifiedItemObj.items.removeAll()
+                            unifiedItemObj.items.insert(objectsIn: nameItemEntry.value)
+                            
+                            let stats = unifiedItemObj.items.reduce((0, 0.0)) { partialResult, itemObj in
+                                (partialResult.0 + itemObj.count, partialResult.1 + itemObj.averageRating * Double(itemObj.count))
                             }
-                        })
+                            unifiedItemObj.count = stats.0
+                            unifiedItemObj.averageRating = stats.1 / Double(stats.0)
+                            
+                            cacheObj.items.append(unifiedItemObj)
+                            cacheObj.itemsCount += 1
+                            cacheObj.totalNumber += stats.0
+                        }
                 }
             }
             .store(in: &cancellables)
