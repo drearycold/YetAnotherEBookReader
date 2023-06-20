@@ -919,7 +919,14 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
         guard book.readPos.bookPrefId == bookId else { return nil }
 
-        return book.readPos.getDevices(by: ReaderType.YabrEPUB).first?.toFolioReaderReadPosition()
+        return book.readPos
+            .getDevices(by: ReaderType.YabrEPUB)
+            .filter({
+                $0.structuralStyle == FolioReaderStructuralStyle.bundle.rawValue
+                &&
+                $0.structuralRootPageNumber == rootPageNumber
+            })
+            .first?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {

@@ -17,63 +17,98 @@ struct LibraryInfoCategoryItemsView: View {
     
     @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
     
+    @ObservedResults(CalibreLibraryCategoryObject.self, sortDescriptor: .init(keyPath: "libraryId")) var libraryCategories
+
     var body: some View {
-        ZStack {
+        VStack {
+            #if DEBUG
             List {
-                ForEach(unifiedCategory.items) { categoryItem in
-                    NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
-                        bookListView()
-                            .onAppear {
-                                if viewModel.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
-                                    return
-                                }
-                                
-                                resetSearchCriteria()
-                                
-                                viewModel.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
-                                
-                                if viewModel.categoriesSelected == "Series" {
-                                    if viewModel.sortCriteria.by != .SeriesIndex {
-                                        viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                    }
-                                    
-                                    viewModel.sortCriteria.by = .SeriesIndex
-                                    viewModel.sortCriteria.ascending = true
-                                } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
-                                    if viewModel.sortCriteria.by != .Publication {
-                                        viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                    }
-                                    
-                                    viewModel.sortCriteria.by = .Publication
-                                    viewModel.sortCriteria.ascending = false
-                                }
-                                else {
-                                    viewModel.sortCriteria.by = .Modified
-                                    viewModel.sortCriteria.ascending = false
-                                }
-                                
-                                resetToFirstPage()
-                            }
-                            .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
-                    } label: {
-                        Text(categoryItem.name)
+                ForEach(libraryCategories.where({ $0.categoryName == unifiedCategory.categoryName})) { libraryCategory in
+                    VStack {
+                        HStack {
+                            Text(libraryCategory.libraryId)
+                            Spacer()
+                        }
+                        HStack {
+                            Text("\(libraryCategory.generation)")
+                            Spacer()
+                            Text("\(libraryCategory.items.count)")
+                        }
                     }
-                    .isDetailLink(false)
                 }
             }
-            
+            #endif
+
             if unifiedCategory.items.isEmpty,
                unifiedCategory.itemsCount > 999,
                unifiedCategory.totalNumber > 999 {
                 VStack {
-                    Text("Too many items, please use filter")
+                    Text("Found \(unifiedCategory.itemsCount) items, too many to list them all, please use filter")
+                }
+            } else {
+                List {
+                    ForEach(unifiedCategory.items) { categoryItem in
+                        NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
+                            bookListView()
+                                .onAppear {
+                                    if viewModel.filterCriteriaCategory[unifiedCategory.categoryName]?.contains(categoryItem.name) == true {
+                                        return
+                                    }
+                                    
+                                    resetSearchCriteria()
+                                    
+                                    viewModel.filterCriteriaCategory[unifiedCategory.categoryName] = .init([categoryItem.name])
+                                    
+                                    if viewModel.categoriesSelected == "Series" {
+                                        if viewModel.sortCriteria.by != .SeriesIndex {
+                                            viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+                                        }
+                                        
+                                        viewModel.sortCriteria.by = .SeriesIndex
+                                        viewModel.sortCriteria.ascending = true
+                                    } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
+                                        if viewModel.sortCriteria.by != .Publication {
+                                            viewModel.lastSortCriteria.append(viewModel.sortCriteria)
+                                        }
+                                        
+                                        viewModel.sortCriteria.by = .Publication
+                                        viewModel.sortCriteria.ascending = false
+                                    }
+                                    else {
+                                        viewModel.sortCriteria.by = .Modified
+                                        viewModel.sortCriteria.ascending = false
+                                    }
+                                    
+                                    resetToFirstPage()
+                                }
+                                .navigationTitle("\(unifiedCategory.categoryName): \(categoryItem.name)")
+                        } label: {
+                            Text(categoryItem.name)
+                        }
+                        .isDetailLink(false)
+                    }
                 }
             }
-               
         }
         .toolbar {
             Button {
-                modelData.librarySearchManager.refreshUnifiedCategoryResult(unifiedCategory.key)
+//                modelData.librarySearchManager.refreshUnifiedCategoryResult(unifiedCategory.key)
+                libraryCategories
+                    .where({ $0.categoryName == unifiedCategory.categoryName}).forEach { libraryCategory in
+                        
+                        guard let library = modelData.calibreLibraries[libraryCategory.libraryId],
+                            let realm = libraryCategory.realm?.thaw(),
+                            let thawed = libraryCategory.thaw()
+                        else {
+                            return
+                        }
+                        
+                        try! realm.write {
+                            thawed.generation = .distantPast
+                        }
+                        
+                        modelData.syncLibrarySubject.send(.init(library: library, autoUpdateOnly: true, incremental: true))
+                    }
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }

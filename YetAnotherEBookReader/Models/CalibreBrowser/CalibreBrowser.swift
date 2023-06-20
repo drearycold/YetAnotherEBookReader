@@ -186,7 +186,11 @@ class CalibreLibrarySearchManager: ObservableObject {
     private let searchMergerRequestSubject = PassthroughSubject<SearchCriteriaMergedKey, Never>()
     
     private let categoryRequestSubject = PassthroughSubject<LibraryCategoryList, Never>()
-    private let categoryMergerRequestSubject = PassthroughSubject<CalibreUnifiedCategoryKey, Never>()  //category name
+    
+    //collect and fire to categoryMergerHandlerSubject
+    private let categoryMergerRequestSubject = PassthroughSubject<CalibreUnifiedCategoryKey, Never>()
+
+    private let categoryMergerHandlerSubject = PassthroughSubject<CalibreUnifiedCategoryKey, Never>()
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -722,23 +726,27 @@ class CalibreLibrarySearchManager: ObservableObject {
             .subscribe(on: cacheRealmQueue)
             .collect(.byTime(cacheRealmQueue, .seconds(2)))
             .sink { changesList in
-                var count = 0
+                var initialCount = 0
+                var updateCount = 0
                 changesList.forEach { changes in
                     switch changes {
                     case .error(_):
                         break
                     case .initial(_):
-                        count += cacheObj.items.count
+                        initialCount += cacheObj.items.count
                         break
                     case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) deletion count=\(deletions.count)")
                         print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) insertions count=\(insertions.count)")
                         
-                        count += deletions.count + insertions.count + modifications.count
+                        updateCount += deletions.count + insertions.count + modifications.count
                     }
                 }
                 
-                if count > 0 {
+                if updateCount > 0 {
+                    self.categoryMergerHandlerSubject.send(.init(categoryName: cacheObj.categoryName, search: ""))
+                }
+                else if initialCount > 0 {
                     self.categoryMergerRequestSubject.send(.init(categoryName: cacheObj.categoryName, search: ""))
                 }
             }
@@ -1250,7 +1258,16 @@ class CalibreLibrarySearchManager: ObservableObject {
     }
     
     fileprivate func registerCategoryMergeReceiver() {
-        self.categoryMergerRequestSubject.receive(on: cacheRealmQueue)
+        self.categoryMergerRequestSubject
+            .collect(.byTime(RunLoop.main, .seconds(1)))
+            .sink { categoryKeys in
+                Set(categoryKeys).forEach {
+                    self.categoryMergerHandlerSubject.send($0)
+                }
+            }
+            .store(in: &cancellables)
+        
+        self.categoryMergerHandlerSubject.receive(on: cacheRealmQueue)
             .map { categoryKey -> (CalibreUnifiedCategoryKey, [String: [CalibreLibraryCategoryItemObject]]) in
                 let nameItems = self.cacheCategoryLibraryObjects.filter {
                     $0.key.categoryName == categoryKey.categoryName
@@ -1557,7 +1574,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     }
     
     func refreshUnifiedCategoryResult(_ categoryKey: CalibreUnifiedCategoryKey) {
-        self.categoryMergerRequestSubject.send(categoryKey)
+        self.categoryMergerHandlerSubject.send(categoryKey)
     }
     /**
      merged search results
