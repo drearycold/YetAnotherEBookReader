@@ -17,7 +17,7 @@ struct ReadingPositionHistoryView: View {
     
     @Binding var presenting: Bool
     
-    @ObservedResults(BookDeviceReadingPositionRealm.self) var readingPositions
+    @ObservedResults(BookDeviceReadingPositionRealm.self, where: { !$0.bookId.ends(with: " - History") }) var readingPositions
 
     let library: CalibreLibrary?
     let bookId: Int32?
@@ -47,6 +47,16 @@ struct ReadingPositionHistoryView: View {
 //                ) {
 //                    BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
 //                }
+                
+                #if DEBUG
+                ForEach(readingPositions) { readingPosition in
+                    HStack {
+                        Text(readingPosition.deviceId)
+                        Text(readingPosition.lastReadChapter)
+                        Text("\(readingPosition.lastProgress)")
+                    }
+                }
+                #endif
                 
                 if let viewModel = _positionViewModel {
                     if viewModel.positions.isEmpty == false {

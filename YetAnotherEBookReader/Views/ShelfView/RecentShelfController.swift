@@ -305,7 +305,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             
             let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
                 .environmentObject(modelData)
-                .environment(\.realm, bookAnnoRealm)
+                .environment(\.realmConfiguration, bookAnnoRealm.configuration)
             
             let detailView = UIHostingController(
                 rootView: bookDetailView
@@ -360,8 +360,13 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         print("I just clicked progress \"\(bookTitle)\" with bookId \(bookId), at index \(index)")
         
         modelData.readingBookInShelfId = bookId
-        guard let book = modelData.readingBook else { return }
         
+        guard let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId),
+              let book = modelData.readingBook,
+              let bookAnnoRealm = book.readPos.realm
+        else {
+            return
+        }
         
         let readingPositionHistoryView = UIHostingController(
             rootView: ReadingPositionHistoryView(
@@ -369,6 +374,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 library: book.library,
                 bookId: book.id
             ).environmentObject(modelData)
+                .environment(\.realmConfiguration, bookAnnoRealm.configuration)
         )
         
         let nav = UINavigationController(rootViewController: readingPositionHistoryView)
