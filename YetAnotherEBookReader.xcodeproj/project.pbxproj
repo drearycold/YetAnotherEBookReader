@@ -898,6 +898,7 @@
 			isa = PBXGroup;
 			children = (
 				E7804CCA29C021BC0066BD43 /* CalibreBrowser */,
+				E730405B28EBDAB50013BA01 /* BookAnnotation.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 				2ABB913E261EC359004AA7C0 /* CalibreData.swift */,
@@ -909,7 +910,6 @@
 				E77B8D462973D16200363F39 /* ModelDataResource.swift */,
 				2ACE265826A921230037FCB4 /* RealmModel.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
-				E730405B28EBDAB50013BA01 /* BookAnnotation.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -2169,7 +2169,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 113;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2254,7 +2254,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 113;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

@@ -488,6 +488,12 @@ final class ModelData: ObservableObject {
                         }
                     }
                 }
+                
+                if oldSchemaVersion < 113 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
+                        newObject?["_id"] = ObjectId.generate()
+                    }
+                }
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize

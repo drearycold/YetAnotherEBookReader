@@ -8,58 +8,49 @@
 import Foundation
 import RealmSwift
 
-
-
-func getBookPreferenceConfig(book: CalibreBook, format: Format) -> Realm.Configuration? {
-    guard let bookFileURL = getSavedUrl(book: book, format: format) else { return nil }
-    return getBookPreferenceConfig(bookFileURL: bookFileURL)
-}
-
-func getBookPreferenceConfig(bookFileURL: URL) -> Realm.Configuration? {
-    return Realm.Configuration(
-        fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
-        schemaVersion: ModelData.RealmSchemaVersion) { migration, oldSchemaVersion in
-            if oldSchemaVersion < 109 {
-                migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
-                    if let oldObject = oldObject,
-                       let deviceId = oldObject["id"] as? String {
-                        newObject?["deviceId"] = deviceId
+extension BookAnnotation {
+    static func PrefId(library: CalibreLibrary, id: Int32) -> String {
+        "\(library.key) - \(id)"
+    }
+    
+    static func getBookPreferenceIndividualConfig(bookFileURL: URL) -> Realm.Configuration {
+        return Realm.Configuration(
+            fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
+            schemaVersion: ModelData.RealmSchemaVersion) { migration, oldSchemaVersion in
+                if oldSchemaVersion < 109 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
+                        if let oldObject = oldObject,
+                           let deviceId = oldObject["id"] as? String {
+                            newObject?["deviceId"] = deviceId
+                        }
+                        newObject?["_id"] = ObjectId.generate()
                     }
-                    newObject?["_id"] = ObjectId.generate()
+                }
+                
+                if oldSchemaVersion < 113 {
+                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
+                        newObject?["_id"] = ObjectId.generate()
+                    }
                 }
             }
-        }
-}
-
-@available(*, deprecated, message: "Remove CalibreBookLastReadPositionRealm")
-func readPosToLastReadPosition(book: CalibreBook, format: Format, formatInfo: FormatInfo) {
-    guard formatInfo.cached,
-          let bookPrefConfig = getBookPreferenceConfig(book: book, format: format),
-          let bookPrefRealm = try? Realm(configuration: bookPrefConfig) else { return }
+    }
     
-    book.readPos.getDevices().forEach { position in
-        guard let readerType = ReaderType(rawValue: position.readerName), readerType.format == format else { return }
-//                    position.encodeEPUBCFI()
+    static func getBookPreferenceServerConfig(_ server: CalibreServer) -> Realm.Configuration {
+        let applicationSupportURL = try! FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         
-        let object = bookPrefRealm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: position.id) ??
-        CalibreBookLastReadPositionRealm()
-
-        var position = position
-        
-        guard object.epoch < position.epoch || object.cfi.count < 3 || !object.cfi.contains("_readerName") else { return }
-        
-        if position.epoch == 0.0 {
-            position.epoch = Date().timeIntervalSince1970
-        }
-        
-        try? bookPrefRealm.write {
-            object.cfi = position.encodeEPUBCFI()
-            object.pos_frac = position.lastProgress / 100
-            object.epoch = position.epoch
-            if object.device.isEmpty {
-                object.device = position.id
-                bookPrefRealm.add(object, update: .all)
-            }
-        }
+        return Realm.Configuration(
+            fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { migration, oldSchemaVersion in
+                
+            },
+            objectTypes: [
+                BookDeviceReadingPositionRealm.self,
+                BookDeviceReadingPositionHistoryRealm.self,
+                FolioReaderPreferenceRealm.self,
+                BookHighlightRealm.self,
+                BookBookmarkRealm.self
+            ]
+        )
     }
 }

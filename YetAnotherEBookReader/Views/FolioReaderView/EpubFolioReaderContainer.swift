@@ -217,7 +217,9 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
     }
     
     func folioReaderDidClose(_ folioReader: FolioReader) {
-        webServer.stop()
+        DispatchQueue.global(qos: .background).async {
+            self.webServer.stop()
+        }
         
 //        if let bookId = readerConfig.identifier,
 //           let savedPosition = folioReader.savedPositionForCurrentBook,

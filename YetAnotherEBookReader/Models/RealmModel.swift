@@ -82,6 +82,12 @@ extension CalibreServer: Persistable {
     }
 }
 
+extension CalibreServer {
+    var realmPerf: Realm {
+        try! Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(self))
+    }
+}
+
 class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     @objc dynamic var primaryKey: String?
     
@@ -741,12 +747,14 @@ extension BookDeviceReadingPosition: Persistable {
     }
 }
 
-class BookDeviceReadingPositionHistoryRealm: Object {
-    @objc dynamic var bookId: String = ""
+class BookDeviceReadingPositionHistoryRealm: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
     
-    @objc dynamic var startDatetime = Date()
-    @objc dynamic var startPosition: BookDeviceReadingPositionRealm?
-    @objc dynamic var endPosition: BookDeviceReadingPositionRealm?
+    @Persisted var bookId: String = ""
+    
+    @Persisted var startDatetime = Date()
+    @Persisted var startPosition: BookDeviceReadingPositionRealm?
+    @Persisted var endPosition: BookDeviceReadingPositionRealm?
     
     var startDateByLocale: String? {
         let dateFormatter = DateFormatter()
@@ -761,6 +769,10 @@ class BookDeviceReadingPositionHistoryRealm: Object {
         dateFormatter.timeStyle = .long
         dateFormatter.locale = Locale.autoupdatingCurrent
         return dateFormatter.string(from: startDatetime)
+    }
+    
+    override static func primaryKey()-> String? {
+        return "_id"
     }
 }
 

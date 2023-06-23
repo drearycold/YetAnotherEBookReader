@@ -55,18 +55,20 @@ struct BookPreviewView_Previews: PreviewProvider {
     @StateObject static var modelData = ModelData(mock: true)
 
     static var previews: some View {
-        BookPreviewView(
-            viewModel: BookPreviewViewModel(
-                modelData: modelData,
-                book: modelData.readingBook!,
-                url: getSavedUrl(
-                    book: modelData.readingBook!,
-                    format: modelData.defaultReaderForDefaultFormat(
-                        book: modelData.readingBook!
-                    ).0)!,
-                format: modelData.defaultReaderForDefaultFormat(book: modelData.readingBook!).0,
-                reader: modelData.defaultReaderForDefaultFormat(book: modelData.readingBook!).1
+        if let book = modelData.booksInShelf.first?.value,
+           let formatReaderPair: (Format, ReaderType) = modelData.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
+           let savedUrl = getSavedUrl(book: book, format: formatReaderPair.0) {
+            BookPreviewView(
+                viewModel: BookPreviewViewModel(
+                    modelData: modelData,
+                    book: book,
+                    url: savedUrl,
+                    format: formatReaderPair.0,
+                    reader: formatReaderPair.1
+                )
             )
-        )
+        } else {
+            Text("Nil Book")
+        }
     }
 }

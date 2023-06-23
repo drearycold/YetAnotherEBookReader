@@ -16,9 +16,12 @@ extension EpubFolioReaderContainer {
         } else {
             guard let book = modelData?.readingBook,
                   let format = modelData?.readerInfo?.format,
-                  let realmConfig = getBookPreferenceConfig(book: book, format: format),
+                  let bookFileURL = getSavedUrl(book: book, format: format),
                   let profileRealmConfig = modelData?.realmConf
                   else { return FolioReaderDummyPreferenceProvider(folioReader) }
+            
+//            let realmConfig = BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: bookFileURL)
+            let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
             let preferenceProvider = FolioReaderRealmPreferenceProvider(folioReader, realmConfig: realmConfig, profileRealmConfig: profileRealmConfig)
             self.folioReaderPreferenceProvider = preferenceProvider
             
