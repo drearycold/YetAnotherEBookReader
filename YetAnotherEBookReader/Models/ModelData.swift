@@ -633,8 +633,6 @@ final class ModelData: ObservableObject {
                 }
             }
             
-            book.readPos.makePersistent()
-            
             self.booksInShelf[book.inShelfId] = book
             
 //            self.shelfDataModel.addToShelf(book: book)
@@ -1327,9 +1325,7 @@ final class ModelData: ObservableObject {
         book.inShelf = true
         formats.forEach {
             book.formats[$0.rawValue]?.selected = true
-        }
-        book.readPos.makePersistent()
-        
+        }        
         updateBook(book: book)
         
         if let library = calibreLibraries[book.library.id],

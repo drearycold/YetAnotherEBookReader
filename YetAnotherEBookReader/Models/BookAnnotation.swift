@@ -24,54 +24,122 @@ class BookAnnotation {
         self.id = id
         self.library = library
         self.localFilename = localFilename
-        bookPrefId = "\(library.key) - \(id)"
+        bookPrefId = BookAnnotation.PrefId(library: library, id: id)
     }
-    
-    var ephemeralRealm: Realm?
-    var persistentRealm: Realm?
     
     var realm: Realm? {
-        if Thread.isMainThread {
-            if let realm = persistentRealm {
-                return realm
-            }
-            
-            if let realm = ephemeralRealm {
-                return realm
-            }
-        }
-        
-        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
-              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl),
-              let basePrefUrl = bookPrefConf.fileURL
-        else { return nil }
-        
-        if FileManager.default.fileExists(atPath: basePrefUrl.path) {
-            let realm = try! Realm(configuration: bookPrefConf)
-            if Thread.isMainThread {
-                persistentRealm = realm
-            }
-            return realm
-        } else {
-            var bookPrefConf = bookPrefConf
-            bookPrefConf.inMemoryIdentifier = bookPrefId
-            let realm = try! Realm(configuration: bookPrefConf)
-            if Thread.isMainThread {
-                ephemeralRealm = realm
-            }
-            return realm
-        }
+        migrateIndividualRealm()
+        return library.server.realmPerf
     }
     
-    func makePersistent() {
-        guard let realm = ephemeralRealm,
-              let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
-              let bookPrefConf = getBookPreferenceConfig(bookFileURL: bookBaseUrl)
-        else { return }
+    func migrateIndividualRealm() {
+        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
+           let bookPrefConf = BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: bookBaseUrl) as Realm.Configuration?,
+           let basePrefUrl = bookPrefConf.fileURL,
+           FileManager.default.fileExists(atPath: basePrefUrl.path)
+        else {
+            return
+        }
         
-        try! realm.writeCopy(configuration: bookPrefConf)
+        autoreleasepool {
+            let individualRealm = try! Realm(configuration: bookPrefConf)
+            let serverRealm = library.server.realmPerf
+            individualRealm.configuration.objectTypes?.forEach { objectType in
+                guard let objectType = objectType as? Object.Type
+                else {
+                    assert(false, "Not an Object")
+                    return
+                }
+                try! serverRealm.write {
+                    switch objectType.className() {
+                    case BookDeviceReadingPositionRealm.className():
+                        let objects = individualRealm.objects(BookDeviceReadingPositionRealm.self)
+                            .where { !$0.bookId.ends(with: " - History") }
+                        objects.forEach { object in
+                            guard serverRealm.object(ofType: BookDeviceReadingPositionRealm.self, forPrimaryKey: object._id) == nil
+                            else {
+                                return
+                            }
+                            serverRealm.create(objectType.self, value: object)
+                        }
+                    case BookDeviceReadingPositionHistoryRealm.className(),
+                        FolioReaderPreferenceRealm.className(), BookHighlightRealm.className():
+                        guard let primaryKey = objectType.primaryKey()
+                        else {
+                            assert(false, "Need Primary Key")
+                            return
+                        }
+                        individualRealm.objects(objectType.self)
+                            .forEach { object in
+                                guard serverRealm.object(ofType: objectType.self, forPrimaryKey: object[primaryKey]) == nil
+                                else {
+                                    return
+                                }
+                                serverRealm.create(objectType.self, value: object)
+                            }
+                    case FolioReaderReadPositionRealm.className():
+                        individualRealm.objects(FolioReaderReadPositionRealm.self)
+                            .filter(NSPredicate(format: "maxPage > %@", NSNumber(1)))
+                            .compactMap { $0.toReadPosition()?.toBookDeviceReadingPosition()
+                            }
+                            .forEach { newPosition in
+                                let existing = serverRealm.objects(BookDeviceReadingPositionRealm.self)
+                                    .filter(
+                                        NSPredicate(
+                                            format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                                            bookPrefId,
+                                            newPosition.id,
+                                            newPosition.readerName,
+                                            NSNumber(value: newPosition.structuralStyle),
+                                            NSNumber(value: newPosition.positionTrackingStyle),
+                                            NSNumber(value: newPosition.structuralRootPageNumber)
+                                        )
+                                    )
+                                if existing.isEmpty {
+                                    serverRealm.add(newPosition.managedObject(bookId: bookPrefId))
+                                }
+                            }
+                    case FolioReaderHighlightRealm.className():
+                        individualRealm.objects(FolioReaderHighlightRealm.self)
+                            .forEach { oldObj in
+                                guard serverRealm.object(ofType: BookHighlightRealm.self, forPrimaryKey: oldObj.highlightId) == nil
+                                else {
+                                    // realm.delete(oldObj)
+                                    return
+                                }
+                                
+                                guard let newObj = oldObj.toBookHighlightRealm(readerName: ReaderType.YabrEPUB.rawValue)
+                                else { return }
+                                
+                                serverRealm.add(newObj)
+                                // realm.delete(oldObj)
+                            }
+                    case CalibreBookLastReadPositionRealm.className():
+                        break   //ignore deprecated types
+                    default:
+                        assert(individualRealm.objects(objectType.self).isEmpty, "Unrecognized ObjectType \(objectType.className())")
+                    }
+                }
+            }
+        }
         
-        ephemeralRealm = nil
+        if try! Realm.deleteFiles(for: bookPrefConf) {
+            let basePrefPath = basePrefUrl.deletingLastPathComponent()
+            let enumerator = FileManager.default.enumerator(atPath: basePrefPath.path)
+            
+            var toRemoveURL = [URL]()
+            while let file = enumerator?.nextObject() as? String {
+                let fileURL = basePrefPath.appendingPathComponent(file)
+                if fileURL.lastPathComponent.starts(with: basePrefUrl.lastPathComponent) {
+                    toRemoveURL.append(fileURL)
+                }
+            }
+            
+            toRemoveURL.forEach {
+                print("\(#function) removeItem=\($0.path)")
+                try? FileManager.default.removeItem(at: $0)
+            }
+        }
     }
 }
 
@@ -180,39 +248,6 @@ extension BookAnnotation {
      */
     private func get() -> Results<BookDeviceReadingPositionRealm>? {
         guard let realm = realm else { return nil }
-
-        let oldPositions = realm.objects(FolioReaderReadPositionRealm.self)
-        if oldPositions.isEmpty == false {
-            oldPositions
-                .filter(NSPredicate(format: "maxPage > %@", NSNumber(1)))
-                .compactMap { $0.toReadPosition()?.toBookDeviceReadingPosition() }
-                .forEach { position in
-                    updatePosition(position)
-                }
-                
-            try? realm.write {
-                realm.delete(realm.objects(FolioReaderReadPositionRealm.self))
-            }
-        }
-        
-        let oldHighlights = realm.objects(FolioReaderHighlightRealm.self)
-        if oldHighlights.isEmpty == false {
-            try? realm.write {
-                oldHighlights.forEach { oldObj in
-                    guard realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: oldObj.highlightId) == nil
-                    else {
-                        realm.delete(oldObj)
-                        return
-                    }
-                    
-                    guard let newObj = oldObj.toBookHighlightRealm(readerName: ReaderType.YabrEPUB.rawValue)
-                    else { return }
-                    
-                    realm.add(newObj)
-                    realm.delete(oldObj)
-                }
-            }
-        }
         
         return realm.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId = %@", bookPrefId))
@@ -273,9 +308,15 @@ extension BookAnnotation {
         guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
         
         try? realm.write {
-            historyEntry.endPosition = readPosition.managedObject()
-            historyEntry.endPosition?.bookId = "\(bookPrefId) - History"
-            historyEntry.endPosition?.takePrecedence = false
+            let newEndPositionObject = readPosition.managedObject()
+            newEndPositionObject.bookId = "\(bookPrefId) - History"
+            if let endPositionObject = historyEntry.endPosition {
+                newEndPositionObject._id = endPositionObject._id
+                realm.add(newEndPositionObject, update: .modified)
+                
+            } else {
+                historyEntry.endPosition = newEndPositionObject
+            }
         }
     }
     
