@@ -157,7 +157,8 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
     let realm: Realm?
     let profileRealm: Realm?
     
-    var prefObj: FolioReaderPreferenceRealm!
+    //TODO: sort threading out
+    @ThreadSafe var prefObj: FolioReaderPreferenceRealm!
     
     init(_ folioReader: FolioReader, realmConfig: Realm.Configuration, profileRealmConfig: Realm.Configuration) {
         self.folioReader = folioReader

@@ -281,6 +281,35 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     override static func indexedProperties() -> [String] {
         return ["serverUrl", "serverUsername", "libraryName", "idInLib", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
     }
+    
+    var ratingDescription: String {
+        CalibreBookRealm.RatingDescription(rating)
+    }
+    
+    static func RatingDescription(_ rating: Int) -> String {
+        if rating == 0 {
+            return "No Rating"
+        } else {
+            let starNum = rating / 2
+            let half = (rating % 2) > 0
+            
+            return Array(repeating: "★", count: starNum).joined()
+            + (half ? "☆" : "")
+        }
+//        if rating > 9 {
+//            return "★★★★★"
+//        } else if rating > 7 {
+//            return "★★★★"
+//        } else if rating > 5 {
+//            return "★★★"
+//        } else if rating > 3 {
+//            return "★★"
+//        } else if rating > 1 {
+//            return "★"
+//        } else {
+//            return "☆"
+//        }
+    }
 }
 
 extension CalibreBook: Persistable {

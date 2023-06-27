@@ -134,49 +134,34 @@ struct LibraryInfoBookListView: View {
                 #endif
                 
                 if unifiedSearchObject.books.isEmpty {
-                    if unifiedSearchObject.unifiedOffsets.count == 0 {
-                        Text("Loading books...")
-                    } else {
-                        Text("Found no books.")
-                    }
+                    Text(getLibraryLoadingCount() > 0 ? "Loading books..." : "Found no books.")
                 } else {
-                    ForEach(unifiedSearchObject.books) { bookRealm in
-                        NavigationLink (
-                            destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
-                            tag: bookRealm.primaryKey!,
-                            selection: $modelData.selectedBookId
-                        ) {
-                            if let book = modelData.convert(bookRealm: bookRealm) {
-                                HStack {
-                                    //                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
-                                    //                                Text(index.description)
-                                    //                            }
-                                    if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: viewModel.filterCriteriaLibraries, criteria: viewModel.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
-                                        Text(bookIndex.description)
-                                            .onAppear {
-                                                guard bookIndex > unifiedSearchObject.limitNumber - 20
-                                                else {
-                                                    return
-                                                }
-                                                
-                                                expandSearchUnifiedBookLimit()
-                                            }
-                                    }
-                                    bookRowView(book: book, bookRealm: bookRealm)
+                    if let sectionByString = viewModel.sectionedBy?.sectionByString {
+                        ForEach(unifiedSearchObject.books.sectioned(by: sectionByString)) { section in
+                            Section {
+                                ForEach(section) { bookRealm in
+                                    listEntryView(bookRealm: bookRealm)
                                 }
-                            } else {
-                                Text(bookRealm.title)
+                            } header: {
+                                Text(section.key ?? "Unknown")
+                            }
+                            
+                        }
+                    } else if let sectionByRating = viewModel.sectionedBy?.sectionByRating {
+                        ForEach(unifiedSearchObject.books.sectioned(by: sectionByRating, ascending: false)) { section in
+                            Section {
+                                ForEach(section) { bookRealm in
+                                    listEntryView(bookRealm: bookRealm)
+                                }
+                            } header: {
+                                Text(CalibreBookRealm.RatingDescription(section.key))
                             }
                         }
-                        .isDetailLink(true)
-                        .contextMenu {
-                            if let book = modelData.convert(bookRealm: bookRealm) {
-                                bookRowContextMenuView(book: book)
-                            } else {
-                                EmptyView()
-                            }
+                    } else {
+                        ForEach(unifiedSearchObject.books) { bookRealm in
+                            listEntryView(bookRealm: bookRealm)
                         }
-                    }   //ForEach
+                    }
                 }
                 #if DEBUG
                 debugView()
@@ -194,6 +179,25 @@ struct LibraryInfoBookListView: View {
                     sortMenuView()
                         .disabled(unifiedSearchObject.loading)
                 }
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func listEntryView(bookRealm: CalibreBookRealm) -> some View {
+        NavigationLink (
+            destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
+            tag: bookRealm.primaryKey!,
+            selection: $modelData.selectedBookId
+        ) {
+            LibraryInfoBookRow(unifiedSearchObject: unifiedSearchObject, bookRealm: bookRealm)
+        }
+        .isDetailLink(true)
+        .contextMenu {
+            if let book = modelData.convert(bookRealm: bookRealm) {
+                bookRowContextMenuView(book: book)
+            } else {
+                EmptyView()
             }
         }
     }
@@ -226,7 +230,23 @@ struct LibraryInfoBookListView: View {
             }
             
             Button {
-                modelData.librarySearchManager.refreshSearchResults(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
+                guard let realm = unifiedSearchObject.realm?.thaw(),
+                let thawedObject = unifiedSearchObject.thaw()
+                else {
+                    return
+                }
+                
+                try! realm.write {
+                    thawedObject.unifiedOffsets.forEach {
+                        $0.value?.generation = .distantPast
+                    }
+                }
+                
+                modelData.librarySearchManager.refreshSearchResults(
+                    libraryIds: viewModel.filterCriteriaLibraries,
+                    searchCriteria: viewModel.currentLibrarySearchCriteria,
+                    force: true
+                )
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
@@ -284,6 +304,28 @@ struct LibraryInfoBookListView: View {
                         Text(sort.rawValue)
                     }
                 }
+            }
+            
+            if unifiedSearchObject.books.count == unifiedSearchObject.totalNumber,
+               unifiedSearchObject.totalNumber > 0,
+               unifiedSearchObject.totalNumber < 1000 {
+                Divider()
+                
+                Text("Group By")
+                
+                ForEach(LibraryInfoView.GroupKey.allCases) { key in
+                    Button {
+                        if viewModel.sectionedBy != key {
+                            viewModel.sectionedBy = key
+                        } else {
+                            viewModel.sectionedBy = nil
+                        }
+                    } label: {
+                        Text((viewModel.sectionedBy == key ? "✓ " : "  ") + key.description)
+                    }
+                }
+            } else {
+                EmptyView()
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
@@ -500,24 +542,35 @@ struct LibraryInfoBookListView: View {
         }
     }
     
+    private func getLibraryLoadingCount() -> Int {
+        modelData.calibreLibraries
+            .sorted(by: { $0.key < $1.key })
+            .filter({
+                $0.value.hidden == false
+                &&
+                $0.value.server.removed == false
+                &&
+                (unifiedSearchObject.libraryIds.isEmpty || unifiedSearchObject.libraryIds.contains($0.key))
+            })
+            .map({
+                $0.key
+            })
+            .reduce(0, { partialResult, libraryId in
+                guard let unifiedOffsetOpt = unifiedSearchObject.unifiedOffsets[libraryId],
+                      unifiedOffsetOpt != nil
+                else {
+                    return partialResult + 1
+                }
+                if let runtime = modelData.librarySearchManager.cacheSearchLibraryRuntime[.init(libraryId: libraryId, criteria: viewModel.currentLibrarySearchCriteria)],
+                   runtime.loading > 0 {
+                    return partialResult + 1
+                }
+                return partialResult
+            })
+    }
+    
     private func getLibrarySearchingText() -> String {
-//        let searchResults = modelData.librarySearchManager.getCaches(
-//            for: viewModel.filterCriteriaLibraries,
-//            of: viewModel.currentLibrarySearchCriteria
-//        )
-//        let searchResultsLoading = searchResults.filter { $0.value.loading }
-//        if searchResultsLoading.count == 1,
-//           let libraryId = searchResultsLoading.first?.key.libraryId,
-//           let library = viewModel.calibreLibraries[libraryId] {
-//            return "Searching \(library.name)..."
-//        }
-//        if searchResultsLoading.count > 1 {
-//            return "Searching \(searchResultsLoading.count) libraries..."
-//        }
-//        let searchResultsError = searchResults.filter { $0.value.error }
-//        if searchResultsError.isEmpty == false {
-//            return "Result Incomplete"
-//        }
+        let librariesLoading = getLibraryLoadingCount()
         
         let offsets = unifiedSearchObject.unifiedOffsets.filter {
             guard let unifiedOffset = $0.value,
@@ -530,13 +583,24 @@ struct LibraryInfoBookListView: View {
             return searchSource.totalNumber > 0
         }
         
+        var text = ""
+        
         if offsets.count < 1 {
-            return "Cannot find in any library"
-        } else if offsets.count < 2 {
-            return "Found in \(offsets.count) library"
+            if librariesLoading > 0 {
+                text = "Still searching \(librariesLoading) libraries"
+            } else {
+                text = "Cannot find in any library"
+            }
         } else {
-            return "Found in \(offsets.count) libraries"
+            text = "Found in \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
+            
+            if librariesLoading > 0 {
+                text += ", \(librariesLoading) to go"
+            }
         }
+        
+        
+        return text
     }
     
     func searchStringChanged(searchString: String) {
@@ -569,49 +633,54 @@ struct LibraryInfoBookListView: View {
         viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
     }
     
-    func expandSearchUnifiedBookLimit() {
-        guard unifiedSearchObject.limitNumber < unifiedSearchObject.totalNumber,
-              let realm = unifiedSearchObject.realm?.thaw(),
-              let thawedObject = unifiedSearchObject.thaw()
-        else {
-            return
-        }
-        try! realm.write {
-            thawedObject.limitNumber = min(unifiedSearchObject.limitNumber + 100, unifiedSearchObject.totalNumber)
-        }
-    }
-    
     @ViewBuilder
     func debugView() -> some View {
         Group {
-            Text("Object: \(unifiedSearchObject._id) \(unifiedSearchObject.libraryIds.count) \(unifiedSearchObject.unifiedOffsets.count)")
-            
-            Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
-            
-            Button {
-                expandSearchUnifiedBookLimit()
-            } label: {
-                Text("Expand")
-            }
-            
-            Button {
-                let realm = unifiedSearchObject.realm!.thaw()
-                let thawedObject = unifiedSearchObject.thaw()!
-                try! realm.write {
-                    thawedObject.resetList()
-                    thawedObject.limitNumber = 0
+            Group {
+                Text("Object: \(unifiedSearchObject._id) \(unifiedSearchObject.libraryIds.count) \(unifiedSearchObject.unifiedOffsets.count)")
+                
+                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
+                
+                Button {
+                    viewModel.expandSearchUnifiedBookLimit(unifiedSearchObject)
+                } label: {
+                    Text("Expand")
                 }
-            } label: {
-                Text("Reset")
+                
+                Button {
+                    let realm = unifiedSearchObject.realm!.thaw()
+                    let thawedObject = unifiedSearchObject.thaw()!
+                    try! realm.write {
+                        thawedObject.resetList()
+                        thawedObject.limitNumber = 0
+                    }
+                } label: {
+                    Text("Reset")
+                }
             }
             
-            if unifiedSearchObject.unifiedOffsets.count > 0 {
-                ForEach(unifiedSearchObject.unifiedOffsets.sorted(by: { $0.key < $1.key }), id: \.key) { unifiedEntry in
+            ForEach(modelData.calibreLibraries
+                .sorted(by: { $0.key < $1.key })
+                .filter({
+                    $0.value.hidden == false
+                    &&
+                    $0.value.server.removed == false
+                    &&
+                    (unifiedSearchObject.libraryIds.isEmpty || unifiedSearchObject.libraryIds.contains($0.key))
+                }), id: \.key
+            ) { libraryId, library in
+                Text("Required: \(libraryId)")
+                if let unifiedOffsetOpt = unifiedSearchObject.unifiedOffsets[libraryId],
+                   let unifiedOffset = unifiedOffsetOpt {
                     HStack {
-                        Text("\(unifiedEntry.key) \(unifiedEntry.value?.description ?? "N/A")")
+                        if let runtime = modelData.librarySearchManager.cacheSearchLibraryRuntime[.init(libraryId: libraryId, criteria: viewModel.currentLibrarySearchCriteria)] {
+                            Text("Loading: \(runtime.loading)")
+                        } else {
+                            Text("!!!Mising Search Runtime!!!")
+                        }
+                        Text(unifiedOffset.description)
                     }
-                    if let searchObj = unifiedEntry.value?.searchObject,
-                       let library = modelData.calibreLibraries[searchObj.libraryId] {
+                    if let searchObj = unifiedOffset.searchObject {
                         ForEach(searchObj.sources.sorted(by: { $0.key < $1.key }), id: \.key) { searchSourceEntry in
                             HStack {
                                 Text(library.name)
@@ -625,12 +694,14 @@ struct LibraryInfoBookListView: View {
                     } else {
                         Text("Missing searchObj & Library")
                     }
+                    
+                } else {
+                    Text("No Unified Offset Object")
                 }
-            } else {
-                Text("No Unified Offset Object")
+                
             }
         }
-            .foregroundColor(.red)
+        .foregroundColor(.red)
     }
 }
 

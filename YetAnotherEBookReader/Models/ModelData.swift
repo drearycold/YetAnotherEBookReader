@@ -39,14 +39,6 @@ final class ModelData: ObservableObject {
     var formatReaderMap = [Format: [ReaderType]]()
     var formatList = [Format]()
     
-    static let SearchLibraryResultsRealmConfiguration = Realm.Configuration(fileURL: nil, inMemoryIdentifier: "searchLibraryResultsRealm")
-    
-    static let SearchLibraryResultsRealmQueue = DispatchQueue(label: "searchLibraryResultsRealm", qos: .userInitiated)
-    
-    internal let searchLibraryResultsRealmMainThread = try? Realm(configuration: SearchLibraryResultsRealmConfiguration)
-    
-    var searchLibraryResultsRealmQueue: Realm?
-    
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
     
     @Published var booksInShelf = [String: CalibreBook]()
@@ -251,10 +243,6 @@ final class ModelData: ObservableObject {
         }.store(in: &calibreCancellables)
         
         self.calibreServerService.registerBookFormatDownloadHandler()
-        
-        ModelData.SearchLibraryResultsRealmQueue.sync {
-            self.searchLibraryResultsRealmQueue = try? Realm(configuration: ModelData.SearchLibraryResultsRealmConfiguration, queue: ModelData.SearchLibraryResultsRealmQueue)
-        }
         
         if mock {
             try? tryInitializeDatabase() { _ in

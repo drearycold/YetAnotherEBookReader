@@ -173,6 +173,11 @@ class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
     }
 }
 
+struct CalibreLibrarySearchRuntime {
+    var loading = 0
+    var error = false
+}
+
 struct CalibreUnifiedSearchRuntime {
     var indexMap: [String: Int] = [:]
     var objectNotificationToken: NotificationToken?

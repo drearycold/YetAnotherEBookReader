@@ -168,6 +168,8 @@ class CalibreLibrarySearchManager: ObservableObject {
     private let service: CalibreServerService
     
     private var cacheSearchLibraryObjects = [LibrarySearchKey: ObjectId]()
+    private(set) var cacheSearchLibraryRuntime = [LibrarySearchKey: CalibreLibrarySearchRuntime]()
+    
     private var cacheSearchUnifiedObjects = [SearchCriteriaMergedKey: ObjectId]()
     private var cacheSearchUnifiedRuntime = [SearchCriteriaMergedKey: CalibreUnifiedSearchRuntime]()
     
@@ -781,34 +783,10 @@ class CalibreLibrarySearchManager: ObservableObject {
                     return (searchKey, initCacheSearchObject(searchKey: searchKey))
                 }
             }
-            .sink { [self] searchKey, cacheObj in
-                /*
-                guard let library = service.modelData.calibreLibraries[cacheObj.libraryId],
-                      let searchTask = service.buildLibrarySearchTask(
-                        library: library,
-                        searchCriteria: searchKey.criteria,
-                        generation: library.lastModified,
-                        num: 100,
-                        offset: 0
-                      ),
-                      searchTask.booksListUrl.isHTTP
-                else {
-                    return
-                }
-                
-                try! cacheRealm.write {
-                    cacheObj.bookIds.removeAll()
-                    cacheObj.books.removeAll()
-                    cacheObj.loading = false
-                    cacheObj.generation = searchTask.generation
-                }
-                
-                searchRequestSubject.send(searchTask)
-                */
-                
+            .map { [self] searchKey, cacheObj -> LibrarySearchKey in
                 guard let library = service.modelData.calibreLibraries[cacheObj.libraryId]
                 else {
-                    return
+                    return searchKey
                 }
                 
                  try! cacheRealm.write {
@@ -828,16 +806,25 @@ class CalibreLibrarySearchManager: ObservableObject {
                 searchTasks.forEach { task in
                     searchRequestSubject.send(task)
                 }
+                
+                return searchKey
+            }
+            .sink { searchKey in
+                
             }
             .store(in: &cancellables)
     }
     
     func registerSearchRequestReceiver() {
-        searchRequestSubject.receive(on: cacheRealmQueue)
-            .map { task -> CalibreLibrarySearchTask in
-//                self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)]?.loading = true
-                
-                return task
+        searchRequestSubject.receive(on: DispatchQueue.main)
+            .map { searchTask -> CalibreLibrarySearchTask in
+                let searchKey = LibrarySearchKey(libraryId: searchTask.library.id, criteria: searchTask.searchCriteria)
+                if self.cacheSearchLibraryRuntime[searchKey] == nil {
+                    self.cacheSearchLibraryRuntime[searchKey] = .init(loading: 1)
+                } else {
+                    self.cacheSearchLibraryRuntime[searchKey]?.loading += 1
+                }
+                return searchTask
             }
             .receive(on: cacheWorkerQueue)
             .flatMap { task -> AnyPublisher<CalibreLibrarySearchTask, Never> in
@@ -853,10 +840,10 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
             }
             .receive(on: cacheRealmQueue)
-            .sink { task in
+            .map { task -> CalibreLibrarySearchTask in
                 guard let cacheObjId = self.cacheSearchLibraryObjects[.init(libraryId: task.library.id, criteria: task.searchCriteria)],
                       let cacheObj = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId)
-                else { return }
+                else { return task }
                 
                 try! self.cacheRealm.write {
                     let sourceObj = self.getOrCreateLibrarySearchValueObject(
@@ -914,6 +901,12 @@ class CalibreLibrarySearchManager: ObservableObject {
                         //discard result
                     }
                 }
+                return task
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { searchTask in
+                let searchKey = LibrarySearchKey(libraryId: searchTask.library.id, criteria: searchTask.searchCriteria)
+                self.cacheSearchLibraryRuntime[searchKey]?.loading -= 1
             }
             .store(in: &cancellables)
     }
@@ -1526,7 +1519,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         }
     }
     
-    func refreshSearchResults(libraryIds: Set<String>, searchCriteria: SearchCriteria) {
+    func refreshSearchResults(libraryIds: Set<String>, searchCriteria: SearchCriteria, force: Bool = false) {
         cacheRealmQueue.async { [self] in
             cacheSearchLibraryObjects
                 .filter({ key, value in
@@ -1541,6 +1534,15 @@ class CalibreLibrarySearchManager: ObservableObject {
                     else {
                         return false
                     }
+                    
+                    if force {
+                        try! cacheRealm.write {
+                            object.sources.forEach {
+                                $0.value?.generation = .distantPast
+                            }
+                        }
+                    }
+                    
                     return !object.sources.allSatisfy { entry in
                         guard let sourceObj = entry.value,
                               sourceObj.generation >= library.lastModified
@@ -1791,28 +1793,11 @@ struct LibraryCategoryListResult: Codable {
 extension ModelData {
     func getBook(for primaryKey: String) -> CalibreBook? {
         var bookLocal: CalibreBook? = nil
-        var bookSearch: CalibreBook? = nil
         if let obj = getBookRealm(forPrimaryKey: primaryKey) {
             bookLocal = convert(bookRealm: obj)
         }
         
-        if let obj = searchLibraryResultsRealmMainThread?.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) {
-            bookSearch = convert(bookRealm: obj)
-        }
-        
-        if bookSearch == nil {
-            return bookLocal
-        }
-        if bookLocal == nil {
-            return bookSearch
-        }
-        
-        if bookLocal?.lastModified == bookSearch?.lastModified,
-           bookLocal?.lastModified == bookLocal?.lastSynced {
-            return bookLocal
-        }
-        
-        return bookSearch
+        return bookLocal
     }
 }
 

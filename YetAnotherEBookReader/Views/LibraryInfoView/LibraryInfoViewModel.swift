@@ -10,8 +10,50 @@ import RealmSwift
 import Combine
 
 extension LibraryInfoView {
+    enum GroupKey: String, CaseIterable, Identifiable, CustomStringConvertible {
+        var id: String {
+            self.rawValue
+        }
+        
+        var description: String {
+            self.rawValue
+        }
+        
+     
+        case Library
+        case Author
+        case Tag
+        case Rating
+        
+        var sectionByString: KeyPath<CalibreBookRealm, String?>? {
+            switch(self) {
+            case .Library:
+                return \CalibreBookRealm.libraryName
+            case .Author:
+                return \CalibreBookRealm.authorFirst
+            case .Tag:
+                return \CalibreBookRealm.tagFirst
+            default:
+                return nil
+            }
+        }
+        
+        var sectionByRating: KeyPath<CalibreBookRealm, Int>? {
+            switch(self) {
+            case .Rating:
+                return \CalibreBookRealm.rating
+            default:
+                return nil
+            }
+        }
+    }
+
+    
     @MainActor class ViewModel: ObservableObject {
         var calibreLibraries: [String: CalibreLibrary] = [:]
+        
+        //booklist group
+        @Published var sectionedBy: GroupKey?
         
         //booklist filters
         @Published var searchString = ""
@@ -62,6 +104,18 @@ extension LibraryInfoView {
         @Published private(set) var unifiedCategoryObject: CalibreUnifiedCategoryObject?
         
         var unifiedCategoryUpdateCancellable: AnyCancellable?
+        
+        func expandSearchUnifiedBookLimit(_ unifiedSearchObject: CalibreUnifiedSearchObject) {
+            guard unifiedSearchObject.limitNumber < unifiedSearchObject.totalNumber,
+                  let realm = unifiedSearchObject.realm?.thaw(),
+                  let thawedObject = unifiedSearchObject.thaw()
+            else {
+                return
+            }
+            try! realm.write {
+                thawedObject.limitNumber = min(unifiedSearchObject.limitNumber + 100, unifiedSearchObject.totalNumber)
+            }
+        }
         
         func setUnifiedSearchObject(modelData: ModelData, unifiedSearchObject: CalibreUnifiedSearchObject?) {
             unifiedSearchUpdateCancellable?.cancel()
