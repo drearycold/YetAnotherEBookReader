@@ -244,11 +244,11 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
                 newPrefObj.currentScrollDirection = folioReader.defaultScrollDirection.rawValue
             }
             
-            prefObj = newPrefObj
-            
-            try? realm.write {
+            try! realm.write {
                 realm.add(newPrefObj, update: .all)
             }
+            
+            prefObj = newPrefObj
         }
     }
 
