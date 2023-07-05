@@ -398,7 +398,7 @@ struct CalibreServerService {
             }
         }
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
-        var readPos = bookRealm.readPos(library: library)
+        let readPos = bookRealm.readPos(library: library)
         //Parse Reading Position
         if let pluginReadingPosition = modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
            let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
@@ -1213,7 +1213,7 @@ struct CalibreServerInfo: Identifiable {
     
     let server: CalibreServer
     let isPublic: Bool
-    let url: URL
+    var url: URL
     var reachable: Bool = false
     var probing: Bool = false
     var errorMsg: String = "Waiting to connect"

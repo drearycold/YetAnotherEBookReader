@@ -174,6 +174,8 @@ final class ModelData: ObservableObject {
     let setLastReadPositionSubject = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
     let updateAnnotationsSubject = PassthroughSubject<CalibreBookUpdateAnnotationsTask, Never>()
     
+    let logCalibreActivitySubject = PassthroughSubject<CalibreActivity, Never>()
+    
     @Published var librarySyncStatus = [String: CalibreSyncStatus]()
 
     @Published var userFontInfos = [String: FontInfo]()
@@ -237,6 +239,8 @@ final class ModelData: ObservableObject {
         registerBookReaderClosedCancellable()
         
         registerRecentShelfUpdater()
+        
+        registerLogCalibreActivityCancellable()
         
         bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
@@ -458,16 +462,6 @@ final class ModelData: ObservableObject {
                     migration.renameProperty(onType: CalibreBookRealm.className(), from: "id", to: "idInLib")
                 }
                 
-                if oldSchemaVersion < 109 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
-                        if let oldObject = oldObject,
-                           let deviceId = oldObject["id"] as? String {
-                            newObject?["deviceId"] = deviceId
-                        }
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-                
                 if oldSchemaVersion < 110 {
                     migration.enumerateObjects(ofType: CalibreUnifiedCategoryObject.className()) { oldObject, newObject in
                         newObject?["search"] = ""
@@ -477,11 +471,7 @@ final class ModelData: ObservableObject {
                     }
                 }
                 
-                if oldSchemaVersion < 113 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
+                BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize
@@ -1718,6 +1708,7 @@ final class ModelData: ObservableObject {
                     info.probing = true
                     info.errorMsg = "Connecting"
                     info.request = request
+                    info.url = URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/")
                     self.calibreServerInfoStaging[request.id] = info
                     return info
                 } else {
@@ -2522,48 +2513,100 @@ final class ModelData: ObservableObject {
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
-        activityDispatchQueue.async {
-            guard let realm = try? Realm(configuration: self.realmConf) else { return }
-            
-            let obj = CalibreActivityLogEntry()
-            
-            obj.type = type
-            
-            obj.startDatetime = startDatetime
-            obj.bookId = bookId ?? 0
-            obj.libraryId = libraryId
-            
-            obj.endpoingURL = request.url?.absoluteString
-            obj.httpMethod = request.httpMethod
-            obj.httpBody = request.httpBody
-            request.allHTTPHeaderFields?.forEach {
-                obj.requestHeaders.append($0.key)
-                obj.requestHeaders.append($0.value)
-            }
-            
-            try? realm.write {
-                realm.add(obj)
-            }
-        }
+        logCalibreActivitySubject.send(
+            CalibreActivityStart(type, request, startDatetime: startDatetime, bookId: bookId, libraryId: libraryId)
+        )
+//        activityDispatchQueue.async {
+//            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+//
+//            let obj = CalibreActivityLogEntry()
+//
+//            obj.type = type
+//
+//            obj.startDatetime = startDatetime
+//            obj.bookId = bookId ?? 0
+//            obj.libraryId = libraryId
+//
+//            obj.endpoingURL = request.url?.absoluteString
+//            obj.httpMethod = request.httpMethod
+//            obj.httpBody = request.httpBody
+//            request.allHTTPHeaderFields?.forEach {
+//                obj.requestHeaders.append($0.key)
+//                obj.requestHeaders.append($0.value)
+//            }
+//
+//            try? realm.write {
+//                realm.add(obj)
+//            }
+//        }
     }
     
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
-        activityDispatchQueue.async {
-            guard let realm = try? Realm(configuration: self.realmConf) else { return }
-            
-            guard let activity = realm.objects(CalibreActivityLogEntry.self).filter(
-                NSPredicate(format: "type = %@ AND startDatetime = %@ AND endpoingURL = %@",
-                            type,
-                            startDatetime as NSDate,
-                            request.url?.absoluteString ?? ""
-                )
-            ).first else { return }
-            
-            try? realm.write {
-                activity.finishDatetime = finishDatetime
-                activity.errMsg = errMsg
+        logCalibreActivitySubject.send(
+            CalibreActivityFinish(type, request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
+        )
+//        activityDispatchQueue.async {
+//            guard let realm = try? Realm(configuration: self.realmConf) else { return }
+//
+//            guard let activity = realm.objects(CalibreActivityLogEntry.self).filter(
+//                NSPredicate(format: "type = %@ AND startDatetime = %@ AND endpoingURL = %@",
+//                            type,
+//                            startDatetime as NSDate,
+//                            request.url?.absoluteString ?? ""
+//                )
+//            ).first else { return }
+//
+//            try? realm.write {
+//                activity.finishDatetime = finishDatetime
+//                activity.errMsg = errMsg
+//            }
+//        }
+    }
+    
+    func registerLogCalibreActivityCancellable() {
+        logCalibreActivitySubject.collect(.byTimeOrCount(RunLoop.main, .seconds(1), 16))
+            .receive(on: activityDispatchQueue)
+            .sink { activities in
+                guard let realm = try? Realm(configuration: self.realmConf) else { return }
+                
+                try? realm.write {
+                    activities.forEach { activity in
+                        if let activityStart = activity as? CalibreActivityStart {
+                            let obj = CalibreActivityLogEntry()
+                            
+                            obj.type = activityStart.type
+                            
+                            obj.startDatetime = activityStart.startDatetime
+                            obj.bookId = activityStart.bookId ?? 0
+                            obj.libraryId = activityStart.libraryId
+                            
+                            obj.endpoingURL = activityStart.request.url?.absoluteString
+                            obj.httpMethod = activityStart.request.httpMethod
+                            obj.httpBody = activityStart.request.httpBody
+                            activityStart.request.allHTTPHeaderFields?.forEach {
+                                obj.requestHeaders.append($0.key)
+                                obj.requestHeaders.append($0.value)
+                            }
+                            
+                            realm.add(obj)
+                        }
+                        
+                        if let activityFinish = activity as? CalibreActivityFinish {
+                            guard let activityPrevious = realm.objects(CalibreActivityLogEntry.self).filter(
+                                NSPredicate(format: "type = %@ AND startDatetime = %@ AND endpoingURL = %@",
+                                            activityFinish.type,
+                                            activityFinish.startDatetime as NSDate,
+                                            activityFinish.request.url?.absoluteString ?? ""
+                                )
+                            ).first else { return }
+                            
+                            activityPrevious.finishDatetime = activityFinish.finishDatetime
+                            activityPrevious.errMsg = activityFinish.errMsg
+                        }
+                    }
+                }
             }
-        }
+            .store(in: &calibreCancellables)
     }
     
     func removeCalibreActivity(obj: CalibreActivityLogEntry) {

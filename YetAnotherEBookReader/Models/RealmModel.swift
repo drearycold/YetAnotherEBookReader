@@ -218,11 +218,13 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     func readPos(library: CalibreLibrary) -> BookAnnotation {
         let readPos = BookAnnotation(id: idInLib, library: library)
         
-        let readPosObject = try? JSONSerialization.jsonObject(with: readPosData as Data? ?? Data(), options: [])
-        let readPosDict = readPosObject as! NSDictionary? ?? NSDictionary()
+        guard let readPosData = readPosData as? Data,
+              let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
+              let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary
+        else {
+            return readPos
+        }
         
-        let deviceMapObject = readPosDict["deviceMap"]
-        let deviceMapDict = deviceMapObject as! NSDictionary? ?? NSDictionary()
         deviceMapDict.forEach { key, value in
             guard let deviceName = key as? String,
                   let deviceReadingPositionDict = value as? [String: Any],
@@ -346,6 +348,12 @@ extension CalibreBook: Persistable {
         self.lastUpdated = managedObject.lastUpdated
         self.formats = formatsVer2
         self.readPos = managedObject.readPos(library: library)
+        if managedObject.readPosData != nil {
+            try? managedObject.realm?.write({
+                managedObject.readPosData = nil
+            })
+        }
+        
         self.inShelf = managedObject.inShelf
         
         if managedObject.identifiersData != nil {
@@ -419,10 +427,11 @@ extension CalibreBook: Persistable {
         
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: []) as NSData
         
-        let deviceMapSerialize = self.readPos.getCopy().compactMapValues { (value) -> Any? in
-            try? JSONSerialization.jsonObject(with: encoder.encode(value))
-        }
-        bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
+//        let deviceMapSerialize = self.readPos.getCopy().compactMapValues { (value) -> Any? in
+//            try? JSONSerialization.jsonObject(with: encoder.encode(value))
+//        }
+//        bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
+        bookRealm.readPosData = nil
         
         return bookRealm
     }
@@ -1263,7 +1272,8 @@ extension CalibreLibraryDSReaderHelper: Persistable {
     }
 }
 
-class BookBookmarkRealm: Object {
+class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
+    @objc dynamic var _id: ObjectId = .generate()
     @objc dynamic var bookId: String = .init()
     @objc dynamic var page: Int = .zero
     
@@ -1274,6 +1284,10 @@ class BookBookmarkRealm: Object {
     @objc dynamic var date: Date = .init()
     
     @objc dynamic var removed: Bool = false
+    
+    override static func primaryKey() -> String? {
+        return "_id"
+    }
 }
 
 extension BookBookmark: Persistable {
@@ -1309,6 +1323,7 @@ extension BookBookmark: Persistable {
 
 
 //MARK: PDF
+@available(*, deprecated, renamed: "YabrPDFOptionsRealm")
 class PDFOptionsRealm: Object {
     @objc dynamic var id: Int32 = 0
     @objc dynamic var libraryName = ""
@@ -1330,15 +1345,43 @@ class PDFOptionsRealm: Object {
     }
 }
 
+
+extension PDFThemeMode: PersistableEnum {}
+extension PDFAutoScaler: PersistableEnum {}
+extension PDFLayoutMode: PersistableEnum {}
+extension PDFReadDirection: PersistableEnum {}
+extension PDFScrollDirection: PersistableEnum {}
+
+class YabrPDFOptionsRealm: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
+    @Persisted var bookId: Int32 = 0
+    @Persisted var libraryName: String
+    
+    @Persisted var themeMode = PDFThemeMode.serpia
+    @Persisted var selectedAutoScaler = PDFAutoScaler.Width
+    @Persisted var pageMode = PDFLayoutMode.Page
+    @Persisted var readingDirection = PDFReadDirection.LtR_TtB
+    @Persisted var scrollDirection = PDFScrollDirection.Vertical
+    
+    @Persisted var hMarginAutoScaler = 5.0
+    @Persisted var vMarginAutoScaler = 5.0
+    @Persisted var hMarginDetectStrength = 2.0
+    @Persisted var vMarginDetectStrength = 2.0
+    @Persisted var marginOffset = 0.0
+    @Persisted var lastScale = 1.0
+    @Persisted var rememberInPagePosition = true
+}
+
 extension PDFOptions: Persistable {
-    public init(managedObject: PDFOptionsRealm) {
-        self.id = managedObject.id
+    public init(managedObject: YabrPDFOptionsRealm) {
+        self.id = managedObject.bookId
         self.libraryName = managedObject.libraryName
-        self.themeMode = .init(rawValue: managedObject.themeMode) ?? .serpia
-        self.selectedAutoScaler = .init(rawValue: managedObject.selectedAutoScaler) ?? .Width
-        self.pageMode = .init(rawValue: managedObject.pageMode) ?? .Page
-        self.readingDirection = .init(rawValue: managedObject.readingDirection) ?? .LtR_TtB
-        self.scrollDirection = .init(rawValue: managedObject.scrollDirection) ?? .Vertical
+        self.themeMode = managedObject.themeMode
+        self.selectedAutoScaler = managedObject.selectedAutoScaler
+        self.pageMode = managedObject.pageMode
+        self.readingDirection = managedObject.readingDirection
+        self.scrollDirection = managedObject.scrollDirection
         self.hMarginAutoScaler = managedObject.hMarginAutoScaler
         self.vMarginAutoScaler = managedObject.vMarginAutoScaler
         self.hMarginDetectStrength = managedObject.hMarginDetectStrength
@@ -1348,16 +1391,16 @@ extension PDFOptions: Persistable {
         self.rememberInPagePosition = managedObject.rememberInPagePosition
     }
     
-    public func managedObject() -> PDFOptionsRealm {
-        let obj = PDFOptionsRealm()
+    public func managedObject() -> YabrPDFOptionsRealm {
+        let obj = YabrPDFOptionsRealm()
         
-        obj.id = self.id
+        obj.bookId = self.id
         obj.libraryName = self.libraryName
-        obj.themeMode = self.themeMode.rawValue
-        obj.selectedAutoScaler = self.selectedAutoScaler.rawValue
-        obj.pageMode = self.pageMode.rawValue
-        obj.readingDirection = self.readingDirection.rawValue
-        obj.scrollDirection = self.scrollDirection.rawValue
+        obj.themeMode = self.themeMode
+        obj.selectedAutoScaler = self.selectedAutoScaler
+        obj.pageMode = self.pageMode
+        obj.readingDirection = self.readingDirection
+        obj.scrollDirection = self.scrollDirection
         obj.hMarginAutoScaler = self.hMarginAutoScaler
         obj.vMarginAutoScaler = self.vMarginAutoScaler
         obj.hMarginDetectStrength = self.hMarginDetectStrength
@@ -1367,5 +1410,20 @@ extension PDFOptions: Persistable {
         obj.rememberInPagePosition = self.rememberInPagePosition
         
         return obj
+    }
+    
+    public func update(obj: YabrPDFOptionsRealm) {
+        obj.themeMode = self.themeMode
+        obj.selectedAutoScaler = self.selectedAutoScaler
+        obj.pageMode = self.pageMode
+        obj.readingDirection = self.readingDirection
+        obj.scrollDirection = self.scrollDirection
+        obj.hMarginAutoScaler = self.hMarginAutoScaler
+        obj.vMarginAutoScaler = self.vMarginAutoScaler
+        obj.hMarginDetectStrength = self.hMarginDetectStrength
+        obj.vMarginDetectStrength = self.vMarginDetectStrength
+        obj.marginOffset = self.marginOffset
+        obj.lastScale = self.lastScale
+        obj.rememberInPagePosition = self.rememberInPagePosition
     }
 }

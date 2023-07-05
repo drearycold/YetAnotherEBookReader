@@ -63,7 +63,9 @@ class BookAnnotation {
                             serverRealm.create(objectType.self, value: object)
                         }
                     case BookDeviceReadingPositionHistoryRealm.className(),
-                        FolioReaderPreferenceRealm.className(), BookHighlightRealm.className():
+                        FolioReaderPreferenceRealm.className(),
+                        BookHighlightRealm.className(),
+                        BookBookmarkRealm.className():
                         guard let primaryKey = objectType.primaryKey()
                         else {
                             assert(false, "Need Primary Key")
@@ -113,6 +115,35 @@ class BookAnnotation {
                                 
                                 serverRealm.add(newObj)
                                 // realm.delete(oldObj)
+                            }
+                    case PDFOptionsRealm.className():
+                        individualRealm.objects(PDFOptionsRealm.self)
+                            .forEach { oldObj in
+                                guard serverRealm.objects(YabrPDFOptionsRealm.self)
+                                    .where({ $0.bookId == id && $0.libraryName == library.name })
+                                    .isEmpty
+                                else {
+                                    return
+                                }
+                                
+                                let newObj = YabrPDFOptionsRealm()
+                                newObj.bookId = oldObj.id
+                                newObj.libraryName = oldObj.libraryName
+                                
+                                newObj.themeMode = PDFThemeMode(rawValue: oldObj.themeMode) ?? .serpia
+                                newObj.selectedAutoScaler = PDFAutoScaler(rawValue: oldObj.selectedAutoScaler) ?? .Width
+                                newObj.pageMode = PDFLayoutMode(rawValue: oldObj.pageMode) ?? .Page
+                                newObj.readingDirection = PDFReadDirection(rawValue: oldObj.readingDirection) ?? .LtR_TtB
+                                newObj.scrollDirection = PDFScrollDirection(rawValue: oldObj.scrollDirection) ?? .Vertical
+                                
+                                newObj.hMarginAutoScaler = oldObj.hMarginAutoScaler
+                                newObj.vMarginAutoScaler = oldObj.vMarginAutoScaler
+                                newObj.hMarginDetectStrength = oldObj.hMarginDetectStrength
+                                newObj.vMarginDetectStrength = oldObj.vMarginDetectStrength
+                                newObj.lastScale = oldObj.lastScale
+                                newObj.rememberInPagePosition = oldObj.rememberInPagePosition
+                                
+                                serverRealm.add(newObj)
                             }
                     case CalibreBookLastReadPositionRealm.className():
                         break   //ignore deprecated types
@@ -169,20 +200,20 @@ extension BookAnnotation {
 
         removePosition(position: newPosition)
         
-        try? realm.write {
-            let existing = realm.objects(BookDeviceReadingPositionRealm.self)
-                .filter(
-                    NSPredicate(
-                        format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                        bookPrefId,
-                        newPosition.id,
-                        newPosition.readerName,
-                        NSNumber(value: newPosition.structuralStyle),
-                        NSNumber(value: newPosition.positionTrackingStyle),
-                        NSNumber(value: newPosition.structuralRootPageNumber)
-                    )
+        let existing = realm.objects(BookDeviceReadingPositionRealm.self)
+            .filter(
+                NSPredicate(
+                    format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
+                    bookPrefId,
+                    newPosition.id,
+                    newPosition.readerName,
+                    NSNumber(value: newPosition.structuralStyle),
+                    NSNumber(value: newPosition.positionTrackingStyle),
+                    NSNumber(value: newPosition.structuralRootPageNumber)
                 )
-            if existing.isEmpty {
+            )
+        if existing.isEmpty {
+            try? realm.write {
                 realm.add(newPosition.managedObject(bookId: bookPrefId))
             }
         }
@@ -328,6 +359,7 @@ extension BookAnnotation {
         guard let realm = realm else { return [] }
 
         var results = realm.objects(BookBookmarkRealm.self)
+            .where { $0.bookId == bookPrefId }
         if excludeRemoved {
             results = results.filter(NSPredicate(format: "removed == false"))
         }
@@ -411,6 +443,7 @@ extension BookAnnotation {
         guard let realm = self.realm else { return .init() }
         
         var results = realm.objects(BookHighlightRealm.self)
+            .where { $0.bookId == bookPrefId }
         if excludeRemoved {
             results = results.filter(NSPredicate(format: "removed == false"))
         }

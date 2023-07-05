@@ -32,6 +32,11 @@ extension BookAnnotation {
                         newObject?["_id"] = ObjectId.generate()
                     }
                 }
+                if oldSchemaVersion < 114 {
+                    migration.enumerateObjects(ofType: BookBookmarkRealm.className()) { oldObject, newObject in
+                        newObject?["_id"] = ObjectId.generate()
+                    }
+                }
             }
     }
     
@@ -49,7 +54,8 @@ extension BookAnnotation {
                 BookDeviceReadingPositionHistoryRealm.self,
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
-                BookBookmarkRealm.self
+                BookBookmarkRealm.self,
+                YabrPDFOptionsRealm.self
             ]
         )
     }

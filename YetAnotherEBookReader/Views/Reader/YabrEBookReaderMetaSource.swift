@@ -17,9 +17,25 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     var refText: String?
     
+    let prefObj: YabrPDFOptionsRealm
+    
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
         self.readerInfo = readerInfo
+        
+        if let prefObj = book.readPos.realm?
+            .objects(YabrPDFOptionsRealm.self)
+            .where({ $0.bookId == book.id && $0.libraryName == book.library.name })
+            .first {
+            self.prefObj = prefObj
+        } else {
+            self.prefObj = YabrPDFOptionsRealm()
+            self.prefObj.bookId = book.id
+            self.prefObj.libraryName = book.library.name
+            try? book.readPos.realm?.write {
+                book.readPos.realm?.add(self.prefObj)
+            }
+        }
     }
     
     func yabrPDFURL(_ view: YabrPDFView?) -> URL? {
@@ -66,20 +82,19 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
-        guard let realm = book.readPos.realm,
-              let pdfOptionsRealm = realm.objects(PDFOptionsRealm.self).first
-        else { return nil }
-        
-        return PDFOptions(managedObject: pdfOptionsRealm)
+        return PDFOptions(managedObject: prefObj)
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        guard let realm = book.readPos.realm
-        else { return }
-        
-        try? realm.write {
-            realm.add(options.managedObject(), update: .all)
-        }
+//        guard let realm = book.readPos.realm
+//        else { return }
+//
+//        try? realm.write {
+//            realm.add(options.managedObject(), update: .all)
+//        }
+        try? prefObj.realm?.write({
+            options.update(obj: prefObj)
+        })
     }
     
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UIViewController)? {

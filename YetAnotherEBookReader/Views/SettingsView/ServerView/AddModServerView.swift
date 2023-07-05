@@ -622,7 +622,7 @@ struct AddModServerView: View {
             return
         }
         
-        var newServer = serverInfo.server
+        var newServer = serverInfo.request.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
         newServer.removed = server.removed
         
@@ -637,7 +637,7 @@ struct AddModServerView: View {
             .sink { serverInfo in
                 serverInfo.libraryMap
                     .map {
-                        self.modelData.probeLibrarySubject.send(.init(library: .init(server: serverInfo.server, key: $0.key, name: $0.value)))
+                        self.modelData.probeLibrarySubject.send(.init(library: .init(server: serverInfo.request.server, key: $0.key, name: $0.value)))
                         return $0
                     }
                     .filter {

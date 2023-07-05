@@ -2192,6 +2192,46 @@ struct CalibreLibraryBooksResult: Codable {
     var metadata: [String: BookMetadata]
 }
 
+class CalibreActivity {
+    let type: String
+    
+    init(_ type: String) {
+        self.type = type
+    }
+}
+
+class CalibreActivityStart: CalibreActivity {
+    let request: URLRequest
+    let startDatetime: Date
+    let bookId: Int32?
+    let libraryId: String?
+    
+    init(_ type: String, _ request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
+        self.request = request
+        self.startDatetime = startDatetime
+        self.bookId = bookId
+        self.libraryId = libraryId
+        
+        super.init(type)
+    }
+}
+
+class CalibreActivityFinish: CalibreActivity {
+    let request: URLRequest
+    let startDatetime: Date
+    let finishDatetime: Date
+    let errMsg: String
+    
+    init(_ type: String, _ request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
+        self.request = request
+        self.startDatetime = startDatetime
+        self.finishDatetime = finishDatetime
+        self.errMsg = errMsg
+        
+        super.init(type)
+    }
+}
+
 extension Array {
     func chunks(size: Int) -> [[Element]] {
         return stride(from: 0, to: count, by: size).map {
