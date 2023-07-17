@@ -348,7 +348,8 @@ extension CalibreBook: Persistable {
         self.lastUpdated = managedObject.lastUpdated
         self.formats = formatsVer2
         self.readPos = managedObject.readPos(library: library)
-        if managedObject.readPosData != nil {
+        if managedObject.readPosData != nil,
+           managedObject.isFrozen == false {
             try? managedObject.realm?.write({
                 managedObject.readPosData = nil
             })
