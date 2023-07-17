@@ -29,6 +29,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pageIndicator = UIButton()
     let pageNextButton = UIButton()
     let pagePrevButton = UIButton()
+    let pageBackButton = UIButton()
     
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
@@ -241,11 +242,29 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             }
         }), for: .primaryActionTriggered)
         
+        pageBackButton.setImage(UIImage(systemName: "arrow.uturn.left"), for: .normal)
+        pageBackButton.setTitleColor(.systemBackground, for: .normal)
+        
         stackView.distribution = .fill
         stackView.alignment = .fill
         stackView.axis = .horizontal
         stackView.spacing = 16.0
         
+        if #available(macCatalyst 16.0, *) {
+            pageBackButton.isHidden = true
+            stackView.addArrangedSubview(pageBackButton)
+            
+            let pageBackAction = UIAction(handler: { action in
+                guard let historyItem = self.historyMenu.children.last as? UIAction
+                else {
+                    return
+                }
+                self.addBlankSubView(page: self.pdfView.currentPage)    //FIXME get actual page
+                historyItem.performWithSender(self, target: self.pdfView)
+            })
+            
+            pageBackButton.addAction(pageBackAction, for: .primaryActionTriggered)
+        }
         stackView.addArrangedSubview(pagePrevButton)
         stackView.addArrangedSubview(pageSlider)
         stackView.addArrangedSubview(pageIndicator)
@@ -437,7 +456,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         }
     }
     
-    func updateHistoryMenu(curPage: PDFPage) {
+    func updateHistoryMenu(curPage: PDFPage, location: CGRect? = nil) {
         guard let pdfDoc = curPage.document,
               let outlineRoot = pdfDoc.outlineRoot
         else { return }
@@ -466,12 +485,25 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
                 if children.isEmpty {
                     self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
+                    self.pageBackButton.isHidden = true
+                    self.pageBackButton.setTitle("", for: .normal)
+                } else if let lastHistoryItem = children.last as? UIAction {
+                    self.pageBackButton.isHidden = false
+                    if lastHistoryItem.title.count > 20 {
+                        self.pageBackButton.setTitle(" Back to \(lastHistoryItem.title.prefix(20))...", for: .normal)
+                    } else {
+                        self.pageBackButton.setTitle(" Back to \(lastHistoryItem.title)", for: .normal)
+                    }
                 }
             }
             if curPage.pageRef?.pageNumber != self.pdfView.currentPage?.pageRef?.pageNumber {
                 self.addBlankSubView(page: curPage)
             }
-            self.pdfView.go(to: curPage)
+            if let location = location {
+                self.pdfView.go(to: location, on: curPage)
+            } else {
+                self.pdfView.go(to: curPage)
+            }
         })
         
         self.historyMenu = self.historyMenu.replacingChildren(historyItems)
@@ -479,6 +511,13 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         self.navigationItem.rightBarButtonItems?.first?.menu = nil  //MUST HAVE, otherwise no effect
         self.navigationItem.rightBarButtonItems?.first?.menu = newMenu
         self.navigationItem.rightBarButtonItems?.first?.isEnabled = true
+        
+        self.pageBackButton.isHidden = false
+        if lastHistoryLabel.count > 20 {
+            self.pageBackButton.setTitle(" Back to \(lastHistoryLabel.prefix(20))...", for: .normal)
+        } else {
+            self.pageBackButton.setTitle(" Back to \(lastHistoryLabel)", for: .normal)
+        }
     }
     
     @objc private func handlePageChange(notification: Notification) {

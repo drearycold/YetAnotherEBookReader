@@ -301,6 +301,11 @@ class YabrPDFView: PDFView {
         if sender.state == .ended {
             let tapLocation = sender.location(in: self)
             
+            let aoi = self.areaOfInterest(for: tapLocation)
+            print("\(#function) aoi=\(aoi)")
+            
+            guard aoi.contains(.annotationArea) else { return }
+            
             let tappedHighlightValues = highlights.reduce(into: [HighlightValue]()) { partialResult, entry in
                 entry.value.forEach { highlightValue in
                     if highlightValue.annotations.filter ({
@@ -329,6 +334,27 @@ class YabrPDFView: PDFView {
                 UIMenuController.shared.hideMenu()
             } else if self.currentSelection != nil {
                 self.clearSelection()
+            }
+            
+            self.visiblePages.forEach { visiblePage in
+                guard let annotation = visiblePage.annotation(at: self.convert(tapLocation, to: visiblePage)),
+                      let typeString = annotation.type,
+                      let annotationAction = annotation.action
+                else {
+                    return
+                }
+                
+                print("\(#function) \(typeString) \(annotation.bounds)")
+                
+                switch typeString {
+                case "Link":
+                    if let currentPage = currentPage {
+                        self.yabrPDFViewController?.updateHistoryMenu(curPage: currentPage, location: annotation.bounds)
+                    }
+                    self.perform(annotationAction)
+                default:
+                    break
+                }
             }
         }
     }
