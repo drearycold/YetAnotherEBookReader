@@ -243,14 +243,15 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         }), for: .primaryActionTriggered)
         
         pageBackButton.setImage(UIImage(systemName: "arrow.uturn.left"), for: .normal)
-        pageBackButton.setTitleColor(.systemBackground, for: .normal)
+        let tintColor: UIColor = pdfOptions.isDark(.lightText, .darkText)
+        pageBackButton.setTitleColor(tintColor, for: .normal)
         
         stackView.distribution = .fill
         stackView.alignment = .fill
         stackView.axis = .horizontal
         stackView.spacing = 16.0
         
-        if #available(macCatalyst 16.0, *) {
+        if #available(iOS 16.0, *) {
             pageBackButton.isHidden = true
             stackView.addArrangedSubview(pageBackButton)
             
@@ -348,7 +349,18 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
         ])
 
-        UIMenuController.shared.menuItems = pdfView.buildDefaultMenuItems()
+        let defaultMenuItems = buildDefaultMenuItems()
+        UIMenuController.shared.menuItems = defaultMenuItems
+        
+        if #available(iOS 16.0, *),
+           false {
+            let newEditMenu = UIEditMenuInteraction(delegate: self)
+            pdfView.addInteraction(newEditMenu)
+            let longPress = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+            
+            longPress.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
+            pdfView.addGestureRecognizer(longPress)
+        }
         
         yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
             pdfView.injectHighlight(highlight: highlight)
@@ -457,12 +469,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     }
     
     func updateHistoryMenu(curPage: PDFPage, location: CGRect? = nil) {
-        guard let pdfDoc = curPage.document,
-              let outlineRoot = pdfDoc.outlineRoot
-        else { return }
+        guard let pdfDoc = curPage.document else { return }
         
         var lastHistoryLabel = "Page \(curPage.pageRef!.pageNumber)"
-        if let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
+        if let outlineRoot = pdfDoc.outlineRoot,
+           let curPageSelection = curPage.selection(for: curPage.bounds(for: .mediaBox)),
            let curPageSelectionText = curPageSelection.string,
            curPageSelectionText.count > 5,
            var curPageOutlineItem = pdfDoc.outlineItem(for: curPageSelection) {
@@ -490,9 +501,25 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 } else if let lastHistoryItem = children.last as? UIAction {
                     self.pageBackButton.isHidden = false
                     if lastHistoryItem.title.count > 20 {
-                        self.pageBackButton.setTitle(" Back to \(lastHistoryItem.title.prefix(20))...", for: .normal)
+                        self.pageBackButton.setAttributedTitle(
+                            .init(
+                                string: " Back to \(lastHistoryItem.title.prefix(20))...",
+                                attributes: [
+                                    NSAttributedString.Key.font: UIFont.systemFont(ofSize: 12.0)
+                                ]
+                            ),
+                            for: .normal
+                        )
                     } else {
-                        self.pageBackButton.setTitle(" Back to \(lastHistoryItem.title)", for: .normal)
+                        self.pageBackButton.setAttributedTitle(
+                            .init(
+                                string: " Back to \(lastHistoryItem.title)",
+                                attributes: [
+                                    NSAttributedString.Key.font: UIFont.systemFont(ofSize: 12.0)
+                                ]
+                            ),
+                            for: .normal
+                        )
                     }
                 }
             }
@@ -514,9 +541,25 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         self.pageBackButton.isHidden = false
         if lastHistoryLabel.count > 20 {
-            self.pageBackButton.setTitle(" Back to \(lastHistoryLabel.prefix(20))...", for: .normal)
+            self.pageBackButton.setAttributedTitle(
+                .init(
+                    string: " Back to \(lastHistoryLabel.prefix(20))...",
+                    attributes: [
+                        NSAttributedString.Key.font: UIFont.systemFont(ofSize: 12.0)
+                    ]
+                    ),
+                for: .normal
+            )
         } else {
-            self.pageBackButton.setTitle(" Back to \(lastHistoryLabel)", for: .normal)
+            self.pageBackButton.setAttributedTitle(
+                .init(
+                    string: " Back to \(lastHistoryLabel)",
+                    attributes: [
+                        NSAttributedString.Key.font: UIFont.systemFont(ofSize: 12.0)
+                    ]
+                ),
+                for: .normal
+            )
         }
     }
     
@@ -1269,6 +1312,62 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     func getPageViewPositionHistory(_ pageNum: Int) -> PageViewPosition? {
         return self.pageViewPositionHistory[pageNum]
     }
+    
+    func buildDefaultMenuItems() -> [UIMenuItem] {
+        let highlightMenuItem = UIMenuItem(title: "HighlightA", action: #selector(highlightAction(_:)))
+        
+        var menuItems = [highlightMenuItem]
+        
+        if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
+            menuItems.append(UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction)))
+            dictViewer.1.loadViewIfNeeded()
+        }
+        
+        return menuItems
+    }
+    
+    @objc func highlightAction(_ sender: Any?) {
+        if let highlightTapped = pdfView.highlightTapped {
+            
+        } else {
+            guard let currentSelection = pdfView.currentSelection else { return }
+            
+            var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
+            currentSelection.pages.forEach { selectionPage in
+                guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
+                var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
+                for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
+                    let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
+                    pdfHighlightPage.ranges.append(selectionPageRange)
+                }
+                pdfHighlightPageLocations.append(pdfHighlightPage)
+            }
+            
+            let pdfHighlight = PDFHighlight(uuid: .init(), pos: pdfHighlightPageLocations, type: 0, content: currentSelection.string ?? "No Content", date: .init())
+            
+            yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
+            pdfView.injectHighlight(highlight: pdfHighlight)
+            
+            print("\(#function) currentSelection=\(currentSelection)")
+        }
+    }
+    
+    @objc func dictViewerAction(_ sender: Any?) {
+        guard let s = pdfView.currentSelection?.string,
+              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
+        
+        print("\(#function) word=\(s)")
+        dictViewer.1.title = s
+        
+        let nav = UINavigationController(rootViewController: dictViewer.1)
+        nav.setNavigationBarHidden(false, animated: false)
+        nav.setToolbarHidden(false, animated: false)
+        
+        pdfView.delegate?.pdfViewParentViewController?().present(nav, animated: true, completion: nil)
+    }
+    
+    
+    
 }
 
 extension YabrPDFViewController: PDFDocumentDelegate {
@@ -1323,4 +1422,33 @@ protocol YabrPDFMetaSource {
     func yabrPDFReferenceText(_ view: YabrPDFView?, set refText: String?)
     
     func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T
+}
+
+@available(iOS 16.0, *)
+extension YabrPDFViewController: UIEditMenuInteractionDelegate {
+    @objc func didLongPress(_ recognizer: UIGestureRecognizer) {
+        let location = recognizer.location(in: pdfView)
+        
+        let configuration = UIEditMenuConfiguration(identifier: nil, sourcePoint: location)
+
+        guard let interaction = pdfView.interactions.first(where: { (($0 as? UIEditMenuInteraction)?.delegate as? YabrPDFViewController) == self }) as? UIEditMenuInteraction
+        else {
+            return
+        }
+        
+//        let aoi = pdfView.areaOfInterest(for: location)
+//        guard aoi.contains(.textArea)
+//        else { return }
+        
+        pdfView.visiblePages.forEach { page in
+            let pagePoint = pdfView.convert(location, to: page)
+            if let pageSelection = pdfView.currentPage?.selectionForWord(at: pagePoint) {
+                pdfView.setCurrentSelection(pageSelection, animate: true)
+                print("\(#function) selection=\(pageSelection)")
+            }
+        }
+        
+        // Present the edit menu interaction.
+        interaction.presentEditMenu(with: configuration)
+    }
 }
