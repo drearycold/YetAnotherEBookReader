@@ -31,6 +31,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pagePrevButton = UIButton()
     let pageBackButton = UIButton()
     
+    let annotationView = YabrPDFAnnotationView()
+    
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
     
@@ -352,14 +354,87 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         let defaultMenuItems = buildDefaultMenuItems()
         UIMenuController.shared.menuItems = defaultMenuItems
         
-        if #available(iOS 16.0, *),
-           false {
-            let newEditMenu = UIEditMenuInteraction(delegate: self)
-            pdfView.addInteraction(newEditMenu)
-            let longPress = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+        if #available(iOS 16.0, *) {
+//            pdfView.interactions.forEach {
+//                pdfView.removeInteraction($0)
+//            }
+//
+//            pdfView.gestureRecognizers?.forEach {
+//                pdfView.removeGestureRecognizer($0)
+//            }
+//
+//            print("\(#function) interactions=\(pdfView.interactions.count)")
             
-            longPress.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
-            pdfView.addGestureRecognizer(longPress)
+//                let newEditMenu = UIEditMenuInteraction(delegate: self)
+//                pdfView.addInteraction(newEditMenu)
+//                let longPress = UILongPressGestureRecognizer(target: self, action: #selector(didLongPress(_:)))
+//
+//                longPress.allowedTouchTypes = [UITouch.TouchType.direct.rawValue as NSNumber]
+//                pdfView.addGestureRecognizer(longPress)
+            
+            
+//            let testLabel = UILabel()
+//            testLabel.text = "Highlight"
+//            testLabel.textColor = .black
+//            testLabel.backgroundColor = .gray
+//            testLabel.frame = .init(x: 100, y: 100, width: 100, height: 100)
+//            testLabel.isHidden = true
+//            self.view.addSubview(testLabel)
+            
+            self.annotationView.isHidden = true
+            self.view.addSubview(self.annotationView)
+            
+//            self.annotationView.highlightButton.addAction(.init(handler: { [self] action in
+//                highlightAction(pdfView)
+//            }), for: .primaryActionTriggered)
+            
+            self.annotationView.underlineButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
+            self.annotationView.highlightButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
+            
+            NotificationCenter.default.addObserver(forName: .PDFViewSelectionChanged, object: pdfView, queue: nil) { [self] notification in
+//                newEditMenu.presentEditMenu(with: .init(identifier: nil, sourcePoint: .zero))
+                
+                guard let selection = pdfView.currentSelection,
+                      let selectionString = selection.string,
+                      selectionString.count > 0
+                else {
+                    annotationView.isHidden = true
+                    return
+                }
+                
+                guard let selectionLastLine = selection.selectionsByLine().last,
+                      let selectionLastLinePage = selectionLastLine.pages.last
+                else {
+                    annotationView.isHidden = true
+                    return
+                }
+                
+                let selectionBound = selectionLastLine.bounds(for: selectionLastLinePage)
+                let selectionInView = pdfView.convert(selectionBound, from: selectionLastLinePage)
+                
+                let buttonSize = CGFloat(48)
+                let padding = CGFloat(32)
+                
+                let annotationViewSize = CGSize(width: buttonSize, height: CGFloat(annotationView.arrangedSubviews.count) * buttonSize)
+                
+                var annotationViewPosition = CGPoint(
+                    x: selectionInView.maxX + padding / 2.0,
+                    y: selectionInView.maxY + padding / 2.0
+                )
+                
+                if annotationViewPosition.x + annotationViewSize.width + padding > pdfView.frame.width {
+                    annotationViewPosition.x = pdfView.frame.width - buttonSize - padding
+                }
+                
+                if annotationViewPosition.y + annotationViewSize.height + padding > pdfView.frame.height {
+                    annotationViewPosition.y = selectionInView.minY - CGFloat(annotationView.arrangedSubviews.count) * buttonSize - padding * 2.0
+                }
+                
+                annotationView.frame = .init(origin: annotationViewPosition, size: annotationViewSize)
+                
+                annotationView.isHidden = false
+            }
+            
         }
         
         yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
@@ -1343,12 +1418,24 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 pdfHighlightPageLocations.append(pdfHighlightPage)
             }
             
-            let pdfHighlight = PDFHighlight(uuid: .init(), pos: pdfHighlightPageLocations, type: 0, content: currentSelection.string ?? "No Content", date: .init())
+            var style = BookHighlightStyle.yellow.rawValue
+            if (sender as? UIButton) == annotationView.underlineButton {
+                style = BookHighlightStyle.underline.rawValue
+            }
+            let pdfHighlight = PDFHighlight(
+                uuid: .init(),
+                pos: pdfHighlightPageLocations,
+                type: style,
+                content: currentSelection.string ?? "No Content",
+                date: .init()
+            )
             
             yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
             pdfView.injectHighlight(highlight: pdfHighlight)
             
             print("\(#function) currentSelection=\(currentSelection)")
+            
+            self.annotationView.isHidden = true
         }
     }
     

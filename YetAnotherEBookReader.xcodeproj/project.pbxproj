@@ -189,6 +189,8 @@
 		E74729C129D4423D007659A1 /* LibraryInfoCategoryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */; };
 		E74729C329D52F5E007659A1 /* LibraryInfoBookListInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */; };
 		E74729C529D54DB2007659A1 /* LibraryInfoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */; };
+		E75A97CA2A67AB57000F4292 /* YabrPDFAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */; };
+		E75A97CB2A67AB5E000F4292 /* YabrPDFAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */; };
 		E769C598296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
 		E769C599296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
 		E769C59A296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
@@ -498,6 +500,7 @@
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
 		E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoViewModel.swift; sourceTree = "<group>"; };
+		E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = YabrPDFAnnotationView.swift; path = YetAnotherEBookReader/Views/PDFView/YabrPDFAnnotationView.swift; sourceTree = SOURCE_ROOT; };
 		E769C52B296BF4C50089C21E /* About.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = About.storyboard; sourceTree = "<group>"; };
 		E769C52D296BF4C50089C21E /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		E769C52E296BF4C50089C21E /* Publication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Publication.swift; sourceTree = "<group>"; };
@@ -775,6 +778,7 @@
 				E7832D5E280D39D9006E6901 /* YabrPDFView.swift */,
 				2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */,
 				E792835228F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift */,
+				E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */,
 			);
 			path = PDFView;
 			sourceTree = "<group>";
@@ -1699,6 +1703,7 @@
 				E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */,
 				E769C5EE296BF4C60089C21E /* LCPViewModel.swift in Sources */,
 				2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */,
+				E75A97CA2A67AB57000F4292 /* YabrPDFAnnotationView.swift in Sources */,
 				2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */,
 				E769C5FC296BF4C60089C21E /* Bookmark.swift in Sources */,
 				2A2A853A275C699500C17825 /* YabrEBookReaderNavigationController.swift in Sources */,
@@ -1874,6 +1879,7 @@
 				2ADCD7E926F4B96200FBAE11 /* RecentShelfController.swift in Sources */,
 				E769C5E1296BF4C60089C21E /* PublicationCollectionViewCell.swift in Sources */,
 				2ADCD7EA26F4B96200FBAE11 /* ReadingPositionDetailView.swift in Sources */,
+				E75A97CB2A67AB5E000F4292 /* YabrPDFAnnotationView.swift in Sources */,
 				E769C5EF296BF4C60089C21E /* LCPViewModel.swift in Sources */,
 				2ADCD7EC26F4B96200FBAE11 /* BookFormatDownload.swift in Sources */,
 				2ADCD7ED26F4B96200FBAE11 /* EpubFolioReaderContainer.swift in Sources */,

@@ -42,6 +42,10 @@ class YabrPDFView: PDFView {
         let could = super.canPerformAction(action, withSender: sender)
         print("\(#function) \(could) \(action.description)")
         
+        self.interactions.forEach { interaction in
+            print("\(#function) \(interaction)")
+        }
+        
         if action.description == "selectAll:" {
             return false
         }
@@ -414,6 +418,17 @@ class YabrPDFView: PDFView {
             UIMenuController.shared.showMenu(from: self, rect: self.convert(selection.bounds(for: page), from: page))
         }
     }
+    
+    @objc func deleteHighlightAction(_ sender: Any?) {
+        guard let highlightTapped = highlightTapped
+        else {
+            return
+        }
+
+        if let pdfHighlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightTapped) {
+            self.yabrPDFMetaSource?.yabrPDFHighlights(self, remove: pdfHighlight)
+        }
+    }
 }
 
 extension BookHighlightStyle {
@@ -494,6 +509,7 @@ extension YabrPDFView {
         
         menuItems.append(UIMenuItem(title: "Select", action: #selector(selectHighlightAction)))
         menuItems.append(UIMenuItem(title: "Modify", action: #selector(modifyHighlightAction)))
+        menuItems.append(UIMenuItem(title: "Delete", action: #selector(deleteHighlightAction)))
         
         return menuItems
     }
