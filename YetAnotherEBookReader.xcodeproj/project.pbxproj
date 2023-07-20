@@ -364,6 +364,7 @@
 		E79360182A08A1B000E0E554 /* LibraryInfoCategoryItemsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79360172A08A1B000E0E554 /* LibraryInfoCategoryItemsView.swift */; };
 		E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
 		E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
+		E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */; };
 		E7C7779528ED324300939D63 /* YabrPDFAnnotationPageVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C7779428ED324300939D63 /* YabrPDFAnnotationPageVC.swift */; };
 		E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C7779728ED495700939D63 /* YabrPDFReferenceList.swift */; };
 		E7C777A128ED495900939D63 /* YabrPDFChapterList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C7779828ED495700939D63 /* YabrPDFChapterList.swift */; };
@@ -1779,6 +1780,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */,
 				E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */,
 				E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */,
 				E732E3EF2A3F03350075D1AC /* LibraryInfoCategoryListView.swift in Sources */,
