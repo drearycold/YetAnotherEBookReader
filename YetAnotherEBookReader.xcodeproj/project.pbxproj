@@ -191,6 +191,7 @@
 		E74729C529D54DB2007659A1 /* LibraryInfoViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */; };
 		E75A97CA2A67AB57000F4292 /* YabrPDFAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */; };
 		E75A97CB2A67AB5E000F4292 /* YabrPDFAnnotationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */; };
+		E75A97CD2A68C79D000F4292 /* YabrPDFSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */; };
 		E769C598296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
 		E769C599296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
 		E769C59A296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
@@ -501,6 +502,7 @@
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
 		E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoViewModel.swift; sourceTree = "<group>"; };
 		E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = YabrPDFAnnotationView.swift; path = YetAnotherEBookReader/Views/PDFView/YabrPDFAnnotationView.swift; sourceTree = SOURCE_ROOT; };
+		E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSharingProvider.swift; sourceTree = "<group>"; };
 		E769C52B296BF4C50089C21E /* About.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = About.storyboard; sourceTree = "<group>"; };
 		E769C52D296BF4C50089C21E /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		E769C52E296BF4C50089C21E /* Publication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Publication.swift; sourceTree = "<group>"; };
@@ -779,6 +781,7 @@
 				2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */,
 				E792835228F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift */,
 				E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */,
+				E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */,
 			);
 			path = PDFView;
 			sourceTree = "<group>";
@@ -1749,6 +1752,7 @@
 				2AC340D32647A23600A477ED /* DSReaderHelperConnector.swift in Sources */,
 				E769C60C296BF4C60089C21E /* EPUBModule.swift in Sources */,
 				E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */,
+				E75A97CD2A68C79D000F4292 /* YabrPDFSharingProvider.swift in Sources */,
 				2AF6FE0A2701B205002BA27E /* YabrReadiumPDFViewController.swift in Sources */,
 				E769C5DA296BF4C60089C21E /* LibraryError.swift in Sources */,
 				2AF6FE0C2701D0F7002BA27E /* YabrReadiumReaderViewController.swift in Sources */,

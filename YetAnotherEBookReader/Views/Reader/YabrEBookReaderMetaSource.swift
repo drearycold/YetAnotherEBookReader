@@ -38,6 +38,19 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         }
     }
     
+    func yabrPDFBook(_ view: YabrPDFView?, info: String) -> String? {
+        switch info {
+        case "Title":
+            return book.title
+        case "Author":
+            return book.authors.first!
+        case "Key":
+            return book.inShelfId
+        default:
+            return nil
+        }
+    }
+    
     func yabrPDFURL(_ view: YabrPDFView?) -> URL? {
         return readerInfo.url
     }

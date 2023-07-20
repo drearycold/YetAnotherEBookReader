@@ -33,6 +33,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     let annotationView = YabrPDFAnnotationView()
     
+    let shareBarButtonItem = UIBarButtonItem()
+    
     let titleInfoButton = UIButton()
     var tocList = [(String, Int)]()
     
@@ -303,6 +305,19 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
 //            })),
         ], animated: true)
         
+        let shareOriginalPDF = UIAction(title: "Original PDF") { [self] action in
+            print("\(#function) \(action)")
+            sharePDF(annotated: false)
+        }
+        
+        let shareAnnotatedPDF = UIAction(title: "Annotated PDF") { [self] action in
+            sharePDF(annotated: true)
+        }
+        
+        shareBarButtonItem.title = "Share"
+        shareBarButtonItem.image = UIImage(systemName: "square.and.arrow.up")
+        shareBarButtonItem.menu = UIMenu(children: [shareOriginalPDF, shareAnnotatedPDF])
+        
         navigationItem.setRightBarButtonItems([
             UIBarButtonItem(image: UIImage(systemName: "clock"), menu: historyMenu),
             UIBarButtonItem(
@@ -323,6 +338,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     self.present(optionViewController, animated: true, completion: nil)
                 }
             ),
+            shareBarButtonItem
         ], animated: true)
         self.navigationItem.rightBarButtonItems?.first?.isEnabled = false
         
@@ -1453,7 +1469,52 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         pdfView.delegate?.pdfViewParentViewController?().present(nav, animated: true, completion: nil)
     }
     
-    
+    func sharePDF(annotated: Bool) {
+        let provider = YabrPDFSharingProvider(placeholderItem: "")
+        guard let pdfURL = yabrPDFMetaSource?.yabrPDFURL(pdfView),
+              let bookInShelfId = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Key")
+        else {
+            return
+        }
+        
+        let bookTitle = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Title") ?? "No Title"
+        let bookAuthor = yabrPDFMetaSource?.yabrPDFBook(pdfView, info: "Author") ?? "Unknown"
+        
+        let tmpDir = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(bookInShelfId, isDirectory: true)
+        let tmpFile = tmpDir.appendingPathComponent("\(bookTitle) - \(bookAuthor).pdf", isDirectory: false)
+        
+        do {
+            if false == FileManager.default.fileExists(atPath: tmpDir.path) {
+                try FileManager.default.createDirectory(at: tmpDir, withIntermediateDirectories: false)
+            }
+            if FileManager.default.fileExists(atPath: tmpFile.path) {
+                try FileManager.default.removeItem(at: tmpFile)
+            }
+            if annotated {
+                guard pdfView.document?.write(to: tmpFile) == true
+                else {
+                    return
+                }
+            } else {
+                try FileManager.default.linkItem(at: pdfURL, to: tmpFile)
+            }
+        } catch {
+            print("Save Original PDF error=\(error)")
+            return
+        }
+        
+        provider.fileURL = tmpFile
+        provider.subject = "Save Original PDF"
+        
+        let vc = UIActivityViewController(activityItems: [provider], applicationActivities: nil)
+        if let popover = vc.popoverPresentationController {
+            popover.barButtonItem = shareBarButtonItem
+        }
+        
+        present(vc, animated: true, completion: nil)
+    }
     
 }
 
@@ -1470,6 +1531,8 @@ extension YabrPDFViewController: PDFViewDelegate {
 }
 
 protocol YabrPDFMetaSource {
+    func yabrPDFBook(_ view: YabrPDFView?, info: String) -> String?
+    
     func yabrPDFURL(_ view: YabrPDFView?) -> URL?
     
     func yabrPDFDocument(_ view: YabrPDFView?) -> PDFDocument?
