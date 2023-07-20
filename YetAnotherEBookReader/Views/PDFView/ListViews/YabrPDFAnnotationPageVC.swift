@@ -20,7 +20,6 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     var viewList = [UIViewController]()
     var segmentedControlItems = [String]()
     
-    let chapterViewController = YabrPDFChapterList()
     let bookmarkViewController = YabrPDFBookmarkList()
     let highlightViewController = YabrPDFHighlightList()
     let referenceViewController = YabrPDFReferenceList()
@@ -43,12 +42,11 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        viewList = [chapterViewController, bookmarkViewController, highlightViewController]
-        chapterViewController.didMove(toParent: self)
+        viewList = [bookmarkViewController, highlightViewController]
         bookmarkViewController.didMove(toParent: self)
         highlightViewController.didMove(toParent: self)
         
-        segmentedControlItems = ["Chapter", "Bookmark", "Highlight"]
+        segmentedControlItems = ["Bookmark", "Highlight"]
         
         if self.yabrPDFMetaSource?.yabrPDFReferenceText(yabrPDFView) != nil {
             viewList.append(referenceViewController)
@@ -86,10 +84,9 @@ class YabrPDFAnnotationPageVC: UIPageViewController {
             segmentedControl.selectedSegmentTintColor = UIColor(cgColor: fillColor)
         }
         
-        if let textColor = chapterViewController.textColor {
+        if let textColor = bookmarkViewController.textColor {
             segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
         }
-
     }
 
     override func viewWillAppear(_ animated: Bool) {

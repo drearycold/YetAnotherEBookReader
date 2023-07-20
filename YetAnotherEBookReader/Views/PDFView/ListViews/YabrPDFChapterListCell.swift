@@ -34,7 +34,7 @@ class YabrPDFChapterListCell: UITableViewCell {
         var constraints = [NSLayoutConstraint]()
         let views = ["label": indexLabel, "page": pageLabel]
 
-        NSLayoutConstraint.constraints(withVisualFormat: "H:|-15-[label]-[page]-15-|", options: [], metrics: nil, views: views).forEach {
+        NSLayoutConstraint.constraints(withVisualFormat: "H:|-15-[label]-[page(>=48)]-15-|", options: [], metrics: nil, views: views).forEach {
             constraints.append($0 as NSLayoutConstraint)
         }
 

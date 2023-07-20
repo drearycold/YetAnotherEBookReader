@@ -84,7 +84,6 @@ class YabrPDFNavigationPageVC: UIPageViewController {
         if let textColor = chapterViewController.textColor {
             segmentedControl.setTitleTextAttributes([.foregroundColor: textColor], for: .normal)
         }
-
     }
 
     // MARK: - Segmented control changes

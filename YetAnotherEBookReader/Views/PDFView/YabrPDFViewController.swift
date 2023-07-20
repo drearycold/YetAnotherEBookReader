@@ -283,13 +283,27 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         navigationItem.setLeftBarButtonItems([
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
-            UIBarButtonItem(title: "List", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { action in
-                let pageController = YabrPDFAnnotationPageVC()
+            UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { action in
+                let navigationController = YabrPDFNavigationPageVC()
                 
-                pageController.yabrPDFView = self.pdfView
-                pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
+                navigationController.yabrPDFView = self.pdfView
+                navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
                 
-                let nav = UINavigationController(rootViewController: pageController)
+                let nav = UINavigationController(rootViewController: navigationController)
+                if let fillColor = PDFPageWithBackground.fillColor {
+                    nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
+                    nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
+                }
+                
+                self.present(nav, animated: true)
+            })),
+            UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { action in
+                let annotationController = YabrPDFAnnotationPageVC()
+                
+                annotationController.yabrPDFView = self.pdfView
+                annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
+                
+                let nav = UINavigationController(rootViewController: annotationController)
                 if let fillColor = PDFPageWithBackground.fillColor {
                     nav.navigationBar.backgroundColor = UIColor(cgColor: fillColor)
                     nav.navigationBar.barTintColor = UIColor(cgColor: fillColor)
@@ -1493,6 +1507,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 try FileManager.default.removeItem(at: tmpFile)
             }
             if annotated {
+                let fillColor = PDFPageWithBackground.fillColor
+                PDFPageWithBackground.fillColor = nil
+                defer {
+                    PDFPageWithBackground.fillColor = fillColor
+                }
                 guard pdfView.document?.write(to: tmpFile) == true
                 else {
                     return
@@ -1502,6 +1521,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             }
         } catch {
             print("Save Original PDF error=\(error)")
+            let alert = UIAlertController(title: "Error Sharing PDF", message: error.localizedDescription, preferredStyle: .alert)
+            alert.addAction(.init(title: "OK", style: .default))
+            self.present(alert, animated: true)
             return
         }
         

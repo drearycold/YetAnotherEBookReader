@@ -508,7 +508,7 @@ extension YabrPDFView {
         var menuItems = [UIMenuItem]()
         
         menuItems.append(UIMenuItem(title: "Select", action: #selector(selectHighlightAction)))
-        menuItems.append(UIMenuItem(title: "Modify", action: #selector(modifyHighlightAction)))
+//        menuItems.append(UIMenuItem(title: "Modify", action: #selector(modifyHighlightAction)))
         menuItems.append(UIMenuItem(title: "Delete", action: #selector(deleteHighlightAction)))
         
         return menuItems

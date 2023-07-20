@@ -87,7 +87,11 @@ class YabrPDFThumbnailList: UICollectionViewController {
                 break
             }
         }
-        let row = currentPageNumber - (topLevelOutlines[sectionIndex].destination?.page?.pageRef?.pageNumber ?? 0)
+        var row = currentPageNumber - (topLevelOutlines[sectionIndex].destination?.page?.pageRef?.pageNumber ?? 0)
+        while row >= collectionView(collectionView, numberOfItemsInSection: sectionIndex) {
+            row -= collectionView(collectionView, numberOfItemsInSection: sectionIndex)
+            sectionIndex += 1
+        }
         self.collectionView.scrollToItem(at: IndexPath(row: row, section: sectionIndex), at: .centeredVertically, animated: true)
     }
     
@@ -122,6 +126,7 @@ class YabrPDFThumbnailList: UICollectionViewController {
         let headerView = collectionView.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: kReuseHeaderFooterIdentifier, for: indexPath) as! YabrPDFThumbnailSectionCell
         
         headerView.titleLabel.text = topLevelOutlines[indexPath.section].label
+        headerView.titleLabel.textColor = textColor
         
         headerView.contentView.backgroundColor = backgroundColor
         
