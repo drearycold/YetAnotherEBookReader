@@ -14,6 +14,8 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
     let webView = WKWebView()
     var server: String?
     var word = ""
+    var backgroundColor = "#"
+    var textColor = "#"
     
     open override func viewDidLoad() {
         super.viewDidLoad()
@@ -73,7 +75,27 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
     open override func viewWillAppear(_ animated: Bool) {
         guard let server = server else { return }
 
-        word = self.title ?? "_"
+        do {
+            let json = try JSONDecoder().decode([String:String].self, from: self.title?.data(using: .utf8) ?? .init())
+            if let word = json["word"] {
+                self.word = word
+            }
+            if let backgroundColor = json["backgroundColor"] {
+                self.backgroundColor = backgroundColor
+            } else {
+                self.backgroundColor = "#"
+            }
+            if let textColor = json["textColor"] {
+                self.textColor = textColor
+            } else {
+                self.textColor = "#"
+            }
+        } catch {
+            word = self.title ?? "_"
+            backgroundColor = "#"
+            textColor = "#"
+        }
+        
         if word.contains(" ") == false {
             let tagger = NLTagger(tagSchemes: [.lemma])
             tagger.string = word
@@ -87,14 +109,84 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             }
         }
         
-        if let wordEncoded = word.lowercased().addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-           let url = URL(string: server + "?word=" + wordEncoded) {
-            webView.load(URLRequest(url: url))
-        }
-        
         self.navigationItem.title = word
         
+        webView.scrollView.backgroundColor = nil
+        webView.backgroundColor = nil
+        webView.underPageBackgroundColor = nil
+        
         super.viewWillAppear(animated)
+        
+        guard var urlComponent = URLComponents(string: server)
+        else {
+            webView.loadHTMLString("""
+            <html>
+            <body>
+            <p>Error parsing server url</p>
+            </body>
+            </html>
+            """, baseURL: nil)
+            return
+        }
+        
+        urlComponent.queryItems = [
+            .init(name: "word", value: word.lowercased()),
+        ]
+        
+        guard let url = urlComponent.url
+        else {
+            webView.loadHTMLString("""
+            <html>
+            <body>
+            <p>Error generating request url</p>
+            </body>
+            </html>
+            """, baseURL: nil)
+            return
+        }
+        
+        Task {
+            await self.loadWebView(url)
+        }
+    }
+    
+    func loadWebView(_ url: URL) async {
+        guard let host = url.host
+        else {
+            return
+        }
+        
+        if let backgroundColor = HTTPCookie(properties: [
+            .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
+            .name: "backgroundColor",
+            .value: backgroundColor,
+            .domain: host
+        ]) {
+            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(backgroundColor)
+        }
+        
+        if let textColor = HTTPCookie(properties: [
+            .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
+            .name: "textColor",
+            .value: textColor,
+            .domain: host
+        ]) {
+            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(textColor)
+        }
+        
+        var request = URLRequest(url: url)
+//        request.httpShouldHandleCookies = true
+//        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        self.webView.load(request)
+    }
+    
+    open override func viewDidDisappear(_ animated: Bool) {
+//        webView.loadHTMLString("""
+//            <html>
+//            <body>
+//            </body>
+//            </html>
+//            """, baseURL: nil)
     }
     
     open override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
