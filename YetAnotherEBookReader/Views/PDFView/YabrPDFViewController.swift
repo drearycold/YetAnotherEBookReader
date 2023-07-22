@@ -14,6 +14,8 @@ import SwiftUI
 @available(macCatalyst 14.0, *)
 class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pdfView = YabrPDFView()
+    let pdfViewAux = YabrPDFView()
+    
     let thumbController = UIViewController()
 
     let blankView = UIImageView()
@@ -30,6 +32,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     let pageNextButton = UIButton()
     let pagePrevButton = UIButton()
     let pageBackButton = UIButton()
+    let pageAuxButton = UIButton()
     
     let annotationView = YabrPDFAnnotationView()
     
@@ -270,10 +273,47 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             
             pageBackButton.addAction(pageBackAction, for: .primaryActionTriggered)
         }
+        
+        pageAuxButton.setImage(UIImage(systemName: "square.split.bottomrightquarter"), for: .normal)
+        pageAuxButton.addAction(.init(handler: { [self] action in
+            if pdfViewAux.superview == nil {
+                pdfViewAux.backgroundColor = pdfView.backgroundColor
+//                pdfViewAux.layer.shadowColor = pdfView.backgroundColor.cgColor
+                
+                pdfViewAux.frame = .init(
+                    origin: .init(x: 150.0, y: view.frame.height - 260),
+                    size: .init(width: pdfView.frame.width - 200.0, height: 200.0)
+                )
+                
+                if pdfViewAux.document == nil {
+                    pdfViewAux.document = pdfView.document
+                    
+                    pdfViewAux.layer.borderWidth = 2
+                    pdfViewAux.layer.cornerRadius = 8
+                    pdfViewAux.layer.shadowRadius = 16
+                    
+                    pdfViewAux.scaleFactor = pdfView.scaleFactor * 0.8
+                    pdfViewAux.displayMode = .singlePageContinuous
+                    pdfViewAux.displayDirection = .vertical
+                    pdfViewAux.interpolationQuality = .high
+                    
+                    if let currentDestination = pdfView.currentDestination {
+                        pdfViewAux.go(to: currentDestination)
+                    }
+                }
+                
+                view.addSubview(pdfViewAux)
+            } else {
+                pdfViewAux.removeFromSuperview()
+            }
+            
+        }), for: .primaryActionTriggered)
+        
         stackView.addArrangedSubview(pagePrevButton)
         stackView.addArrangedSubview(pageSlider)
         stackView.addArrangedSubview(pageIndicator)
         stackView.addArrangedSubview(pageNextButton)
+        stackView.addArrangedSubview(pageAuxButton)
         
         let toolbarView = UIBarButtonItem(customView: stackView)
         setToolbarItems([toolbarView], animated: false)
