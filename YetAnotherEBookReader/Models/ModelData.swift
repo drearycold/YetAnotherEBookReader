@@ -1242,7 +1242,9 @@ final class ModelData: ObservableObject {
     }
     
     func updateServerDSReaderHelper(dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        
+        try! realm.write {
+            realm.add(dsreaderHelper.managedObject(), update: .modified)
+        }
     }
     
     
