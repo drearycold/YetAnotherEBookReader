@@ -592,7 +592,7 @@ struct LibraryInfoBookListView: View {
                 text = "Cannot find in any library"
             }
         } else {
-            text = "Found in \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
+            text = "From \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
             
             if librariesLoading > 0 {
                 text += ", \(librariesLoading) to go"

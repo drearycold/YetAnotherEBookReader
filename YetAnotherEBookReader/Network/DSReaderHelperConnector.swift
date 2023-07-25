@@ -26,7 +26,13 @@ struct DSReaderHelperConnector {
             let userCredential = URLCredential(user: server.username,
                                                password: server.password,
                                                persistence: .forSession)
-            URLCredentialStorage.shared.set(userCredential, for: space)
+            if Thread.isMainThread == false {
+                DispatchQueue.main.sync {
+                    URLCredentialStorage.shared.set(userCredential, for: space)
+                }
+            } else {
+                URLCredentialStorage.shared.set(userCredential, for: space)
+            }
         }
         
         return calibreServerService.urlSession(server: server)
@@ -37,6 +43,15 @@ struct DSReaderHelperConnector {
               var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/configuration")
+        
+        return urlComponents
+    }
+    
+    func endpointConfigurationV1(libraryKey: String) -> URLComponents? {
+        guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
+              var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
+        urlComponents.port = dsreaderHelperServer.port
+        urlComponents.path.append("/dshelper/1/configuration/\(libraryKey)")
         
         return urlComponents
     }
@@ -84,6 +99,17 @@ struct DSReaderHelperConnector {
             .eraseToAnyPublisher()
         
         return publisher
+    }
+    
+    func refreshConfiguration(_ libraryKey: String) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
+        guard let url = endpointConfigurationV1(libraryKey: libraryKey)?.url else {
+            throw URLError(.badURL)
+        }
+        
+        let (data, _) = try await urlSession.data(from: url)
+        let config = try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        
+        return (config, data)
     }
     
     func addToShelf(goodreads_id: String, shelfName: String) -> Bool {

@@ -1996,7 +1996,7 @@ struct CalibreLibraryCountPages: CalibreLibraryPluginColumnInfo, Codable, Hashab
     
     init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
         guard let libraryName = ModelData.shared?.calibreLibraries[libraryId]?.name,
-              let library_config = configuration?.count_pages_prefs?.library_config[libraryName] else { return }
+              let library_config = configuration?.count_pages_prefs?.library_config?[libraryName] else { return }
         pageCountCN = library_config.customColumnPages
         wordCountCN = library_config.customColumnWords
         fleschReadingEaseCN = library_config.customColumnFleschReading
@@ -2101,7 +2101,7 @@ struct CalibreCountPagesPrefs: Codable, Hashable {
         var customColumnWords = ""
     }
     
-    var library_config: [String: LibraryConfig] = [:]
+    var library_config: [String: LibraryConfig]? = [:]
 }
 
 struct CalibreGoodreadsSyncPrefs: Codable, Hashable {

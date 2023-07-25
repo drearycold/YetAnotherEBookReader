@@ -49,11 +49,20 @@ struct ReadingPositionHistoryView: View {
 //                }
                 
                 #if DEBUG
-                ForEach(readingPositions) { readingPosition in
-                    HStack {
-                        Text(readingPosition.deviceId)
-                        Text(readingPosition.lastReadChapter)
-                        Text("\(readingPosition.lastProgress)")
+                Text("BookId: \(bookId ?? -1)")
+                Text("Library: \(library?.id ?? "NO LIB")")
+                if let bookId = bookId,
+                   let library = library {
+                    ForEach(readingPositions.where({
+                        $0.bookId.starts(
+                            with: BookAnnotation.PrefId(library: library, id: bookId)
+                        )
+                    })) { readingPosition in
+                        HStack {
+                            Text(readingPosition.deviceId)
+                            Text(readingPosition.lastReadChapter)
+                            Text("\(readingPosition.lastProgress)")
+                        }
                     }
                 }
                 #endif
