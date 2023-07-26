@@ -10,15 +10,42 @@ import UIKit
 import WebKit
 import NaturalLanguage
 
-open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+
+open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandler {
     let webView = WKWebView()
+    let activityView = UIActivityIndicatorView()
+    let labelView = UILabel()
     var server: String?
-    var word = ""
+    var word: String?
     var backgroundColor = "#"
     var textColor = "#"
     
+    let editor = MDictViewEdit()
+    
     open override func viewDidLoad() {
         super.viewDidLoad()
+        
+        activityView.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(activityView)
+        NSLayoutConstraint.activate([
+            activityView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.6),
+            activityView.heightAnchor.constraint(equalToConstant: 32),
+            activityView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+        activityView.style = .medium
+        activityView.hidesWhenStopped = true
+        activityView.startAnimating()
+        
+        labelView.textAlignment = .center
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        self.view.addSubview(labelView)
+        NSLayoutConstraint.activate([
+            labelView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.6),
+            labelView.heightAnchor.constraint(equalToConstant: 96),
+            labelView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            labelView.bottomAnchor.constraint(equalTo: activityView.topAnchor)
+        ])
 
         self.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
         
@@ -27,17 +54,6 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
         webView.uiDelegate = self
         webView.navigationDelegate = self
         webView.configuration.userContentController.add(self, name: "MDictView")
-        
-        view.addSubview(webView)
-        
-        let constraints = [
-            webView.topAnchor.constraint(equalTo: view.topAnchor),
-            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        ]
-        
-        NSLayoutConstraint.activate(constraints)
         
         webView.translatesAutoresizingMaskIntoConstraints = false
         
@@ -73,8 +89,9 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
     }
     
     open override func viewWillAppear(_ animated: Bool) {
+        guard webView.url?.host == nil else { return }
         guard let server = server else { return }
-
+        
         do {
             let json = try JSONDecoder().decode([String:String].self, from: self.title?.data(using: .utf8) ?? .init())
             if let word = json["word"] {
@@ -96,6 +113,13 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             textColor = "#"
         }
         
+        if let commitWord = editor.commitWord {
+            word = commitWord
+            editor.commitWord = nil
+        }
+        
+        guard var word = word else { return }
+        
         if word.contains(" ") == false {
             let tagger = NLTagger(tagSchemes: [.lemma])
             tagger.string = word
@@ -111,9 +135,33 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
         
         self.navigationItem.title = word
         
-        webView.scrollView.backgroundColor = nil
-        webView.backgroundColor = nil
-        webView.underPageBackgroundColor = nil
+        self.navigationItem.rightBarButtonItems = [
+            UIBarButtonItem(
+                title: "List",
+                image: UIImage(systemName: "list.bullet"),
+                menu: UIMenu(children: [])
+            ),
+            UIBarButtonItem(
+                image: UIImage(systemName: "character.cursor.ibeam"),
+                primaryAction: .init(handler: { [self] _ in
+                    editor.server = self.server
+                    editor.view.backgroundColor = self.view.backgroundColor
+                    
+                    editor.editTextView.text = word
+                    editor.editTextView.textColor = self.navigationController?.navigationBar.tintColor
+                    
+                    editor.editTextHintView.tintColor = self.navigationController?.navigationBar.tintColor
+                    
+                    self.navigationController?.pushViewController(editor, animated: true)
+                })
+            )
+        ]
+        
+        self.navigationItem.rightBarButtonItems?[0].isEnabled = false
+        
+        webView.scrollView.backgroundColor = .clear
+        webView.backgroundColor = .clear
+        webView.underPageBackgroundColor = .clear
         
         super.viewWillAppear(animated)
         
@@ -150,6 +198,22 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
         }
     }
     
+    open override func viewDidAppear(_ animated: Bool) {
+        guard webView.superview == nil else { return }
+        
+        view.addSubview(webView)
+        view.sendSubviewToBack(webView)
+        
+        let constraints = [
+            webView.topAnchor.constraint(equalTo: view.topAnchor),
+            webView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            webView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        ]
+        
+        NSLayoutConstraint.activate(constraints)
+    }
+    
     func loadWebView(_ url: URL) async {
         guard let host = url.host
         else {
@@ -174,19 +238,24 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             await webView.configuration.websiteDataStore.httpCookieStore.setCookie(textColor)
         }
         
-        var request = URLRequest(url: url)
-//        request.httpShouldHandleCookies = true
-//        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        let request = URLRequest(url: url)
         self.webView.load(request)
     }
     
     open override func viewDidDisappear(_ animated: Bool) {
-//        webView.loadHTMLString("""
-//            <html>
-//            <body>
-//            </body>
-//            </html>
-//            """, baseURL: nil)
+        webView.removeFromSuperview()
+        
+        webView.loadHTMLString("""
+            <html>
+            <head>
+            <style>body { background-color: \(backgroundColor) }</style>
+            </head>
+            <body>
+            </body>
+            </html>
+            """, baseURL: nil)
+        
+        super.viewDidAppear(animated)
     }
     
     open override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -195,7 +264,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
             print("MDICTTRANS \(self.view.frame)")
             //self.webView.frame = self.view.frame
         }
-
+        
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
@@ -205,9 +274,25 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         
     }
+}
+
+extension MDictViewContainer: WKNavigationDelegate {
+    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        activityView.color = self.navigationController?.navigationBar.tintColor
+        activityView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
+        activityView.startAnimating()
+        
+        labelView.textColor = self.navigationController?.navigationBar.tintColor
+        labelView.text = "Loading..."
+        labelView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
+        labelView.isHidden = false
+    }
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         print("\(#function) didFinish=\(String(describing: navigation))")
+        guard server != nil,
+              webView.url?.host != nil else { return }
+        
         if let url = webView.url,
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first(where: { $0.name == "word" })?.value {
             self.navigationItem.title = word
@@ -247,7 +332,40 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKNavigationDele
                 }
             })
             )
-            self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "List", image: UIImage(systemName: "list.bullet"), primaryAction: nil, menu: menu)
+            self.navigationItem.rightBarButtonItems?[0] = UIBarButtonItem(
+                    title: "List",
+                    image: UIImage(systemName: "list.bullet"),
+                    menu: menu
+                )
+            
+            self.activityView.stopAnimating()
+            self.labelView.text = nil
+            self.labelView.isHidden = true
         }
+    }
+    
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        activityView.stopAnimating()
+        labelView.text = error.localizedDescription
+        labelView.isHidden = false
+        
+        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(.init(title: "Dismiss", style: .cancel))
+        self.present(alert, animated: true)
+    }
+    
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        activityView.stopAnimating()
+        labelView.text = error.localizedDescription
+        labelView.isHidden = false
+        
+        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(.init(title: "Dismiss", style: .cancel))
+        self.present(alert, animated: true)
+    }
+    
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        labelView.text = "Terminated"
+        labelView.isHidden = false
     }
 }

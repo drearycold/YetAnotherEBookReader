@@ -270,7 +270,6 @@ struct ServerOptionsDSReaderHelper: View {
                 configurationData = data
                 helperStatus = "Connected"
 
-//                var library_config = [String: CalibreDSReaderHelperConfiguration]()
                 if configuration?.count_pages_prefs != nil {
                     helperStatus = "Pulling Library-Specific Configurations..."
                     var libraryConfigs:[String: CalibreCountPagesPrefs.LibraryConfig] = [:]

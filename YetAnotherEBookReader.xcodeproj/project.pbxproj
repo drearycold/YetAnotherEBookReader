@@ -376,6 +376,7 @@
 		E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777AC28EE7E1600939D63 /* YabrPDFReferenceListCell.swift */; };
 		E7DFE3EF297A729900C60E7B /* ReaderOptionsReaderHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */; };
 		E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */; };
+		E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -607,6 +608,7 @@
 		E7C777AC28EE7E1600939D63 /* YabrPDFReferenceListCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFReferenceListCell.swift; sourceTree = "<group>"; };
 		E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsReaderHelpView.swift; sourceTree = "<group>"; };
 		E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsFontHelpView.swift; sourceTree = "<group>"; };
+		E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MDictViewEdit.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -764,6 +766,7 @@
 			isa = PBXGroup;
 			children = (
 				2A8464F4269AE3EE000638B2 /* MDictView.swift */,
+				E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */,
 				2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */,
 				2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */,
 				2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */,
@@ -1632,6 +1635,7 @@
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				E769C618296BF4C60089C21E /* UserSettingsNavigationController.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
+				E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */,
 				2AF8589D2712825400FA87AD /* ReaderOptionsFormatHelpView.swift in Sources */,
 				E769C5C8296BF4C60089C21E /* LCPLibraryService.swift in Sources */,
 				2A47581B27BE250600642AD1 /* AddModServerView.swift in Sources */,
