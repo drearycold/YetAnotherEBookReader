@@ -9,10 +9,15 @@ import Foundation
 import UIKit
 
 class YabrPDFAnnotationView: UIStackView {
+    let dictViewerButton = UIButton()
     let highlightButton = UIButton()
     let underlineButton = UIButton()
     
     init() {
+        let dictViewerImage = UIImage(systemName: "character.book.closed")?
+            .resizableImage(withCapInsets: .zero, resizingMode: .stretch)
+        dictViewerButton.setImage(dictViewerImage, for: .normal)
+        
         let highlightImage = UIImage(systemName: "paintbrush")?
             .resizableImage(withCapInsets: .zero, resizingMode: .stretch)
         highlightButton.setImage(highlightImage, for: .normal)
@@ -24,6 +29,7 @@ class YabrPDFAnnotationView: UIStackView {
         super.init(frame: .zero)
         
         self.axis = .vertical
+        self.addArrangedSubview(dictViewerButton)
         self.addArrangedSubview(underlineButton)
         self.addArrangedSubview(highlightButton)
         

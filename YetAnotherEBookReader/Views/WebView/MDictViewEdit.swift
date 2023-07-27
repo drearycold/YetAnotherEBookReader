@@ -11,7 +11,7 @@ import UIKit
 class MDictViewEdit: UIViewController {
     static let kHintTableViewCellIdentifier = "io.github.dsreader.mdict.hint.cell"
     
-    var editTextHints: [String] = []
+    var editTextHints: [(word: String, freq: Int)] = []
     let editTextView = UITextField()
     let editTextHintView = UITableView()
     var commitWord: String? = nil
@@ -91,11 +91,11 @@ class MDictViewEdit: UIViewController {
             Task {
                 do {
                     let (data, _) = try await URLSession.shared.data(from: url)
-                    let result = try JSONDecoder().decode([String: [String]].self, from: data)
+                    let result = try JSONDecoder().decode([String: [String: Int]].self, from: data)
                     guard let prefixed = result["prefixed"] else { return }
                     guard self.editTextView.text == word else { return }
                     
-                    self.editTextHints = prefixed
+                    self.editTextHints = prefixed.sorted(by: { $0.key < $1.key }).map { ($0.key, $0.value) }
                     self.editTextHintView.reloadData()
                 } catch {
                     
@@ -120,10 +120,11 @@ extension MDictViewEdit: UITableViewDataSource {
         cellView.contentView.backgroundColor = .clear
         
         let label = UILabel()
-        label.text = editTextHints[indexPath.row]
+        label.text = editTextHints[indexPath.row].word
         label.textColor = editTextHintView.tintColor
         label.translatesAutoresizingMaskIntoConstraints = false
         label.backgroundColor = .clear
+        label.textAlignment = .left
         cellView.contentView.addSubview(label)
         NSLayoutConstraint.activate([
             label.centerXAnchor.constraint(equalTo: cellView.centerXAnchor),
@@ -132,13 +133,27 @@ extension MDictViewEdit: UITableViewDataSource {
             label.heightAnchor.constraint(equalTo: cellView.heightAnchor)
         ])
         
+        let freq = UILabel()
+        freq.text = "from \(editTextHints[indexPath.row].freq) dict"
+        freq.textColor = editTextHintView.tintColor
+        freq.translatesAutoresizingMaskIntoConstraints = false
+        freq.backgroundColor = .clear
+        freq.textAlignment = .right
+        cellView.contentView.addSubview(freq)
+        NSLayoutConstraint.activate([
+            freq.centerXAnchor.constraint(equalTo: cellView.centerXAnchor),
+            freq.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+            freq.widthAnchor.constraint(equalTo: cellView.widthAnchor),
+            freq.heightAnchor.constraint(equalTo: cellView.heightAnchor)
+        ])
+        
         return cellView
     }
 }
 
 extension MDictViewEdit: UITableViewDelegate {
     public func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        self.editTextView.text = editTextHints[indexPath.row]
+        self.editTextView.text = editTextHints[indexPath.row].word
         commitAction(self)
     }
 }

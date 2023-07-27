@@ -423,6 +423,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
 
         let defaultMenuItems = buildDefaultMenuItems()
         UIMenuController.shared.menuItems = defaultMenuItems
+        UIMenuController.shared.update()
+        
+        UIMenuController.installTo(responder: self.pdfView)
         
         if #available(iOS 16.0, *) {
 //            pdfView.interactions.forEach {
@@ -460,6 +463,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             
             self.annotationView.underlineButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
             self.annotationView.highlightButton.addTarget(nil, action: #selector(highlightAction(_:)), for: .primaryActionTriggered)
+            self.annotationView.dictViewerButton.addTarget(nil, action: #selector(dictViewerAction(_:)), for: .primaryActionTriggered)
             
             NotificationCenter.default.addObserver(forName: .PDFViewSelectionChanged, object: pdfView, queue: nil) { [self] notification in
 //                newEditMenu.presentEditMenu(with: .init(identifier: nil, sourcePoint: .zero))
@@ -1464,7 +1468,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         var menuItems = [highlightMenuItem]
         
         if let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) {
-            menuItems.append(UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction)))
+            let dictViewerItem = UIMenuItem(title: "MDict", image: UIImage(systemName: "character.book.closed")) { [weak self] _ in
+                self?.dictViewerAction(self)
+            }
+//            menuItems.append(UIMenuItem(title: dictViewer.0, action: #selector(dictViewerAction)))
+            menuItems.append(dictViewerItem)
             dictViewer.1.loadViewIfNeeded()
         }
         
@@ -1510,17 +1518,47 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     }
     
     @objc func dictViewerAction(_ sender: Any?) {
-        guard let s = pdfView.currentSelection?.string,
-              let dictViewer = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
+        guard let selectedText = pdfView.currentSelection?.string,
+              let (name, dictViewer) = yabrPDFMetaSource?.yabrPDFDictViewer(pdfView) else { return }
         
-        print("\(#function) word=\(s)")
-        dictViewer.1.title = s
+        print("\(#function) word=\(selectedText)")
+        dictViewer.title = selectedText
         
-        let nav = UINavigationController(rootViewController: dictViewer.1)
-        nav.setNavigationBarHidden(false, animated: false)
-        nav.setToolbarHidden(false, animated: false)
+        let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
         
-        pdfView.delegate?.pdfViewParentViewController?().present(nav, animated: true, completion: nil)
+        var json = [
+            "word": selectedText,
+            "backgroundColor": backgroundColor.hexString(false)
+        ]
+        let textColor = pdfOptions.isDark(UIColor(white: 0.7, alpha: 1.0), UIColor.black)
+        if pdfOptions.isDark {
+            json["textColor"] = textColor.hexString(false)
+        }
+        
+        dictViewer.title = selectedText
+        do {
+            dictViewer.title = String(data: try JSONEncoder().encode(json), encoding: .utf8) ?? selectedText
+        } catch {}
+        
+        dictViewer.view.backgroundColor = backgroundColor
+        
+        let nav = UINavigationController(rootViewController: dictViewer)
+        nav.navigationBar.isTranslucent = false
+        nav.isToolbarHidden = false
+        nav.view.backgroundColor = dictViewer.view.backgroundColor
+        
+        nav.navigationBar.tintColor = textColor
+        nav.navigationBar.backgroundColor = backgroundColor
+        nav.navigationBar.barTintColor = backgroundColor
+        nav.navigationBar.titleTextAttributes = [
+            .foregroundColor: textColor
+        ]
+        nav.toolbar.tintColor = nav.navigationBar.tintColor
+        nav.toolbar.backgroundColor = nav.navigationBar.backgroundColor
+        nav.toolbar.barTintColor = nav.navigationBar.barTintColor
+
+        self.show(nav, sender: nil)
+//        show(nav, animated: true, completion: nil)
     }
     
     func sharePDF(annotated: Bool) {
@@ -1662,5 +1700,28 @@ extension YabrPDFViewController: UIEditMenuInteractionDelegate {
         
         // Present the edit menu interaction.
         interaction.presentEditMenu(with: configuration)
+    }
+}
+
+fileprivate extension UIColor {
+    //
+    /// Hex string of a UIColor instance.
+    ///
+    /// from: https://github.com/yeahdongcn/UIColor-Hex-Swift
+    ///
+    /// - Parameter includeAlpha: Whether the alpha should be included.
+    /// - Returns: Hexa string
+    func hexString(_ includeAlpha: Bool) -> String {
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        self.getRed(&r, green: &g, blue: &b, alpha: &a)
+        
+        if (includeAlpha == true) {
+            return String(format: "#%02X%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255), Int(a * 255))
+        } else {
+            return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        }
     }
 }

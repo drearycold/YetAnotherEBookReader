@@ -147,7 +147,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
                     editor.server = self.server
                     editor.view.backgroundColor = self.view.backgroundColor
                     
-                    editor.editTextView.text = word
+                    editor.editTextView.text = navigationItem.title
                     editor.editTextView.textColor = self.navigationController?.navigationBar.tintColor
                     
                     editor.editTextHintView.tintColor = self.navigationController?.navigationBar.tintColor
