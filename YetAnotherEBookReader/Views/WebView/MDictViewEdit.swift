@@ -57,6 +57,11 @@ class MDictViewEdit: UIViewController {
     }
     
     override func viewWillAppear(_ animated: Bool) {
+        if commitWord != editTextView.text {
+            editTextHints.removeAll()
+            editTextHintView.reloadData()
+        }
+        
         commitWord = editTextView.text
         super.viewWillAppear(animated)
         
@@ -95,8 +100,10 @@ class MDictViewEdit: UIViewController {
                     guard let prefixed = result["prefixed"] else { return }
                     guard self.editTextView.text == word else { return }
                     
-                    self.editTextHints = prefixed.sorted(by: { $0.key < $1.key }).map { ($0.key, $0.value) }
-                    self.editTextHintView.reloadData()
+                    DispatchQueue.main.async {
+                        self.editTextHints = prefixed.sorted(by: { $0.key < $1.key }).map { ($0.key, $0.value) }
+                        self.editTextHintView.reloadData()
+                    }
                 } catch {
                     
                 }

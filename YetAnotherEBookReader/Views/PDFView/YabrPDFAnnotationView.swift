@@ -33,9 +33,8 @@ class YabrPDFAnnotationView: UIStackView {
         self.addArrangedSubview(underlineButton)
         self.addArrangedSubview(highlightButton)
         
-        self.backgroundColor = .lightGray.withAlphaComponent(0.9)
         self.layer.cornerRadius = 8
-        self.layer.borderWidth = 2
+        self.layer.borderWidth = 1
         self.layer.borderColor = UIColor.gray.withAlphaComponent(0.6).cgColor
         self.distribution = .fillProportionally
     }

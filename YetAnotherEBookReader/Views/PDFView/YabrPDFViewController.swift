@@ -506,6 +506,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 
                 annotationView.frame = .init(origin: annotationViewPosition, size: annotationViewSize)
                 
+                annotationView.backgroundColor = pdfOptions.isDark(
+                    UIColor.black.withAlphaComponent(0.9),
+                    UIColor.white.withAlphaComponent(0.9)
+                )
+                
                 annotationView.isHidden = false
             }
             
