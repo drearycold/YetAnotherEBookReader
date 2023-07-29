@@ -29,15 +29,45 @@ public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {
 
 public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
     let readerConfig: FolioReaderConfig
+//    let dictController = DictTabBarController()
+    let dictNav = UINavigationController()
+    let dictTab = DictTabBarController()
     
     init(readerConfig: FolioReaderConfig) {
         self.readerConfig = readerConfig
+        
+        dictNav.setViewControllers([dictTab], animated: false)
+        
+        dictNav.navigationBar.isTranslucent = false
+        dictNav.isToolbarHidden = true
     }
         
     @objc public func pageWillLoad(_ page: FolioReaderPage) {
         guard let webView = page.webView else { return }
-        let mDictView = MDictViewContainer()
-        webView.setMDictView(mDictView: mDictView)
+        
+        webView.setMDictView(mDictView: dictNav)
     }
     
+    @objc public func pageStyleChanged(_ page: FolioReaderPage, _ reader: FolioReader) {
+        let backgroundColor = readerConfig.themeModeBackground[reader.themeMode]
+        let textColor = readerConfig.themeModeTextColor[reader.themeMode]
+        let navBackgroundColor = readerConfig.themeModeNavBackground[reader.themeMode]
+        
+        
+        dictTab.mDictView.webView.tintColor = textColor
+        dictTab.mDictView.webView.backgroundColor = backgroundColor
+        
+        dictTab.view.backgroundColor = backgroundColor
+
+        dictNav.navigationBar.tintColor = textColor
+        dictNav.navigationBar.backgroundColor = backgroundColor
+        dictNav.navigationBar.barTintColor = navBackgroundColor
+        dictNav.navigationBar.titleTextAttributes = [
+            .foregroundColor: textColor
+        ]
+        
+        dictTab.tabBar.tintColor = textColor
+        dictTab.tabBar.backgroundColor = backgroundColor
+        dictTab.tabBar.barTintColor = navBackgroundColor
+    }
 }

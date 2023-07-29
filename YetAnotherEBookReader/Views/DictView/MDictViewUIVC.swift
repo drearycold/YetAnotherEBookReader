@@ -21,7 +21,7 @@ struct MDictViewUIVC: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> MDictViewContainer {
         let mdictView = MDictViewContainer()
-        mdictView.server = server.absoluteString
+        mdictView.viewModel.server = server.absoluteString
         mdictView.title = "hello"
         return mdictView
     }

@@ -10,17 +10,13 @@ import UIKit
 import WebKit
 import NaturalLanguage
 
-
-open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandler {
+class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandler {
     let webView = WKWebView()
     let activityView = UIActivityIndicatorView()
     let labelView = UILabel()
-    var server: String?
-    var word: String?
-    var backgroundColor = "#"
-    var textColor = "#"
     
-    let editor = MDictViewEdit()
+    //model
+    var viewModel: DictViewModel!
     
     open override func viewDidLoad() {
         super.viewDidLoad()
@@ -47,8 +43,6 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
             labelView.bottomAnchor.constraint(equalTo: activityView.topAnchor)
         ])
 
-        self.navigationItem.setLeftBarButton(UIBarButtonItem(title: "Close", style: .done, target: self, action: #selector(finishReading(sender:))), animated: true)
-        
         print("MDICT viewDidLoad \(self.view.frame)")
         
         webView.uiDelegate = self
@@ -56,69 +50,15 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
         webView.configuration.userContentController.add(self, name: "MDictView")
         
         webView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let enabled = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED)
-        guard enabled else { return }
-        
-        server = UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)?.absoluteString
-        guard server != nil else { return }
-        
-        self.toolbarItems = [
-            UIBarButtonItem(
-                image: UIImage(systemName: "chevron.backward"),
-                primaryAction: UIAction { action in
-                    print("\(#function) backward action")
-                    if self.webView.canGoBack {
-                        self.webView.goBack()
-                    }
-                }
-            ),
-            UIBarButtonItem(
-                image: UIImage(systemName: "chevron.forward"),
-                primaryAction: UIAction { action in
-                    print("\(#function) forward action")
-                    if self.webView.canGoForward {
-                        self.webView.goForward()
-                    }
-                }
-            )
-        ]
-        
-        self.toolbarItems?[0].isEnabled = false
-        self.toolbarItems?[1].isEnabled = false
     }
     
     open override func viewWillAppear(_ animated: Bool) {
-        guard webView.url?.host == nil else { return }
-        guard let server = server else { return }
-        
-        do {
-            let json = try JSONDecoder().decode([String:String].self, from: self.title?.data(using: .utf8) ?? .init())
-            if let word = json["word"] {
-                self.word = word
-            }
-            if let backgroundColor = json["backgroundColor"] {
-                self.backgroundColor = backgroundColor
-            } else {
-                self.backgroundColor = "#"
-            }
-            if let textColor = json["textColor"] {
-                self.textColor = textColor
-            } else {
-                self.textColor = "#"
-            }
-        } catch {
-            word = self.title ?? "_"
-            backgroundColor = "#"
-            textColor = "#"
+        guard webView.url?.host == nil,
+              let server = viewModel.server,
+              var word = viewModel.word
+        else {
+            return
         }
-        
-        if let commitWord = editor.commitWord {
-            word = commitWord
-            editor.commitWord = nil
-        }
-        
-        guard var word = word else { return }
         
         if word.contains(" ") == false {
             let tagger = NLTagger(tagSchemes: [.lemma])
@@ -133,34 +73,8 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
             }
         }
         
-        self.navigationItem.title = word
-        
-        self.navigationItem.rightBarButtonItems = [
-            UIBarButtonItem(
-                title: "List",
-                image: UIImage(systemName: "list.bullet"),
-                menu: UIMenu(children: [])
-            ),
-            UIBarButtonItem(
-                image: UIImage(systemName: "character.cursor.ibeam"),
-                primaryAction: .init(handler: { [self] _ in
-                    editor.server = self.server
-                    editor.view.backgroundColor = self.view.backgroundColor
-                    
-                    editor.editTextView.text = navigationItem.title
-                    editor.editTextView.textColor = self.navigationController?.navigationBar.tintColor
-                    
-                    editor.editTextHintView.tintColor = self.navigationController?.navigationBar.tintColor
-                    
-                    self.navigationController?.pushViewController(editor, animated: true)
-                })
-            )
-        ]
-        
-        self.navigationItem.rightBarButtonItems?[0].isEnabled = false
-        
         webView.scrollView.backgroundColor = .clear
-        webView.backgroundColor = .clear
+//        webView.backgroundColor = .clear
         webView.underPageBackgroundColor = .clear
         
         super.viewWillAppear(animated)
@@ -212,6 +126,9 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
         ]
         
         NSLayoutConstraint.activate(constraints)
+        
+        tabBarController?.navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack
+        tabBarController?.navigationItem.leftBarButtonItems?[2].isEnabled = webView.canGoForward
     }
     
     func loadWebView(_ url: URL) async {
@@ -220,22 +137,26 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
             return
         }
         
-        if let backgroundColor = HTTPCookie(properties: [
+        if let color = webView.backgroundColor?.hexString(false),
+           let cookie = HTTPCookie(properties: [
             .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
             .name: "backgroundColor",
-            .value: backgroundColor,
+            .value:  color,
             .domain: host
         ]) {
-            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(backgroundColor)
+            print("\(#function) \(cookie.name)=\(cookie.value)")
+            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
         }
         
-        if let textColor = HTTPCookie(properties: [
+        if let color = webView.tintColor?.hexString(false),
+           let cookie = HTTPCookie(properties: [
             .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
             .name: "textColor",
-            .value: textColor,
+            .value: color,
             .domain: host
         ]) {
-            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(textColor)
+            print("\(#function) \(cookie.name)=\(cookie.value)")
+            await webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
         }
         
         let request = URLRequest(url: url)
@@ -248,7 +169,7 @@ open class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageH
         webView.loadHTMLString("""
             <html>
             <head>
-            <style>body { background-color: \(backgroundColor) }</style>
+            <style>body { background-color: \(webView.backgroundColor?.hexString(false) ?? "#") }</style>
             </head>
             <body>
             </body>
@@ -290,15 +211,16 @@ extension MDictViewContainer: WKNavigationDelegate {
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         print("\(#function) didFinish=\(String(describing: navigation))")
-        guard server != nil,
+        guard viewModel.server != nil,
               webView.url?.host != nil else { return }
         
         if let url = webView.url,
            let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first(where: { $0.name == "word" })?.value {
-            self.navigationItem.title = word
+            self.tabBarController?.navigationItem.title = word
+            viewModel.word = word
         }
-        toolbarItems?[0].isEnabled = webView.canGoBack
-        toolbarItems?[1].isEnabled = webView.canGoForward
+        tabBarController?.navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack
+        tabBarController?.navigationItem.leftBarButtonItems?[2].isEnabled = webView.canGoForward
 
         webView.evaluateJavaScript(
             """
@@ -332,7 +254,7 @@ extension MDictViewContainer: WKNavigationDelegate {
                 }
             })
             )
-            self.navigationItem.rightBarButtonItems?[0] = UIBarButtonItem(
+            self.tabBarController?.navigationItem.rightBarButtonItems?[0] = UIBarButtonItem(
                     title: "List",
                     image: UIImage(systemName: "list.bullet"),
                     menu: menu

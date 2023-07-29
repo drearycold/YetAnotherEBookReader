@@ -362,6 +362,9 @@
 		E792835928F835FA00EE2FC7 /* YabrPDFThumbnailList.swift in Sources */ = {isa = PBXBuildFile; fileRef = E792835728F835FA00EE2FC7 /* YabrPDFThumbnailList.swift */; };
 		E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */; };
 		E79360182A08A1B000E0E554 /* LibraryInfoCategoryItemsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E79360172A08A1B000E0E554 /* LibraryInfoCategoryItemsView.swift */; };
+		E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
+		E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
+		E7A8EA302A75579100D5C95B /* DIctViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */; };
 		E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
 		E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
 		E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */; };
@@ -596,6 +599,9 @@
 		E792835728F835FA00EE2FC7 /* YabrPDFThumbnailList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFThumbnailList.swift; sourceTree = "<group>"; };
 		E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreDateParser.swift; sourceTree = "<group>"; };
 		E79360172A08A1B000E0E554 /* LibraryInfoCategoryItemsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryItemsView.swift; sourceTree = "<group>"; };
+		E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictTabBarController.swift; sourceTree = "<group>"; };
+		E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncycloView.swift; sourceTree = "<group>"; };
+		E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DIctViewModel.swift; sourceTree = "<group>"; };
 		E7AD2142293720AC00736FEF /* ShelfDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfDataManager.swift; sourceTree = "<group>"; };
 		E7C7779428ED324300939D63 /* YabrPDFAnnotationPageVC.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFAnnotationPageVC.swift; sourceTree = "<group>"; };
 		E7C7779728ED495700939D63 /* YabrPDFReferenceList.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFReferenceList.swift; sourceTree = "<group>"; };
@@ -765,9 +771,6 @@
 		2A8C26B325C54BA700FC7FC0 /* WebView */ = {
 			isa = PBXGroup;
 			children = (
-				2A8464F4269AE3EE000638B2 /* MDictView.swift */,
-				E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */,
-				2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */,
 				2A8C26B925C54C6B00FC7FC0 /* WebViewUI.swift */,
 				2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */,
 			);
@@ -820,6 +823,7 @@
 		2ABB914C261F1A47004AA7C0 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				E7A8EA2A2A74F62A00D5C95B /* DictView */,
 				2A1A4BF42616CCD900E95ED5 /* ADViews */,
 				6E7733BC2664E747008318C3 /* BookDetailView */,
 				2A84650C269AE539000638B2 /* FolioReaderView */,
@@ -1234,6 +1238,19 @@
 			path = CalibreBrowser;
 			sourceTree = "<group>";
 		};
+		E7A8EA2A2A74F62A00D5C95B /* DictView */ = {
+			isa = PBXGroup;
+			children = (
+				2A8464F4269AE3EE000638B2 /* MDictView.swift */,
+				E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */,
+				E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */,
+				E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */,
+				2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */,
+				E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */,
+			);
+			path = DictView;
+			sourceTree = "<group>";
+		};
 		E7C7779328ED322100939D63 /* ListViews */ = {
 			isa = PBXGroup;
 			children = (
@@ -1616,6 +1633,7 @@
 				2A4787A127154E39009C8770 /* FontImportPicker.swift in Sources */,
 				E769C5DC296BF4C60089C21E /* LibraryFactory.swift in Sources */,
 				E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */,
+				E7A8EA302A75579100D5C95B /* DIctViewModel.swift in Sources */,
 				E769C5E8296BF4C60089C21E /* CBZViewController.swift in Sources */,
 				E730405C28EBDAB50013BA01 /* BookAnnotation.swift in Sources */,
 				2AAE40A1267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
@@ -1635,6 +1653,7 @@
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				E769C618296BF4C60089C21E /* UserSettingsNavigationController.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
+				E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */,
 				E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */,
 				2AF8589D2712825400FA87AD /* ReaderOptionsFormatHelpView.swift in Sources */,
 				E769C5C8296BF4C60089C21E /* LCPLibraryService.swift in Sources */,
@@ -1735,6 +1754,7 @@
 				E769C5F2296BF4C60089C21E /* DRMManagementTableViewController.swift in Sources */,
 				2A21BCE327017A9900825BBB /* Configuration.swift in Sources */,
 				E769C61A296BF4C60089C21E /* FontSelectionViewController.swift in Sources */,
+				E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */,
 				2AAB29942713CB690080B0CB /* SupportCalibreIntroView.swift in Sources */,
 				E792835328F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift in Sources */,
 				2A88D9AC275204FA00372660 /* LibraryOptionsOverrideCustomColumnMappings.swift in Sources */,

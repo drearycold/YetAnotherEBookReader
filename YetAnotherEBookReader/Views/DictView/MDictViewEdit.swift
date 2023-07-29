@@ -16,7 +16,7 @@ class MDictViewEdit: UIViewController {
     let editTextHintView = UITableView()
     var commitWord: String? = nil
     
-    var server: String?
+    var viewModel: DictViewModel!
     
     override func viewDidLoad() {
         editTextView.translatesAutoresizingMaskIntoConstraints = false
@@ -76,7 +76,7 @@ class MDictViewEdit: UIViewController {
     @objc func hintAction(_ sender: Any?) {
         guard let word = editTextView.text,
               word.isEmpty == false,
-              let server = server,
+              let server = viewModel.server,
               var urlComponent = URLComponents(string: server.replacingOccurrences(of: "/lookup", with: "/hint"))
         else {
             editTextHints.removeAll()
