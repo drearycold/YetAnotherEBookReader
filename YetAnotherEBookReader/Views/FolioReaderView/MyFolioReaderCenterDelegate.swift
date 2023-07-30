@@ -54,7 +54,7 @@ public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
         let navBackgroundColor = readerConfig.themeModeNavBackground[reader.themeMode]
         
         
-        dictTab.mDictView.webView.tintColor = textColor
+        dictTab.mDictView.webTextColor = reader.isNight(textColor, nil)
         dictTab.mDictView.webView.backgroundColor = backgroundColor
         
         dictTab.view.backgroundColor = backgroundColor

@@ -15,6 +15,7 @@ class MDictViewContainer : UIViewController {
     let activityView = UIActivityIndicatorView()
     let labelView = UILabel()
     
+    var webTextColor: UIColor? = nil
     //model
     var viewModel: DictViewModel!
     
@@ -144,7 +145,7 @@ class MDictViewContainer : UIViewController {
             await webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
         }
         
-        if let color = webView.tintColor?.hexString(false),
+        if let color = webTextColor?.hexString(false),
            let cookie = HTTPCookie(properties: [
             .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
             .name: "textColor",

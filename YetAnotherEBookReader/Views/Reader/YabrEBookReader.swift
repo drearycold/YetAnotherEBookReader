@@ -125,9 +125,17 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             let pdfViewController = YabrPDFViewController()
-            var metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo)
-            if modelData.getCustomDictViewer().0 {
-                metaSource.dictViewer = ("Lookup", MDictViewContainer())
+            let metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo)
+            if dictViewer.0 {
+                metaSource.dictViewerItem = "Lookup"
+                metaSource.dictViewerNav.setViewControllers([metaSource.dictViewerTab], animated: false)
+                
+                metaSource.dictViewerNav.navigationBar.isTranslucent = false
+                metaSource.dictViewerNav.isToolbarHidden = true
+                
+                if let options = metaSource.yabrPDFOptions(pdfViewController.pdfView) {
+                    metaSource.updateDictViewerStyle(options: options)
+                }
             }
             pdfViewController.yabrPDFMetaSource = metaSource
             let ret = pdfViewController.open()

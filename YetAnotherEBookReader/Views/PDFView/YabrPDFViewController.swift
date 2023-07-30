@@ -1529,41 +1529,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         print("\(#function) word=\(selectedText)")
         dictViewer.title = selectedText
         
-        let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
-        
-        var json = [
-            "word": selectedText,
-            "backgroundColor": backgroundColor.hexString(false)
-        ]
-        let textColor = pdfOptions.isDark(UIColor(white: 0.7, alpha: 1.0), UIColor.black)
-        if pdfOptions.isDark {
-            json["textColor"] = textColor.hexString(false)
-        }
-        
-        dictViewer.title = selectedText
-        do {
-            dictViewer.title = String(data: try JSONEncoder().encode(json), encoding: .utf8) ?? selectedText
-        } catch {}
-        
-        dictViewer.view.backgroundColor = backgroundColor
-        
-        let nav = UINavigationController(rootViewController: dictViewer)
-        nav.navigationBar.isTranslucent = false
-        nav.isToolbarHidden = false
-        nav.view.backgroundColor = dictViewer.view.backgroundColor
-        
-        nav.navigationBar.tintColor = textColor
-        nav.navigationBar.backgroundColor = backgroundColor
-        nav.navigationBar.barTintColor = backgroundColor
-        nav.navigationBar.titleTextAttributes = [
-            .foregroundColor: textColor
-        ]
-        nav.toolbar.tintColor = nav.navigationBar.tintColor
-        nav.toolbar.backgroundColor = nav.navigationBar.backgroundColor
-        nav.toolbar.barTintColor = nav.navigationBar.barTintColor
-
-        self.show(nav, sender: nil)
-//        show(nav, animated: true, completion: nil)
+        present(dictViewer, animated: true)
     }
     
     func sharePDF(annotated: Bool) {
@@ -1656,7 +1622,7 @@ protocol YabrPDFMetaSource {
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions)
     
-    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UIViewController)?
+    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)?
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark]
     

@@ -13,7 +13,10 @@ import RealmSwift
 class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo
-    var dictViewer: (String, UIViewController)? = nil
+    
+    var dictViewerItem = ""
+    var dictViewerNav = UINavigationController()
+    var dictViewerTab = DictTabBarController()
     
     var refText: String?
     
@@ -99,19 +102,15 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-//        guard let realm = book.readPos.realm
-//        else { return }
-//
-//        try? realm.write {
-//            realm.add(options.managedObject(), update: .all)
-//        }
         try? prefObj.realm?.write({
             options.update(obj: prefObj)
         })
+        
+        updateDictViewerStyle(options: options)
     }
     
-    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UIViewController)? {
-        return dictViewer
+    func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)? {
+        return (dictViewerItem, dictViewerNav)
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {
@@ -167,7 +166,27 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         yabrPDFOptions(view)?.isDark(f, l) ?? l
     }
     
-    
+    func updateDictViewerStyle(options: PDFOptions) {
+        let backgroundColor = UIColor(cgColor: options.fillColor)
+        let textColor = options.isDark(UIColor(white: 0.7, alpha: 1.0), UIColor.black)
+        let navBackgroundColor = backgroundColor
+        
+        dictViewerTab.mDictView.webTextColor = options.isDark(.init(white: 0.7, alpha: 1.0), nil)
+        dictViewerTab.mDictView.webView.backgroundColor = backgroundColor
+        
+        dictViewerTab.view.backgroundColor = backgroundColor
+
+        dictViewerNav.navigationBar.tintColor = textColor
+        dictViewerNav.navigationBar.backgroundColor = backgroundColor
+        dictViewerNav.navigationBar.barTintColor = navBackgroundColor
+        dictViewerNav.navigationBar.titleTextAttributes = [
+            .foregroundColor: textColor
+        ]
+        
+        dictViewerTab.tabBar.tintColor = textColor
+        dictViewerTab.tabBar.backgroundColor = backgroundColor
+        dictViewerTab.tabBar.barTintColor = navBackgroundColor
+    }
 }
 
 extension BookBookmark {
@@ -242,7 +261,7 @@ extension BookHighlight {
 struct YabrEBookReaderReadiumMetaSource: YabrReadiumMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo
-    var dictViewer: (String, UIViewController)? = nil
+    var dictViewer: (String, UINavigationController)? = nil
     
     func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController) -> BookDeviceReadingPosition? {
         return readerInfo.position
@@ -271,7 +290,7 @@ struct YabrEBookReaderReadiumMetaSource: YabrReadiumMetaSource {
         book.readPos.updatePosition(position)
     }
     
-    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UIViewController)? {
+    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UINavigationController)? {
         return dictViewer
     }
 }
