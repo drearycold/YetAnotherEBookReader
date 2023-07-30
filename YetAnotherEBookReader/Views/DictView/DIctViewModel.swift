@@ -6,10 +6,12 @@
 //
 
 import Foundation
+import WebKit
 
 @MainActor class DictViewModel {
     
     var server: String?
     var word: String?
 
+    var tabWebView: [WKWebView] = []
 }

@@ -10,7 +10,7 @@ import UIKit
 import WebKit
 import NaturalLanguage
 
-class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandler {
+class MDictViewContainer : UIViewController {
     let webView = WKWebView()
     let activityView = UIActivityIndicatorView()
     let labelView = UILabel()
@@ -44,10 +44,6 @@ class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandle
         ])
 
         print("MDICT viewDidLoad \(self.view.frame)")
-        
-        webView.uiDelegate = self
-        webView.navigationDelegate = self
-        webView.configuration.userContentController.add(self, name: "MDictView")
         
         webView.translatesAutoresizingMaskIntoConstraints = false
     }
@@ -194,100 +190,5 @@ class MDictViewContainer : UIViewController, WKUIDelegate, WKScriptMessageHandle
     
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         
-    }
-}
-
-extension MDictViewContainer: WKNavigationDelegate {
-    public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        activityView.color = self.navigationController?.navigationBar.tintColor
-        activityView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
-        activityView.startAnimating()
-        
-        labelView.textColor = self.navigationController?.navigationBar.tintColor
-        labelView.text = "Loading..."
-        labelView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
-        labelView.isHidden = false
-    }
-    
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        print("\(#function) didFinish=\(String(describing: navigation))")
-        guard viewModel.server != nil,
-              webView.url?.host != nil else { return }
-        
-        if let url = webView.url,
-           let components = URLComponents(url: url, resolvingAgainstBaseURL: false), let word = components.queryItems?.first(where: { $0.name == "word" })?.value {
-            self.tabBarController?.navigationItem.title = word
-            viewModel.word = word
-        }
-        tabBarController?.navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack
-        tabBarController?.navigationItem.leftBarButtonItems?[2].isEnabled = webView.canGoForward
-
-        webView.evaluateJavaScript(
-            """
-            var mdict_def = document.getElementsByClassName("mdictDefinition")
-            var names = []
-            for (var i=0; i<mdict_def.length; i+=1) {
-                var h = mdict_def.item(i).getElementsByTagName("h5")[0]
-                names.push({name: h.innerText, id: mdict_def.item(i).id})
-            }
-            names
-            """
-        ) { result, error in
-            print("\(#function) result=\(String(describing: result)) error=\(error)")
-            guard let array = result as? NSArray else { return }
-            array.forEach {
-                guard let a = $0 as? NSDictionary else { return }
-                print("\(#function) a=\(a)")
-                guard let id = a["id"], let name = a["name"] else { return }
-                print("\(#function) id=\(id) name=\(name)")
-
-            }
-            let menu = UIMenu(title: "Dictionary", image: nil, identifier: nil, options: [], children: array.compactMap({
-                guard let a = $0 as? NSDictionary, let id = a["id"] as? String, let name = a["name"] as? String else { return nil }
-                return UIAction(title: name, image: nil, identifier: nil, discoverabilityTitle: nil, attributes: [], state: .off) { action in
-                    print("\(#function) id=\(id) name=\(name)")
-                    self.webView.evaluateJavaScript("document.getElementById('\(id)').offsetTop") { result, error in
-                        if let offset = result as? CGFloat {
-                            self.webView.scrollView.contentOffset.y = offset - (self.navigationController?.navigationBar.frame.height ?? 0)
-                        }
-                    }
-                }
-            })
-            )
-            self.tabBarController?.navigationItem.rightBarButtonItems?[0] = UIBarButtonItem(
-                    title: "List",
-                    image: UIImage(systemName: "list.bullet"),
-                    menu: menu
-                )
-            
-            self.activityView.stopAnimating()
-            self.labelView.text = nil
-            self.labelView.isHidden = true
-        }
-    }
-    
-    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        activityView.stopAnimating()
-        labelView.text = error.localizedDescription
-        labelView.isHidden = false
-        
-        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-        alert.addAction(.init(title: "Dismiss", style: .cancel))
-        self.present(alert, animated: true)
-    }
-    
-    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        activityView.stopAnimating()
-        labelView.text = error.localizedDescription
-        labelView.isHidden = false
-        
-        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-        alert.addAction(.init(title: "Dismiss", style: .cancel))
-        self.present(alert, animated: true)
-    }
-    
-    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        labelView.text = "Terminated"
-        labelView.isHidden = false
     }
 }

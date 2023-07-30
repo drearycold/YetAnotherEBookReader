@@ -47,10 +47,3 @@ class EncycloView: UIViewController {
         super.viewDidAppear(animated)
     }
 }
-
-extension EncycloView: WKNavigationDelegate {
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        tabBarController?.navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack
-        tabBarController?.navigationItem.leftBarButtonItems?[2].isEnabled = webView.canGoForward
-    }
-}
