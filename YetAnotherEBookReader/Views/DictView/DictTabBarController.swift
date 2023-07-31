@@ -118,16 +118,30 @@ extension DictTabBarController: UITabBarControllerDelegate {
 
 extension DictTabBarController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        if webView == mDictView.webView {
-            mDictView.activityView.color = self.navigationController?.navigationBar.tintColor
-            mDictView.activityView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
-            mDictView.activityView.startAnimating()
-            
-            mDictView.labelView.textColor = self.navigationController?.navigationBar.tintColor
-            mDictView.labelView.text = "Loading..."
-            mDictView.labelView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
-            mDictView.labelView.isHidden = false
+        guard let dictWebView = webView as? DictWebView
+        else {
+            return
         }
+        
+        dictWebView.activityView.color = self.navigationController?.navigationBar.tintColor
+        dictWebView.activityView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
+        dictWebView.activityView.startAnimating()
+        
+        dictWebView.labelView.textColor = self.navigationController?.navigationBar.tintColor
+        dictWebView.labelView.text = "Loading..."
+        dictWebView.labelView.backgroundColor = self.navigationController?.navigationBar.backgroundColor?.withAlphaComponent(0.9)
+        dictWebView.labelView.isHidden = false
+    }
+    
+    public func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        guard let dictWebView = webView as? DictWebView
+        else {
+            return
+        }
+        
+        dictWebView.activityView.stopAnimating()
+        dictWebView.labelView.text = nil
+        dictWebView.labelView.isHidden = true
     }
     
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -177,10 +191,6 @@ extension DictTabBarController: WKNavigationDelegate {
                     }
                 })
                 
-                self.mDictView.activityView.stopAnimating()
-                self.mDictView.labelView.text = nil
-                self.mDictView.labelView.isHidden = true
-                
                 if self.selectedIndex == 0,
                    self.viewModel.word == navWord {
                     let menu = UIMenu(title: "Dictionary", image: nil, identifier: nil, options: [], children: menuItems)
@@ -200,33 +210,42 @@ extension DictTabBarController: WKNavigationDelegate {
     }
     
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        if webView == mDictView.webView {
-            mDictView.activityView.stopAnimating()
-            mDictView.labelView.text = error.localizedDescription
-            mDictView.labelView.isHidden = false
-            
-            let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-            alert.addAction(.init(title: "Dismiss", style: .cancel))
-            self.present(alert, animated: true)
+        guard let dictWebView = webView as? DictWebView
+        else {
+            return
         }
+        
+        dictWebView.activityView.stopAnimating()
+        dictWebView.labelView.text = error.localizedDescription
+        dictWebView.labelView.isHidden = false
+        
+        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(.init(title: "Dismiss", style: .cancel))
+        self.present(alert, animated: true)
     }
     
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        if webView == mDictView.webView {
-            mDictView.activityView.stopAnimating()
-            mDictView.labelView.text = error.localizedDescription
-            mDictView.labelView.isHidden = false
-            
-            let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
-            alert.addAction(.init(title: "Dismiss", style: .cancel))
-            self.present(alert, animated: true)
+        guard let dictWebView = webView as? DictWebView
+        else {
+            return
         }
+        
+        dictWebView.activityView.stopAnimating()
+        dictWebView.labelView.text = error.localizedDescription
+        dictWebView.labelView.isHidden = false
+            
+        let alert = UIAlertController(title: "Error", message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(.init(title: "Dismiss", style: .cancel))
+        self.present(alert, animated: true)
     }
     
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        if webView == mDictView.webView {
-            mDictView.labelView.text = "Terminated"
-            mDictView.labelView.isHidden = false
+        guard let dictWebView = webView as? DictWebView
+        else {
+            return
         }
+        
+        dictWebView.labelView.text = "Terminated"
+        dictWebView.labelView.isHidden = false
     }
 }

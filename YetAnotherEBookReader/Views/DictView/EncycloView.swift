@@ -11,7 +11,7 @@ import WebKit
 
 class EncycloView: UIViewController {
     
-    let webView = WKWebView(frame: .zero)
+    let webView = DictWebView()
 
     //model
     var viewModel: DictViewModel!

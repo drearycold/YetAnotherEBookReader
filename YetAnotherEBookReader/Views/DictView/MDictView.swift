@@ -11,10 +11,7 @@ import WebKit
 import NaturalLanguage
 
 class MDictViewContainer : UIViewController {
-    let webView = WKWebView()
-    let activityView = UIActivityIndicatorView()
-    let labelView = UILabel()
-    
+    let webView = DictWebView()
     var webTextColor: UIColor? = nil
     //model
     var viewModel: DictViewModel!
@@ -22,28 +19,6 @@ class MDictViewContainer : UIViewController {
     open override func viewDidLoad() {
         super.viewDidLoad()
         
-        activityView.translatesAutoresizingMaskIntoConstraints = false
-        self.view.addSubview(activityView)
-        NSLayoutConstraint.activate([
-            activityView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.6),
-            activityView.heightAnchor.constraint(equalToConstant: 32),
-            activityView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        ])
-        activityView.style = .medium
-        activityView.hidesWhenStopped = true
-        activityView.startAnimating()
-        
-        labelView.textAlignment = .center
-        labelView.translatesAutoresizingMaskIntoConstraints = false
-        self.view.addSubview(labelView)
-        NSLayoutConstraint.activate([
-            labelView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.6),
-            labelView.heightAnchor.constraint(equalToConstant: 96),
-            labelView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            labelView.bottomAnchor.constraint(equalTo: activityView.topAnchor)
-        ])
-
         print("MDICT viewDidLoad \(self.view.frame)")
         
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -190,6 +165,5 @@ class MDictViewContainer : UIViewController {
     }
     
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        
     }
 }
