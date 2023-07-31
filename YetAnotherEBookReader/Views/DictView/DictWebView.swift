@@ -13,6 +13,8 @@ internal class DictWebView: WKWebView {
     let activityView = UIActivityIndicatorView()
     let labelView = UILabel()
     
+    var webTextColor: UIColor? = nil
+    
     init() {
         super.init(frame: .zero, configuration: .init())
         

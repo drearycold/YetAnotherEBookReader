@@ -118,6 +118,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             } else {
                 pdfView.pageTapDisable()
             }
+            
+            yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
         }
     }
         
@@ -1409,8 +1411,6 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             
             print("\(#function) updatedReadingPosition=\(updatedReadingPosition)")
         }
-            
-        yabrPDFMetaSource?.yabrPDFOptions(pdfView, update: pdfOptions)
     }
     
 //    @objc func lookupStarDict() {

@@ -100,6 +100,17 @@ class DictTabBarController: UITabBarController {
         super.viewWillAppear(animated)
     }
     
+    func updateStyle(_ textColor: UIColor, _ backgroundColor: UIColor, _ navBackgroundColor: UIColor, _ nightMode: Bool) {
+        mDictView.webView.webTextColor = nightMode ? textColor : nil
+        mDictView.webView.backgroundColor = backgroundColor
+        
+        view.backgroundColor = backgroundColor
+
+        tabBar.tintColor = textColor
+        tabBar.backgroundColor = backgroundColor
+        tabBar.barTintColor = navBackgroundColor
+    }
+    
     func updateNavigationButtons() {
         let webView = viewModel.tabWebView[selectedIndex]
         navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack

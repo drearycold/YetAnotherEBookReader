@@ -171,21 +171,14 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         let textColor = options.isDark(UIColor(white: 0.7, alpha: 1.0), UIColor.black)
         let navBackgroundColor = backgroundColor
         
-        dictViewerTab.mDictView.webTextColor = options.isDark(.init(white: 0.7, alpha: 1.0), nil)
-        dictViewerTab.mDictView.webView.backgroundColor = backgroundColor
-        
-        dictViewerTab.view.backgroundColor = backgroundColor
-
         dictViewerNav.navigationBar.tintColor = textColor
         dictViewerNav.navigationBar.backgroundColor = backgroundColor
         dictViewerNav.navigationBar.barTintColor = navBackgroundColor
         dictViewerNav.navigationBar.titleTextAttributes = [
             .foregroundColor: textColor
         ]
-        
-        dictViewerTab.tabBar.tintColor = textColor
-        dictViewerTab.tabBar.backgroundColor = backgroundColor
-        dictViewerTab.tabBar.barTintColor = navBackgroundColor
+    
+        dictViewerTab.updateStyle(textColor, backgroundColor, navBackgroundColor, options.isDark)
     }
 }
 

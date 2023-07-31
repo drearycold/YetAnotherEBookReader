@@ -12,7 +12,6 @@ import NaturalLanguage
 
 class MDictViewContainer : UIViewController {
     let webView = DictWebView()
-    var webTextColor: UIColor? = nil
     //model
     var viewModel: DictViewModel!
     
@@ -98,9 +97,6 @@ class MDictViewContainer : UIViewController {
         ]
         
         NSLayoutConstraint.activate(constraints)
-        
-        tabBarController?.navigationItem.leftBarButtonItems?[1].isEnabled = webView.canGoBack
-        tabBarController?.navigationItem.leftBarButtonItems?[2].isEnabled = webView.canGoForward
     }
     
     func loadWebView(_ url: URL) async {
@@ -120,7 +116,7 @@ class MDictViewContainer : UIViewController {
             await webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
         }
         
-        if let color = webTextColor?.hexString(false),
+        if let color = webView.webTextColor?.hexString(false),
            let cookie = HTTPCookie(properties: [
             .path: url.path.replacingOccurrences(of: "/lookup", with: ""),
             .name: "textColor",

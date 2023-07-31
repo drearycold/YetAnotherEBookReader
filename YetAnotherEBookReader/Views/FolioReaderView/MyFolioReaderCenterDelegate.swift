@@ -53,12 +53,6 @@ public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
         let textColor = readerConfig.themeModeTextColor[reader.themeMode]
         let navBackgroundColor = readerConfig.themeModeNavBackground[reader.themeMode]
         
-        
-        dictTab.mDictView.webTextColor = reader.isNight(textColor, nil)
-        dictTab.mDictView.webView.backgroundColor = backgroundColor
-        
-        dictTab.view.backgroundColor = backgroundColor
-
         dictNav.navigationBar.tintColor = textColor
         dictNav.navigationBar.backgroundColor = backgroundColor
         dictNav.navigationBar.barTintColor = navBackgroundColor
@@ -66,8 +60,6 @@ public class YabrFolioReaderPageDelegate: FolioReaderPageDelegate {
             .foregroundColor: textColor
         ]
         
-        dictTab.tabBar.tintColor = textColor
-        dictTab.tabBar.backgroundColor = backgroundColor
-        dictTab.tabBar.barTintColor = navBackgroundColor
+        dictTab.updateStyle(textColor, backgroundColor, navBackgroundColor, reader.nightMode)
     }
 }
