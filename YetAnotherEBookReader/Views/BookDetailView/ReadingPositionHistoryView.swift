@@ -8,9 +8,7 @@
 import SwiftUI
 import RealmSwift
 
-#if canImport(SwiftUICharts)
 import SwiftUICharts
-#endif
 
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
@@ -29,14 +27,47 @@ struct ReadingPositionHistoryView: View {
     @State private var _positionViewModel: ReadingPositionListViewModel? = nil
     @State private var booksHistory = [String: Double]()   //InShelfId to minutes
     
+    @State private var barChartData: BarChartData?
+    
     let minutesFormatter = NumberFormatter()
     
     var body: some View {
         VStack {
-            #if canImport(SwiftUICharts)
-            BarChartView(data: ChartData(points: readingStatistics), title: "Weekly Read Time", legend: "Minutes", form: ChartForm.large, valueSpecifier: "%.1f")
-                .padding()
-            #endif
+            Group {
+                if readingStatistics.isEmpty {
+                    Text("New Book")
+                } else {
+                    #if DEBUG
+                    List {
+                        ForEach(readingStatistics, id: \.self) { minutes in
+                            Text("\(minutes)")
+                        }
+                    }
+                    #endif
+                    if let data = barChartData {
+                        BarChart(
+                            chartData: data
+                        )
+                        .touchOverlay(chartData: data, specifier: "%.1f")
+                        .averageLine(chartData: data,
+                                     strokeStyle: StrokeStyle(lineWidth: 3,dash: [5,10]))
+                        .yAxisPOI(chartData: data,
+                                  markerName: "50",
+                                  markerValue: 50,
+                                  lineColour: Color.blue,
+                                  strokeStyle: StrokeStyle(lineWidth: 3, dash: [5,10]))
+                        .xAxisGrid(chartData: data)
+                        .yAxisGrid(chartData: data)
+                        .xAxisLabels(chartData: data)
+                        .yAxisLabels(chartData: data)
+                        .infoBox(chartData: data)
+                        .floatingInfoBox(chartData: data)
+                        .headerBox(chartData: data)
+                        .legends(chartData: data)
+                        .padding()
+                    }
+                }
+            }
             List {
 //                Section(
 //                    header: Text("Stats"),
@@ -157,6 +188,21 @@ struct ReadingPositionHistoryView: View {
             readingStatistics = modelData.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
+            
+            barChartData = .init(
+                dataSets: .init(
+                    dataPoints: readingStatistics.map({
+                        .init(value: $0)
+                    }),
+                    legendTitle: "Minutes"
+                ),
+                metadata: .init(
+                    title: "Weekly Read Time",
+                    subtitle: "Minutes"
+                )
+            )
+            
+            print("\(#function) readingStatistics=\(readingStatistics)")
             
             minutesFormatter.maximumFractionDigits = 1
             minutesFormatter.minimumFractionDigits = 1

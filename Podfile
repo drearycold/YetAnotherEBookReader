@@ -10,6 +10,7 @@ target 'YetAnotherEBookReader' do
   # Pods for YetAnotherEBookReader
   pod 'ShelfView', :path => '../ShelfView-iOS'  
   pod 'FolioReaderKit', path: '../FolioReaderKit'
+  pod 'SwiftUICharts', path: '../SwiftUICharts'
 
   pod 'Google-Mobile-Ads-SDK'
   pod 'GoogleAppMeasurement'
@@ -24,7 +25,7 @@ pod 'GCDWebServer', podspec: 'https://raw.githubusercontent.com/readium/GCDWebSe
   pod 'Kingfisher/SwiftUI', '~> 5.0'
   pod 'MBProgressHUD', '~> 1.2.0'
   pod 'RealmSwift', '~> 10.0'
-  pod 'SQLite.swift', '~> 0.13.0'
+  #pod 'SQLite.swift', '~> 0.13.0'
 
   target 'YetAnotherEBookReaderTests' do
     inherit! :search_paths
