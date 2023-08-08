@@ -25,6 +25,7 @@ class DictTabBarController: UITabBarController {
 
         encycloView.viewModel = viewModel
         encycloView.webView.navigationDelegate = self
+        encycloView.webView.configuration.userContentController.add(self, name: "EncycloView")
         
         editor.viewModel = viewModel
         
@@ -103,6 +104,9 @@ class DictTabBarController: UITabBarController {
     func updateStyle(_ textColor: UIColor, _ backgroundColor: UIColor, _ navBackgroundColor: UIColor, _ nightMode: Bool) {
         mDictView.webView.webTextColor = nightMode ? textColor : nil
         mDictView.webView.backgroundColor = backgroundColor
+        
+        encycloView.webView.webTextColor = nightMode ? textColor : nil
+        encycloView.webView.backgroundColor = backgroundColor
         
         view.backgroundColor = backgroundColor
 
@@ -258,5 +262,13 @@ extension DictTabBarController: WKNavigationDelegate {
         
         dictWebView.labelView.text = "Terminated"
         dictWebView.labelView.isHidden = false
+    }
+}
+
+extension DictTabBarController: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let response = message.body as? String else { return }
+        
+        print("\(#function) \(response)")
     }
 }

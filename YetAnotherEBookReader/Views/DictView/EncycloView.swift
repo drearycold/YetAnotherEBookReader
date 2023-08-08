@@ -33,6 +33,22 @@ class EncycloView: UIViewController {
         urlComponents?.path.append(viewModel.word!)
 //        urlComponents?.path = urlComponents?.path.append
         
+        webView.configuration.userContentController.removeAllUserScripts()
+        if let backgroundColor = webView.backgroundColor?.hexString(false) {
+            webView.configuration.userContentController.addUserScript(
+                .init(source: """
+                var style = document.createElement('style');
+                style.id = 'style_folio_background';
+                style.type = 'text/css';
+                style.innerHTML = 'body { background-color: \(backgroundColor) !important; }';
+                document.head.appendChild(style);
+                window.webkit.messageHandlers.EncycloView
+                    .postMessage(style.outerHTML)
+                window.webkit.messageHandlers.EncycloView
+                    .postMessage(document.head.outerHTML)
+            """, injectionTime: .atDocumentEnd, forMainFrameOnly: false)
+            )
+        }
         if let url = urlComponents?.url {
             webView.load(.init(url: url))
         }

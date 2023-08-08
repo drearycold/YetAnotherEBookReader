@@ -168,6 +168,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
+            epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
             nav.pushViewController(epubReaderContainer, animated: false)
             nav.setToolbarHidden(true, animated: false)
