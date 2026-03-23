@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 52;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -378,6 +378,11 @@
 		E7C777A928ED4A3F00939D63 /* YabrPDFHighlightListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777A828ED4A3F00939D63 /* YabrPDFHighlightListCell.swift */; };
 		E7C777AB28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777AA28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift */; };
 		E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777AC28EE7E1600939D63 /* YabrPDFReferenceListCell.swift */; };
+		E7D315102BE5F8AF00A5B50A /* DictWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA312A77674300D5C95B /* DictWebView.swift */; };
+		E7D315112BE5F8AF00A5B50A /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
+		E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
+		E7D315132BE5F8AF00A5B50A /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
+		E7D315142BE5F8AF00A5B50A /* DIctViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */; };
 		E7DFE3EF297A729900C60E7B /* ReaderOptionsReaderHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */; };
 		E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */; };
 		E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
@@ -1554,9 +1559,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-Catalyst/Pods-YetAnotherEBookReader-Catalyst-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1593,9 +1602,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests/Pods-YetAnotherEBookReader-YetAnotherEBookReaderUITests-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1610,9 +1623,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-YetAnotherEBookReader/Pods-YetAnotherEBookReader-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1808,6 +1825,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E7D315102BE5F8AF00A5B50A /* DictWebView.swift in Sources */,
+				E7D315112BE5F8AF00A5B50A /* EncycloView.swift in Sources */,
+				E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */,
+				E7D315132BE5F8AF00A5B50A /* MDictViewEdit.swift in Sources */,
+				E7D315142BE5F8AF00A5B50A /* DIctViewModel.swift in Sources */,
 				E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */,
 				E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */,
 				E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */,
@@ -2209,7 +2231,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 114;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2221,7 +2243,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.4;
+				MARKETING_VERSION = 0.2.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",
@@ -2276,6 +2298,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -2294,7 +2317,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 114;
+				CURRENT_PROJECT_VERSION = 124;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -2306,7 +2329,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.2.4;
+				MARKETING_VERSION = 0.2.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-l\"c++\"",
@@ -2359,6 +2382,7 @@
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_OBJC_BRIDGING_HEADER = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

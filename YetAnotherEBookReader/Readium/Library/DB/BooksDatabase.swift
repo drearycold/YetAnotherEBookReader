@@ -126,14 +126,14 @@ class BooksTable {
     
     let books = Table("BOOKS")
     
-    let ID = Expression<Int64>("id")
-    let IDENTIFIER = Expression<String?>("identifier")
-    let HREF = Expression<String>("href")
-    let TITLE = Expression<String>("title")
-    let AUTHOR = Expression<String?>("author")
-    let COVER = Expression<Data?>("cover")
-    let CREATION = Expression<Date>("creationDate")
-    let PROGRESSION = Expression<String?>("progression")
+    let ID = SQLite.Expression<Int64>("id")
+    let IDENTIFIER = SQLite.Expression<String?>("identifier")
+    let HREF = SQLite.Expression<String>("href")
+    let TITLE = SQLite.Expression<String>("title")
+    let AUTHOR = SQLite.Expression<String?>("author")
+    let COVER = SQLite.Expression<Data?>("cover")
+    let CREATION = SQLite.Expression<Date>("creationDate")
+    let PROGRESSION = SQLite.Expression<String?>("progression")
     
     init(_ connection: Connection) {
         

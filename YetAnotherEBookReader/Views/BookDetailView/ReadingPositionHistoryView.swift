@@ -8,7 +8,9 @@
 import SwiftUI
 import RealmSwift
 
+#if canImport(SwiftUICharts)
 import SwiftUICharts
+#endif
 
 struct ReadingPositionHistoryView: View {
     @EnvironmentObject var modelData: ModelData
@@ -27,7 +29,9 @@ struct ReadingPositionHistoryView: View {
     @State private var _positionViewModel: ReadingPositionListViewModel? = nil
     @State private var booksHistory = [String: Double]()   //InShelfId to minutes
     
+    #if canImport(SwiftUICharts)
     @State private var barChartData: BarChartData?
+    #endif
     
     let minutesFormatter = NumberFormatter()
     
@@ -44,6 +48,7 @@ struct ReadingPositionHistoryView: View {
                         }
                     }
                     #endif
+                    #if canImport(SwiftUICharts)
                     if let data = barChartData {
                         BarChart(
                             chartData: data
@@ -66,6 +71,7 @@ struct ReadingPositionHistoryView: View {
                         .legends(chartData: data)
                         .padding()
                     }
+                    #endif
                 }
             }
             List {
@@ -189,6 +195,7 @@ struct ReadingPositionHistoryView: View {
             maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
             avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
             
+            #if canImport(SwiftUICharts)
             barChartData = .init(
                 dataSets: .init(
                     dataPoints: readingStatistics.map({
@@ -201,6 +208,7 @@ struct ReadingPositionHistoryView: View {
                     subtitle: "Minutes"
                 )
             )
+            #endif
             
             print("\(#function) readingStatistics=\(readingStatistics)")
             
