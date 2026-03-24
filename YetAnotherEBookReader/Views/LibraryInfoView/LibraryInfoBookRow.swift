@@ -7,7 +7,8 @@
 
 import SwiftUI
 import RealmSwift
-import struct Kingfisher.KFImage
+//import struct Kingfisher.KFImage
+import KingfisherSwiftUI
 
 struct LibraryInfoBookRow: View {
     @EnvironmentObject var modelData: ModelData

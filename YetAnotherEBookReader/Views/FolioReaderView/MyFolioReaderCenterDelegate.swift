@@ -6,7 +6,7 @@
 //
 
 import Foundation
-
+import UIKit
 import FolioReaderKit
 
 public class MyFolioReaderCenterDelegate: FolioReaderCenterDelegate {

@@ -53,7 +53,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
         
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willResignActiveNotification, object: nil)
         // NotificationCenter.default.addObserver(self, selector: #selector(folioReader.saveReaderState), name: UIApplication.willTerminateNotification, object: nil)
-        
+#if canImport(GoogleMobileAds)
 #if GAD_ENABLED
         let gadRequest = GADRequest()
         //        gadRequest.scene = self.view.window?.windowScene
@@ -68,7 +68,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
             self.interstitialAd?.fullScreenContentDelegate = self
         }
 #endif
-        
+#endif
         super.initialization()
     }
 
