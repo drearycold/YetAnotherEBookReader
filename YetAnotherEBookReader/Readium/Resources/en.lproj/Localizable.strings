@@ -15,8 +15,6 @@
 
 /* Library tab title */
 "bookshelf_tab" = "Bookshelf";
-"catalogs_tab" = "OPDS Feeds";
-"about_tab" = "About";
 
 /* Buttons */
 "ok_button" = "OK";
@@ -125,31 +123,6 @@
 "lcp_characters_label" = "%d characters";
 /* Quantity of pages left to be printed */
 "lcp_pages_label" = "%d pages";
-
-
-/* MARK: OPDS */
-
-/* Button to edit the OPDS catalog */
-"opds_edit_button" = "Edit catalog";
-/* Button to expand a feed gallery */
-"opds_more_button" = "more >";
-"opds_more_button_a11y_label" = "expand feed";
-/* Title of the section displaying the feeds */
-"opds_browse_title" = "Browse";
-/* Title of the add feed alert */
-"opds_add_title" = "Enter feed title and URL";
-/* Message when adding an invalid OPDS feed */
-"opds_add_failure_message" = "Feed is not valid, please try again.";
-/* Label for the OPDS feed title field */
-"opds_feed_title_caption" = "Feed Title";
-/* Label for the OPDS feed URL field */
-"opds_feed_url_caption" = "Feed URL";
-/* Error message when the feed couldn't be loaded */
-"opds_failure_message" = "Something went wrong.";
-/* Add OPDS Feed button label */
-"opds_add_button_a11y_label" = "Add OPDS Feed";
-"opds_show_detail_view_a11y_hint" = "tap to view details";
-"opds_feed_header_a11y_hint" = "Feed Group Header";
 
 
 /* MARK: User Settings */

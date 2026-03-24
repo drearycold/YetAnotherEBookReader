@@ -197,7 +197,6 @@
 		E769B43F2F72736A00EABE1E /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43E2F72736A00EABE1E /* R2Shared */; };
 		E769B4412F72736A00EABE1E /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4402F72736A00EABE1E /* R2Streamer */; };
 		E769B4432F72736A00EABE1E /* ReadiumLCP in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4422F72736A00EABE1E /* ReadiumLCP */; };
-		E769B4452F72736A00EABE1E /* ReadiumOPDS in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4442F72736A00EABE1E /* ReadiumOPDS */; };
 		E769C59A296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
 		E769C59B296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
 		E769C59C296BF4C60089C21E /* Publication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52E296BF4C50089C21E /* Publication.swift */; };
@@ -323,7 +322,6 @@
 		E76EF6C82F7233490037219B /* R2Navigator in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6C72F7233490037219B /* R2Navigator */; };
 		E76EF6CA2F7233490037219B /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6C92F7233490037219B /* R2Shared */; };
 		E76EF6CC2F7233490037219B /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6CB2F7233490037219B /* R2Streamer */; };
-		E76EF6D02F7233490037219B /* ReadiumOPDS in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6CF2F7233490037219B /* ReadiumOPDS */; };
 		E77B8D472973D16200363F39 /* ModelDataResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77B8D462973D16200363F39 /* ModelDataResource.swift */; };
 		E77B8D482973D16200363F39 /* ModelDataResource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E77B8D462973D16200363F39 /* ModelDataResource.swift */; };
 		E77B8D5029751C2A00363F39 /* YabrResources in Resources */ = {isa = PBXBuildFile; fileRef = E77B8D4F29751C2A00363F39 /* YabrResources */; };
@@ -344,7 +342,6 @@
 		E7A20DF42F725BDE006D940C /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E7A20DF32F725BDE006D940C /* R2Shared */; };
 		E7A20DF62F725BDE006D940C /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E7A20DF52F725BDE006D940C /* R2Streamer */; };
 		E7A20DF82F725BDE006D940C /* ReadiumLCP in Frameworks */ = {isa = PBXBuildFile; productRef = E7A20DF72F725BDE006D940C /* ReadiumLCP */; };
-		E7A20DFA2F725BDE006D940C /* ReadiumOPDS in Frameworks */ = {isa = PBXBuildFile; productRef = E7A20DF92F725BDE006D940C /* ReadiumOPDS */; };
 		E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
 		E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
 		E7A8EA302A75579100D5C95B /* DIctViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */; };
@@ -597,11 +594,9 @@
 				E7A20DF22F725BDE006D940C /* R2Navigator in Frameworks */,
 				E7A20DF62F725BDE006D940C /* R2Streamer in Frameworks */,
 				E76EF6CA2F7233490037219B /* R2Shared in Frameworks */,
-				E7A20DFA2F725BDE006D940C /* ReadiumOPDS in Frameworks */,
 				E7C602132F7139180060265A /* KingfisherSwiftUI in Frameworks */,
 				E7C602042F7134560060265A /* FolioReaderKit in Frameworks */,
 				4C8D6A8BE24380426C1F893E /* (null) in Frameworks */,
-				E76EF6D02F7233490037219B /* ReadiumOPDS in Frameworks */,
 				E7C6021B2F7141C00060265A /* MBProgressHUD in Frameworks */,
 				E7C6020C2F7136110060265A /* ShelfView in Frameworks */,
 				E7A20DF42F725BDE006D940C /* R2Shared in Frameworks */,
@@ -626,7 +621,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E769B4452F72736A00EABE1E /* ReadiumOPDS in Frameworks */,
 				E769B4392F72736A00EABE1E /* MBProgressHUD in Frameworks */,
 				E769B4432F72736A00EABE1E /* ReadiumLCP in Frameworks */,
 				E769B4332F72736A00EABE1E /* SwiftUICharts in Frameworks */,
@@ -2507,11 +2501,6 @@
 			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
 			productName = ReadiumLCP;
 		};
-		E769B4442F72736A00EABE1E /* ReadiumOPDS */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
-			productName = ReadiumOPDS;
-		};
 		E76EF6C72F7233490037219B /* R2Navigator */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E76EF6C62F7233490037219B /* XCRemoteSwiftPackageReference "swift-toolkit" */;
@@ -2526,11 +2515,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E76EF6C62F7233490037219B /* XCRemoteSwiftPackageReference "swift-toolkit" */;
 			productName = R2Streamer;
-		};
-		E76EF6CF2F7233490037219B /* ReadiumOPDS */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E76EF6C62F7233490037219B /* XCRemoteSwiftPackageReference "swift-toolkit" */;
-			productName = ReadiumOPDS;
 		};
 		E7A20DF12F725BDE006D940C /* R2Navigator */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -2547,10 +2531,6 @@
 		E7A20DF72F725BDE006D940C /* ReadiumLCP */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ReadiumLCP;
-		};
-		E7A20DF92F725BDE006D940C /* ReadiumOPDS */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = ReadiumOPDS;
 		};
 		E7C602032F7134560060265A /* FolioReaderKit */ = {
 			isa = XCSwiftPackageProductDependency;
