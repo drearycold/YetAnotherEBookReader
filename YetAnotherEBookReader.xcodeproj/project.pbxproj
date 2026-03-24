@@ -212,30 +212,6 @@
 		E769C5A7296BF4C60089C21E /* UIViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C535296BF4C50089C21E /* UIViewController.swift */; };
 		E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
 		E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
-		E769C5B0296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */; };
-		E769C5B1296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */; };
-		E769C5B2296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */; };
-		E769C5B3296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */; };
-		E769C5B4296BF4C60089C21E /* OPDSRootTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53F296BF4C60089C21E /* OPDSRootTableViewController.swift */; };
-		E769C5B5296BF4C60089C21E /* OPDSRootTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53F296BF4C60089C21E /* OPDSRootTableViewController.swift */; };
-		E769C5B6296BF4C60089C21E /* OPDSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C540296BF4C60089C21E /* OPDSModule.swift */; };
-		E769C5B7296BF4C60089C21E /* OPDSModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C540296BF4C60089C21E /* OPDSModule.swift */; };
-		E769C5B8296BF4C60089C21E /* OPDSGroupTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C541296BF4C60089C21E /* OPDSGroupTableViewCell.swift */; };
-		E769C5B9296BF4C60089C21E /* OPDSGroupTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C541296BF4C60089C21E /* OPDSGroupTableViewCell.swift */; };
-		E769C5BA296BF4C60089C21E /* OPDSPublicationInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C542296BF4C60089C21E /* OPDSPublicationInfoViewController.swift */; };
-		E769C5BB296BF4C60089C21E /* OPDSPublicationInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C542296BF4C60089C21E /* OPDSPublicationInfoViewController.swift */; };
-		E769C5BC296BF4C60089C21E /* OPDSFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C543296BF4C60089C21E /* OPDSFactory.swift */; };
-		E769C5BD296BF4C60089C21E /* OPDSFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C543296BF4C60089C21E /* OPDSFactory.swift */; };
-		E769C5BE296BF4C60089C21E /* OPDSPlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C544296BF4C60089C21E /* OPDSPlaceholderView.swift */; };
-		E769C5BF296BF4C60089C21E /* OPDSPlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C544296BF4C60089C21E /* OPDSPlaceholderView.swift */; };
-		E769C5C0296BF4C60089C21E /* OPDS.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C545296BF4C60089C21E /* OPDS.storyboard */; };
-		E769C5C1296BF4C60089C21E /* OPDS.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C545296BF4C60089C21E /* OPDS.storyboard */; };
-		E769C5C2296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C547296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift */; };
-		E769C5C3296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C547296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift */; };
-		E769C5C4296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C548296BF4C60089C21E /* OPDSPublicationTableViewCell.swift */; };
-		E769C5C5296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C548296BF4C60089C21E /* OPDSPublicationTableViewCell.swift */; };
-		E769C5C6296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C549296BF4C60089C21E /* OPDSFacetViewController.swift */; };
-		E769C5C7296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C549296BF4C60089C21E /* OPDSFacetViewController.swift */; };
 		E769C5C8296BF4C60089C21E /* LCPLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C54C296BF4C60089C21E /* LCPLibraryService.swift */; };
 		E769C5C9296BF4C60089C21E /* LCPLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C54C296BF4C60089C21E /* LCPLibraryService.swift */; };
 		E769C5CA296BF4C60089C21E /* DRMLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C54D296BF4C60089C21E /* DRMLibraryService.swift */; };
@@ -518,18 +494,6 @@
 		E769C534296BF4C50089C21E /* UIImage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIImage.swift; sourceTree = "<group>"; };
 		E769C535296BF4C50089C21E /* UIViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIViewController.swift; sourceTree = "<group>"; };
 		E769C536296BF4C50089C21E /* BarButtonItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BarButtonItem.swift; sourceTree = "<group>"; };
-		E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSNavigationTableViewCell.swift; sourceTree = "<group>"; };
-		E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSGroupCollectionViewCell.swift; sourceTree = "<group>"; };
-		E769C53F296BF4C60089C21E /* OPDSRootTableViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSRootTableViewController.swift; sourceTree = "<group>"; };
-		E769C540296BF4C60089C21E /* OPDSModule.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSModule.swift; sourceTree = "<group>"; };
-		E769C541296BF4C60089C21E /* OPDSGroupTableViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSGroupTableViewCell.swift; sourceTree = "<group>"; };
-		E769C542296BF4C60089C21E /* OPDSPublicationInfoViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSPublicationInfoViewController.swift; sourceTree = "<group>"; };
-		E769C543296BF4C60089C21E /* OPDSFactory.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSFactory.swift; sourceTree = "<group>"; };
-		E769C544296BF4C60089C21E /* OPDSPlaceholderView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSPlaceholderView.swift; sourceTree = "<group>"; };
-		E769C546296BF4C60089C21E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/OPDS.storyboard; sourceTree = "<group>"; };
-		E769C547296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSCatalogSelectorViewController.swift; sourceTree = "<group>"; };
-		E769C548296BF4C60089C21E /* OPDSPublicationTableViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSPublicationTableViewCell.swift; sourceTree = "<group>"; };
-		E769C549296BF4C60089C21E /* OPDSFacetViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSFacetViewController.swift; sourceTree = "<group>"; };
 		E769C54C296BF4C60089C21E /* LCPLibraryService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LCPLibraryService.swift; sourceTree = "<group>"; };
 		E769C54D296BF4C60089C21E /* DRMLibraryService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DRMLibraryService.swift; sourceTree = "<group>"; };
 		E769C54F296BF4C60089C21E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/PublicationMenuViewController.strings; sourceTree = "<group>"; };
@@ -979,7 +943,6 @@
 			children = (
 				E769C52C296BF4C50089C21E /* Common */,
 				E769C54A296BF4C60089C21E /* Library */,
-				E769C53C296BF4C60089C21E /* OPDS */,
 				E769C560296BF4C60089C21E /* Reader */,
 				E769C58A296BF4C60089C21E /* Resources */,
 			);
@@ -1014,25 +977,6 @@
 				E769C535296BF4C50089C21E /* UIViewController.swift */,
 			);
 			path = Extensions;
-			sourceTree = "<group>";
-		};
-		E769C53C296BF4C60089C21E /* OPDS */ = {
-			isa = PBXGroup;
-			children = (
-				E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */,
-				E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */,
-				E769C53F296BF4C60089C21E /* OPDSRootTableViewController.swift */,
-				E769C540296BF4C60089C21E /* OPDSModule.swift */,
-				E769C541296BF4C60089C21E /* OPDSGroupTableViewCell.swift */,
-				E769C542296BF4C60089C21E /* OPDSPublicationInfoViewController.swift */,
-				E769C543296BF4C60089C21E /* OPDSFactory.swift */,
-				E769C544296BF4C60089C21E /* OPDSPlaceholderView.swift */,
-				E769C545296BF4C60089C21E /* OPDS.storyboard */,
-				E769C547296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift */,
-				E769C548296BF4C60089C21E /* OPDSPublicationTableViewCell.swift */,
-				E769C549296BF4C60089C21E /* OPDSFacetViewController.swift */,
-			);
-			path = OPDS;
 			sourceTree = "<group>";
 		};
 		E769C54A296BF4C60089C21E /* Library */ = {
@@ -1396,7 +1340,6 @@
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,
 				E769C620296BF4C60089C21E /* Localizable.strings in Resources */,
 				2AAB2996271411060080B0CB /* Settings.bundle in Resources */,
-				E769C5C0296BF4C60089C21E /* OPDS.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1420,7 +1363,6 @@
 			files = (
 				E769C611296BF4C60089C21E /* UserSettings.strings in Resources */,
 				E769C5D7296BF4C60089C21E /* PublicationMenuViewController.xib in Resources */,
-				E769C5C1296BF4C60089C21E /* OPDS.storyboard in Resources */,
 				E77B8D5129751C2A00363F39 /* YabrResources in Resources */,
 				E769C62D296BF4C60089C21E /* 1.cbz in Resources */,
 				E769C62B296BF4C60089C21E /* 5.epub in Resources */,
@@ -1451,7 +1393,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				E769C5A4296BF4C60089C21E /* UIImage.swift in Sources */,
-				E769C5B6296BF4C60089C21E /* OPDSModule.swift in Sources */,
 				E782836628EEA5BA0011438D /* YabrPDFTableViewController.swift in Sources */,
 				E769C5D2296BF4C60089C21E /* LibraryService.swift in Sources */,
 				E7C7779528ED324300939D63 /* YabrPDFAnnotationPageVC.swift in Sources */,
@@ -1466,8 +1407,6 @@
 				2AAE40A1267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
 				2AF6FE0E2701E1DA002BA27E /* YabrReadiumCBZViewController.swift in Sources */,
 				E7C777AB28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift in Sources */,
-				E769C5C4296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */,
-				E769C5C6296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */,
 				E769C5F6296BF4C60089C21E /* ReaderViewController.swift in Sources */,
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
 				2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */,
@@ -1499,11 +1438,9 @@
 				E7804CCC29C0220D0066BD43 /* CalibreSearchCache.swift in Sources */,
 				2AD38F8726D637B70053D01D /* ReadingPositionDetailView.swift in Sources */,
 				2A63F74026C1136E00DB5E98 /* BookFormatDownload.swift in Sources */,
-				E769C5B2296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */,
 				E792835528F7DFD100EE2FC7 /* YabrPDFNavigationPageVC.swift in Sources */,
 				2A47879D271526BF009C8770 /* FontsHelper.swift in Sources */,
 				2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */,
-				E769C5BE296BF4C60089C21E /* OPDSPlaceholderView.swift in Sources */,
 				E769C5FE296BF4C60089C21E /* BookmarkDataSource.swift in Sources */,
 				2ABB9158261F1A47004AA7C0 /* EpubFolioReaderContainer.swift in Sources */,
 				E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */,
@@ -1518,7 +1455,6 @@
 				E769C600296BF4C60089C21E /* OutlineTableViewController.swift in Sources */,
 				E769C5EC296BF4C60089C21E /* PDFViewController.swift in Sources */,
 				E7C777A928ED4A3F00939D63 /* YabrPDFHighlightListCell.swift in Sources */,
-				E769C5B4296BF4C60089C21E /* OPDSRootTableViewController.swift in Sources */,
 				E769C5DE296BF4C60089C21E /* BooksDatabase.swift in Sources */,
 				E769C60E296BF4C60089C21E /* AssociatedColors.swift in Sources */,
 				E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */,
@@ -1549,7 +1485,6 @@
 				2ACE265926A921230037FCB4 /* RealmModel.swift in Sources */,
 				E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
 				2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
-				E769C5B8296BF4C60089C21E /* OPDSGroupTableViewCell.swift in Sources */,
 				2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */,
 				E769C5E0296BF4C60089C21E /* PublicationCollectionViewCell.swift in Sources */,
 				E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */,
@@ -1560,7 +1495,6 @@
 				2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */,
 				E769C5FC296BF4C60089C21E /* Bookmark.swift in Sources */,
 				2A2A853A275C699500C17825 /* YabrEBookReaderNavigationController.swift in Sources */,
-				E769C5BA296BF4C60089C21E /* OPDSPublicationInfoViewController.swift in Sources */,
 				2A264A4127311E8200C4CEFA /* ReadingPositionHistoryView.swift in Sources */,
 				E769C608296BF4C60089C21E /* ReaderModule.swift in Sources */,
 				E769C5E6296BF4C60089C21E /* CBZModule.swift in Sources */,
@@ -1574,7 +1508,6 @@
 				2A21BCE527017F9400825BBB /* Providers.swift in Sources */,
 				2ACE265D26A97BE70037FCB4 /* ImageRequest.swift in Sources */,
 				E769C60A296BF4C60089C21E /* ReaderFormatModule.swift in Sources */,
-				E769C5B0296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */,
 				E769C614296BF4C60089C21E /* AdvancedSettingsViewController.swift in Sources */,
 				2AAE409D267849E80058A501 /* LibraryInfoBookRow.swift in Sources */,
 				E769C5F2296BF4C60089C21E /* DRMManagementTableViewController.swift in Sources */,
@@ -1587,14 +1520,12 @@
 				2A0A0487271BF65A00589B87 /* SupportInfoView.swift in Sources */,
 				E769C5F4296BF4C60089C21E /* DRMViewModel.swift in Sources */,
 				6E7733C026663D51008318C3 /* BookFiles.swift in Sources */,
-				E769C5BC296BF4C60089C21E /* OPDSFactory.swift in Sources */,
 				2AAE409F26784D080058A501 /* LibraryBookListFilter.swift in Sources */,
 				2ABB9135261DE894004AA7C0 /* RecentShelfUI.swift in Sources */,
 				E77B8D472973D16200363F39 /* ModelDataResource.swift in Sources */,
 				E7C777A328ED495900939D63 /* YabrPDFChapterListCell.swift in Sources */,
 				2ABB9154261F1A47004AA7C0 /* LibraryInfoView.swift in Sources */,
 				E7C777A728ED495900939D63 /* YabrPDFHighlightList.swift in Sources */,
-				E769C5C2296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */,
 				E74729C329D52F5E007659A1 /* LibraryInfoBookListInfoView.swift in Sources */,
 				2ADC45BE2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift in Sources */,
 				2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */,
@@ -1646,7 +1577,6 @@
 				E732E3F42A3F03350075D1AC /* ReaderOptionsFontHelpView.swift in Sources */,
 				E732E3F52A3F03350075D1AC /* CalibreSearchCache.swift in Sources */,
 				E769C5A5296BF4C60089C21E /* UIImage.swift in Sources */,
-				E769C5B7296BF4C60089C21E /* OPDSModule.swift in Sources */,
 				E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */,
 				E769C5D3296BF4C60089C21E /* LibraryService.swift in Sources */,
 				E706CBCA291B48CB00C1426F /* CalibreBrowser.swift in Sources */,
@@ -1660,10 +1590,8 @@
 				6E7B80D828FBA7AD008B075C /* YabrPDFAnnotationPageVC.swift in Sources */,
 				6E7B80D928FBA7AD008B075C /* YabrPDFNavigationPageVC.swift in Sources */,
 				6E7B80DA28FBA7AD008B075C /* YabrPDFThumbnailList.swift in Sources */,
-				E769C5C5296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */,
 				6E7B80DB28FBA7AD008B075C /* YabrPDFThumbnailListCell.swift in Sources */,
 				6E7B80DC28FBA7AD008B075C /* YabrPDFBookmarkList.swift in Sources */,
-				E769C5C7296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */,
 				E769C5F7296BF4C60089C21E /* ReaderViewController.swift in Sources */,
 				6E7B80DD28FBA7AD008B075C /* YabrPDFBookmarkListCell.swift in Sources */,
 				6E7B80DE28FBA7AD008B075C /* YabrPDFChapterList.swift in Sources */,
@@ -1690,11 +1618,9 @@
 				6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */,
 				6E7B80EA28FBA7AD008B075C /* YabrReadiumCBZViewController.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
-				E769C5B3296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */,
 				6E7B80EC28FBA7AD008B075C /* YabrReadiumReaderViewController.swift in Sources */,
 				6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */,
 				6E7B80EE28FBA7AD008B075C /* BookImportPicker.swift in Sources */,
-				E769C5BF296BF4C60089C21E /* OPDSPlaceholderView.swift in Sources */,
 				E769C5FF296BF4C60089C21E /* BookmarkDataSource.swift in Sources */,
 				6E7B80EF28FBA7AD008B075C /* FontImportPicker.swift in Sources */,
 				E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */,
@@ -1707,7 +1633,6 @@
 				6E7B80F428FBA7AD008B075C /* LibraryOptionsOverrideCustomColumnMappings.swift in Sources */,
 				E769C601296BF4C60089C21E /* OutlineTableViewController.swift in Sources */,
 				E769C5ED296BF4C60089C21E /* PDFViewController.swift in Sources */,
-				E769C5B5296BF4C60089C21E /* OPDSRootTableViewController.swift in Sources */,
 				E769C5DF296BF4C60089C21E /* BooksDatabase.swift in Sources */,
 				E769C60F296BF4C60089C21E /* AssociatedColors.swift in Sources */,
 				6E7B80F828FBA7AD008B075C /* AddModServerView.swift in Sources */,
@@ -1735,7 +1660,6 @@
 				2ADCD7E626F4B96200FBAE11 /* Utils.swift in Sources */,
 				2ADCD7E726F4B96200FBAE11 /* YabrPDFViewController.swift in Sources */,
 				2ADCD7E826F4B96200FBAE11 /* ReadingPositionViewModel.swift in Sources */,
-				E769C5B9296BF4C60089C21E /* OPDSGroupTableViewCell.swift in Sources */,
 				2ADCD7E926F4B96200FBAE11 /* RecentShelfController.swift in Sources */,
 				E769C5E1296BF4C60089C21E /* PublicationCollectionViewCell.swift in Sources */,
 				2ADCD7EA26F4B96200FBAE11 /* ReadingPositionDetailView.swift in Sources */,
@@ -1746,7 +1670,6 @@
 				2ADCD7EF26F4B96200FBAE11 /* YetAnotherEBookReaderApp.swift in Sources */,
 				E769C5FD296BF4C60089C21E /* Bookmark.swift in Sources */,
 				2ADCD7F026F4B96200FBAE11 /* CalibreData.swift in Sources */,
-				E769C5BB296BF4C60089C21E /* OPDSPublicationInfoViewController.swift in Sources */,
 				2ADCD7F226F4B96200FBAE11 /* YabrPDFOptionView.swift in Sources */,
 				E769C609296BF4C60089C21E /* ReaderModule.swift in Sources */,
 				E769C5E7296BF4C60089C21E /* CBZModule.swift in Sources */,
@@ -1758,7 +1681,6 @@
 				2ADCD7FD26F4B96200FBAE11 /* BookDetailViewModel.swift in Sources */,
 				2ADCD80026F4B96200FBAE11 /* SectionShelfController.swift in Sources */,
 				E769C60B296BF4C60089C21E /* ReaderFormatModule.swift in Sources */,
-				E769C5B1296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */,
 				E769C615296BF4C60089C21E /* AdvancedSettingsViewController.swift in Sources */,
 				2ADCD80226F4B96200FBAE11 /* BookPreviewView.swift in Sources */,
 				E769C5F3296BF4C60089C21E /* DRMManagementTableViewController.swift in Sources */,
@@ -1770,14 +1692,12 @@
 				2ADCD80F26F4B96200FBAE11 /* SettingsView.swift in Sources */,
 				E769C5F5296BF4C60089C21E /* DRMViewModel.swift in Sources */,
 				2ADCD81526F4B96200FBAE11 /* YabrData.swift in Sources */,
-				E769C5BD296BF4C60089C21E /* OPDSFactory.swift in Sources */,
 				2ADCD81A26F4B96200FBAE11 /* MDictView.swift in Sources */,
 				2ADCD81C26F4B96200FBAE11 /* BookPreference.swift in Sources */,
 				E77B8D482973D16200363F39 /* ModelDataResource.swift in Sources */,
 				2ADCD81E26F4B96200FBAE11 /* SectionShelfUI.swift in Sources */,
 				2ADCD82326F4B96200FBAE11 /* ImageRequest.swift in Sources */,
 				2ADCD82826F4B96200FBAE11 /* LibraryInfoBookRow.swift in Sources */,
-				E769C5C3296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */,
 				2ADCD82D26F4B96200FBAE11 /* BookFiles.swift in Sources */,
 				2ADCD82E26F4B96200FBAE11 /* LibraryBookListFilter.swift in Sources */,
 				2ADCD82F26F4B96200FBAE11 /* RecentShelfUI.swift in Sources */,
@@ -1806,14 +1726,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		E769C545296BF4C60089C21E /* OPDS.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				E769C546296BF4C60089C21E /* Base */,
-			);
-			name = OPDS.storyboard;
-			sourceTree = "<group>";
-		};
 		E769C54E296BF4C60089C21E /* PublicationMenuViewController.strings */ = {
 			isa = PBXVariantGroup;
 			children = (

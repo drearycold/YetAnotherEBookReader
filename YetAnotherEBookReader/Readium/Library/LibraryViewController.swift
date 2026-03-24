@@ -17,7 +17,7 @@ import R2Shared
 import R2Streamer
 import R2Navigator
 import Kingfisher
-import ReadiumOPDS
+// import ReadiumOPDS
 
 
 protocol LibraryViewControllerFactory {
@@ -156,54 +156,7 @@ class LibraryViewController: UIViewController, Loggable {
     }
     
     private func addBookFromURL(url: String? = nil, message: String? = nil) {
-        let alert = UIAlertController(
-            title: NSLocalizedString("library_add_book_from_url_title", comment: "Title for the `Add book from URL` alert"),
-            message: message,
-            preferredStyle: .alert
-        )
-        
-        func retry(message: String? = nil) {
-            addBookFromURL(url: alert.textFields?[0].text, message: message)
-        }
-        
-        func add(_ action: UIAlertAction) {
-            let optionalURLString = alert.textFields?[0].text
-            guard let urlString = optionalURLString,
-                let url = URL(string: urlString) else
-            {
-                retry(message: NSLocalizedString("library_add_book_from_url_failure_message", comment: "Error message when trying to add a book from a URL"))
-                return
-            }
-            
-            func tryAdd(from url: URL) {
-                library.importPublication(from: url, sender: self) { result in
-                    if case .failure(let error) = result {
-                        retry(message: error.localizedDescription)
-                    }
-                }
-            }
-
-            let hideActivity = toastActivity(on: view)
-            OPDSParser.parseURL(url: url) { data, _ in
-                DispatchQueue.main.async {
-                    hideActivity()
-
-                    if let downloadLink = data?.publication?.downloadLinks.first, let downloadURL = URL(string: downloadLink.href) {
-                        tryAdd(from: downloadURL)
-                    } else {
-                        tryAdd(from: url)
-                    }
-                }
-            }
-        }
-        
-        alert.addTextField { textField in
-            textField.placeholder = NSLocalizedString("library_add_book_from_url_placeholder", comment: "Placeholder for the URL field in the `Add book from URL` alert")
-            textField.text = url
-        }
-        alert.addAction(UIAlertAction(title: NSLocalizedString("add_button", comment: "Add a book from a URL button"), style: .default, handler: add))
-        alert.addAction(UIAlertAction(title: NSLocalizedString("cancel_button", comment: "Cancel adding a boom from a URL button"), style: .cancel))
-        present(alert, animated: true, completion: nil)
+        // OPDS import is disabled in favor of Calibre Server.
     }
     
 }
