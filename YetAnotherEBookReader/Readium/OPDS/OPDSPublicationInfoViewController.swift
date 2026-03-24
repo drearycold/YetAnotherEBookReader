@@ -112,14 +112,18 @@ class OPDSPublicationInfoViewController: UIViewController, Loggable {
             
             switch result {
             case .success(let book):
+                break
+/*
                 delegate.presentAlert(
                     NSLocalizedString("success_title", comment: "Title of the alert when a publication is successfully downloaded"),
                     message: String(format: NSLocalizedString("library_download_success_message", comment: "Message of the alert when a publication is successfully downloaded"), book.title),
                     from: self
                 )
+*/
                 
             case .failure(let error):
-                delegate.presentError(error, from: self)
+                break
+//                delegate.presentError(error, from: self)
 
             case .cancelled:
                 break

@@ -26,7 +26,7 @@ protocol OPDSModuleAPI {
     
 }
 
-protocol OPDSModuleDelegate: ModuleDelegate {
+protocol OPDSModuleDelegate: AnyObject {
     
     /// Called when an OPDS publication needs to be downloaded.
     func opdsDownloadPublication(_ publication: Publication?, at link: Link, sender: UIViewController, completion: @escaping (CancellableResult<Book, Error>) -> Void)

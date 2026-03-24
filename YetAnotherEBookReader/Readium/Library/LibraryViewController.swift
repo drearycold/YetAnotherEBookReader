@@ -232,7 +232,7 @@ extension LibraryViewController: UIDocumentPickerDelegate {
         }
         library.importPublications(from: urls, sender: self) { result in
             if case .failure(let error) = result {
-                self.libraryDelegate?.presentError(error, from: self)
+//                self.libraryDelegate?.presentError(error, from: self)
             }
         }
     }
@@ -240,7 +240,7 @@ extension LibraryViewController: UIDocumentPickerDelegate {
     public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentAt url: URL) {
         library.importPublication(from: url, sender: self) { result in
             if case .failure(let error) = result {
-                self.libraryDelegate?.presentError(error, from: self)
+//                self.libraryDelegate?.presentError(error, from: self)
             }
         }
     }
@@ -357,7 +357,7 @@ extension LibraryViewController: UICollectionViewDelegateFlowLayout, UICollectio
                 done()
                 
             case .failure(let error):
-                self.libraryDelegate?.presentError(error, from: self)
+//                self.libraryDelegate?.presentError(error, from: self)
                 done()
             }
         }
@@ -396,7 +396,7 @@ extension LibraryViewController: PublicationCollectionViewCellDelegate {
                 }, completion: nil)
                 
             } catch {
-                self.libraryDelegate?.presentError(error, from: self)
+//                self.libraryDelegate?.presentError(error, from: self)
             }
         })
         let cancelAction = UIAlertAction(title: NSLocalizedString("cancel_button", comment: "Button to cancel the deletion of a publication"), style: .cancel, handler: { alert in
@@ -419,7 +419,8 @@ extension LibraryViewController: PublicationCollectionViewCellDelegate {
                 self.navigationController?.pushViewController(detailsViewController, animated: true)
                 
             case .failure(let error):
-                self.libraryDelegate?.presentError(error, from: self)
+                break
+//                self.libraryDelegate?.presentError(error, from: self)
                 
             case .cancelled:
                 break
@@ -490,7 +491,7 @@ extension LibraryViewController: DownloadDisplayDelegate {
             guard let self = self else {
                 return
             }
-            self.libraryDelegate?.presentError(LibraryError.downloadFailed(description), from: self)
+//            self.libraryDelegate?.presentError(LibraryError.downloadFailed(description), from: self)
         }
     }
     
@@ -516,11 +517,13 @@ extension LibraryViewController: DownloadDisplayDelegate {
             collectionView.insertItems(at: [newIndexPath])
         }, completion: { [weak self] _ in
             guard let `self` = self else { return }
+/*
             self.libraryDelegate?.presentAlert(
                 NSLocalizedString("success_title", comment: "Title of the alert when a publication is successfully imported"),
                 message: NSLocalizedString("library_import_success_message", comment: "Title of the alert when a publication is successfully imported"),
                 from: self
             )
+*/
         })
     }
     

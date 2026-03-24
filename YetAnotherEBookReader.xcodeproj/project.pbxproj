@@ -198,8 +198,6 @@
 		E769B4412F72736A00EABE1E /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4402F72736A00EABE1E /* R2Streamer */; };
 		E769B4432F72736A00EABE1E /* ReadiumLCP in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4422F72736A00EABE1E /* ReadiumLCP */; };
 		E769B4452F72736A00EABE1E /* ReadiumOPDS in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4442F72736A00EABE1E /* ReadiumOPDS */; };
-		E769C598296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
-		E769C599296BF4C60089C21E /* About.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C52B296BF4C50089C21E /* About.storyboard */; };
 		E769C59A296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
 		E769C59B296BF4C60089C21E /* Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52D296BF4C50089C21E /* Connection.swift */; };
 		E769C59C296BF4C60089C21E /* Publication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52E296BF4C50089C21E /* Publication.swift */; };
@@ -214,12 +212,6 @@
 		E769C5A7296BF4C60089C21E /* UIViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C535296BF4C50089C21E /* UIViewController.swift */; };
 		E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
 		E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
-		E769C5AA296BF4C60089C21E /* AboutTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C538296BF4C50089C21E /* AboutTableViewController.swift */; };
-		E769C5AB296BF4C60089C21E /* AboutTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C538296BF4C50089C21E /* AboutTableViewController.swift */; };
-		E769C5AC296BF4C60089C21E /* AppModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C539296BF4C50089C21E /* AppModule.swift */; };
-		E769C5AD296BF4C60089C21E /* AppModule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C539296BF4C50089C21E /* AppModule.swift */; };
-		E769C5AE296BF4C60089C21E /* App.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C53A296BF4C50089C21E /* App.storyboard */; };
-		E769C5AF296BF4C60089C21E /* App.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C53A296BF4C50089C21E /* App.storyboard */; };
 		E769C5B0296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */; };
 		E769C5B1296BF4C60089C21E /* OPDSNavigationTableViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */; };
 		E769C5B2296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */; };
@@ -519,7 +511,6 @@
 		E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoViewModel.swift; sourceTree = "<group>"; };
 		E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = YabrPDFAnnotationView.swift; path = YetAnotherEBookReader/Views/PDFView/YabrPDFAnnotationView.swift; sourceTree = SOURCE_ROOT; };
 		E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSharingProvider.swift; sourceTree = "<group>"; };
-		E769C52B296BF4C50089C21E /* About.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; path = About.storyboard; sourceTree = "<group>"; };
 		E769C52D296BF4C50089C21E /* Connection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Connection.swift; sourceTree = "<group>"; };
 		E769C52E296BF4C50089C21E /* Publication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Publication.swift; sourceTree = "<group>"; };
 		E769C531296BF4C50089C21E /* ScreenOrientation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ScreenOrientation.swift; sourceTree = "<group>"; };
@@ -527,9 +518,6 @@
 		E769C534296BF4C50089C21E /* UIImage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIImage.swift; sourceTree = "<group>"; };
 		E769C535296BF4C50089C21E /* UIViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIViewController.swift; sourceTree = "<group>"; };
 		E769C536296BF4C50089C21E /* BarButtonItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BarButtonItem.swift; sourceTree = "<group>"; };
-		E769C538296BF4C50089C21E /* AboutTableViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AboutTableViewController.swift; sourceTree = "<group>"; };
-		E769C539296BF4C50089C21E /* AppModule.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppModule.swift; sourceTree = "<group>"; };
-		E769C53B296BF4C50089C21E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/App.storyboard; sourceTree = "<group>"; };
 		E769C53D296BF4C60089C21E /* OPDSNavigationTableViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSNavigationTableViewCell.swift; sourceTree = "<group>"; };
 		E769C53E296BF4C60089C21E /* OPDSGroupCollectionViewCell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSGroupCollectionViewCell.swift; sourceTree = "<group>"; };
 		E769C53F296BF4C60089C21E /* OPDSRootTableViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OPDSRootTableViewController.swift; sourceTree = "<group>"; };
@@ -989,8 +977,6 @@
 		E769C2E9296ADA120089C21E /* Readium */ = {
 			isa = PBXGroup;
 			children = (
-				E769C52A296BF4C50089C21E /* About */,
-				E769C537296BF4C50089C21E /* App */,
 				E769C52C296BF4C50089C21E /* Common */,
 				E769C54A296BF4C60089C21E /* Library */,
 				E769C53C296BF4C60089C21E /* OPDS */,
@@ -998,14 +984,6 @@
 				E769C58A296BF4C60089C21E /* Resources */,
 			);
 			path = Readium;
-			sourceTree = "<group>";
-		};
-		E769C52A296BF4C50089C21E /* About */ = {
-			isa = PBXGroup;
-			children = (
-				E769C52B296BF4C50089C21E /* About.storyboard */,
-			);
-			path = About;
 			sourceTree = "<group>";
 		};
 		E769C52C296BF4C50089C21E /* Common */ = {
@@ -1036,16 +1014,6 @@
 				E769C535296BF4C50089C21E /* UIViewController.swift */,
 			);
 			path = Extensions;
-			sourceTree = "<group>";
-		};
-		E769C537296BF4C50089C21E /* App */ = {
-			isa = PBXGroup;
-			children = (
-				E769C538296BF4C50089C21E /* AboutTableViewController.swift */,
-				E769C539296BF4C50089C21E /* AppModule.swift */,
-				E769C53A296BF4C50089C21E /* App.storyboard */,
-			);
-			path = App;
 			sourceTree = "<group>";
 		};
 		E769C53C296BF4C60089C21E /* OPDS */ = {
@@ -1406,10 +1374,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */,
-				E769C598296BF4C60089C21E /* About.storyboard in Resources */,
 				E769C626296BF4C60089C21E /* 1.epub in Resources */,
 				E769C610296BF4C60089C21E /* UserSettings.strings in Resources */,
-				E769C5AE296BF4C60089C21E /* App.storyboard in Resources */,
 				E769C5CC296BF4C60089C21E /* PublicationMenuViewController.strings in Resources */,
 				E769C616296BF4C60089C21E /* UserSettings.storyboard in Resources */,
 				E769C622296BF4C60089C21E /* Assets.xcassets in Resources */,
@@ -1466,11 +1432,9 @@
 				E769C603296BF4C60089C21E /* Outline.storyboard in Resources */,
 				2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */,
 				E769C625296BF4C60089C21E /* LaunchScreen.storyboard in Resources */,
-				E769C5AF296BF4C60089C21E /* App.storyboard in Resources */,
 				E769C627296BF4C60089C21E /* 1.epub in Resources */,
 				E769C633296BF4C60089C21E /* 2.epub in Resources */,
 				E769C5D9296BF4C60089C21E /* PublicationCollectionViewCell.xib in Resources */,
-				E769C599296BF4C60089C21E /* About.storyboard in Resources */,
 				E769C631296BF4C60089C21E /* 3.epub in Resources */,
 				E769C62F296BF4C60089C21E /* 4.epub in Resources */,
 				E769C617296BF4C60089C21E /* UserSettings.storyboard in Resources */,
@@ -1502,7 +1466,6 @@
 				2AAE40A1267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
 				2AF6FE0E2701E1DA002BA27E /* YabrReadiumCBZViewController.swift in Sources */,
 				E7C777AB28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift in Sources */,
-				E769C5AA296BF4C60089C21E /* AboutTableViewController.swift in Sources */,
 				E769C5C4296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */,
 				E769C5C6296BF4C60089C21E /* OPDSFacetViewController.swift in Sources */,
 				E769C5F6296BF4C60089C21E /* ReaderViewController.swift in Sources */,
@@ -1633,7 +1596,6 @@
 				E7C777A728ED495900939D63 /* YabrPDFHighlightList.swift in Sources */,
 				E769C5C2296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */,
 				E74729C329D52F5E007659A1 /* LibraryInfoBookListInfoView.swift in Sources */,
-				E769C5AC296BF4C60089C21E /* AppModule.swift in Sources */,
 				2ADC45BE2733AAAC00BD07E0 /* LibraryOptionsCountPages.swift in Sources */,
 				2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */,
 				2ABB9143261ED7E5004AA7C0 /* Constants.swift in Sources */,
@@ -1698,7 +1660,6 @@
 				6E7B80D828FBA7AD008B075C /* YabrPDFAnnotationPageVC.swift in Sources */,
 				6E7B80D928FBA7AD008B075C /* YabrPDFNavigationPageVC.swift in Sources */,
 				6E7B80DA28FBA7AD008B075C /* YabrPDFThumbnailList.swift in Sources */,
-				E769C5AB296BF4C60089C21E /* AboutTableViewController.swift in Sources */,
 				E769C5C5296BF4C60089C21E /* OPDSPublicationTableViewCell.swift in Sources */,
 				6E7B80DB28FBA7AD008B075C /* YabrPDFThumbnailListCell.swift in Sources */,
 				6E7B80DC28FBA7AD008B075C /* YabrPDFBookmarkList.swift in Sources */,
@@ -1817,7 +1778,6 @@
 				2ADCD82326F4B96200FBAE11 /* ImageRequest.swift in Sources */,
 				2ADCD82826F4B96200FBAE11 /* LibraryInfoBookRow.swift in Sources */,
 				E769C5C3296BF4C60089C21E /* OPDSCatalogSelectorViewController.swift in Sources */,
-				E769C5AD296BF4C60089C21E /* AppModule.swift in Sources */,
 				2ADCD82D26F4B96200FBAE11 /* BookFiles.swift in Sources */,
 				2ADCD82E26F4B96200FBAE11 /* LibraryBookListFilter.swift in Sources */,
 				2ADCD82F26F4B96200FBAE11 /* RecentShelfUI.swift in Sources */,
@@ -1846,14 +1806,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		E769C53A296BF4C50089C21E /* App.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				E769C53B296BF4C50089C21E /* Base */,
-			);
-			name = App.storyboard;
-			sourceTree = "<group>";
-		};
 		E769C545296BF4C60089C21E /* OPDS.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (

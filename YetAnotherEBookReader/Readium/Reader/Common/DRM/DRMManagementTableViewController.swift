@@ -70,14 +70,16 @@ class DRMManagementTableViewController: UITableViewController {
         let confirmButton = UIAlertAction(title: NSLocalizedString("confirm_button", comment: "Confirmation button to renew a publication"), style: .default, handler: { (_) in
             self.viewModel.renewLoan { error in
                 if let error = error {
-                    self.moduleDelegate?.presentError(error, from: self)
+//                    self.moduleDelegate?.presentError(error, from: self)
                 } else {
                     self.reload()
+/*
                     self.moduleDelegate?.presentAlert(
                         NSLocalizedString("success_title", comment: "Title for the success message after renewing a publication"),
                         message: NSLocalizedString("reader_drm_renew_success_message", comment: "Success message after renewing a publication"),
                         from: self
                     )
+*/
                 }
             }
         })
@@ -98,14 +100,16 @@ class DRMManagementTableViewController: UITableViewController {
         let confirmButton = UIAlertAction(title: NSLocalizedString("confirm_button", comment: "Confirmation button to return a publication"), style: .destructive, handler: { (_) in
             self.viewModel.returnPublication() { error in
                 if let error = error {
-                    self.moduleDelegate?.presentError(error, from: self)
+//                    self.moduleDelegate?.presentError(error, from: self)
                 } else {
                     self.navigationController?.popToRootViewController(animated: true)
+/*
                     self.moduleDelegate?.presentAlert(
                         NSLocalizedString("success_title", comment: "Title for the success message after returning a publication"),
                         message: NSLocalizedString("reader_drm_return_success_message", comment: "Success message after returning a publication"),
                         from: self
                     )
+*/
                 }
             }
         })

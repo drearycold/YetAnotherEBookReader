@@ -27,7 +27,7 @@ protocol ReaderModuleAPI {
     
 }
 
-protocol ReaderModuleDelegate: ModuleDelegate {
+protocol ReaderModuleDelegate: AnyObject {
 }
 
 
@@ -69,7 +69,7 @@ final class ReaderModule: ReaderModuleAPI {
         }
         
         guard let module = self.formatModules.first(where:{ $0.publicationFormats.contains(publication.format) }) else {
-            delegate.presentError(ReaderError.formatNotSupported, from: navigationController)
+//            delegate.presentError(ReaderError.formatNotSupported, from: navigationController)
             completion()
             return
         }
@@ -78,7 +78,7 @@ final class ReaderModule: ReaderModuleAPI {
             let readerViewController = try module.makeReaderViewController(for: publication, book: book, resourcesServer: resourcesServer)
             present(readerViewController)
         } catch {
-            delegate.presentError(error, from: navigationController)
+//            delegate.presentError(error, from: navigationController)
         }
 
         completion()
@@ -104,11 +104,11 @@ extension ReaderModule: ReaderFormatModuleDelegate {
     }
     
     func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
-        delegate?.presentAlert(title, message: message, from: viewController)
+//        delegate?.presentAlert(title, message: message, from: viewController)
     }
     
     func presentError(_ error: Error?, from viewController: UIViewController) {
-        delegate?.presentError(error, from: viewController)
+//        delegate?.presentError(error, from: viewController)
     }
 
 }

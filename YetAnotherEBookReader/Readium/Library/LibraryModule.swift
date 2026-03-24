@@ -47,7 +47,7 @@ extension LibraryModuleAPI {
     
 }
 
-protocol LibraryModuleDelegate: ModuleDelegate {
+protocol LibraryModuleDelegate: AnyObject {
     
     /// Called when the user tap on a publication in the library.
     func libraryDidSelectPublication(_ publication: Publication, book: Book, completion: @escaping () -> Void)
