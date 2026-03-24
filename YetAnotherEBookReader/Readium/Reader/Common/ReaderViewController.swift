@@ -17,6 +17,12 @@ import R2Shared
 import SwiftSoup
 import WebKit
 
+protocol ReaderFormatModuleDelegate: AnyObject {
+    func presentOutline(of publication: Publication, delegate: OutlineTableViewControllerDelegate?, from viewController: UIViewController)
+//    func presentDRM(for publication: Publication, from viewController: UIViewController)
+    func presentAlert(_ title: String, message: String, from viewController: UIViewController)
+    func presentError(_ error: Error?, from viewController: UIViewController)
+}
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class ReaderViewController: UIViewController, Loggable {
@@ -25,9 +31,9 @@ class ReaderViewController: UIViewController, Loggable {
     
     let navigator: UIViewController & Navigator
     let publication: Publication
-    let book: Book
+    let book: Any
 
-    lazy var bookmarksDataSource: BookmarkDataSource? = BookmarkDataSource(bookID: book.id)
+    // lazy var bookmarksDataSource: BookmarkDataSource? = BookmarkDataSource(bookID: book.id)
     
     private(set) var stackView: UIStackView!
     private lazy var positionLabel = UILabel()
@@ -39,7 +45,7 @@ class ReaderViewController: UIViewController, Loggable {
         return try! NSRegularExpression(pattern: "[\\p{Ll}\\p{Lu}\\p{Lt}\\p{Lo}]{2}")
     }()
     
-    init(navigator: UIViewController & Navigator, publication: Publication, book: Book) {
+    init(navigator: UIViewController & Navigator, publication: Publication, book: Any) {
         self.navigator = navigator
         self.publication = publication
         self.book = book
@@ -117,11 +123,11 @@ class ReaderViewController: UIViewController, Loggable {
         // Table of Contents
         buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "menuIcon"), style: .plain, target: self, action: #selector(presentOutline)))
         // DRM management
-        if publication.isProtected {
-            buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "drm"), style: .plain, target: self, action: #selector(presentDRMManagement)))
-        }
+//        if publication.isProtected {
+//            buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "drm"), style: .plain, target: self, action: #selector(presentDRMManagement)))
+//        }
         // Bookmarks
-        buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "bookmark"), style: .plain, target: self, action: #selector(bookmarkCurrentPosition)))
+//        buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "bookmark"), style: .plain, target: self, action: #selector(bookmarkCurrentPosition)))
         
         return buttons
     }
@@ -148,9 +154,11 @@ class ReaderViewController: UIViewController, Loggable {
     // MARK: - Locations
     /// FIXME: This should be implemented in a shared Navigator interface, using Locators.
     
+/*
     var currentBookmark: Bookmark? {
         fatalError("Not implemented")
     }
+*/
     
 
     // MARK: - Outlines
@@ -162,6 +170,7 @@ class ReaderViewController: UIViewController, Loggable {
     
     // MARK: - Bookmarks
     
+/*
     @objc func bookmarkCurrentPosition() {
         guard let dataSource = bookmarksDataSource,
             let bookmark = currentBookmark,
@@ -172,17 +181,11 @@ class ReaderViewController: UIViewController, Loggable {
         }
         toast(NSLocalizedString("reader_bookmark_success_message", comment: "Success message when adding a bookmark"), on: view, duration: 1)
     }
+*/
     
     
     // MARK: - DRM
-    
-    @objc func presentDRMManagement() {
-        guard publication.isProtected else {
-            return
-        }
-        moduleDelegate?.presentDRM(for: publication, from: self)
-    }
-    
+
 
     // MARK: - Accessibility
     
@@ -245,11 +248,13 @@ class ReaderViewController: UIViewController, Loggable {
 extension ReaderViewController: NavigatorDelegate {
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+/*
         do {
             try BooksDatabase.shared.books.saveProgression(locator, of: book)
         } catch {
             log(.error, error)
         }
+*/
 
         positionLabel.text = {
             if let position = locator.locations.position {

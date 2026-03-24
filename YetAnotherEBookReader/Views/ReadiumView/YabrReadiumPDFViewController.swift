@@ -12,10 +12,10 @@ import R2Shared
 
 final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNavigatorDelegate {
     
-    init(publication: Publication, book: Book) {
-        let navigator = PDFNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
+    init(publication: Publication, initialLocation: Locator?) {
+        let navigator = PDFNavigatorViewController(publication: publication, initialLocation: initialLocation)
         
-        super.init(navigator: navigator, publication: publication, book: book)
+        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
         
         navigator.delegate = self
     }
@@ -24,6 +24,7 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
         super.viewDidLoad()
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -38,6 +39,7 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
             locator: locator
         )
     }
+*/
 
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)

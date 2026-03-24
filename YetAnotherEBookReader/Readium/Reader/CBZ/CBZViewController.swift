@@ -18,8 +18,8 @@ import R2Streamer
 
 class CBZViewController: ReaderViewController {
 
-    init(publication: Publication, book: Book) {
-        let navigator = CBZNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
+    init(publication: Publication, book: Any) {
+        let navigator = CBZNavigatorViewController(publication: publication, initialLocation: nil)
         
         super.init(navigator: navigator, publication: publication, book: book)
         
@@ -32,6 +32,7 @@ class CBZViewController: ReaderViewController {
         view.backgroundColor = .black
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -46,6 +47,7 @@ class CBZViewController: ReaderViewController {
             locator: locator
         )
     }
+*/
 
 }
 

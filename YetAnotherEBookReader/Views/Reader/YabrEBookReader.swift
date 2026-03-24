@@ -55,19 +55,13 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     let publication = try result.get()
                     server.removeAll()
                     try server.add(publication)
-                    let book = Book(
-                        href: self.readerInfo.url.lastPathComponent,
-                        title: publication.metadata.title,
-                        author: publication.metadata.authors.map{$0.name}.joined(separator: ", "),
-                        identifier: publication.metadata.identifier ?? self.readerInfo.url.deletingPathExtension().lastPathComponent,
-                        cover: publication.cover?.pngData()
-                    )
+                    var initialLocation: Locator? = nil
                     
                     //readingOrder for EPUB & CBZ, metadata.numberOfPages for PDF
                     if self.readerInfo.position.lastReadPage > 0,
                        self.readerInfo.readerType == ReaderType.ReadiumPDF ? self.readerInfo.position.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0 : self.readerInfo.position.lastReadPage - 1 < publication.readingOrder.count,
                        let link = self.readerInfo.readerType == ReaderType.ReadiumPDF ? publication.readingOrder.first : publication.readingOrder[self.readerInfo.position.lastReadPage - 1] {
-                        let locator = Locator(
+                        initialLocation = Locator(
                             href: link.href,
                             type: link.type ?? "",
                             title: self.readerInfo.position.lastReadChapter,
@@ -78,17 +72,16 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                                 position: self.readerInfo.readerType == ReaderType.ReadiumPDF ? self.readerInfo.position.lastPosition[0] : self.readerInfo.position.lastPosition[1],
                                 otherLocations: [:]),
                             text: Locator.Text())
-                        book.progression = locator.jsonString
                     }
                     
                     guard let readerVC = { () -> YabrReadiumReaderViewController? in
                         switch(self.readerInfo.readerType) {
                         case .ReadiumEPUB:
-                            return YabrReadiumEPUBViewController(publication: publication, book: book, resourcesServer: server)
+                            return YabrReadiumEPUBViewController(publication: publication, initialLocation: initialLocation, resourcesServer: server)
                         case .ReadiumPDF:
-                            return YabrReadiumPDFViewController(publication: publication, book: book)
+                            return YabrReadiumPDFViewController(publication: publication, initialLocation: initialLocation)
                         case .ReadiumCBZ:
-                            return YabrReadiumCBZViewController(publication: publication, book: book)
+                            return YabrReadiumCBZViewController(publication: publication, initialLocation: initialLocation)
                         default:
                             return nil      //shouldn't fall here
                         }
@@ -197,9 +190,9 @@ class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
         viewController.present(UINavigationController(rootViewController: outlineTableVC), animated: true)
     }
     
-    func presentDRM(for publication: Publication, from viewController: UIViewController) {
-        
-    }
+//    func presentDRM(for publication: Publication, from viewController: UIViewController) {
+//        
+//    }
     
     func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
         

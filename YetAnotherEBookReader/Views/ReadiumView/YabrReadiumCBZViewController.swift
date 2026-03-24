@@ -25,10 +25,10 @@ import R2Streamer
 
 class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
 
-    init(publication: Publication, book: Book) {
-        let navigator = CBZNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
+    init(publication: Publication, initialLocation: Locator?) {
+        let navigator = CBZNavigatorViewController(publication: publication, initialLocation: initialLocation)
         
-        super.init(navigator: navigator, publication: publication, book: book)
+        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
         
         navigator.delegate = self
     }
@@ -39,6 +39,7 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         view.backgroundColor = .black
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -53,6 +54,7 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
             locator: locator
         )
     }
+*/
 
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)

@@ -20,7 +20,7 @@ protocol OutlineTableViewControllerFactory {
 
 protocol OutlineTableViewControllerDelegate: AnyObject {
     
-    var bookmarksDataSource: BookmarkDataSource? { get }
+//    var bookmarksDataSource: BookmarkDataSource? { get }
     func outline(_ outlineTableViewController: OutlineTableViewController, goTo location: Locator)
 
 }
@@ -37,9 +37,11 @@ final class OutlineTableViewController: UITableViewController {
     // Outlines (list of links) to display for each section.
     private var outlines: [Section: [(level: Int, link: Link)]] = [:]
 
+/*
     var bookmarksDataSource: BookmarkDataSource? {
         return delegate?.bookmarksDataSource
     }
+*/
 
     @IBOutlet weak var segments: UISegmentedControl!
     @IBAction func segmentChanged(_ sender: Any) {
@@ -80,10 +82,13 @@ final class OutlineTableViewController: UITableViewController {
     func locator(at indexPath: IndexPath) -> Locator? {
         switch section {
         case .bookmarks:
+            return nil
+/*
             guard let bookmark = bookmarksDataSource?.bookmark(at: indexPath.row) else {
                 return nil
             }
             return bookmark.locator
+*/
 
         default:
             guard let outline = outlines[section],
@@ -119,13 +124,8 @@ final class OutlineTableViewController: UITableViewController {
         switch section {
             
         case .bookmarks:
-            let cell: BookmarkCell = {
-                if let cell = tableView.dequeueReusableCell(withIdentifier: kBookmarkCell) as? BookmarkCell {
-                    return cell
-                }
-                return BookmarkCell(style: UITableViewCell.CellStyle.subtitle, reuseIdentifier: kBookmarkCell)
-            } ()
-            
+            let cell = UITableViewCell(style: .subtitle, reuseIdentifier: kBookmarkCell)
+/*
             if let bookmark = bookmarksDataSource?.bookmark(at: indexPath.item) {
                 cell.textLabel?.text = bookmark.locator.title
                 cell.formattedDate = bookmark.creationDate
@@ -139,6 +139,7 @@ final class OutlineTableViewController: UITableViewController {
                     }
                 }()
             }
+*/
             return cell
             
         default:
@@ -156,7 +157,7 @@ final class OutlineTableViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, numberOfRowsInSection tableSection: Int) -> Int {
         switch section {
         case .bookmarks:
-            return bookmarksDataSource?.count ?? 0
+            return 0 // bookmarksDataSource?.count ?? 0
         default:
             return outlines[section]?.count ?? 0
         }
@@ -180,11 +181,14 @@ final class OutlineTableViewController: UITableViewController {
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
         switch section {
         case .bookmarks:
+            break
+/*
             if editingStyle == .delete {
                 if (self.bookmarksDataSource?.removeBookmark(index: indexPath.item) ?? false) {
                     tableView.deleteRows(at: [indexPath], with: .fade)
                 }
             }
+*/
             
         default:
             break

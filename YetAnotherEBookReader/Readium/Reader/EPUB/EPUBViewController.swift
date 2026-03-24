@@ -19,8 +19,8 @@ class EPUBViewController: ReaderViewController {
     var popoverUserconfigurationAnchor: UIBarButtonItem?
     var userSettingNavigationController: UserSettingsNavigationController
 
-    init(publication: Publication, book: Book, resourcesServer: ResourcesServer) {
-        let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: book.progressionLocator, resourcesServer: resourcesServer)
+    init(publication: Publication, book: Any, resourcesServer: ResourcesServer) {
+        let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: nil, resourcesServer: resourcesServer)
 
         let settingsStoryboard = UIStoryboard(name: "UserSettings", bundle: nil)
         userSettingNavigationController = settingsStoryboard.instantiateViewController(withIdentifier: "UserSettingsNavigationController") as! UserSettingsNavigationController
@@ -87,6 +87,7 @@ class EPUBViewController: ReaderViewController {
         return buttons
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -96,6 +97,7 @@ class EPUBViewController: ReaderViewController {
         }
         return Bookmark(bookID: book.id, resourceIndex: resourceIndex, locator: locator)
     }
+*/
     
     @objc func presentUserSettings() {
         let popoverPresentationController = userSettingNavigationController.popoverPresentationController!

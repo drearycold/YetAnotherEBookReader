@@ -18,8 +18,8 @@ import R2Shared
 @available(iOS 11.0, *)
 final class PDFViewController: ReaderViewController {
     
-    init(publication: Publication, book: Book) {
-        let navigator = PDFNavigatorViewController(publication: publication, initialLocation: book.progressionLocator)
+    init(publication: Publication, book: Any) {
+        let navigator = PDFNavigatorViewController(publication: publication, initialLocation: nil)
         
         super.init(navigator: navigator, publication: publication, book: book)
         
@@ -30,6 +30,7 @@ final class PDFViewController: ReaderViewController {
         super.viewDidLoad()
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -44,6 +45,7 @@ final class PDFViewController: ReaderViewController {
             locator: locator
         )
     }
+*/
 
 }
 

@@ -19,7 +19,7 @@ final class ReaderFactory {
     
     final class Storyboards {
         let outline = UIStoryboard(name: "Outline", bundle: nil)
-        let drm = UIStoryboard(name: "DRM", bundle: nil)
+//        let drm = UIStoryboard(name: "DRM", bundle: nil)
     }
     
     let storyboards = Storyboards()
@@ -29,16 +29,6 @@ extension ReaderFactory: OutlineTableViewControllerFactory {
     func make(publication: Publication) -> OutlineTableViewController {
         let controller = storyboards.outline.instantiateViewController(withIdentifier: "OutlineTableViewController") as! OutlineTableViewController
         controller.publication = publication
-        return controller
-    }
-}
-
-extension ReaderFactory: DRMManagementTableViewControllerFactory {
-    func make(publication: Publication, delegate: ReaderModuleDelegate?) -> DRMManagementTableViewController {
-        let controller =
-            storyboards.drm.instantiateViewController(withIdentifier: "DRMManagementTableViewController") as! DRMManagementTableViewController
-        controller.moduleDelegate = delegate
-        controller.viewModel = DRMViewModel.make(publication: publication, presentingViewController: controller)
         return controller
     }
 }

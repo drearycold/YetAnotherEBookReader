@@ -31,8 +31,8 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     var popoverUserconfigurationAnchor: UIBarButtonItem?
     var userSettingNavigationController: UserSettingsNavigationController
 
-    init(publication: Publication, book: Book, resourcesServer: ResourcesServer) {
-        let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: book.progressionLocator, resourcesServer: resourcesServer)
+    init(publication: Publication, initialLocation: Locator?, resourcesServer: ResourcesServer) {
+        let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation, resourcesServer: resourcesServer)
 
         let settingsStoryboard = UIStoryboard(name: "UserSettings", bundle: nil)
         userSettingNavigationController = settingsStoryboard.instantiateViewController(withIdentifier: "UserSettingsNavigationController") as! UserSettingsNavigationController
@@ -41,7 +41,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         userSettingNavigationController.advancedSettingsViewController =
             (settingsStoryboard.instantiateViewController(withIdentifier: "AdvancedSettingsViewController") as! AdvancedSettingsViewController)
         
-        super.init(navigator: navigator, publication: publication, book: book)
+        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
         
         navigator.delegate = self
     }
@@ -97,6 +97,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         return buttons
     }
     
+/*
     override var currentBookmark: Bookmark? {
         guard
             let locator = navigator.currentLocation,
@@ -106,6 +107,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         }
         return Bookmark(bookID: book.id, resourceIndex: resourceIndex, locator: locator)
     }
+*/
     
     @objc func presentUserSettings() {
         let popoverPresentationController = userSettingNavigationController.popoverPresentationController!
@@ -211,6 +213,7 @@ extension YabrReadiumEPUBViewController: UIPopoverPresentationControllerDelegate
 }
 
 
+/*
 extension YabrReadiumEPUBViewController: ReaderModuleDelegate {
     func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
         print("ReaderModuleDelegateImpl alert \(title) \(message)")
@@ -222,14 +225,25 @@ extension YabrReadiumEPUBViewController: ReaderModuleDelegate {
         }
     }
 }
+*/
 
 extension YabrReadiumEPUBViewController: ReaderFormatModuleDelegate {
     func presentOutline(of publication: Publication, delegate: OutlineTableViewControllerDelegate?, from viewController: UIViewController) {
         
     }
     
-    func presentDRM(for publication: Publication, from viewController: UIViewController) {
-        
+//    func presentDRM(for publication: Publication, from viewController: UIViewController) {
+//        
+//    }
+
+    func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
+        print("ReaderModuleDelegateImpl alert \(title) \(message)")
+    }
+    
+    func presentError(_ error: Error?, from viewController: UIViewController) {
+        if let error = error {
+            print("ReaderModuleDelegateImpl error \(error)")
+        }
     }
 }
 
