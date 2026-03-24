@@ -10,39 +10,41 @@ import UIKit
 import R2Shared
 import R2Navigator
 
-//
-//  EPUBViewController.swift
-//  r2-testapp-swift
-//
-//  Created by Alexandre Camilleri on 7/3/17.
-//
-//  Copyright 2018 European Digital Reading Lab. All rights reserved.
-//  Licensed to the Readium Foundation under one or more contributor license agreements.
-//  Use of this source code is governed by a BSD-style license which is detailed in the
-//  LICENSE file present in the project repository where this source code is maintained.
-//
-
-import UIKit
-import R2Shared
-import R2Navigator
+class AssociatedColors {
+    
+    /// Get associated colors for a specific appearance setting
+    /// - parameter appearance: The selected appearance
+    /// - Returns: A tuple with a main color and a text color
+    static func getColors(for appearance: UserProperty) -> (mainColor: UIColor, textColor: UIColor) {
+        var mainColor, textColor: UIColor
+        
+        switch appearance.toString() {
+        case "readium-sepia-on":
+            mainColor = UIColor.init(red: 250/255, green: 244/255, blue: 232/255, alpha: 1)
+            textColor = UIColor.init(red: 18/255, green: 18/255, blue: 18/255, alpha: 1)
+        case "readium-night-on":
+            mainColor = UIColor.black
+            textColor = UIColor.init(red: 254/255, green: 254/255, blue: 254/255, alpha: 1)
+        default:
+            mainColor = UIColor.white
+            textColor = UIColor.black
+        }
+        
+        return (mainColor, textColor)
+    }
+    
+}
 
 class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
+
     var popoverUserconfigurationAnchor: UIBarButtonItem?
-    var userSettingNavigationController: UserSettingsNavigationController
 
     init(publication: Publication, initialLocation: Locator?, resourcesServer: ResourcesServer) {
         let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation, resourcesServer: resourcesServer)
 
-        let settingsStoryboard = UIStoryboard(name: "UserSettings", bundle: nil)
-        userSettingNavigationController = settingsStoryboard.instantiateViewController(withIdentifier: "UserSettingsNavigationController") as! UserSettingsNavigationController
-        userSettingNavigationController.fontSelectionViewController =
-            (settingsStoryboard.instantiateViewController(withIdentifier: "FontSelectionViewController") as! FontSelectionViewController)
-        userSettingNavigationController.advancedSettingsViewController =
-            (settingsStoryboard.instantiateViewController(withIdentifier: "AdvancedSettingsViewController") as! AdvancedSettingsViewController)
-        
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
-        
+
         navigator.delegate = self
     }
     
@@ -57,25 +59,18 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         if let appearance = publication.userProperties.getProperty(reference: ReadiumCSSReference.appearance.rawValue) {
             setUIColor(for: appearance)
         }
+    }
+    
+    internal func setUIColor(for appearance: UserProperty) {
+        let colors = AssociatedColors.getColors(for: appearance)
         
-        let userSettings = epubNavigator.userSettings
-        userSettingNavigationController.userSettings = userSettings
-        userSettingNavigationController.modalPresentationStyle = .popover
-        userSettingNavigationController.usdelegate = self
-        userSettingNavigationController.userSettingsTableViewController.publication = publication
+        navigator.view.backgroundColor = colors.mainColor
+        view.backgroundColor = colors.mainColor
+        //
+        navigationController?.navigationBar.barTintColor = colors.mainColor
+        navigationController?.navigationBar.tintColor = colors.textColor
         
-
-        publication.userSettingsUIPresetUpdated = { [weak self] preset in
-            guard let `self` = self, let presetScrollValue:Bool = preset?[.scroll] else {
-                return
-            }
-            
-            if let scroll = self.userSettingNavigationController.userSettings.userProperties.getProperty(reference: ReadiumCSSReference.scroll.rawValue) as? Switchable {
-                if scroll.on != presetScrollValue {
-                    self.userSettingNavigationController.scrollModeDidChange()
-                }
-            }
-        }
+        navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: colors.textColor]
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -90,9 +85,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         var buttons = super.makeNavigationBarButtons()
 
         // User configuration button
-        let userSettingsButton = UIBarButtonItem(image: #imageLiteral(resourceName: "settingsIcon"), style: .plain, target: self, action: #selector(presentUserSettings))
-        buttons.insert(userSettingsButton, at: 1)
-        popoverUserconfigurationAnchor = userSettingsButton
+//        let userSettingsButton = UIBarButtonItem(image: #imageLiteral(resourceName: "settingsIcon"), style: .plain, target: self, action: #selector(presentUserSettings))
+//        buttons.insert(userSettingsButton, at: 1)
+//        popoverUserconfigurationAnchor = userSettingsButton
 
         return buttons
     }
@@ -109,20 +104,6 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     }
 */
     
-    @objc func presentUserSettings() {
-        let popoverPresentationController = userSettingNavigationController.popoverPresentationController!
-        
-        popoverPresentationController.delegate = self
-        popoverPresentationController.barButtonItem = popoverUserconfigurationAnchor
-
-        userSettingNavigationController.publication = publication
-        present(userSettingNavigationController, animated: true) {
-            // Makes sure that the popover is dismissed also when tapping on one of the other UIBarButtonItems.
-            // ie. http://karmeye.com/2014/11/20/ios8-popovers-and-passthroughviews/
-            popoverPresentationController.passthroughViews = nil
-        }
-    }
-
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)
         
@@ -171,35 +152,6 @@ extension YabrReadiumEPUBViewController: UIGestureRecognizerDelegate {
     
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         return true
-    }
-    
-}
-
-extension YabrReadiumEPUBViewController: UserSettingsNavigationControllerDelegate {
-
-    internal func getUserSettings() -> UserSettings {
-        return epubNavigator.userSettings
-    }
-    
-    internal func updateUserSettingsStyle() {
-        DispatchQueue.main.async {
-            self.epubNavigator.updateUserSettingStyle()
-        }
-    }
-    
-    /// Synchronyze the UI appearance to the UserSettings.Appearance.
-    ///
-    /// - Parameter appearance: The appearance.
-    internal func setUIColor(for appearance: UserProperty) {
-        let colors = AssociatedColors.getColors(for: appearance)
-        
-        navigator.view.backgroundColor = colors.mainColor
-        view.backgroundColor = colors.mainColor
-        //
-        navigationController?.navigationBar.barTintColor = colors.mainColor
-        navigationController?.navigationBar.tintColor = colors.textColor
-        
-        navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: colors.textColor]
     }
     
 }
