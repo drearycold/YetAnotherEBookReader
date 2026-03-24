@@ -44,17 +44,17 @@ class BookmarksTable {
   
     let tableName = Table("BOOKMARKS")
     
-    let bookmarkID = Expression<Int64>("id")
-    let bookID = Expression<Int64>("bookID")
+    let bookmarkID = SQLite.Expression<Int64>("id")
+    let bookID = SQLite.Expression<Int64>("bookID")
   
-    let resourceIndex = Expression<Int>("resourceIndex")
-    let resourceHref = Expression<String>("resourceHref")
-    let resourceTitle =  Expression<String>("resourceTitle")
-    let resourceType =  Expression<String>("resourceType")
+    let resourceIndex = SQLite.Expression<Int>("resourceIndex")
+    let resourceHref = SQLite.Expression<String>("resourceHref")
+    let resourceTitle =  SQLite.Expression<String>("resourceTitle")
+    let resourceType =  SQLite.Expression<String>("resourceType")
 
-    let locations = Expression<String>("locations")
-    let locatorText = Expression<String>("locatorText")
-    let creationDate = Expression<Date>("creationDate")
+    let locations = SQLite.Expression<String>("locations")
+    let locatorText = SQLite.Expression<String>("locatorText")
+    let creationDate = SQLite.Expression<Date>("creationDate")
 
   
     init(_ connection: Connection) {

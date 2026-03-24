@@ -9,7 +9,8 @@ import SwiftUI
 import OSLog
 import Combine
 import RealmSwift
-import struct Kingfisher.KFImage
+//import struct Kingfisher.KFImage
+import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {

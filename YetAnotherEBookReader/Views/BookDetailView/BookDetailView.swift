@@ -9,7 +9,8 @@ import Foundation
 import OSLog
 import SwiftUI
 import RealmSwift
-import struct Kingfisher.KFImage
+//import struct Kingfisher.KFImage
+import KingfisherSwiftUI
 
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
