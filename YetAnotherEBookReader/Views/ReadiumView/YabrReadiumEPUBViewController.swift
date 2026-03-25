@@ -32,7 +32,6 @@ class AssociatedColors {
         
         return (mainColor, textColor)
     }
-    
 }
 
 class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
@@ -179,23 +178,4 @@ extension YabrReadiumEPUBViewController: ReaderModuleDelegate {
 }
 */
 
-extension YabrReadiumEPUBViewController: ReaderFormatModuleDelegate {
-    func presentOutline(of publication: Publication, delegate: OutlineTableViewControllerDelegate?, from viewController: UIViewController) {
-        
-    }
-    
-//    func presentDRM(for publication: Publication, from viewController: UIViewController) {
-//        
-//    }
-
-    func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
-        print("ReaderModuleDelegateImpl alert \(title) \(message)")
-    }
-    
-    func presentError(_ error: Error?, from viewController: UIViewController) {
-        if let error = error {
-            print("ReaderModuleDelegateImpl error \(error)")
-        }
-    }
-}
 

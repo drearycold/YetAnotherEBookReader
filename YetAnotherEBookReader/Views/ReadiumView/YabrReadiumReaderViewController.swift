@@ -29,8 +29,6 @@ import WebKit
 class YabrReadiumReaderViewController:
     UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate {
     
-    var moduleDelegate: ReaderFormatModuleDelegate?
-    
     let navigator: UIViewController & Navigator
     let publication: Publication
     let initialLocation: Locator?
@@ -166,8 +164,11 @@ class YabrReadiumReaderViewController:
     // MARK: - Outlines
 
     @objc func presentOutline() {
-        print("\(#function) moduleDelegate=\(moduleDelegate)")
-        moduleDelegate?.presentOutline(of: publication, delegate: self, from: self)
+        let storyboard = UIStoryboard(name: "Outline", bundle: nil)
+        let outlineTableVC = storyboard.instantiateViewController(withIdentifier: "OutlineTableViewController") as! OutlineTableViewController
+        outlineTableVC.publication = publication
+        outlineTableVC.delegate = self
+        present(UINavigationController(rootViewController: outlineTableVC), animated: true)
     }
     
     
@@ -279,7 +280,7 @@ class YabrReadiumReaderViewController:
     }
     
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
-        moduleDelegate?.presentError(error, from: self)
+//        moduleDelegate?.presentError(error, from: self)
     }
     
     func navigator(_ navigator: Navigator, shouldNavigateToNoteAt link: Link, content: String, referrer: String?) -> Bool {

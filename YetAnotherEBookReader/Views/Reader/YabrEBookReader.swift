@@ -18,8 +18,6 @@ struct YabrEBookReader: UIViewControllerRepresentable {
     let book: CalibreBook
     let readerInfo: ReaderInfo
     
-    let moduleDelegate = YabrEBookReaderModuleDelegate()
-    
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
     
@@ -100,7 +98,6 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                             }
                         )
                     )
-                    readerVC.moduleDelegate = moduleDelegate
                     
                     nav.setToolbarHidden(true, animated: false)
                     nav.pushViewController(readerVC, animated: false)
@@ -178,29 +175,5 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         // uiViewController.open(epubURL: bookURL)
         // print("EBookReader updateUIViewController \(context)")
     }
-    
-}
-
-class YabrEBookReaderModuleDelegate: ReaderFormatModuleDelegate {
-    private let factory = ReaderFactory()
-    
-    func presentOutline(of publication: Publication, delegate: OutlineTableViewControllerDelegate?, from viewController: UIViewController) {
-        let outlineTableVC: OutlineTableViewController = factory.make(publication: publication)
-        outlineTableVC.delegate = delegate
-        viewController.present(UINavigationController(rootViewController: outlineTableVC), animated: true)
-    }
-    
-//    func presentDRM(for publication: Publication, from viewController: UIViewController) {
-//        
-//    }
-    
-    func presentAlert(_ title: String, message: String, from viewController: UIViewController) {
-        
-    }
-    
-    func presentError(_ error: Error?, from viewController: UIViewController) {
-        
-    }
-    
     
 }
