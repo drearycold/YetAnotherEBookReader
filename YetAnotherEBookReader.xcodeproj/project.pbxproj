@@ -208,10 +208,6 @@
 		E769C5A7296BF4C60089C21E /* UIViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C535296BF4C50089C21E /* UIViewController.swift */; };
 		E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
 		E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
-		E769C600296BF4C60089C21E /* OutlineTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C575296BF4C60089C21E /* OutlineTableViewController.swift */; };
-		E769C601296BF4C60089C21E /* OutlineTableViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C575296BF4C60089C21E /* OutlineTableViewController.swift */; };
-		E769C602296BF4C60089C21E /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C576296BF4C60089C21E /* Outline.storyboard */; };
-		E769C603296BF4C60089C21E /* Outline.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C576296BF4C60089C21E /* Outline.storyboard */; };
 		E769C620296BF4C60089C21E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E769C58B296BF4C60089C21E /* Localizable.strings */; };
 		E769C621296BF4C60089C21E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E769C58B296BF4C60089C21E /* Localizable.strings */; };
 		E769C622296BF4C60089C21E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E769C58D296BF4C60089C21E /* Assets.xcassets */; };
@@ -402,8 +398,6 @@
 		E769C534296BF4C50089C21E /* UIImage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIImage.swift; sourceTree = "<group>"; };
 		E769C535296BF4C50089C21E /* UIViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIViewController.swift; sourceTree = "<group>"; };
 		E769C536296BF4C50089C21E /* BarButtonItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BarButtonItem.swift; sourceTree = "<group>"; };
-		E769C575296BF4C60089C21E /* OutlineTableViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = OutlineTableViewController.swift; sourceTree = "<group>"; };
-		E769C577296BF4C60089C21E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Outline.storyboard; sourceTree = "<group>"; };
 		E769C58C296BF4C60089C21E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		E769C58D296BF4C60089C21E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E769C58F296BF4C60089C21E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -849,18 +843,8 @@
 		E769C567296BF4C60089C21E /* Common */ = {
 			isa = PBXGroup;
 			children = (
-				E769C574296BF4C60089C21E /* Outline */,
 			);
 			path = Common;
-			sourceTree = "<group>";
-		};
-		E769C574296BF4C60089C21E /* Outline */ = {
-			isa = PBXGroup;
-			children = (
-				E769C575296BF4C60089C21E /* OutlineTableViewController.swift */,
-				E769C576296BF4C60089C21E /* Outline.storyboard */,
-			);
-			path = Outline;
 			sourceTree = "<group>";
 		};
 		E769C58A296BF4C60089C21E /* Resources */ = {
@@ -1072,7 +1056,6 @@
 				E769C62C296BF4C60089C21E /* 1.cbz in Resources */,
 				E769C628296BF4C60089C21E /* 6.epub in Resources */,
 				E769C624296BF4C60089C21E /* LaunchScreen.storyboard in Resources */,
-				E769C602296BF4C60089C21E /* Outline.storyboard in Resources */,
 				E77B8D5029751C2A00363F39 /* YabrResources in Resources */,
 				2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */,
 				E769C630296BF4C60089C21E /* 3.epub in Resources */,
@@ -1107,7 +1090,6 @@
 				E769C629296BF4C60089C21E /* 6.epub in Resources */,
 				E769C623296BF4C60089C21E /* Assets.xcassets in Resources */,
 				2ADCD85A26F4B96200FBAE11 /* Preview Assets.xcassets in Resources */,
-				E769C603296BF4C60089C21E /* Outline.storyboard in Resources */,
 				2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */,
 				E769C625296BF4C60089C21E /* LaunchScreen.storyboard in Resources */,
 				E769C627296BF4C60089C21E /* 1.epub in Resources */,
@@ -1170,7 +1152,6 @@
 				E7C777A628ED495900939D63 /* YabrPDFBookmarkList.swift in Sources */,
 				E738C89F29160AA700A4AC6E /* CalibreBrowser.swift in Sources */,
 				2ABB9157261F1A47004AA7C0 /* MainView.swift in Sources */,
-				E769C600296BF4C60089C21E /* OutlineTableViewController.swift in Sources */,
 				E7C777A928ED4A3F00939D63 /* YabrPDFHighlightListCell.swift in Sources */,
 				E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */,
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
@@ -1313,7 +1294,6 @@
 				6E7B80F228FBA7AD008B075C /* LibraryOptionsGoodreadsSync.swift in Sources */,
 				6E7B80F328FBA7AD008B075C /* LibraryOptionsReadingPosition.swift in Sources */,
 				6E7B80F428FBA7AD008B075C /* LibraryOptionsOverrideCustomColumnMappings.swift in Sources */,
-				E769C601296BF4C60089C21E /* OutlineTableViewController.swift in Sources */,
 				6E7B80F828FBA7AD008B075C /* AddModServerView.swift in Sources */,
 				6E7B80F928FBA7AD008B075C /* ServerDetailView.swift in Sources */,
 				6E7B80FA28FBA7AD008B075C /* ServerOptionsDSReaderHelper.swift in Sources */,
@@ -1386,14 +1366,6 @@
 /* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
-		E769C576296BF4C60089C21E /* Outline.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				E769C577296BF4C60089C21E /* Base */,
-			);
-			name = Outline.storyboard;
-			sourceTree = "<group>";
-		};
 		E769C58B296BF4C60089C21E /* Localizable.strings */ = {
 			isa = PBXVariantGroup;
 			children = (

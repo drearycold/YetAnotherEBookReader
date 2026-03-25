@@ -27,7 +27,7 @@ import WebKit
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class YabrReadiumReaderViewController:
-    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, OutlineTableViewControllerDelegate {
+    UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate {
     
     let navigator: UIViewController & Navigator
     let publication: Publication
@@ -164,11 +164,7 @@ class YabrReadiumReaderViewController:
     // MARK: - Outlines
 
     @objc func presentOutline() {
-        let storyboard = UIStoryboard(name: "Outline", bundle: nil)
-        let outlineTableVC = storyboard.instantiateViewController(withIdentifier: "OutlineTableViewController") as! OutlineTableViewController
-        outlineTableVC.publication = publication
-        outlineTableVC.delegate = self
-        present(UINavigationController(rootViewController: outlineTableVC), animated: true)
+        // Display YABR TOC UI here
     }
     
     
@@ -348,11 +344,6 @@ class YabrReadiumReaderViewController:
         }
     }
     
-    //MARK: - OutlineTableViewControllerDelegate
-    func outline(_ outlineTableViewController: OutlineTableViewController, goTo location: Locator) {
-        navigator.go(to: location)
-    }
-
     //MARK: - YabrReadiumMetaSource
     var readiumMetaSource: YabrReadiumMetaSource? = nil
 }
