@@ -8,7 +8,7 @@
 
 import UIKit
 import FolioReaderKit
-import GCDWebServer
+import ReadiumGCDWebServer
 import ZIPFoundation
 
 #if canImport(GoogleMobileAds)
@@ -29,7 +29,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
     var folioReaderReadPositionProvider: FolioReaderReadPositionProvider?
     var folioReaderBookmarkProvider: FolioReaderBookmarkProvider?
 
-    let webServer = GCDWebServer()
+    let webServer = ReadiumGCDWebServer()
     let dateFormatter = DateFormatter()
     var epubArchive: Archive?
 
@@ -78,8 +78,8 @@ class EpubFolioReaderContainer: FolioReaderContainer {
         dateFormatter.locale = Locale(identifier: "en_US")
         dateFormatter.timeZone = TimeZone(secondsFromGMT: 0)
         
-        webServer.addDefaultHandler(forMethod: "GET", request: GCDWebServerRequest.self) { request in
-            guard let path = request.path.removingPercentEncoding else { return GCDWebServerErrorResponse() }
+        webServer.addDefaultHandler(forMethod: "GET", request: ReadiumGCDWebServerRequest.self) { request in
+            guard let path = request.path.removingPercentEncoding else { return ReadiumGCDWebServerErrorResponse() }
             print("\(#function) GCDREQUEST path=\(path)")
             
 //            if path.hasSuffix("css") {
@@ -90,16 +90,16 @@ class EpubFolioReaderContainer: FolioReaderContainer {
 //            }
             
             var pathSegs = path.split(separator: "/")
-            guard pathSegs.count > 1 else { return GCDWebServerErrorResponse() }
+            guard pathSegs.count > 1 else { return ReadiumGCDWebServerErrorResponse() }
             pathSegs.removeFirst()
             let resourcePath = pathSegs.joined(separator: "/")
             
             //The Archive class maintains the state of its underlying file descriptor for performance reasons and is therefore not re-entrant. #29
             guard let archiveURL = self.epubArchive?.url,
                   let archive = Archive(url: archiveURL, accessMode: .read),
-                  let entry = archive[resourcePath] else { return GCDWebServerErrorResponse() }
+                  let entry = archive[resourcePath] else { return ReadiumGCDWebServerErrorResponse() }
             
-            var contentType = GCDWebServerGetMimeTypeForExtension((resourcePath as NSString).pathExtension, nil)
+            var contentType = ReadiumGCDWebServerGetMimeTypeForExtension((resourcePath as NSString).pathExtension, nil)
             if contentType.contains("text/") {
                 contentType += ";charset=utf-8"
             }
@@ -107,7 +107,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
             var dataQueue = [Data]()
             var isError = false
             
-            let streamResponse = GCDWebServerStreamedResponse(
+            let streamResponse = ReadiumGCDWebServerStreamedResponse(
                 contentType: contentType,
                 asyncStreamBlock: { block in
                     DispatchQueue.global(qos: .userInteractive).async {
@@ -159,7 +159,7 @@ class EpubFolioReaderContainer: FolioReaderContainer {
             return streamResponse
         }
         
-        webServer.addHandler(forMethod: "GET", pathRegex: "^/_fonts/.+?(otf|ttf)$", request: GCDWebServerRequest.self) { request in
+        webServer.addHandler(forMethod: "GET", pathRegex: "^/_fonts/.+?(otf|ttf)$", request: ReadiumGCDWebServerRequest.self) { request in
             let fileName = (request.path as NSString).lastPathComponent
             print("\(#function) GCDREQUEST FONT fileName=\(fileName) path=\(request.path)")
 
@@ -167,27 +167,27 @@ class EpubFolioReaderContainer: FolioReaderContainer {
             else { return nil }
             
             let fontFileURL = documentDirectory.appendingPathComponent("Fonts",  isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-            guard FileManager.default.fileExists(atPath: fontFileURL.path) else { return GCDWebServerErrorResponse() }
+            guard FileManager.default.fileExists(atPath: fontFileURL.path) else { return ReadiumGCDWebServerErrorResponse() }
             
-            guard let fileResponse = GCDWebServerFileResponse(file: fontFileURL.path) else { return GCDWebServerErrorResponse() }
+            guard let fileResponse = ReadiumGCDWebServerFileResponse(file: fontFileURL.path) else { return ReadiumGCDWebServerErrorResponse() }
             
             return fileResponse
         }
         
         try? webServer.start(options: [
-            GCDWebServerOption_Port: kGCDWebServerPreferredPort,
-            GCDWebServerOption_BindToLocalhost: true
+            ReadiumGCDWebServerOption_Port: kGCDWebServerPreferredPort,
+            ReadiumGCDWebServerOption_BindToLocalhost: true
         ])
         
         // fallback
         if webServer.isRunning == false {
             try? webServer.start(options: [
-                GCDWebServerOption_BindToLocalhost: true,
+                ReadiumGCDWebServerOption_BindToLocalhost: true,
             ])
             
             if webServer.isRunning == false {
                 try? webServer.start(options: [
-                    GCDWebServerOption_BindToLocalhost: true
+                    ReadiumGCDWebServerOption_BindToLocalhost: true
                 ])
             }
         }

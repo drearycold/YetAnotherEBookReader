@@ -273,6 +273,7 @@
 		E7C777A928ED4A3F00939D63 /* YabrPDFHighlightListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777A828ED4A3F00939D63 /* YabrPDFHighlightListCell.swift */; };
 		E7C777AB28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777AA28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift */; };
 		E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7C777AC28EE7E1600939D63 /* YabrPDFReferenceListCell.swift */; };
+		E7CF01192F73C867008597D4 /* FolioReaderKit in Frameworks */ = {isa = PBXBuildFile; productRef = E7CF01182F73C867008597D4 /* FolioReaderKit */; };
 		E7D315102BE5F8AF00A5B50A /* DictWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA312A77674300D5C95B /* DictWebView.swift */; };
 		E7D315112BE5F8AF00A5B50A /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
 		E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
@@ -450,6 +451,7 @@
 				E76EF6CC2F7233490037219B /* R2Streamer in Frameworks */,
 				E7C602162F713C320060265A /* Realm in Frameworks */,
 				E7C6020A2F7134DC0060265A /* SwiftUICharts in Frameworks */,
+				E7CF01192F73C867008597D4 /* FolioReaderKit in Frameworks */,
 				17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */,
 				4E430763E1DF7DC24FA6D571 /* (null) in Frameworks */,
 				E76EF6C82F7233490037219B /* R2Navigator in Frameworks */,
@@ -1021,7 +1023,6 @@
 			);
 			mainGroup = 2AC3EC0F25BDBC10004A6633;
 			packageReferences = (
-				E7C602022F7134560060265A /* XCLocalSwiftPackageReference "../FolioReaderKit" */,
 				E7C602052F7134AD0060265A /* XCLocalSwiftPackageReference "../ShelfView-iOS" */,
 				E7C602082F7134DC0060265A /* XCLocalSwiftPackageReference "../SwiftUICharts" */,
 				E7C6020D2F7137A80060265A /* XCRemoteSwiftPackageReference "Kingfisher" */,
@@ -1029,6 +1030,7 @@
 				E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */,
 				E76EF6D12F72473A0037219B /* XCRemoteSwiftPackageReference "GCDWebServer" */,
 				E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */,
+				E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "../FolioReaderKit" */,
 			);
 			productRefGroup = 2AC3EC1925BDBC10004A6633 /* Products */;
 			projectDirPath = "";
@@ -1982,6 +1984,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../SwiftUICharts;
 		};
+		E7CF01172F73C867008597D4 /* XCLocalSwiftPackageReference "../FolioReaderKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../FolioReaderKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
@@ -1998,7 +2004,7 @@
 			repositoryURL = "https://github.com/readium/GCDWebServer";
 			requirement = {
 				kind = upToNextMinorVersion;
-				minimumVersion = 3.7.4;
+				minimumVersion = 4.0.0;
 			};
 		};
 		E7C6020D2F7137A80060265A /* XCRemoteSwiftPackageReference "Kingfisher" */ = {
@@ -2137,6 +2143,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */;
 			productName = MBProgressHUD;
+		};
+		E7CF01182F73C867008597D4 /* FolioReaderKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FolioReaderKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
