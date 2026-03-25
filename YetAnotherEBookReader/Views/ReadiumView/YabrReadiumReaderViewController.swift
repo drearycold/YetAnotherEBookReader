@@ -121,7 +121,7 @@ class YabrReadiumReaderViewController:
     func makeNavigationBarButtons() -> [UIBarButtonItem] {
         var buttons: [UIBarButtonItem] = []
         // Table of Contents
-        buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "menuIcon"), style: .plain, target: self, action: #selector(presentOutline)))
+        buttons.append(UIBarButtonItem(image: UIImage(systemName: "line.3.horizontal"), style: .plain, target: self, action: #selector(presentOutline)))
         // DRM management
         //        if publication.isRestricted {
         //            buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "drm"), style: .plain, target: self, action: #selector(presentDRMManagement)))
@@ -308,15 +308,17 @@ class YabrReadiumReaderViewController:
         let vc = UIViewController()
         vc.view = wk
         vc.navigationItem.title = title
-        vc.navigationItem.leftBarButtonItem = BarButtonItem(barButtonSystemItem: .done, actionHandler: { (item) in
-            vc.dismiss(animated: true, completion: nil)
-        })
+        vc.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dismissDictViewer))
         
         let nav = UINavigationController(rootViewController: vc)
         nav.modalPresentationStyle = .formSheet
         self.present(nav, animated: true, completion: nil)
         
         return false
+    }
+
+    @objc func dismissDictViewer() {
+        dismiss(animated: true, completion: nil)
     }
     
     /// Checks to ensure the title is non-nil and contains at least 2 letters.

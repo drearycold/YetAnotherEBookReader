@@ -36,7 +36,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     var menuTargetRect: CGRect!     //used by secondary menu, make sure it's properly set
     
-    let refreshBarButtonItem = BarButtonItem()
+    let refreshBarButtonItem = UIBarButtonItem()
 
     override var canBecomeFirstResponder: Bool {
         true

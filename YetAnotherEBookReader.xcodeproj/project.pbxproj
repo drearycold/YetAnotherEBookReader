@@ -196,38 +196,6 @@
 		E769B43D2F72736A00EABE1E /* R2Navigator in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43C2F72736A00EABE1E /* R2Navigator */; };
 		E769B43F2F72736A00EABE1E /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43E2F72736A00EABE1E /* R2Shared */; };
 		E769B4412F72736A00EABE1E /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4402F72736A00EABE1E /* R2Streamer */; };
-		E769C59C296BF4C60089C21E /* Publication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52E296BF4C50089C21E /* Publication.swift */; };
-		E769C59D296BF4C60089C21E /* Publication.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C52E296BF4C50089C21E /* Publication.swift */; };
-		E769C5A0296BF4C60089C21E /* ScreenOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C531296BF4C50089C21E /* ScreenOrientation.swift */; };
-		E769C5A1296BF4C60089C21E /* ScreenOrientation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C531296BF4C50089C21E /* ScreenOrientation.swift */; };
-		E769C5A2296BF4C60089C21E /* URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C533296BF4C50089C21E /* URL.swift */; };
-		E769C5A3296BF4C60089C21E /* URL.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C533296BF4C50089C21E /* URL.swift */; };
-		E769C5A4296BF4C60089C21E /* UIImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C534296BF4C50089C21E /* UIImage.swift */; };
-		E769C5A5296BF4C60089C21E /* UIImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C534296BF4C50089C21E /* UIImage.swift */; };
-		E769C5A6296BF4C60089C21E /* UIViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C535296BF4C50089C21E /* UIViewController.swift */; };
-		E769C5A7296BF4C60089C21E /* UIViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C535296BF4C50089C21E /* UIViewController.swift */; };
-		E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
-		E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = E769C536296BF4C50089C21E /* BarButtonItem.swift */; };
-		E769C620296BF4C60089C21E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E769C58B296BF4C60089C21E /* Localizable.strings */; };
-		E769C621296BF4C60089C21E /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = E769C58B296BF4C60089C21E /* Localizable.strings */; };
-		E769C622296BF4C60089C21E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E769C58D296BF4C60089C21E /* Assets.xcassets */; };
-		E769C623296BF4C60089C21E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E769C58D296BF4C60089C21E /* Assets.xcassets */; };
-		E769C624296BF4C60089C21E /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C58E296BF4C60089C21E /* LaunchScreen.storyboard */; };
-		E769C625296BF4C60089C21E /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = E769C58E296BF4C60089C21E /* LaunchScreen.storyboard */; };
-		E769C626296BF4C60089C21E /* 1.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C591296BF4C60089C21E /* 1.epub */; };
-		E769C627296BF4C60089C21E /* 1.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C591296BF4C60089C21E /* 1.epub */; };
-		E769C628296BF4C60089C21E /* 6.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C592296BF4C60089C21E /* 6.epub */; };
-		E769C629296BF4C60089C21E /* 6.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C592296BF4C60089C21E /* 6.epub */; };
-		E769C62A296BF4C60089C21E /* 5.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C593296BF4C60089C21E /* 5.epub */; };
-		E769C62B296BF4C60089C21E /* 5.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C593296BF4C60089C21E /* 5.epub */; };
-		E769C62C296BF4C60089C21E /* 1.cbz in Resources */ = {isa = PBXBuildFile; fileRef = E769C594296BF4C60089C21E /* 1.cbz */; };
-		E769C62D296BF4C60089C21E /* 1.cbz in Resources */ = {isa = PBXBuildFile; fileRef = E769C594296BF4C60089C21E /* 1.cbz */; };
-		E769C62E296BF4C60089C21E /* 4.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C595296BF4C60089C21E /* 4.epub */; };
-		E769C62F296BF4C60089C21E /* 4.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C595296BF4C60089C21E /* 4.epub */; };
-		E769C630296BF4C60089C21E /* 3.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C596296BF4C60089C21E /* 3.epub */; };
-		E769C631296BF4C60089C21E /* 3.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C596296BF4C60089C21E /* 3.epub */; };
-		E769C632296BF4C60089C21E /* 2.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C597296BF4C60089C21E /* 2.epub */; };
-		E769C633296BF4C60089C21E /* 2.epub in Resources */ = {isa = PBXBuildFile; fileRef = E769C597296BF4C60089C21E /* 2.epub */; };
 		E76EF6C82F7233490037219B /* R2Navigator in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6C72F7233490037219B /* R2Navigator */; };
 		E76EF6CA2F7233490037219B /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6C92F7233490037219B /* R2Shared */; };
 		E76EF6CC2F7233490037219B /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E76EF6CB2F7233490037219B /* R2Streamer */; };
@@ -393,22 +361,6 @@
 		E74729C429D54DB2007659A1 /* LibraryInfoViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoViewModel.swift; sourceTree = "<group>"; };
 		E75A97C92A67AB57000F4292 /* YabrPDFAnnotationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = YabrPDFAnnotationView.swift; path = YetAnotherEBookReader/Views/PDFView/YabrPDFAnnotationView.swift; sourceTree = SOURCE_ROOT; };
 		E75A97CC2A68C79D000F4292 /* YabrPDFSharingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrPDFSharingProvider.swift; sourceTree = "<group>"; };
-		E769C52E296BF4C50089C21E /* Publication.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Publication.swift; sourceTree = "<group>"; };
-		E769C531296BF4C50089C21E /* ScreenOrientation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ScreenOrientation.swift; sourceTree = "<group>"; };
-		E769C533296BF4C50089C21E /* URL.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = URL.swift; sourceTree = "<group>"; };
-		E769C534296BF4C50089C21E /* UIImage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIImage.swift; sourceTree = "<group>"; };
-		E769C535296BF4C50089C21E /* UIViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = UIViewController.swift; sourceTree = "<group>"; };
-		E769C536296BF4C50089C21E /* BarButtonItem.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BarButtonItem.swift; sourceTree = "<group>"; };
-		E769C58C296BF4C60089C21E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
-		E769C58D296BF4C60089C21E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		E769C58F296BF4C60089C21E /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		E769C591296BF4C60089C21E /* 1.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 1.epub; sourceTree = "<group>"; };
-		E769C592296BF4C60089C21E /* 6.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 6.epub; sourceTree = "<group>"; };
-		E769C593296BF4C60089C21E /* 5.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 5.epub; sourceTree = "<group>"; };
-		E769C594296BF4C60089C21E /* 1.cbz */ = {isa = PBXFileReference; lastKnownFileType = file; path = 1.cbz; sourceTree = "<group>"; };
-		E769C595296BF4C60089C21E /* 4.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 4.epub; sourceTree = "<group>"; };
-		E769C596296BF4C60089C21E /* 3.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 3.epub; sourceTree = "<group>"; };
-		E769C597296BF4C60089C21E /* 2.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = 2.epub; sourceTree = "<group>"; };
 		E77B8D462973D16200363F39 /* ModelDataResource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDataResource.swift; sourceTree = "<group>"; };
 		E77B8D4F29751C2A00363F39 /* YabrResources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = YabrResources; sourceTree = "<group>"; };
 		E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreSearchCache.swift; sourceTree = "<group>"; };
@@ -800,7 +752,6 @@
 			children = (
 				E769C52C296BF4C50089C21E /* Common */,
 				E769C560296BF4C60089C21E /* Reader */,
-				E769C58A296BF4C60089C21E /* Resources */,
 			);
 			path = Readium;
 			sourceTree = "<group>";
@@ -808,30 +759,8 @@
 		E769C52C296BF4C50089C21E /* Common */ = {
 			isa = PBXGroup;
 			children = (
-				E769C52E296BF4C50089C21E /* Publication.swift */,
-				E769C530296BF4C50089C21E /* Toolkit */,
 			);
 			path = Common;
-			sourceTree = "<group>";
-		};
-		E769C530296BF4C50089C21E /* Toolkit */ = {
-			isa = PBXGroup;
-			children = (
-				E769C531296BF4C50089C21E /* ScreenOrientation.swift */,
-				E769C532296BF4C50089C21E /* Extensions */,
-				E769C536296BF4C50089C21E /* BarButtonItem.swift */,
-			);
-			path = Toolkit;
-			sourceTree = "<group>";
-		};
-		E769C532296BF4C50089C21E /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-				E769C533296BF4C50089C21E /* URL.swift */,
-				E769C534296BF4C50089C21E /* UIImage.swift */,
-				E769C535296BF4C50089C21E /* UIViewController.swift */,
-			);
-			path = Extensions;
 			sourceTree = "<group>";
 		};
 		E769C560296BF4C60089C21E /* Reader */ = {
@@ -847,31 +776,6 @@
 			children = (
 			);
 			path = Common;
-			sourceTree = "<group>";
-		};
-		E769C58A296BF4C60089C21E /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				E769C58B296BF4C60089C21E /* Localizable.strings */,
-				E769C58D296BF4C60089C21E /* Assets.xcassets */,
-				E769C58E296BF4C60089C21E /* LaunchScreen.storyboard */,
-				E769C590296BF4C60089C21E /* Samples */,
-			);
-			path = Resources;
-			sourceTree = "<group>";
-		};
-		E769C590296BF4C60089C21E /* Samples */ = {
-			isa = PBXGroup;
-			children = (
-				E769C591296BF4C60089C21E /* 1.epub */,
-				E769C592296BF4C60089C21E /* 6.epub */,
-				E769C593296BF4C60089C21E /* 5.epub */,
-				E769C594296BF4C60089C21E /* 1.cbz */,
-				E769C595296BF4C60089C21E /* 4.epub */,
-				E769C596296BF4C60089C21E /* 3.epub */,
-				E769C597296BF4C60089C21E /* 2.epub */,
-			);
-			path = Samples;
 			sourceTree = "<group>";
 		};
 		E7804CCA29C021BC0066BD43 /* CalibreBrowser */ = {
@@ -1050,19 +954,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				2AC3EC2325BDBC11004A6633 /* Preview Assets.xcassets in Resources */,
-				E769C626296BF4C60089C21E /* 1.epub in Resources */,
-				E769C622296BF4C60089C21E /* Assets.xcassets in Resources */,
-				E769C62A296BF4C60089C21E /* 5.epub in Resources */,
-				E769C632296BF4C60089C21E /* 2.epub in Resources */,
-				E769C62E296BF4C60089C21E /* 4.epub in Resources */,
-				E769C62C296BF4C60089C21E /* 1.cbz in Resources */,
-				E769C628296BF4C60089C21E /* 6.epub in Resources */,
-				E769C624296BF4C60089C21E /* LaunchScreen.storyboard in Resources */,
 				E77B8D5029751C2A00363F39 /* YabrResources in Resources */,
 				2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */,
-				E769C630296BF4C60089C21E /* 3.epub in Resources */,
 				2AC3EC2025BDBC11004A6633 /* Assets.xcassets in Resources */,
-				E769C620296BF4C60089C21E /* Localizable.strings in Resources */,
 				2AAB2996271411060080B0CB /* Settings.bundle in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1086,18 +980,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				E77B8D5129751C2A00363F39 /* YabrResources in Resources */,
-				E769C62D296BF4C60089C21E /* 1.cbz in Resources */,
-				E769C62B296BF4C60089C21E /* 5.epub in Resources */,
-				E769C621296BF4C60089C21E /* Localizable.strings in Resources */,
-				E769C629296BF4C60089C21E /* 6.epub in Resources */,
-				E769C623296BF4C60089C21E /* Assets.xcassets in Resources */,
 				2ADCD85A26F4B96200FBAE11 /* Preview Assets.xcassets in Resources */,
 				2ADCD85F26F4B96200FBAE11 /* Assets.xcassets in Resources */,
-				E769C625296BF4C60089C21E /* LaunchScreen.storyboard in Resources */,
-				E769C627296BF4C60089C21E /* 1.epub in Resources */,
-				E769C633296BF4C60089C21E /* 2.epub in Resources */,
-				E769C631296BF4C60089C21E /* 3.epub in Resources */,
-				E769C62F296BF4C60089C21E /* 4.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1108,7 +992,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E769C5A4296BF4C60089C21E /* UIImage.swift in Sources */,
 				E782836628EEA5BA0011438D /* YabrPDFTableViewController.swift in Sources */,
 				E7C7779528ED324300939D63 /* YabrPDFAnnotationPageVC.swift in Sources */,
 				2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift in Sources */,
@@ -1122,7 +1005,6 @@
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
 				2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */,
 				2A0EBA86267893740080BF5B /* Downloader.swift in Sources */,
-				E769C59C296BF4C60089C21E /* Publication.swift in Sources */,
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
 				E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */,
@@ -1132,12 +1014,9 @@
 				2A25E249272BAC67009D5341 /* LibraryOptionsGoodreadsSync.swift in Sources */,
 				2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */,
 				E7DFE3EF297A729900C60E7B /* ReaderOptionsReaderHelpView.swift in Sources */,
-				E769C5A2296BF4C60089C21E /* URL.swift in Sources */,
 				2A8C26D025C5A1E100FC7FC0 /* YabrPDFViewController.swift in Sources */,
 				E7804CCE29D138980066BD43 /* BookDetailView.swift in Sources */,
 				2AD38F8926D639EE0053D01D /* ReadingPositionViewModel.swift in Sources */,
-				E769C5A0296BF4C60089C21E /* ScreenOrientation.swift in Sources */,
-				E769C5A6296BF4C60089C21E /* UIViewController.swift in Sources */,
 				E74729C529D54DB2007659A1 /* LibraryInfoViewModel.swift in Sources */,
 				2ABB9132261DE894004AA7C0 /* RecentShelfController.swift in Sources */,
 				E7804CCC29C0220D0066BD43 /* CalibreSearchCache.swift in Sources */,
@@ -1147,7 +1026,6 @@
 				2A47879D271526BF009C8770 /* FontsHelper.swift in Sources */,
 				2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */,
 				2ABB9158261F1A47004AA7C0 /* EpubFolioReaderContainer.swift in Sources */,
-				E769C5A8296BF4C60089C21E /* BarButtonItem.swift in Sources */,
 				2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */,
 				2ABB913F261EC359004AA7C0 /* CalibreData.swift in Sources */,
 				2A890571260076780072B580 /* YabrPDFOptionView.swift in Sources */,
@@ -1255,7 +1133,6 @@
 				E732E3F32A3F03350075D1AC /* ReaderOptionsReaderHelpView.swift in Sources */,
 				E732E3F42A3F03350075D1AC /* ReaderOptionsFontHelpView.swift in Sources */,
 				E732E3F52A3F03350075D1AC /* CalibreSearchCache.swift in Sources */,
-				E769C5A5296BF4C60089C21E /* UIImage.swift in Sources */,
 				E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */,
 				E706CBCA291B48CB00C1426F /* CalibreBrowser.swift in Sources */,
 				6E7B80D428FBA7AD008B075C /* ActivityList.swift in Sources */,
@@ -1270,7 +1147,6 @@
 				6E7B80DD28FBA7AD008B075C /* YabrPDFBookmarkListCell.swift in Sources */,
 				6E7B80DE28FBA7AD008B075C /* YabrPDFChapterList.swift in Sources */,
 				6E7B80DF28FBA7AD008B075C /* YabrPDFChapterListCell.swift in Sources */,
-				E769C59D296BF4C60089C21E /* Publication.swift in Sources */,
 				6E7B80E028FBA7AD008B075C /* YabrPDFHighlightList.swift in Sources */,
 				6E7B80E128FBA7AD008B075C /* YabrPDFHighlightListCell.swift in Sources */,
 				6E7B80E228FBA7AD008B075C /* YabrPDFReferenceList.swift in Sources */,
@@ -1278,11 +1154,8 @@
 				6E7B80E428FBA7AD008B075C /* YabrPDFTableViewController.swift in Sources */,
 				6E7B80E528FBA7AD008B075C /* YabrPDFModel.swift in Sources */,
 				6E7B80E628FBA7AD008B075C /* YabrPDFView.swift in Sources */,
-				E769C5A3296BF4C60089C21E /* URL.swift in Sources */,
 				6E7B80E728FBA7AD008B075C /* YabrPDFThumbnailViewController.swift in Sources */,
 				6E7B80E828FBA7AD008B075C /* YabrEBookReaderNavigationController.swift in Sources */,
-				E769C5A1296BF4C60089C21E /* ScreenOrientation.swift in Sources */,
-				E769C5A7296BF4C60089C21E /* UIViewController.swift in Sources */,
 				6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */,
 				6E7B80EA28FBA7AD008B075C /* YabrReadiumCBZViewController.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
@@ -1290,7 +1163,6 @@
 				6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */,
 				6E7B80EE28FBA7AD008B075C /* BookImportPicker.swift in Sources */,
 				6E7B80EF28FBA7AD008B075C /* FontImportPicker.swift in Sources */,
-				E769C5A9296BF4C60089C21E /* BarButtonItem.swift in Sources */,
 				6E7B80F028FBA7AD008B075C /* ReaderOptionsFormatHelpView.swift in Sources */,
 				6E7B80F128FBA7AD008B075C /* LibraryOptionsCountPages.swift in Sources */,
 				6E7B80F228FBA7AD008B075C /* LibraryOptionsGoodreadsSync.swift in Sources */,
@@ -1366,25 +1238,6 @@
 			targetProxy = 2AC3EC3A25BDBC11004A6633 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin PBXVariantGroup section */
-		E769C58B296BF4C60089C21E /* Localizable.strings */ = {
-			isa = PBXVariantGroup;
-			children = (
-				E769C58C296BF4C60089C21E /* en */,
-			);
-			name = Localizable.strings;
-			sourceTree = "<group>";
-		};
-		E769C58E296BF4C60089C21E /* LaunchScreen.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				E769C58F296BF4C60089C21E /* Base */,
-			);
-			name = LaunchScreen.storyboard;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		2AC3EC4025BDBC11004A6633 /* Debug */ = {
