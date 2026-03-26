@@ -7,42 +7,20 @@
 
 import Foundation
 import UIKit
-import R2Shared
-import R2Navigator
+import ReadiumShared
+import ReadiumNavigator
 
-class AssociatedColors {
-    
-    /// Get associated colors for a specific appearance setting
-    /// - parameter appearance: The selected appearance
-    /// - Returns: A tuple with a main color and a text color
-    static func getColors(for appearance: UserProperty) -> (mainColor: UIColor, textColor: UIColor) {
-        var mainColor, textColor: UIColor
-        
-        switch appearance.toString() {
-        case "readium-sepia-on":
-            mainColor = UIColor.init(red: 250/255, green: 244/255, blue: 232/255, alpha: 1)
-            textColor = UIColor.init(red: 18/255, green: 18/255, blue: 18/255, alpha: 1)
-        case "readium-night-on":
-            mainColor = UIColor.black
-            textColor = UIColor.init(red: 254/255, green: 254/255, blue: 254/255, alpha: 1)
-        default:
-            mainColor = UIColor.white
-            textColor = UIColor.black
-        }
-        
-        return (mainColor, textColor)
-    }
-}
+import ReadiumAdapterGCDWebServer
 
 class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
 
     var popoverUserconfigurationAnchor: UIBarButtonItem?
 
-    init(publication: Publication, initialLocation: Locator?, resourcesServer: ResourcesServer) {
-        let navigator = EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation, resourcesServer: resourcesServer)
+    init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+        let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
 
-        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
+        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
 
         navigator.delegate = self
     }
@@ -53,23 +31,6 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-  
-        /// Set initial UI appearance.
-        if let appearance = publication.userProperties.getProperty(reference: ReadiumCSSReference.appearance.rawValue) {
-            setUIColor(for: appearance)
-        }
-    }
-    
-    internal func setUIColor(for appearance: UserProperty) {
-        let colors = AssociatedColors.getColors(for: appearance)
-        
-        navigator.view.backgroundColor = colors.mainColor
-        view.backgroundColor = colors.mainColor
-        //
-        navigationController?.navigationBar.barTintColor = colors.mainColor
-        navigationController?.navigationBar.tintColor = colors.textColor
-        
-        navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: colors.textColor]
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -109,29 +70,36 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         print("EpubReadiumReaderContainerNavigatorDelegate \(locator)")
         print("EpubReadiumReaderContainerNavigatorDelegate otherLocations=\(locator.locations.otherLocations)")
         
-        var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
-        
-        if let index = publication.readingOrder.firstIndex(withHREF: locator.href) {
-            updatedReadingPosition.2["pageNumber"] = index + 1
-        } else {
-            updatedReadingPosition.2["pageNumber"] = 1
+        Task {
+            var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
+            
+            if let index = publication.readingOrder.firstIndexWithHREF(locator.href) {
+                updatedReadingPosition.2["pageNumber"] = index + 1
+            } else {
+                updatedReadingPosition.2["pageNumber"] = 1
+            }
+            updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
+            updatedReadingPosition.2["pageOffsetX"] = locator.locations.position
+            
+            updatedReadingPosition.0 = locator.locations.progression ?? 0.0
+            updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
+            
+            let tocResult = await publication.tableOfContents()
+            let tableOfContents = (try? tocResult.get()) ?? []
+            
+            if let title = locator.title {
+                updatedReadingPosition.3 = title
+            } else if let tocLink = tableOfContents.firstDeep(withHREF: locator.href.string),
+                      let tocTitle = tocLink.title {
+                updatedReadingPosition.3 = tocTitle
+            } else {
+                updatedReadingPosition.3 = "Unknown Chapter"
+            }
+            
+            DispatchQueue.main.async {
+                self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
+            }
         }
-        updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
-        updatedReadingPosition.2["pageOffsetX"] = locator.locations.position
-        
-        updatedReadingPosition.0 = locator.locations.progression ?? 0.0
-        updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
-        
-        if let title = locator.title {
-            updatedReadingPosition.3 = title
-        } else if let tocLink = publication.tableOfContents.firstDeep(withHREF: locator.href),
-                  let tocTitle = tocLink.title {
-            updatedReadingPosition.3 = tocTitle
-        } else {
-            updatedReadingPosition.3 = "Unknown Chapter"
-        }
-        
-        self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
     }
 }
 

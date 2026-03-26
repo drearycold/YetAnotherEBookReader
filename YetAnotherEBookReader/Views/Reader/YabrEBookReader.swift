@@ -9,8 +9,9 @@ import Foundation
 import UIKit
 import SwiftUI
 import FolioReaderKit
-import R2Shared
-import R2Streamer
+import ReadiumShared
+import ReadiumStreamer
+import ReadiumAdapterGCDWebServer
 
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: UIViewControllerRepresentable {
@@ -40,46 +41,54 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         if (readerInfo.format == Format.EPUB && readerInfo.readerType == ReaderType.ReadiumEPUB)
             || (readerInfo.format == Format.PDF && readerInfo.readerType == ReaderType.ReadiumPDF)
             || (readerInfo.format == Format.CBZ && readerInfo.readerType == ReaderType.ReadiumCBZ) {
-            guard let server = PublicationServer() else {
-                return nav
-            }
             
-            let streamer = Streamer()
             
-            let asset = FileAsset(url: readerInfo.url)
+            let httpClient = DefaultHTTPClient()
+            let assetRetriever = AssetRetriever(httpClient: httpClient)
+            let httpServer = GCDHTTPServer(assetRetriever: assetRetriever)
+            let readiumEnv = YabrReadiumEnvironment(httpClient: httpClient, assetRetriever: assetRetriever, httpServer: httpServer)
             
-            streamer.open(asset: asset, allowUserInteraction: true) { result in
+            let publicationOpener = PublicationOpener(
+                parser: DefaultPublicationParser(httpClient: httpClient, assetRetriever: assetRetriever, pdfFactory: DefaultPDFDocumentFactory())
+            )
+            
+            Task {
+                guard let absoluteUrl = readerInfo.url.anyURL.absoluteURL,
+                      let asset = try? await assetRetriever.retrieve(url: absoluteUrl).get() else { return }
+                
+                let result = await publicationOpener.open(asset: asset, allowUserInteraction: true, sender: nil)
+                DispatchQueue.main.async {
                 do {
                     let publication = try result.get()
-                    server.removeAll()
-                    try server.add(publication)
                     var initialLocation: Locator? = nil
                     
                     //readingOrder for EPUB & CBZ, metadata.numberOfPages for PDF
                     if self.readerInfo.position.lastReadPage > 0,
                        self.readerInfo.readerType == ReaderType.ReadiumPDF ? self.readerInfo.position.lastReadPage - 1 < publication.metadata.numberOfPages ?? 0 : self.readerInfo.position.lastReadPage - 1 < publication.readingOrder.count,
                        let link = self.readerInfo.readerType == ReaderType.ReadiumPDF ? publication.readingOrder.first : publication.readingOrder[self.readerInfo.position.lastReadPage - 1] {
-                        initialLocation = Locator(
-                            href: link.href,
-                            type: link.type ?? "",
-                            title: self.readerInfo.position.lastReadChapter,
-                            locations: Locator.Locations(
-                                fragments: [],
-                                progression: self.readerInfo.position.lastChapterProgress / 100.0,
-                                totalProgression: self.readerInfo.position.lastProgress / 100.0,
-                                position: self.readerInfo.readerType == ReaderType.ReadiumPDF ? self.readerInfo.position.lastPosition[0] : self.readerInfo.position.lastPosition[1],
-                                otherLocations: [:]),
-                            text: Locator.Text())
+                        if let href = AnyURL(legacyHREF: link.href) {
+                            initialLocation = Locator(
+                                href: href,
+                                mediaType: link.mediaType ?? .html,
+                                title: self.readerInfo.position.lastReadChapter,
+                                locations: Locator.Locations(
+                                    fragments: [],
+                                    progression: self.readerInfo.position.lastChapterProgress / 100.0,
+                                    totalProgression: self.readerInfo.position.lastProgress / 100.0,
+                                    position: self.readerInfo.readerType == ReaderType.ReadiumPDF ? self.readerInfo.position.lastPosition[0] : self.readerInfo.position.lastPosition[1],
+                                    otherLocations: [:]),
+                                text: Locator.Text())
+                        }
                     }
                     
                     guard let readerVC = { () -> YabrReadiumReaderViewController? in
                         switch(self.readerInfo.readerType) {
                         case .ReadiumEPUB:
-                            return YabrReadiumEPUBViewController(publication: publication, initialLocation: initialLocation, resourcesServer: server)
+                            return YabrReadiumEPUBViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
                         case .ReadiumPDF:
-                            return YabrReadiumPDFViewController(publication: publication, initialLocation: initialLocation)
+                            return YabrReadiumPDFViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
                         case .ReadiumCBZ:
-                            return YabrReadiumCBZViewController(publication: publication, initialLocation: initialLocation)
+                            return YabrReadiumCBZViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
                         default:
                             return nil      //shouldn't fall here
                         }
@@ -93,7 +102,6 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                                 if let locator = readerVC.navigator.currentLocation {
                                     readerVC.navigator(readerVC.navigator, locationDidChange: locator)
                                 }
-                                (readerVC as? YabrReadiumEPUBViewController)?.epubNavigator.userSettings.save()
                                 readerVC.dismiss(animated: true, completion: nil)
                             }
                         )
@@ -103,6 +111,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                     nav.pushViewController(readerVC, animated: false)
                 } catch {
                     print(error)
+                }
                 }
             }
             
@@ -158,7 +167,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
-            epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
+            _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
             nav.pushViewController(epubReaderContainer, animated: false)
             nav.setToolbarHidden(true, animated: false)

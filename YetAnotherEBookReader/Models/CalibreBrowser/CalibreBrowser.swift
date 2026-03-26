@@ -348,7 +348,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                             refreshUnifiedCategoryResult(cacheObj.key)
                         }
                     }
-                case .update(let result, deletions: let deletions, insertions: let insertions, modifications: let modifications):
+                case .update(let result, deletions: _, insertions: let insertions, modifications: _):
                     insertions.forEach {
                         let cacheObj = result[$0]
                         
@@ -683,7 +683,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                       let unifiedOffset = $0.value,
                       unifiedOffset.searchObjectSource.isEmpty == false,
                       let sourceObjOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
-                      let sourceObj = sourceObjOpt
+                      let _ = sourceObjOpt
                 else {
                     merged = false
                     return
@@ -701,7 +701,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     func registerCacheUnifiedChangeReceiver(unifiedKey: SearchCriteriaMergedKey, cacheObj: CalibreUnifiedSearchObject) {
         cacheSearchUnifiedRuntime[unifiedKey]!.objectNotificationToken = cacheObj.observe(keyPaths: ["limitNumber"], { change in
             switch change {
-            case .change(let object, let properties):
+            case .change(_, let properties):
                 for property in properties {
 //                    print("Property '\(property.name)' of object \(object) changed to '\(property.newValue!)' from '\(property.oldValue ?? -1)'")
                     if property.name == "limitNumber",
@@ -764,7 +764,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                     break
                 case .initial(_):
                     break
-                case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
+                case .update(_, deletions: let deletions, insertions: let insertions, modifications: _):
                     print("\(#function) \(cacheObj.categoryName) deletion count=\(deletions.count)")
                     print("\(#function) \(cacheObj.categoryName) insertions count=\(insertions.count)")
                     break
@@ -1971,7 +1971,7 @@ extension CalibreServerService {
             
             return (
                 serverUrl,
-                booksListUrlComponents.url(relativeTo: serverUrl)?.absoluteURL,
+                booksListUrlComponents.url(relativeTo: serverUrl),
                 parameter
             )
         }.compactMap {

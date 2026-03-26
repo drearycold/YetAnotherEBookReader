@@ -400,7 +400,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         
         buildTocList()
         
-        titleInfoButton.setTitle(self.pdfView.document?.title ?? "", for: .normal)
+        let docTitle = self.pdfView.document?.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
+        titleInfoButton.setTitle(docTitle ?? "", for: .normal)
         titleInfoButton.contentHorizontalAlignment = .center
         titleInfoButton.showsMenuAsPrimaryAction = true
         titleInfoButton.frame = CGRect(x:0, y:0, width: navigationController?.navigationBar.frame.width ?? 600 / 2, height: 40)
@@ -1403,7 +1404,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             updatedReadingPosition.lastChapterProgress = chapterProgress
             updatedReadingPosition.lastProgress = bookProgress
             updatedReadingPosition.lastReadChapter = chapterName
-            updatedReadingPosition.lastReadBook = pdfView.document?.title ?? "Unknown Title"
+            let docTitle = pdfView.document?.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
+            updatedReadingPosition.lastReadBook = docTitle ?? "Unknown Title"
             updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
             updatedReadingPosition.epoch = Date().timeIntervalSince1970
             

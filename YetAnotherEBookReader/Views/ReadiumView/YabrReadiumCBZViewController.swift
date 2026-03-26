@@ -18,17 +18,19 @@
 //
 
 import UIKit
-import R2Navigator
-import R2Shared
-import R2Streamer
+import ReadiumNavigator
+import ReadiumShared
+import ReadiumStreamer
 
+
+import ReadiumAdapterGCDWebServer
 
 class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
 
-    init(publication: Publication, initialLocation: Locator?) {
-        let navigator = CBZNavigatorViewController(publication: publication, initialLocation: initialLocation)
+    init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+        let navigator = try! CBZNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
         
-        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation)
+        super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
         
         navigator.delegate = self
     }

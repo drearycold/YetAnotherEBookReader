@@ -71,3 +71,9 @@ struct TestView: View {
         }.aspectRatio(contentMode: .fit)
     }
 }
+
+extension URL {
+    var isHTTP: Bool {
+        return self.scheme?.lowercased() == "http" || self.scheme?.lowercased() == "https"
+    }
+}

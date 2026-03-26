@@ -9,7 +9,7 @@
 import UIKit
 import FolioReaderKit
 import ReadiumGCDWebServer
-import ZIPFoundation
+import ReadiumZIPFoundation
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds

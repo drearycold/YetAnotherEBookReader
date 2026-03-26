@@ -73,3 +73,9 @@ internal extension UIColor {
         }
     }
 }
+
+extension URL {
+    public var isHTTP: Bool {
+        ["http", "https"].contains(scheme?.lowercased())
+    }
+}

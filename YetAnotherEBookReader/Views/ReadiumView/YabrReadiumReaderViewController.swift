@@ -19,11 +19,18 @@
 
 import SafariServices
 import UIKit
-import R2Navigator
-import R2Shared
+import ReadiumNavigator
+import ReadiumShared
+import ReadiumAdapterGCDWebServer
 import SwiftSoup
 import WebKit
 
+
+struct YabrReadiumEnvironment {
+    let httpClient: HTTPClient
+    let assetRetriever: AssetRetriever
+    let httpServer: GCDHTTPServer
+}
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class YabrReadiumReaderViewController:
@@ -32,6 +39,8 @@ class YabrReadiumReaderViewController:
     let navigator: UIViewController & Navigator
     let publication: Publication
     let initialLocation: Locator?
+    
+    let environment: YabrReadiumEnvironment
 
     // lazy var bookmarksDataSource: BookmarkDataSource? = BookmarkDataSource(bookID: book.id)
     
@@ -45,10 +54,11 @@ class YabrReadiumReaderViewController:
         return try! NSRegularExpression(pattern: "[\\p{Ll}\\p{Lu}\\p{Lt}\\p{Lo}]{2}")
     }()
     
-    init(navigator: UIViewController & Navigator, publication: Publication, initialLocation: Locator?) {
+    init(navigator: UIViewController & Navigator, publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
         self.initialLocation = initialLocation
         self.navigator = navigator
         self.publication = publication
+        self.environment = environment
 
         super.init(nibName: nil, bundle: nil)
         
@@ -245,20 +255,24 @@ class YabrReadiumReaderViewController:
     }
     
     @objc private func goBackward() {
-        navigator.goBackward()
+        Task { await navigator.goBackward() }
     }
     
     @objc private func goForward() {
-        navigator.goForward()
+        Task { await navigator.goForward() }
     }
     
     
     // MARK: - NavigatorDelegate
+    func navigator(_ navigator: Navigator, didFailToLoadResourceAt href: RelativeURL, withError error: ReadError) {
+        print("ReadiumReaderViewController didFailToLoadResourceAt \(href.string) \(error)")
+    }
+
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
 
         positionLabel.text = {
             if let position = locator.locations.position {
-                return "\(position) / \(publication.positions.count)"
+                return "\(position)"
             } else if let progression = locator.locations.totalProgression {
                 return "\(progression)%"
             } else {
@@ -269,7 +283,7 @@ class YabrReadiumReaderViewController:
     
     func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
         // SFSafariViewController crashes when given an URL without an HTTP scheme.
-        guard ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+        guard url.isHTTP else {
             return
         }
         present(SFSafariViewController(url: url), animated: true)
@@ -336,9 +350,9 @@ class YabrReadiumReaderViewController:
         let thresholdRange = 0...(0.2 * viewport.width)
         var moved = false
         if thresholdRange ~= point.x {
-            moved = navigator.goLeft(animated: false)
+            Task { moved = await navigator.goLeft(options: .none) }
         } else if thresholdRange ~= (viewport.maxX - point.x) {
-            moved = navigator.goRight(animated: false)
+            Task { moved = await navigator.goRight(options: .none) }
         }
         
         if !moved {

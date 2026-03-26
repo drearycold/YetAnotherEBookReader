@@ -12,12 +12,7 @@ import SwiftUI
 import OSLog
 import Kingfisher
 import ShelfView
-
 import CryptoSwift
-#if canImport(R2Shared)
-import R2Shared
-import R2Streamer
-#endif
 
 final class ModelData: ObservableObject {
     static var shared: ModelData?
