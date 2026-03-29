@@ -18,7 +18,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     var popoverUserconfigurationAnchor: UIBarButtonItem?
 
     init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
+        let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation)
 
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
 

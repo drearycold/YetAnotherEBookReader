@@ -119,12 +119,21 @@
       }
     },
     {
+      "identity" : "zip",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/marmelroy/Zip.git",
+      "state" : {
+        "revision" : "67fa55813b9e7b3b9acee9c0ae501def28746d76",
+        "version" : "2.1.2"
+      }
+    },
+    {
       "identity" : "zipfoundation",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/readium/ZIPFoundation.git",
       "state" : {
-        "revision" : "1df2cc049d62530be23a8a32b966ee35fca78390",
-        "version" : "1.0.0"
+        "revision" : "adb49c8bfe060cc187370b12fa081012a6440b86",
+        "version" : "3.0.1"
       }
     }
   ],
