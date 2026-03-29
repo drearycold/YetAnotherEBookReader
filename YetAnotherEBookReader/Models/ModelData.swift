@@ -466,6 +466,11 @@ final class ModelData: ObservableObject {
                     }
                 }
                 
+                if oldSchemaVersion < 125 {
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListSyle")
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                }
+                
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in

@@ -47,7 +47,10 @@ extension BookAnnotation {
             fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
-                
+                if oldSchemaVersion < 125 {
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListSyle")
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,

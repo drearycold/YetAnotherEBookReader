@@ -93,7 +93,7 @@ class FolioReaderPreferenceRealm: Object {
     
     @objc dynamic var currentNavigationMenuIndex: Int = .min
     @objc dynamic var currentAnnotationMenuIndex: Int = .min
-    @objc dynamic var currentNavigationBookListStyle: Int = .min
+    @objc dynamic var currentNavigationMenuBookListSyle: Int = .min
     
     @objc dynamic var currentVMarginLinked: Bool = true
     @objc dynamic var currentMarginTop: Int = .min
@@ -112,7 +112,7 @@ class FolioReaderPreferenceRealm: Object {
     
     @objc dynamic var styleOverride: Int = .min
     @objc dynamic var structuralStyle: Int = 0
-    @objc dynamic var structuralTocLevel: Int = 0
+    @objc dynamic var structuralTrackingTocLevel: Int = 0
     
     func copyFrom(src: FolioReaderPreferenceRealm) {
         nightMode = src.nightMode
@@ -252,230 +252,29 @@ class FolioReaderRealmPreferenceProvider: FolioReaderPreferenceProvider {
         }
     }
 
-    func preference(nightMode defaults: Bool) -> Bool {
-        return prefObj?.nightMode ?? defaults
+    func preference(stringFor key: String, default defaultValue: String) -> String {
+        return prefObj?.value(forKey: key) as? String ?? defaultValue
     }
     
-    func preference(setNightMode value: Bool) {
-        try? realm?.write { prefObj?.nightMode = value }
+    func preference(setString value: String, for key: String) {
+        try? realm?.write { prefObj?.setValue(value, forKey: key) }
     }
     
-    func preference(themeMode defaults: Int) -> Int {
-        return value(of: prefObj?.themeMode, defaults: defaults)
+    func preference(intFor key: String, default defaultValue: Int) -> Int {
+        guard let val = prefObj?.value(forKey: key) as? Int else { return defaultValue }
+        return val == .min ? defaultValue : val
     }
     
-    func preference(setThemeMode value: Int) {
-        try? realm?.write { prefObj?.themeMode = value }
+    func preference(setInt value: Int, for key: String) {
+        try? realm?.write { prefObj?.setValue(value, forKey: key) }
     }
     
-    func preference(currentFont defaults: String) -> String {
-        return prefObj?.currentFont ?? defaults
+    func preference(boolFor key: String, default defaultValue: Bool) -> Bool {
+        return prefObj?.value(forKey: key) as? Bool ?? defaultValue
     }
     
-    func preference(setCurrentFont value: String) {
-        try? realm?.write { prefObj?.currentFont = value }
-    }
-    
-    func preference(currentFontSize defaults: String) -> String {
-        return prefObj?.currentFontSize ?? defaults
-    }
-    
-    func preference(setCurrentFontSize value: String) {
-        try? realm?.write { prefObj?.currentFontSize = value }
-    }
-    
-    func preference(currentFontWeight defaults: String) -> String {
-        return prefObj?.currentFontWeight ?? defaults
-    }
-    
-    func preference(setCurrentFontWeight value: String) {
-        try? realm?.write { prefObj?.currentFontWeight = value }
-    }
-    
-    func preference(currentAudioRate defaults: Int) -> Int {
-        return value(of: prefObj?.currentAudioRate, defaults: defaults)
-    }
-    
-    func preference(setCurrentAudioRate value: Int) {
-        try? realm?.write { prefObj?.currentAudioRate = value }
-    }
-    
-    func preference(currentHighlightStyle defaults: Int) -> Int {
-        return value(of: prefObj?.currentHighlightStyle, defaults: defaults)
-    }
-    
-    func preference(setCurrentHighlightStyle value: Int) {
-        try? realm?.write { prefObj?.currentHighlightStyle = value }
-    }
-    
-    func preference(currentMediaOverlayStyle defaults: Int) -> Int {
-        return value(of: prefObj?.currentMediaOverlayStyle, defaults: defaults)
-    }
-    
-    func preference(setCurrentMediaOverlayStyle value: Int) {
-        try? realm?.write { prefObj?.currentMediaOverlayStyle = value }
-    }
-    
-    func preference(currentScrollDirection defaults: Int) -> Int {
-        return value(of: prefObj?.currentScrollDirection, defaults: defaults)
-    }
-    
-    func preference(setCurrentScrollDirection value: Int) {
-        try? realm?.write { prefObj?.currentScrollDirection = value }
-    }
-    
-    func preference(currentNavigationMenuIndex defaults: Int) -> Int {
-        return value(of: prefObj?.currentNavigationMenuIndex, defaults: defaults)
-    }
-    
-    func preference(setCurrentNavigationMenuIndex value: Int) {
-        try? realm?.write { prefObj?.currentNavigationMenuIndex = value }
-    }
-    
-    func preference(currentAnnotationMenuIndex defaults: Int) -> Int {
-        return value(of: prefObj?.currentAnnotationMenuIndex, defaults: defaults)
-    }
-    
-    func preference(setCurrentAnnotationMenuIndex value: Int) {
-        try? realm?.write { prefObj?.currentAnnotationMenuIndex = value }
-    }
-    
-    func preference(currentNavigationMenuBookListSyle defaults: Int) -> Int {
-        return value(of: prefObj?.currentNavigationBookListStyle, defaults: defaults)
-    }
-    
-    func preference(setCurrentNavigationMenuBookListStyle value: Int) {
-        try? realm?.write { prefObj?.currentNavigationBookListStyle = value}
-    }
-    
-    func preference(currentMarginTop defaults: Int) -> Int {
-        return value(of: prefObj?.currentMarginTop, defaults: defaults)
-    }
-    
-    func preference(setCurrentVMarginLinked value: Bool) {
-        try? realm?.write { prefObj?.currentVMarginLinked = value }
-    }
-    
-    func preference(currentVMarginLinked defaults: Bool) -> Bool {
-        prefObj?.currentVMarginLinked ?? defaults
-    }
-    
-    func preference(setCurrentMarginTop value: Int) {
-        try? realm?.write { prefObj?.currentMarginTop = value }
-    }
-    
-    func preference(currentMarginBottom defaults: Int) -> Int {
-        return value(of: prefObj?.currentMarginBottom, defaults: defaults)
-    }
-    
-    func preference(setCurrentMarginBottom value: Int) {
-        try? realm?.write { prefObj?.currentMarginBottom = value }
-    }
-    
-    func preference(setCurrentHMarginLinked value: Bool) {
-        try? realm?.write { prefObj?.currentHMarginLinked = value }
-    }
-    
-    func preference(currentHMarginLinked defaults: Bool) -> Bool {
-        prefObj?.currentHMarginLinked ?? defaults
-    }
-    
-    func preference(currentMarginLeft defaults: Int) -> Int {
-        return value(of: prefObj?.currentMarginLeft, defaults: defaults)
-    }
-    
-    func preference(setCurrentMarginLeft value: Int) {
-        try? realm?.write { prefObj?.currentMarginLeft = value }
-    }
-    
-    func preference(currentMarginRight defaults: Int) -> Int {
-        return value(of: prefObj?.currentMarginRight, defaults: defaults)
-    }
-    
-    func preference(setCurrentMarginRight value: Int) {
-        try? realm?.write { prefObj?.currentMarginRight = value }
-    }
-    
-    func preference(currentLetterSpacing defaults: Int) -> Int {
-        return value(of: prefObj?.currentLetterSpacing, defaults: defaults)
-    }
-    
-    func preference(setCurrentLetterSpacing value: Int) {
-        try? realm?.write { prefObj?.currentLetterSpacing = value }
-    }
-    
-    func preference(currentLineHeight defaults: Int) -> Int {
-        return value(of: prefObj?.currentLineHeight, defaults: defaults)
-    }
-    
-    func preference(setCurrentLineHeight value: Int) {
-        try? realm?.write { prefObj?.currentLineHeight = value }
-    }
-    
-    func preference(currentTextIndent defaults: Int) -> Int {
-        return value(of: prefObj?.currentTextIndent, defaults: defaults)
-    }
-    
-    func preference(setCurrentTextIndent value: Int) {
-        try? realm?.write { prefObj?.currentTextIndent = value }
-    }
-    func preference(doWrapPara defaults: Bool) -> Bool {
-        return prefObj?.doWrapPara ?? defaults
-    }
-    
-    func preference(setDoWrapPara value: Bool) {
-        try? realm?.write {
-            prefObj?.doWrapPara = value
-        }
-    }
-    
-    func preference(doClearClass defaults: Bool) -> Bool {
-        return prefObj?.doClearClass ?? defaults
-
-    }
-    
-    func preference(setDoClearClass value: Bool) {
-        try? realm?.write {
-            prefObj?.doClearClass = value
-        }
-    }
-    
-    func preference(styleOverride defaults: Int) -> Int {
-        return prefObj?.styleOverride ?? defaults
-    }
-    
-    func preference(setStyleOverride value: Int) {
-        try? realm?.write {
-            prefObj?.styleOverride = value
-        }
-    }
-    
-    func preference(structuralStyle defaults: Int) -> Int {
-        return prefObj?.structuralStyle ?? defaults
-    }
-    
-    func preference(setStructuralStyle value: Int) {
-        try? realm?.write {
-            prefObj?.structuralStyle = value
-        }
-    }
-    
-    func preference(structuralTocLevel defaults: Int) -> Int {
-        return prefObj?.structuralTocLevel ?? defaults
-    }
-    
-    func preference(setStructuralTocLevel value: Int) {
-        try? realm?.write {
-            prefObj?.structuralTocLevel = value
-        }
-    }
-    
-    private func value(of: Int?, defaults: Int) -> Int {
-        if let v = of, v != .min {
-            return v
-        } else {
-            return defaults
-        }
+    func preference(setBool value: Bool, for key: String) {
+        try? realm?.write { prefObj?.setValue(value, forKey: key) }
     }
     
     func preference(loadProfile name: String) {
