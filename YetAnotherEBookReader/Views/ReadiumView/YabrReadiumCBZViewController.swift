@@ -20,8 +20,6 @@
 import UIKit
 import ReadiumNavigator
 import ReadiumShared
-import ReadiumStreamer
-
 
 import ReadiumAdapterGCDWebServer
 
@@ -40,23 +38,6 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
         
         view.backgroundColor = .black
     }
-    
-/*
-    override var currentBookmark: Bookmark? {
-        guard
-            let locator = navigator.currentLocation,
-            let resourceIndex = publication.readingOrder.firstIndex(withHREF: locator.href) else
-        {
-            return nil
-        }
-        
-        return Bookmark(
-            bookID: book.id,
-            resourceIndex: resourceIndex,
-            locator: locator
-        )
-    }
-*/
 
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)

@@ -41,8 +41,6 @@ class YabrReadiumReaderViewController:
     let initialLocation: Locator?
     
     let environment: YabrReadiumEnvironment
-
-    // lazy var bookmarksDataSource: BookmarkDataSource? = BookmarkDataSource(bookID: book.id)
     
     private(set) var stackView: UIStackView!
     private lazy var positionLabel = UILabel()
@@ -136,8 +134,6 @@ class YabrReadiumReaderViewController:
         //        if publication.isRestricted {
         //            buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "drm"), style: .plain, target: self, action: #selector(presentDRMManagement)))
         //        }
-        // Bookmarks
-//        buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "bookmark"), style: .plain, target: self, action: #selector(bookmarkCurrentPosition)))
         
         return buttons
     }
@@ -163,36 +159,12 @@ class YabrReadiumReaderViewController:
     
     // MARK: - Locations
     /// FIXME: This should be implemented in a shared Navigator interface, using Locators.
-    
-/*
-    var currentBookmark: Bookmark? {
-        fatalError("Not implemented")
-    }
-*/
-    
 
     // MARK: - Outlines
 
     @objc func presentOutline() {
         // Display YABR TOC UI here
     }
-    
-    
-    // MARK: - Bookmarks
-    
-/*
-    @objc func bookmarkCurrentPosition() {
-        guard let dataSource = bookmarksDataSource,
-            let bookmark = currentBookmark,
-            dataSource.addBookmark(bookmark: bookmark) else
-        {
-            toast(NSLocalizedString("reader_bookmark_failure_message", comment: "Error message when adding a new bookmark failed"), on: view, duration: 2)
-            return
-        }
-        toast(NSLocalizedString("reader_bookmark_success_message", comment: "Success message when adding a bookmark"), on: view, duration: 1)
-    }
-*/
-    
     
     // MARK: - DRM
     

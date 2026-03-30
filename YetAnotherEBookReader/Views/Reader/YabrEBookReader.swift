@@ -11,8 +11,8 @@ import SwiftUI
 import FolioReaderKit
 import ReadiumShared
 import ReadiumStreamer
-import ReadiumGCDWebServer
 import ReadiumAdapterGCDWebServer
+import ReadiumGCDWebServer
 
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: UIViewControllerRepresentable {
@@ -57,7 +57,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
                 guard let absoluteUrl = readerInfo.url.anyURL.absoluteURL,
                       let asset = try? await assetRetriever.retrieve(url: absoluteUrl).get() else { return }
                 
-                let result = await publicationOpener.open(asset: asset, allowUserInteraction: true, sender: nil)
+                let result = await publicationOpener.open(asset: asset, allowUserInteraction: true)
                 DispatchQueue.main.async {
                 do {
                     let publication = try result.get()
@@ -165,9 +165,13 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             
             let folioReader = FolioReader()
             let webServer = ReadiumGCDWebServer()
+
+            guard let unzipPath = makeFolioReaderUnzipPath() else {
+                return nav
+            }
             
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
-            
+
             epubReaderContainer.modelData = modelData
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
