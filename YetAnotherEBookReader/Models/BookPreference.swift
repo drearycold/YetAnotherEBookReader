@@ -58,8 +58,54 @@ extension BookAnnotation {
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
                 BookBookmarkRealm.self,
-                YabrPDFOptionsRealm.self
+                YabrPDFOptionsRealm.self,
+                ReadiumPreferenceRealm.self
             ]
         )
     }
 }
+
+class ReadiumPreferenceStore {
+    let realm: Realm
+    
+    init(server: CalibreServer) {
+        let config = BookAnnotation.getBookPreferenceServerConfig(server)
+        self.realm = try! Realm(configuration: config)
+    }
+    
+    func load(id: String) -> ReadiumPreferenceRealm? {
+        return realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: id)
+    }
+    
+    func save(id: String, from viewModel: YabrReaderSettingsViewModel) {
+        try? realm.write {
+            let obj = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: id) ?? ReadiumPreferenceRealm()
+            if (obj.id == "") {
+                obj.id = id
+            }
+            
+            obj.themeMode = viewModel.themeMode
+            obj.fontSizePercentage = viewModel.fontSizePercentage
+            obj.fontFamily = viewModel.fontFamily
+            obj.lineHeight = viewModel.lineHeight
+            obj.pageMargins = viewModel.pageMargins
+            obj.publisherStyles = viewModel.publisherStyles
+            obj.scroll = viewModel.scroll
+            obj.textAlign = viewModel.textAlign
+            
+            obj.columnCount = viewModel.columnCount
+            obj.fontWeight = viewModel.fontWeight
+            obj.letterSpacing = viewModel.letterSpacing
+            obj.wordSpacing = viewModel.wordSpacing
+            obj.hyphens = viewModel.hyphens
+            obj.imageFilter = viewModel.imageFilter
+            obj.textNormalization = viewModel.textNormalization
+            obj.typeScale = viewModel.typeScale
+            obj.paragraphIndent = viewModel.paragraphIndent
+            obj.paragraphSpacing = viewModel.paragraphSpacing
+            
+            realm.add(obj, update: .all)
+        }
+    }
+}
+

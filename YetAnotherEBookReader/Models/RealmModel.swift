@@ -1428,3 +1428,28 @@ extension PDFOptions: Persistable {
         obj.rememberInPagePosition = self.rememberInPagePosition
     }
 }
+
+class ReadiumPreferenceRealm: Object {
+    @Persisted(primaryKey: true) var id: String = ""
+    
+    @Persisted var themeMode: Int = 0
+    @Persisted var fontSizePercentage: Double = 100.0
+    @Persisted var fontFamily: String = "Original"
+    @Persisted var lineHeight: Double = 1.2
+    @Persisted var pageMargins: Double = 1.0
+    @Persisted var publisherStyles: Bool = true
+    @Persisted var scroll: Bool = false
+    @Persisted var textAlign: Int = 0
+    
+    @Persisted var columnCount: Int = 0
+    @Persisted var fontWeight: Double = 1.0
+    @Persisted var letterSpacing: Double = 0.0
+    @Persisted var wordSpacing: Double = 0.0
+    @Persisted var hyphens: Bool = false
+    @Persisted var imageFilter: Int = 0
+    @Persisted var textNormalization: Bool = false
+    @Persisted var typeScale: Double = 1.2
+    @Persisted var paragraphIndent: Double = 0.0
+    @Persisted var paragraphSpacing: Double = 0.0
+}
+

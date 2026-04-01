@@ -30,6 +30,7 @@ struct YabrReadiumEnvironment {
     let httpClient: HTTPClient
     let assetRetriever: AssetRetriever
     let httpServer: GCDHTTPServer
+    let book: CalibreBook?
 }
 
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.

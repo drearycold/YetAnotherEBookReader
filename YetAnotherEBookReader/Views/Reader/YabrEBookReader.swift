@@ -47,7 +47,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
             let httpClient = DefaultHTTPClient()
             let assetRetriever = AssetRetriever(httpClient: httpClient)
             let httpServer = GCDHTTPServer(assetRetriever: assetRetriever)
-            let readiumEnv = YabrReadiumEnvironment(httpClient: httpClient, assetRetriever: assetRetriever, httpServer: httpServer)
+            let readiumEnv = YabrReadiumEnvironment(httpClient: httpClient, assetRetriever: assetRetriever, httpServer: httpServer, book: self.book)
             
             let publicationOpener = PublicationOpener(
                 parser: DefaultPublicationParser(httpClient: httpClient, assetRetriever: assetRetriever, pdfFactory: DefaultPDFDocumentFactory())
