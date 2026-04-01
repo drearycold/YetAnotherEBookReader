@@ -76,6 +76,9 @@ class YabrReadiumReaderViewController:
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        self.edgesForExtendedLayout = .all
+        self.extendedLayoutIncludesOpaqueBars = true
+        
         view.backgroundColor = .white
       
         navigationItem.rightBarButtonItems = makeNavigationBarButtons()
