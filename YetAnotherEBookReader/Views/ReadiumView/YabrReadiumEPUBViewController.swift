@@ -50,12 +50,20 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 self.preferences = self.readiumPrefs!.toEPUBPreferences()
                 navigator.submitPreferences(self.preferences)
                 
+                // Set initial background color to match theme
+                self.view.backgroundColor = self.readiumPrefs?.themeColor ?? .white
+                
                 // Observe changes from SwiftUI
                 self.prefsToken = self.readiumPrefs?.observe { [weak self] change in
                     guard let self = self, let prefs = self.readiumPrefs else { return }
                     if case .change = change {
                         self.preferences = prefs.toEPUBPreferences()
                         self.epubNavigator.submitPreferences(self.preferences)
+                        
+                        // Animate background color change for smooth theme transition
+                        UIView.animate(withDuration: 0.3) {
+                            self.view.backgroundColor = prefs.themeColor
+                        }
                     }
                 }
             }
@@ -72,6 +80,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        // Ensure navigator background is clear so host view background shows through Safe Areas
+        navigator.view.backgroundColor = .clear
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -175,6 +186,18 @@ extension YabrReadiumEPUBViewController: UIPopoverPresentationControllerDelegate
 // MARK: - ReadiumPreferenceRealm Extensions
 
 extension ReadiumPreferenceRealm {
+    
+    var themeColor: UIColor {
+        switch themeMode {
+        case 1: // Sepia
+            return UIColor(red: 0.96, green: 0.93, blue: 0.87, alpha: 1.0)
+        case 2: // Dark
+            return .black
+        default: // Light
+            return .white
+        }
+    }
+
     func toEPUBPreferences() -> EPUBPreferences {
         EPUBPreferences(
             columnCount: self.columnCount == 0 ? .auto : (self.columnCount == 1 ? .one : .two),

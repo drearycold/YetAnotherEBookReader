@@ -15,7 +15,18 @@ import ReadiumAdapterGCDWebServer
 import ReadiumGCDWebServer
 
 @available(macCatalyst 14.0, *)
-struct YabrEBookReader: UIViewControllerRepresentable {
+struct YabrEBookReader: View {
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
+    
+    var body: some View {
+        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo)
+            .ignoresSafeArea()
+    }
+}
+
+@available(macCatalyst 14.0, *)
+struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
@@ -36,7 +47,7 @@ struct YabrEBookReader: UIViewControllerRepresentable {
         let nav = YabrEBookReaderNavigationController(modelData: modelData, book: book, readerInfo: readerInfo)
         nav.modelData = modelData
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
-        nav.navigationBar.isTranslucent = false
+        nav.navigationBar.isTranslucent = true
 
 //        #if canImport(R2Shared)
         if (readerInfo.format == Format.EPUB && readerInfo.readerType == ReaderType.ReadiumEPUB)
