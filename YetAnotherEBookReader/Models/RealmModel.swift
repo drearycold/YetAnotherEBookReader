@@ -1429,7 +1429,7 @@ extension PDFOptions: Persistable {
     }
 }
 
-class ReadiumPreferenceRealm: Object {
+class ReadiumPreferenceRealm: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var id: String = ""
     
     @Persisted var themeMode: Int = 0

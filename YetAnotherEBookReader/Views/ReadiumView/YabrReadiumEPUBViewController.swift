@@ -8,6 +8,7 @@
 import Foundation
 import UIKit
 import SwiftUI
+import RealmSwift
 import ReadiumShared
 import ReadiumNavigator
 
@@ -19,7 +20,8 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     var popoverUserconfigurationAnchor: UIBarButtonItem?
     
     private var preferences = EPUBPreferences()
-    private var preferenceStore: ReadiumPreferenceStore?
+    private var readiumPrefs: ReadiumPreferenceRealm?
+    private var prefsToken: NotificationToken?
 
     init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
         let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation)
@@ -30,80 +32,38 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         
         // Initialize preference store and load preferences
         if let book = environment.book {
-            let store = ReadiumPreferenceStore(server: book.library.server)
-            self.preferenceStore = store
-            
-            if let savedPrefs = store.load(id: book.readPos.bookPrefId) {
-                // Apply saved preferences to initial state
-                self.preferences = EPUBPreferences(
-                    columnCount: savedPrefs.columnCount == 0 ? .auto : (savedPrefs.columnCount == 1 ? .one : .two),
-                    fontFamily: savedPrefs.fontFamily == "Original" ? nil : FontFamily(rawValue: savedPrefs.fontFamily),
-                    fontSize: savedPrefs.fontSizePercentage / 100.0,
-                    fontWeight: savedPrefs.fontWeight,
-                    hyphens: savedPrefs.hyphens,
-                    imageFilter: savedPrefs.imageFilter == 0 ? nil : (savedPrefs.imageFilter == 1 ? .darken : .invert),
-                    letterSpacing: savedPrefs.letterSpacing,
-                    lineHeight: savedPrefs.lineHeight,
-                    pageMargins: savedPrefs.pageMargins,
-                    paragraphIndent: savedPrefs.paragraphIndent,
-                    paragraphSpacing: savedPrefs.paragraphSpacing,
-                    publisherStyles: savedPrefs.publisherStyles,
-                    scroll: savedPrefs.scroll,
-                    textAlign: {
-                        switch savedPrefs.textAlign {
-                        case 1: return .start
-                        case 2: return .left
-                        case 3: return .right
-                        case 4: return .justify
-                        default: return nil
-                        }
-                    }(),
-                    textNormalization: savedPrefs.textNormalization,
-                    theme: {
-                        switch savedPrefs.themeMode {
-                        case 1: return .sepia
-                        case 2: return .dark
-                        default: return .light
-                        }
-                    }(),
-                    typeScale: savedPrefs.typeScale,
-                    wordSpacing: savedPrefs.wordSpacing
-                )
+            let config = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
+            if let realm = try? Realm(configuration: config) {
+                let bookId = book.readPos.bookPrefId
+                if let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) {
+                    self.readiumPrefs = savedPrefs
+                } else {
+                    let newPrefs = ReadiumPreferenceRealm()
+                    newPrefs.id = bookId
+                    newPrefs.update(from: navigator.settings)
+                    try? realm.write {
+                        realm.add(newPrefs)
+                    }
+                    self.readiumPrefs = newPrefs
+                }
                 
-                // Submit loaded preferences to navigator
+                self.preferences = self.readiumPrefs!.toEPUBPreferences()
                 navigator.submitPreferences(self.preferences)
-            } else {
-                // Initialize preferences from current settings if no saved ones
-                self.preferences = EPUBPreferences(
-                    backgroundColor: navigator.settings.backgroundColor,
-                    columnCount: navigator.settings.columnCount,
-                    fontFamily: navigator.settings.fontFamily,
-                    fontSize: navigator.settings.fontSize,
-                    fontWeight: navigator.settings.fontWeight,
-                    hyphens: navigator.settings.hyphens,
-                    imageFilter: navigator.settings.imageFilter,
-                    language: navigator.settings.language,
-                    letterSpacing: navigator.settings.letterSpacing,
-                    ligatures: navigator.settings.ligatures,
-                    lineHeight: navigator.settings.lineHeight,
-                    offsetFirstPage: navigator.settings.offsetFirstPage,
-                    pageMargins: navigator.settings.pageMargins,
-                    paragraphIndent: navigator.settings.paragraphIndent,
-                    paragraphSpacing: navigator.settings.paragraphSpacing,
-                    publisherStyles: navigator.settings.publisherStyles,
-                    readingProgression: navigator.settings.readingProgression,
-                    scroll: navigator.settings.scroll,
-                    spread: navigator.settings.spread,
-                    textAlign: navigator.settings.textAlign,
-                    textColor: navigator.settings.textColor,
-                    textNormalization: navigator.settings.textNormalization,
-                    theme: navigator.settings.theme,
-                    typeScale: navigator.settings.typeScale,
-                    verticalText: navigator.settings.verticalText,
-                    wordSpacing: navigator.settings.wordSpacing
-                )
+                
+                // Observe changes from SwiftUI
+                self.prefsToken = self.readiumPrefs?.observe { [weak self] change in
+                    guard let self = self, let prefs = self.readiumPrefs else { return }
+                    if case .change = change {
+                        self.preferences = prefs.toEPUBPreferences()
+                        self.epubNavigator.submitPreferences(self.preferences)
+                    }
+                }
             }
         }
+    }
+    
+    deinit {
+        prefsToken?.invalidate()
     }
     
     var epubNavigator: EPUBNavigatorViewController {
@@ -134,23 +94,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     }
     
     @objc func presentSettings() {
-        let vm = YabrReaderSettingsViewModel(
-            engineType: .readium,
-            readiumPrefs: self.preferences,
-            readiumMetadata: self.publication.metadata
-        )
-        vm.onReadiumPreferencesSubmit = { [weak self, weak vm] newPrefs in
-            guard let self = self, let vm = vm else { return }
-            self.preferences = newPrefs
-            self.epubNavigator.submitPreferences(newPrefs)
-            
-            // Save to persistence
-            if let book = self.environment.book {
-                self.preferenceStore?.save(id: book.readPos.bookPrefId, from: vm)
-            }
-        }
+        guard let prefs = readiumPrefs else { return }
         
-        let settingsView = YabrReaderSettingsView(viewModel: vm)
+        let settingsView = YabrReaderSettingsView(prefs: prefs)
         let hostingController = UIHostingController(rootView: settingsView)
         hostingController.modalPresentationStyle = .popover
         hostingController.popoverPresentationController?.barButtonItem = popoverUserconfigurationAnchor
@@ -223,5 +169,102 @@ extension YabrReadiumEPUBViewController: UIPopoverPresentationControllerDelegate
     func adaptivePresentationStyle(for controller: UIPresentationController, traitCollection: UITraitCollection) -> UIModalPresentationStyle
     {
         return .none
+    }
+}
+
+// MARK: - ReadiumPreferenceRealm Extensions
+
+extension ReadiumPreferenceRealm {
+    func toEPUBPreferences() -> EPUBPreferences {
+        EPUBPreferences(
+            columnCount: self.columnCount == 0 ? .auto : (self.columnCount == 1 ? .one : .two),
+            fontFamily: self.fontFamily == "Original" ? nil : FontFamily(rawValue: self.fontFamily),
+            fontSize: self.fontSizePercentage / 100.0,
+            fontWeight: self.fontWeight,
+            hyphens: self.hyphens,
+            imageFilter: self.imageFilter == 0 ? nil : (self.imageFilter == 1 ? .darken : .invert),
+            letterSpacing: self.letterSpacing,
+            lineHeight: self.lineHeight,
+            pageMargins: self.pageMargins,
+            paragraphIndent: self.paragraphIndent,
+            paragraphSpacing: self.paragraphSpacing,
+            publisherStyles: self.publisherStyles,
+            scroll: self.scroll,
+            textAlign: {
+                switch self.textAlign {
+                case 1: return .start
+                case 2: return .left
+                case 3: return .right
+                case 4: return .justify
+                default: return nil
+                }
+            }(),
+            textNormalization: self.textNormalization,
+            theme: {
+                switch self.themeMode {
+                case 1: return .sepia
+                case 2: return .dark
+                default: return .light
+                }
+            }(),
+            typeScale: self.typeScale,
+            wordSpacing: self.wordSpacing
+        )
+    }
+    
+    func update(from settings: EPUBSettings) {
+        switch settings.theme {
+        case .light: self.themeMode = 0
+        case .sepia: self.themeMode = 1
+        case .dark: self.themeMode = 2
+        }
+        
+        self.fontSizePercentage = settings.fontSize * 100.0
+        
+        if let fontFamily = settings.fontFamily {
+            self.fontFamily = fontFamily.rawValue
+        } else {
+            self.fontFamily = "Original"
+        }
+        
+        self.lineHeight = settings.lineHeight ?? 1.2
+        self.pageMargins = settings.pageMargins
+        self.publisherStyles = settings.publisherStyles
+        self.scroll = settings.scroll
+        
+        switch settings.textAlign {
+        case .start: self.textAlign = 1
+        case .left: self.textAlign = 2
+        case .right: self.textAlign = 3
+        case .justify: self.textAlign = 4
+        default: self.textAlign = 0
+        }
+        
+        switch settings.columnCount {
+        case .auto: self.columnCount = 0
+        case .one: self.columnCount = 1
+        case .two: self.columnCount = 2
+        default: self.columnCount = 0
+        }
+        
+        self.fontWeight = settings.fontWeight ?? 1.0
+        self.letterSpacing = settings.letterSpacing ?? 0.0
+        self.wordSpacing = settings.wordSpacing ?? 0.0
+        self.hyphens = settings.hyphens ?? false
+        
+        if let filter = settings.imageFilter {
+            switch filter {
+            case .darken: self.imageFilter = 1
+            case .invert: self.imageFilter = 2
+            @unknown default: self.imageFilter = 0
+            }
+        } else {
+            self.imageFilter = 0
+        }
+        
+        self.textNormalization = settings.textNormalization
+        self.typeScale = settings.typeScale ?? 1.2
+        self.paragraphIndent = settings.paragraphIndent ?? 0.0
+        self.paragraphSpacing = settings.paragraphSpacing ?? 0.0
     }
 }
