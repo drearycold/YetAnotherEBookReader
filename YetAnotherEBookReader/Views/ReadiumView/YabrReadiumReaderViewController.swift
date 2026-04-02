@@ -5,18 +5,6 @@
 //  Created by 京太郎 on 2021/9/27.
 //
 
-//
-//  ReaderViewController.swift
-//  r2-testapp-swift
-//
-//  Created by Mickaël Menu on 07.03.19.
-//
-//  Copyright 2019 European Digital Reading Lab. All rights reserved.
-//  Licensed to the Readium Foundation under one or more contributor license agreements.
-//  Use of this source code is governed by a BSD-style license which is detailed in the
-//  LICENSE file present in the project repository where this source code is maintained.
-//
-
 import SafariServices
 import UIKit
 import ReadiumNavigator
@@ -33,6 +21,12 @@ struct YabrReadiumEnvironment {
     let book: CalibreBook?
 }
 
+protocol YabrReadiumMetaSource {
+    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController) -> BookDeviceReadingPosition?
+    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController, update readPosition: (Double, Double, [String: Any], String))
+    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UINavigationController)?
+}
+
 /// This class is meant to be subclassed by each publication format view controller. It contains the shared behavior, eg. navigation bar toggling.
 class YabrReadiumReaderViewController:
     UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate {
@@ -43,7 +37,11 @@ class YabrReadiumReaderViewController:
     
     let environment: YabrReadiumEnvironment
     
+    var readiumMetaSource: YabrReadiumMetaSource? = nil
+    
     private(set) var stackView: UIStackView!
+    private var stackViewTopConstraint: NSLayoutConstraint!
+    
     private lazy var positionLabel = UILabel()
     
     /// This regex matches any string with at least 2 consecutive letters (not limited to ASCII).
@@ -61,7 +59,7 @@ class YabrReadiumReaderViewController:
 
         super.init(nibName: nil, bundle: nil)
         
-        NotificationCenter.default.addObserver(self, selector: #selector(voiceOverStatusDidChange), name: Notification.Name(UIAccessibilityVoiceOverStatusChanged), object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(voiceOverStatusDidChange), name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil)
     }
 
     @available(*, unavailable)
@@ -76,6 +74,7 @@ class YabrReadiumReaderViewController:
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        // Allow content to flow behind navigation bar
         self.edgesForExtendedLayout = .all
         self.extendedLayoutIncludesOpaqueBars = true
         
@@ -89,13 +88,14 @@ class YabrReadiumReaderViewController:
         stackView.axis = .vertical
         view.addSubview(stackView)
         stackView.translatesAutoresizingMaskIntoConstraints = false
-        let topConstraint = stackView.topAnchor.constraint(equalTo: view.topAnchor)
-        // `accessibilityTopMargin` takes precedence when VoiceOver is enabled.
-        topConstraint.priority = .defaultHigh
+        
+        // Pin stackView to view.topAnchor with a dynamic constraint to handle status bar vs nav bar
+        stackViewTopConstraint = stackView.topAnchor.constraint(equalTo: view.topAnchor)
+        
         NSLayoutConstraint.activate([
-            topConstraint,
+            stackViewTopConstraint,
             stackView.rightAnchor.constraint(equalTo: view.rightAnchor),
-            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            stackView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             stackView.leftAnchor.constraint(equalTo: view.leftAnchor)
         ])
 
@@ -111,8 +111,29 @@ class YabrReadiumReaderViewController:
         view.addSubview(positionLabel)
         NSLayoutConstraint.activate([
             positionLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            positionLabel.bottomAnchor.constraint(equalTo: navigator.view.bottomAnchor, constant: -20)
+            positionLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10)
         ])
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        
+        // Calculate the effective top inset to avoid status bar but ignore navigation bar
+        let statusBarHeight: CGFloat
+        if let nav = navigationController, !nav.isNavigationBarHidden {
+            // When nav bar is visible, safeAreaInsets.top includes both status bar and nav bar
+            let navBarHeight = nav.navigationBar.frame.height
+            statusBarHeight = max(0, view.safeAreaInsets.top - navBarHeight)
+        } else {
+            // When nav bar is hidden, safeAreaInsets.top is just the status bar (or notch) height
+            statusBarHeight = view.safeAreaInsets.top
+        }
+        
+        // Update constraint to ensure content starts exactly below the system safe area inset (status bar)
+        // while allowing it to be covered by the navigation bar when it appears.
+        if stackViewTopConstraint.constant != statusBarHeight {
+            stackViewTopConstraint.constant = statusBarHeight
+        }
     }
     
     override func willMove(toParent parent: UIViewController?) {
@@ -134,10 +155,6 @@ class YabrReadiumReaderViewController:
         var buttons: [UIBarButtonItem] = []
         // Table of Contents
         buttons.append(UIBarButtonItem(image: UIImage(systemName: "line.3.horizontal"), style: .plain, target: self, action: #selector(presentOutline)))
-        // DRM management
-        //        if publication.isRestricted {
-        //            buttons.append(UIBarButtonItem(image: #imageLiteral(resourceName: "drm"), style: .plain, target: self, action: #selector(presentDRMManagement)))
-        //        }
         
         return buttons
     }
@@ -157,43 +174,21 @@ class YabrReadiumReaderViewController:
     }
     
     override var prefersStatusBarHidden: Bool {
-        return navigationBarHidden && !UIAccessibility.isVoiceOverRunning
+        return false
     }
 
     
-    // MARK: - Locations
-    /// FIXME: This should be implemented in a shared Navigator interface, using Locators.
-
     // MARK: - Outlines
 
     @objc func presentOutline() {
         // Display YABR TOC UI here
     }
     
-    // MARK: - DRM
-    
-/*
-    @objc func presentDRMManagement() {
-        guard publication.isProtected else {
-            return
-        }
-        moduleDelegate?.presentDRM(for: publication, from: self)
-    }
-*/
-    
-
     // MARK: - Accessibility
     
     /// Constraint used to shift the content under the navigation bar, since it is always visible when VoiceOver is running.
     private lazy var accessibilityTopMargin: NSLayoutConstraint = {
-        let topAnchor: NSLayoutYAxisAnchor = {
-            if #available(iOS 11.0, *) {
-                return self.view.safeAreaLayoutGuide.topAnchor
-            } else {
-                return self.topLayoutGuide.bottomAnchor
-            }
-        }()
-        return self.stackView.topAnchor.constraint(equalTo: topAnchor)
+        return self.stackView.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor)
     }()
     
     private lazy var accessibilityToolbar: UIToolbar = {
@@ -248,102 +243,28 @@ class YabrReadiumReaderViewController:
 
         positionLabel.text = {
             if let position = locator.locations.position {
-                return "\(position)"
-            } else if let progression = locator.locations.totalProgression {
-                return "\(progression)%"
+                return "\(position) / \(self.publication.readingOrder.count)"
             } else {
-                return nil
+                return ""
             }
         }()
     }
-    
-    func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
-        // SFSafariViewController crashes when given an URL without an HTTP scheme.
-        guard url.isHTTP else {
-            return
-        }
-        present(SFSafariViewController(url: url), animated: true)
-    }
-    
+
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
-//        moduleDelegate?.presentError(error, from: self)
-    }
-    
-    func navigator(_ navigator: Navigator, shouldNavigateToNoteAt link: Link, content: String, referrer: String?) -> Bool {
-        
-        var title = referrer
-        if let t = title {
-            title = try? clean(t, .none())
-        }
-        if !suitableTitle(title) {
-            title = nil
-        }
-        
-        let content = (try? clean(content, .none())) ?? ""
-        let page =
-        """
-        <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            </head>
-            <body>
-                \(content)
-            </body>
-        </html>
-        """
-        
-        let wk = WKWebView()
-        wk.loadHTMLString(page, baseURL: nil)
-        
-        let vc = UIViewController()
-        vc.view = wk
-        vc.navigationItem.title = title
-        vc.navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(dismissDictViewer))
-        
-        let nav = UINavigationController(rootViewController: vc)
-        nav.modalPresentationStyle = .formSheet
-        self.present(nav, animated: true, completion: nil)
-        
-        return false
+        print("ReadiumReaderViewController presentError \(error)")
     }
 
-    @objc func dismissDictViewer() {
-        dismiss(animated: true, completion: nil)
-    }
-    
-    /// Checks to ensure the title is non-nil and contains at least 2 letters.
-    func suitableTitle(_ title: String?) -> Bool {
-        guard let title = title else { return false }
-        let range = NSRange(location: 0, length: title.utf16.count)
-        let match = YabrReadiumReaderViewController.noterefTitleRegex.firstMatch(in: title, range: range)
-        return match != nil
-    }
-    
-    // MARK: - VisualNavigatorDelegate
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
-        let viewport = navigator.view.bounds
-        // Skips to previous/next pages if the tap is on the content edges.
-        let thresholdRange = 0...(0.2 * viewport.width)
-        var moved = false
-        if thresholdRange ~= point.x {
-            Task { moved = await navigator.goLeft(options: .none) }
-        } else if thresholdRange ~= (viewport.maxX - point.x) {
-            Task { moved = await navigator.goRight(options: .none) }
-        }
+        let viewport = view.bounds
+        let leftEdge = viewport.width * 0.2
+        let rightEdge = viewport.width * 0.8
         
-        if !moved {
+        if point.x < leftEdge {
+            Task { await navigator.goLeft(options: .animated) }
+        } else if point.x > rightEdge {
+            Task { await navigator.goRight(options: .animated) }
+        } else {
             toggleNavigationBar()
         }
     }
-    
-    //MARK: - YabrReadiumMetaSource
-    var readiumMetaSource: YabrReadiumMetaSource? = nil
-}
-
-protocol YabrReadiumMetaSource {
-    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController) -> BookDeviceReadingPosition?
-    
-    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController, update readPosition: (Double, Double, [String: Any], String))
-    
-    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UINavigationController)?
 }

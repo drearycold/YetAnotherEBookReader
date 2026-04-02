@@ -18,6 +18,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
 
     var popoverUserconfigurationAnchor: UIBarButtonItem?
+    var popoverNavigationAnchor: UIBarButtonItem?
     
     private var preferences = EPUBPreferences()
     private var readiumPrefs: ReadiumPreferenceRealm?
@@ -53,6 +54,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 // Set initial background color to match theme
                 self.view.backgroundColor = self.readiumPrefs?.themeColor ?? .white
                 
+                // Apply theme to Navigation Bar immediately in init
+                self.updateNavigationBarTheme()
+                
                 // Observe changes from SwiftUI
                 self.prefsToken = self.readiumPrefs?.observe { [weak self] change in
                     guard let self = self, let prefs = self.readiumPrefs else { return }
@@ -63,6 +67,8 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                         // Animate background color change for smooth theme transition
                         UIView.animate(withDuration: 0.3) {
                             self.view.backgroundColor = prefs.themeColor
+                            self.updateNavigationBarTheme()
+                            self.setNeedsStatusBarAppearanceUpdate()
                         }
                     }
                 }
@@ -83,6 +89,14 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         
         // Ensure navigator background is clear so host view background shows through Safe Areas
         navigator.view.backgroundColor = .clear
+        
+        // Reinforce theme on load
+        updateNavigationBarTheme()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        updateNavigationBarTheme()
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -100,6 +114,11 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         let settingsButton = UIBarButtonItem(image: UIImage(systemName: "textformat.size"), style: .plain, target: self, action: #selector(presentSettings))
         buttons.insert(settingsButton, at: 0)
         popoverUserconfigurationAnchor = settingsButton
+        
+        // Navigation panel button
+        let tocButton = UIBarButtonItem(image: UIImage(systemName: "list.bullet"), style: .plain, target: self, action: #selector(presentNavigationPanel))
+        buttons.insert(tocButton, at: 1)
+        popoverNavigationAnchor = tocButton
 
         return buttons
     }
@@ -114,6 +133,62 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         hostingController.popoverPresentationController?.delegate = self
         
         present(hostingController, animated: true)
+    }
+    
+    @objc func presentNavigationPanel() {
+        let vm = YabrReaderNavigationViewModel(publication: self.publication)
+        vm.loadAnnotations(book: environment.book)
+        
+        let navigationView = YabrReaderNavigationView(viewModel: vm)
+        let hostingController = UIHostingController(rootView: navigationView)
+        hostingController.modalPresentationStyle = .popover
+        hostingController.popoverPresentationController?.barButtonItem = popoverNavigationAnchor
+        hostingController.popoverPresentationController?.delegate = self
+        
+        vm.onNavigateToLink = { [weak self, weak hostingController] link in
+            hostingController?.dismiss(animated: true) {
+                Task { [weak self] in
+                    await self?.navigator.go(to: link)
+                }
+            }
+        }
+        
+        vm.onNavigateToLocator = { [weak self, weak hostingController] locator in
+            hostingController?.dismiss(animated: true) {
+                Task { [weak self] in
+                    await self?.navigator.go(to: locator)
+                }
+            }
+        }
+        
+        present(hostingController, animated: true)
+    }
+    
+    func updateNavigationBarTheme() {
+        guard let prefs = readiumPrefs else { return }
+        
+        let appearance = UINavigationBarAppearance()
+        // Use default or transparent background to allow semi-transparent effect
+        appearance.configureWithDefaultBackground()
+        // Set semi-transparent theme color
+        appearance.backgroundColor = prefs.themeColor.withAlphaComponent(0.85)
+        
+        let textColor: UIColor = (prefs.themeMode == 2) ? .white : .black
+        appearance.titleTextAttributes = [.foregroundColor: textColor]
+        appearance.largeTitleTextAttributes = [.foregroundColor: textColor]
+        
+        // Apply to navigationItem appearances
+        self.navigationItem.standardAppearance = appearance
+        self.navigationItem.scrollEdgeAppearance = appearance
+        self.navigationItem.compactAppearance = appearance
+        
+        if let navBar = navigationController?.navigationBar {
+            navBar.tintColor = (prefs.themeMode == 1) ? UIColor(red: 0.36, green: 0.25, blue: 0.15, alpha: 1.0) : textColor
+        }
+    }
+    
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        return (readiumPrefs?.themeMode == 2) ? .lightContent : .darkContent
     }
     
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
@@ -190,7 +265,7 @@ extension ReadiumPreferenceRealm {
     var themeColor: UIColor {
         switch themeMode {
         case 1: // Sepia
-            return UIColor(red: 0.96, green: 0.93, blue: 0.87, alpha: 1.0)
+            return UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1.0) // #FAF4E8
         case 2: // Dark
             return .black
         default: // Light
