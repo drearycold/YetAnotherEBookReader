@@ -15,7 +15,12 @@ import ReadiumAdapterGCDWebServer
 final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNavigatorDelegate {
     
     init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        let navigator = try! PDFNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
+        let navigator: PDFNavigatorViewController
+        do {
+            navigator = try PDFNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
+        } catch {
+            fatalError("Failed to initialize PDFNavigatorViewController: \(error)")
+        }
         
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
         
@@ -29,7 +34,8 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)
         
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
             var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
             
             updatedReadingPosition.2["pageNumber"] = locator.locations.position
@@ -41,7 +47,7 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
             updatedReadingPosition.0 = locator.locations.progression ?? 0.0
             updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
             
-            let tocResult = await publication.tableOfContents()
+            let tocResult = await self.publication.tableOfContents()
             let tableOfContents = (try? tocResult.get()) ?? []
             
             if let title = locator.title {

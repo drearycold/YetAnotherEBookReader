@@ -419,10 +419,11 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         print("EpubReadiumReaderContainerNavigatorDelegate \(locator)")
         print("EpubReadiumReaderContainerNavigatorDelegate otherLocations=\(locator.locations.otherLocations)")
         
-        Task {
+        Task { [weak self] in
+            guard let self = self else { return }
             var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
             
-            if let index = publication.readingOrder.firstIndexWithHREF(locator.href) {
+            if let index = self.publication.readingOrder.firstIndexWithHREF(locator.href) {
                 updatedReadingPosition.2["pageNumber"] = index + 1
             } else {
                 updatedReadingPosition.2["pageNumber"] = 1
@@ -433,7 +434,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             updatedReadingPosition.0 = locator.locations.progression ?? 0.0
             updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
             
-            let tocResult = await publication.tableOfContents()
+            let tocResult = await self.publication.tableOfContents()
             let tableOfContents = (try? tocResult.get()) ?? []
             
             if let title = locator.title {
