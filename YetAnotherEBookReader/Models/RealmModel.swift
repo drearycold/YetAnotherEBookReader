@@ -1451,5 +1451,7 @@ class ReadiumPreferenceRealm: Object, ObjectKeyIdentifiable {
     @Persisted var typeScale: Double = 1.2
     @Persisted var paragraphIndent: Double = 0.0
     @Persisted var paragraphSpacing: Double = 0.0
+    
+    @Persisted var volumeKeyPaging: Bool = false
 }
 

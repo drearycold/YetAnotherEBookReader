@@ -43,6 +43,7 @@ struct YabrReaderSettingsView: View {
                     }
                     
                     Toggle("Scroll Mode", isOn: $prefs.scroll)
+                    Toggle("Volume Key Paging", isOn: $prefs.volumeKeyPaging)
                     
                     if !prefs.scroll {
                         Picker("Columns", selection: $prefs.columnCount) {

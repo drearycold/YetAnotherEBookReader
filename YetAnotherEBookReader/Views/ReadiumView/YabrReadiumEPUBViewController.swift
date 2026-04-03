@@ -11,6 +11,9 @@ import SwiftUI
 import RealmSwift
 import ReadiumShared
 import ReadiumNavigator
+import AVFoundation
+import MediaPlayer
+import WebKit
 
 import ReadiumAdapterGCDWebServer
 
@@ -23,6 +26,11 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     private var preferences = EPUBPreferences()
     private var readiumPrefs: ReadiumPreferenceRealm?
     private var prefsToken: NotificationToken?
+    
+    private var volumeView: MPVolumeView?
+    private var volumeObserver: NSKeyValueObservation?
+    private var isHandlingVolumeChange = false
+    private var lastRequestedVolume: Float?
 
     init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
         let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation)
@@ -57,6 +65,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 // Apply theme to Navigation Bar immediately in init
                 self.updateNavigationBarTheme()
                 
+                // Initial volume key paging setup
+                self.setupVolumeKeyPaging()
+                
                 // Observe changes from SwiftUI
                 self.prefsToken = self.readiumPrefs?.observe { [weak self] change in
                     guard let self = self, let prefs = self.readiumPrefs else { return }
@@ -70,6 +81,9 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                             self.updateNavigationBarTheme()
                             self.setNeedsStatusBarAppearanceUpdate()
                         }
+                        
+                        // React to volume key paging toggle
+                        self.setupVolumeKeyPaging()
                     }
                 }
             }
@@ -77,6 +91,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     }
     
     deinit {
+        teardownVolumeKeyPaging()
         prefsToken?.invalidate()
     }
     
@@ -90,13 +105,13 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         // Ensure navigator background is clear so host view background shows through Safe Areas
         navigator.view.backgroundColor = .clear
         
-        // Reinforce theme on load
         updateNavigationBarTheme()
     }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         updateNavigationBarTheme()
+        setupVolumeKeyPaging()
     }
     
     override func viewDidAppear(_ animated: Bool) {
@@ -105,6 +120,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
 
     override open func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        teardownVolumeKeyPaging()
     }
 
     override func makeNavigationBarButtons() -> [UIBarButtonItem] {
@@ -168,16 +184,13 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         guard let prefs = readiumPrefs else { return }
         
         let appearance = UINavigationBarAppearance()
-        // Use default or transparent background to allow semi-transparent effect
         appearance.configureWithDefaultBackground()
-        // Set semi-transparent theme color
         appearance.backgroundColor = prefs.themeColor.withAlphaComponent(0.85)
         
         let textColor: UIColor = (prefs.themeMode == 2) ? .white : .black
         appearance.titleTextAttributes = [.foregroundColor: textColor]
         appearance.largeTitleTextAttributes = [.foregroundColor: textColor]
         
-        // Apply to navigationItem appearances
         self.navigationItem.standardAppearance = appearance
         self.navigationItem.scrollEdgeAppearance = appearance
         self.navigationItem.compactAppearance = appearance
@@ -189,6 +202,213 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     
     override var preferredStatusBarStyle: UIStatusBarStyle {
         return (readiumPrefs?.themeMode == 2) ? .lightContent : .darkContent
+    }
+    
+    private func getVerticalScrollViews(from view: UIView, into list: inout [WKWebView]) {
+        if let webView = view as? WKWebView {
+            list.append(webView)
+        }
+        for subview in view.subviews {
+            getVerticalScrollViews(from: subview, into: &list)
+        }
+    }
+    
+    private func getActiveVerticalScrollView() -> UIScrollView? {
+        var webViews = [WKWebView]()
+        getVerticalScrollViews(from: self.navigator.view, into: &webViews)
+        
+        if webViews.isEmpty { return nil }
+        if webViews.count == 1 { return webViews[0].scrollView }
+        
+        // If multiple exist (e.g. during transition), find the one most central to the container
+        let containerBounds = self.navigator.view.bounds
+        let containerCenter = CGPoint(x: containerBounds.midX, y: containerBounds.midY)
+        
+        return webViews.sorted { (wv1, wv2) -> Bool in
+            let frame1 = wv1.convert(wv1.bounds, to: self.navigator.view)
+            let frame2 = wv2.convert(wv2.bounds, to: self.navigator.view)
+            let dist1 = pow(frame1.midX - containerCenter.x, 2) + pow(frame1.midY - containerCenter.y, 2)
+            let dist2 = pow(frame2.midX - containerCenter.x, 2) + pow(frame2.midY - containerCenter.y, 2)
+            return dist1 < dist2
+        }.first?.scrollView
+    }
+    
+    private func handleVolumeKey(up: Bool) {
+        let isScroll = self.preferences.scroll ?? false
+        let isRTL = self.preferences.readingProgression == .rtl
+        
+        if isScroll {
+            guard let scrollView = getActiveVerticalScrollView() else {
+                print("VolumeKeyPaging: No active scroll view found, falling back to jump")
+                Task {
+                    if up { await self.epubNavigator.goBackward(options: .animated) }
+                    else { await self.epubNavigator.goForward(options: .animated) }
+                }
+                return
+            }
+            
+            let offset = scrollView.contentOffset
+            let viewHeight = scrollView.bounds.height
+            let contentHeight = scrollView.contentSize.height
+            let scrollAmount = max(0, viewHeight - 80)
+            
+            if up {
+                if offset.y <= 0 {
+                    print("VolumeKeyPaging: At top, jumping backward")
+                    Task { await self.epubNavigator.goBackward(options: .animated) }
+                } else {
+                    let newY = max(0, offset.y - scrollAmount)
+                    print("VolumeKeyPaging: Scrolling up to \(newY)")
+                    scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
+                }
+            } else {
+                let maxOffsetY = max(0, contentHeight - viewHeight)
+                if offset.y >= maxOffsetY - 1 { // 1pt tolerance
+                    print("VolumeKeyPaging: At bottom, jumping forward")
+                    Task { await self.epubNavigator.goForward(options: .animated) }
+                } else {
+                    let newY = min(maxOffsetY, offset.y + scrollAmount)
+                    print("VolumeKeyPaging: Scrolling down to \(newY)")
+                    scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
+                }
+            }
+        } else {
+            Task {
+                if up {
+                    if isRTL {
+                        await self.epubNavigator.goRight(options: .animated)
+                    } else {
+                        await self.epubNavigator.goLeft(options: .animated)
+                    }
+                } else {
+                    if isRTL {
+                        await self.epubNavigator.goLeft(options: .animated)
+                    } else {
+                        await self.epubNavigator.goRight(options: .animated)
+                    }
+                }
+            }
+        }
+    }
+    
+    func setupVolumeKeyPaging() {
+        let isEnabled = readiumPrefs?.volumeKeyPaging ?? false
+        
+        guard isEnabled else {
+            teardownVolumeKeyPaging()
+            return
+        }
+        
+        // Ensure MPVolumeView is in hierarchy to suppress system HUD and capture events
+        if volumeView == nil {
+            let view = MPVolumeView(frame: CGRect(x: 0, y: 0, width: 1, height: 1))
+            view.clipsToBounds = true
+            view.alpha = 0.01
+            view.isUserInteractionEnabled = false
+            self.view.addSubview(view)
+            self.volumeView = view
+            
+            // Force layout to instantiate the UISlider quickly
+            view.setNeedsLayout()
+            view.layoutIfNeeded()
+            print("VolumeKeyPaging: MPVolumeView initialized")
+        }
+        
+        let session = AVAudioSession.sharedInstance()
+        do {
+            try session.setCategory(.ambient, options: [.mixWithOthers])
+            try session.setActive(true)
+            print("VolumeKeyPaging: AVAudioSession activated")
+        } catch {
+            print("VolumeKeyPaging: Failed to activate audio session: \(error)")
+        }
+        
+        setSystemVolume(0.5)
+        
+        if volumeObserver == nil {
+            volumeObserver = session.observe(\.outputVolume, options: [.new, .old]) { [weak self] session, change in
+                guard let self = self,
+                      let newVol = change.newValue,
+                      let oldVol = change.oldValue else { return }
+                
+                print("VolumeKeyPaging: RAW Change detected \(oldVol) -> \(newVol)")
+                
+                // 1. Exact Programmatic Match: Ignore completely
+                if let lastReq = self.lastRequestedVolume, abs(newVol - lastReq) < 0.01 {
+                    print("VolumeKeyPaging: Exact programmatic change handled (\(newVol))")
+                    self.lastRequestedVolume = nil
+                    return
+                }
+                
+                // 2. Determine direction
+                let isUp: Bool
+                
+                // If there's a massive jump (>0.15) while a request is pending, our programmatic setting
+                // was combined with a physical key press. Compare against the TARGET, not the old volume.
+                if let lastReq = self.lastRequestedVolume, abs(newVol - oldVol) > 0.15 {
+                    print("VolumeKeyPaging: Massive jump. Target: \(lastReq), Actual: \(newVol)")
+                    // If the actual volume fell short of the 0.5 target, they pressed DOWN.
+                    // If it overshot the 0.5 target, they pressed UP.
+                    isUp = newVol > lastReq
+                } else {
+                    // Normal user step
+                    isUp = newVol > oldVol
+                }
+                
+                // 3. Clear pending request flags
+                self.lastRequestedVolume = nil
+                
+                // 4. Rate Limiting
+                if self.isHandlingVolumeChange { 
+                    print("VolumeKeyPaging: Busy, skipping event")
+                    return 
+                }
+                self.isHandlingVolumeChange = true
+                
+                // 5. Process
+                print("VolumeKeyPaging: USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
+                self.handleVolumeKey(up: isUp)
+                
+                // 6. Reset to baseline 0.5
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    self.setSystemVolume(0.5)
+                    self.isHandlingVolumeChange = false
+                }
+            }
+            print("VolumeKeyPaging: Observer attached")
+        }
+    }
+    
+    func teardownVolumeKeyPaging() {
+        print("VolumeKeyPaging: Teardown called")
+        volumeObserver?.invalidate()
+        volumeObserver = nil
+        volumeView?.removeFromSuperview()
+        volumeView = nil
+    }
+    
+    private func setSystemVolume(_ volume: Float, retryCount: Int = 0) {
+        guard let volumeView = volumeView else { return }
+        self.lastRequestedVolume = volume
+        
+        func findSlider(in view: UIView) -> UISlider? {
+            if let slider = view as? UISlider { return slider }
+            for subview in view.subviews {
+                if let found = findSlider(in: subview) { return found }
+            }
+            return nil
+        }
+        
+        if let slider = findSlider(in: volumeView) {
+            DispatchQueue.main.async {
+                slider.value = volume
+            }
+        } else if retryCount < 10 {
+            // Slider might not be ready yet due to lazy loading of MPVolumeView subviews
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                self?.setSystemVolume(volume, retryCount: retryCount + 1)
+            }
+        }
     }
     
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
