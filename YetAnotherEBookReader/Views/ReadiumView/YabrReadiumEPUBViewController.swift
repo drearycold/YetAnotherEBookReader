@@ -327,52 +327,54 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         
         if volumeObserver == nil {
             volumeObserver = session.observe(\.outputVolume, options: [.new, .old]) { [weak self] session, change in
-                guard let self = self,
-                      let newVol = change.newValue,
-                      let oldVol = change.oldValue else { return }
-                
-                print("VolumeKeyPaging: RAW Change detected \(oldVol) -> \(newVol)")
-                
-                // 1. Exact Programmatic Match: Ignore completely
-                if let lastReq = self.lastRequestedVolume, abs(newVol - lastReq) < 0.01 {
-                    print("VolumeKeyPaging: Exact programmatic change handled (\(newVol))")
+                DispatchQueue.main.async {
+                    guard let self = self,
+                          let newVol = change.newValue,
+                          let oldVol = change.oldValue else { return }
+                    
+                    print("VolumeKeyPaging: RAW Change detected \(oldVol) -> \(newVol)")
+                    
+                    // 1. Exact Programmatic Match: Ignore completely
+                    if let lastReq = self.lastRequestedVolume, abs(newVol - lastReq) < 0.01 {
+                        print("VolumeKeyPaging: Exact programmatic change handled (\(newVol))")
+                        self.lastRequestedVolume = nil
+                        return
+                    }
+                    
+                    // 2. Determine direction
+                    let isUp: Bool
+                    
+                    // If there's a massive jump (>0.15) while a request is pending, our programmatic setting
+                    // was combined with a physical key press. Compare against the TARGET, not the old volume.
+                    if let lastReq = self.lastRequestedVolume, abs(newVol - oldVol) > 0.15 {
+                        print("VolumeKeyPaging: Massive jump. Target: \(lastReq), Actual: \(newVol)")
+                        // If the actual volume fell short of the 0.5 target, they pressed DOWN.
+                        // If it overshot the 0.5 target, they pressed UP.
+                        isUp = newVol > lastReq
+                    } else {
+                        // Normal user step
+                        isUp = newVol > oldVol
+                    }
+                    
+                    // 3. Clear pending request flags
                     self.lastRequestedVolume = nil
-                    return
-                }
-                
-                // 2. Determine direction
-                let isUp: Bool
-                
-                // If there's a massive jump (>0.15) while a request is pending, our programmatic setting
-                // was combined with a physical key press. Compare against the TARGET, not the old volume.
-                if let lastReq = self.lastRequestedVolume, abs(newVol - oldVol) > 0.15 {
-                    print("VolumeKeyPaging: Massive jump. Target: \(lastReq), Actual: \(newVol)")
-                    // If the actual volume fell short of the 0.5 target, they pressed DOWN.
-                    // If it overshot the 0.5 target, they pressed UP.
-                    isUp = newVol > lastReq
-                } else {
-                    // Normal user step
-                    isUp = newVol > oldVol
-                }
-                
-                // 3. Clear pending request flags
-                self.lastRequestedVolume = nil
-                
-                // 4. Rate Limiting
-                if self.isHandlingVolumeChange { 
-                    print("VolumeKeyPaging: Busy, skipping event")
-                    return 
-                }
-                self.isHandlingVolumeChange = true
-                
-                // 5. Process
-                print("VolumeKeyPaging: USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
-                self.handleVolumeKey(up: isUp)
-                
-                // 6. Reset to baseline 0.5
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    self.setSystemVolume(0.5)
-                    self.isHandlingVolumeChange = false
+                    
+                    // 4. Rate Limiting
+                    if self.isHandlingVolumeChange { 
+                        print("VolumeKeyPaging: Busy, skipping event")
+                        return 
+                    }
+                    self.isHandlingVolumeChange = true
+                    
+                    // 5. Process
+                    print("VolumeKeyPaging: USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
+                    self.handleVolumeKey(up: isUp)
+                    
+                    // 6. Reset to baseline 0.5
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        self.setSystemVolume(0.5)
+                        self.isHandlingVolumeChange = false
+                    }
                 }
             }
             print("VolumeKeyPaging: Observer attached")
@@ -391,22 +393,22 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         guard let volumeView = volumeView else { return }
         self.lastRequestedVolume = volume
         
-        func findSlider(in view: UIView) -> UISlider? {
-            if let slider = view as? UISlider { return slider }
-            for subview in view.subviews {
-                if let found = findSlider(in: subview) { return found }
+        DispatchQueue.main.async {
+            func findSlider(in view: UIView) -> UISlider? {
+                if let slider = view as? UISlider { return slider }
+                for subview in view.subviews {
+                    if let found = findSlider(in: subview) { return found }
+                }
+                return nil
             }
-            return nil
-        }
-        
-        if let slider = findSlider(in: volumeView) {
-            DispatchQueue.main.async {
+            
+            if let slider = findSlider(in: volumeView) {
                 slider.value = volume
-            }
-        } else if retryCount < 10 {
-            // Slider might not be ready yet due to lazy loading of MPVolumeView subviews
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                self?.setSystemVolume(volume, retryCount: retryCount + 1)
+            } else if retryCount < 10 {
+                // Slider might not be ready yet due to lazy loading of MPVolumeView subviews
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                    self?.setSystemVolume(volume, retryCount: retryCount + 1)
+                }
             }
         }
     }
