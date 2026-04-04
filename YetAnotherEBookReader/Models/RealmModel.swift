@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 import RealmSwift
 
 public protocol Persistable {
@@ -1454,5 +1455,130 @@ class ReadiumPreferenceRealm: Object, ObjectKeyIdentifiable {
     
     @Persisted var volumeKeyPaging: Bool = false
     @Persisted var verticalMargin: Double = 0.0
+    @Persisted var readingProgression: Int = 0 // 0: LTR, 1: RTL
+}
+
+import ReadiumNavigator
+import ReadiumShared
+
+extension ReadiumPreferenceRealm {
+    
+    var themeColor: UIColor {
+        switch themeMode {
+        case 1: // Sepia
+            return UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1.0) // #FAF4E8
+        case 2: // Dark
+            return .black
+        default: // Light
+            return .white
+        }
+    }
+
+    func toEPUBPreferences() -> EPUBPreferences {
+        EPUBPreferences(
+            columnCount: self.columnCount == 0 ? .auto : (self.columnCount == 1 ? .one : .two),
+            fontFamily: self.fontFamily == "Original" ? nil : ReadiumNavigator.FontFamily(rawValue: self.fontFamily),
+            fontSize: self.fontSizePercentage / 100.0,
+            fontWeight: self.fontWeight,
+            hyphens: self.hyphens,
+            imageFilter: self.imageFilter == 0 ? nil : (self.imageFilter == 1 ? .darken : .invert),
+            letterSpacing: self.letterSpacing,
+            lineHeight: self.lineHeight,
+            pageMargins: self.pageMargins,
+            paragraphIndent: self.paragraphIndent,
+            paragraphSpacing: self.paragraphSpacing,
+            publisherStyles: self.publisherStyles,
+            readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
+            scroll: self.scroll,
+            textAlign: {
+                switch self.textAlign {
+                case 1: return .start
+                case 2: return .left
+                case 3: return .right
+                case 4: return .justify
+                default: return nil
+                }
+            }(),
+            textNormalization: self.textNormalization,
+            theme: {
+                switch self.themeMode {
+                case 1: return .sepia
+                case 2: return .dark
+                default: return .light
+                }
+            }(),
+            typeScale: self.typeScale,
+            wordSpacing: self.wordSpacing
+        )
+    }
+    
+    func toPDFPreferences() -> PDFPreferences {
+        PDFPreferences(
+            readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
+            scroll: self.scroll
+        )
+    }
+    
+    func update(from settings: EPUBSettings) {
+        switch settings.theme {
+        case .light: self.themeMode = 0
+        case .sepia: self.themeMode = 1
+        case .dark: self.themeMode = 2
+        }
+        
+        self.fontSizePercentage = settings.fontSize * 100.0
+        
+        if let fontFamily = settings.fontFamily {
+            self.fontFamily = fontFamily.rawValue
+        } else {
+            self.fontFamily = "Original"
+        }
+        
+        self.lineHeight = settings.lineHeight ?? 1.2
+        self.pageMargins = settings.pageMargins
+        self.publisherStyles = settings.publisherStyles
+        self.scroll = settings.scroll
+        self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
+        
+        switch settings.textAlign {
+        case .start: self.textAlign = 1
+        case .left: self.textAlign = 2
+        case .right: self.textAlign = 3
+        case .justify: self.textAlign = 4
+        default: self.textAlign = 0
+        }
+        
+        switch settings.columnCount {
+        case .auto: self.columnCount = 0
+        case .one: self.columnCount = 1
+        case .two: self.columnCount = 2
+        default: self.columnCount = 0
+        }
+        
+        self.fontWeight = settings.fontWeight ?? 1.0
+        self.letterSpacing = settings.letterSpacing ?? 0.0
+        self.wordSpacing = settings.wordSpacing ?? 0.0
+        self.hyphens = settings.hyphens ?? false
+        
+        if let filter = settings.imageFilter {
+            switch filter {
+            case .darken: self.imageFilter = 1
+            case .invert: self.imageFilter = 2
+            @unknown default: self.imageFilter = 0
+            }
+        } else {
+            self.imageFilter = 0
+        }
+        
+        self.textNormalization = settings.textNormalization
+        self.typeScale = settings.typeScale ?? 1.2
+        self.paragraphIndent = settings.paragraphIndent ?? 0.0
+        self.paragraphSpacing = settings.paragraphSpacing ?? 0.0
+    }
+    
+    func update(from settings: PDFSettings) {
+        self.scroll = settings.scroll
+        self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
+    }
 }
 

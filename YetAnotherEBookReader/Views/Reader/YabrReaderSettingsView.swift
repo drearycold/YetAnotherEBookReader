@@ -7,9 +7,11 @@
 
 import SwiftUI
 import RealmSwift
+import ReadiumShared
 
 struct YabrReaderSettingsView: View {
     @ObservedRealmObject var prefs: ReadiumPreferenceRealm
+    let publication: Publication
     
     let supportedFontFamilies: [String] = [
         "Original",
@@ -22,6 +24,10 @@ struct YabrReaderSettingsView: View {
         "Iowan Old Style",
         "Palatino"
     ]
+    
+    private var isReflowable: Bool {
+        publication.metadata.layout == .reflowable
+    }
     
     var body: some View {
         NavigationView {
@@ -45,7 +51,13 @@ struct YabrReaderSettingsView: View {
                     Toggle("Scroll Mode", isOn: $prefs.scroll)
                     Toggle("Volume Key Paging", isOn: $prefs.volumeKeyPaging)
                     
-                    if !prefs.scroll {
+                    Picker("Progression", selection: $prefs.readingProgression) {
+                        Text("LTR").tag(0)
+                        Text("RTL").tag(1)
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                    
+                    if isReflowable && !prefs.scroll {
                         Picker("Columns", selection: $prefs.columnCount) {
                             Text("Auto").tag(0)
                             Text("1").tag(1)
@@ -54,91 +66,102 @@ struct YabrReaderSettingsView: View {
                     }
                 }
                 
-                Section(header: Text("Typography")) {
-                    Picker("Typeface", selection: $prefs.fontFamily) {
-                        ForEach(supportedFontFamilies, id: \.self) {
-                            Text($0).tag($0)
+                if isReflowable {
+                    Section(header: Text("Typography")) {
+                        Picker("Typeface", selection: $prefs.fontFamily) {
+                            ForEach(supportedFontFamilies, id: \.self) {
+                                Text($0).tag($0)
+                            }
+                        }
+                        
+                        HStack {
+                            Button(action: { 
+                                if prefs.fontSizePercentage > 50 { 
+                                    $prefs.fontSizePercentage.wrappedValue -= 10 
+                                } 
+                            }) {
+                                Image(systemName: "textformat.size.smaller")
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                            Spacer()
+                            Text("Font Size: \(Int(prefs.fontSizePercentage))%")
+                                .font(.subheadline)
+                            Spacer()
+                            Button(action: { 
+                                if prefs.fontSizePercentage < 300 { 
+                                    $prefs.fontSizePercentage.wrappedValue += 10 
+                                } 
+                            }) {
+                                Image(systemName: "textformat.size.larger")
+                            }
+                            .buttonStyle(BorderlessButtonStyle())
+                        }
+                        
+                        Stepper(value: $prefs.fontWeight, in: 0.0...2.5, step: 0.25) {
+                            Text("Font Weight: \(prefs.fontWeight, specifier: "%.2f")")
+                        }
+                        
+                        Toggle("Text Normalization", isOn: $prefs.textNormalization)
+                    }
+                    
+                    Section(header: Text("Layout")) {
+                        Toggle("Publisher Styles", isOn: $prefs.publisherStyles)
+                        
+                        if !prefs.publisherStyles {
+                            Group {
+                                Picker("Alignment", selection: $prefs.textAlign) {
+                                    Text("Default").tag(0)
+                                    Text("Start").tag(1)
+                                    Text("Left").tag(2)
+                                    Text("Right").tag(3)
+                                    Text("Justify").tag(4)
+                                }
+                                
+                                Stepper(value: $prefs.lineHeight, in: 1.0...2.0, step: 0.1) {
+                                    Text("Line Height: \(prefs.lineHeight, specifier: "%.1f")")
+                                }
+                                
+                                Stepper(value: $prefs.typeScale, in: 1.0...2.0, step: 0.1) {
+                                    Text("Type Scale: \(prefs.typeScale, specifier: "%.1f")")
+                                }
+                                
+                                Stepper(value: $prefs.wordSpacing, in: 0.0...1.0, step: 0.1) {
+                                    Text("Word Spacing: \(prefs.wordSpacing, specifier: "%.1f")")
+                                }
+                                
+                                Stepper(value: $prefs.letterSpacing, in: 0.0...1.0, step: 0.1) {
+                                    Text("Letter Spacing: \(prefs.letterSpacing, specifier: "%.1f")")
+                                }
+                                
+                                Stepper(value: $prefs.paragraphIndent, in: 0.0...3.0, step: 0.2) {
+                                    Text("Paragraph Indent: \(prefs.paragraphIndent, specifier: "%.1f")")
+                                }
+                                
+                                Stepper(value: $prefs.paragraphSpacing, in: 0.0...2.0, step: 0.1) {
+                                    Text("Paragraph Spacing: \(prefs.paragraphSpacing, specifier: "%.1f")")
+                                }
+                                
+                                Toggle("Hyphens", isOn: $prefs.hyphens)
+                            }
+                        }
+                        
+                        Stepper(value: $prefs.pageMargins, in: 0.0...4.0, step: 0.3) {
+                            Text("Page Margins: \(prefs.pageMargins, specifier: "%.1f")")
+                        }
+                        
+                        if !prefs.scroll {
+                            Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
+                                Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
+                            }
                         }
                     }
-                    
-                    HStack {
-                        Button(action: { 
-                            if prefs.fontSizePercentage > 50 { 
-                                $prefs.fontSizePercentage.wrappedValue -= 10 
-                            } 
-                        }) {
-                            Image(systemName: "textformat.size.smaller")
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                        Spacer()
-                        Text("Font Size: \(Int(prefs.fontSizePercentage))%")
-                            .font(.subheadline)
-                        Spacer()
-                        Button(action: { 
-                            if prefs.fontSizePercentage < 300 { 
-                                $prefs.fontSizePercentage.wrappedValue += 10 
-                            } 
-                        }) {
-                            Image(systemName: "textformat.size.larger")
-                        }
-                        .buttonStyle(BorderlessButtonStyle())
-                    }
-                    
-                    Stepper(value: $prefs.fontWeight, in: 0.0...2.5, step: 0.25) {
-                        Text("Font Weight: \(prefs.fontWeight, specifier: "%.2f")")
-                    }
-                    
-                    Toggle("Text Normalization", isOn: $prefs.textNormalization)
-                }
-                
-                Section(header: Text("Layout")) {
-                    Toggle("Publisher Styles", isOn: $prefs.publisherStyles)
-                    
-                    if !prefs.publisherStyles {
-                        Group {
-                            Picker("Alignment", selection: $prefs.textAlign) {
-                                Text("Default").tag(0)
-                                Text("Start").tag(1)
-                                Text("Left").tag(2)
-                                Text("Right").tag(3)
-                                Text("Justify").tag(4)
-                            }
-                            
-                            Stepper(value: $prefs.lineHeight, in: 1.0...2.0, step: 0.1) {
-                                Text("Line Height: \(prefs.lineHeight, specifier: "%.1f")")
-                            }
-                            
-                            Stepper(value: $prefs.typeScale, in: 1.0...2.0, step: 0.1) {
-                                Text("Type Scale: \(prefs.typeScale, specifier: "%.1f")")
-                            }
-                            
-                            Stepper(value: $prefs.wordSpacing, in: 0.0...1.0, step: 0.1) {
-                                Text("Word Spacing: \(prefs.wordSpacing, specifier: "%.1f")")
-                            }
-                            
-                            Stepper(value: $prefs.letterSpacing, in: 0.0...1.0, step: 0.1) {
-                                Text("Letter Spacing: \(prefs.letterSpacing, specifier: "%.1f")")
-                            }
-                            
-                            Stepper(value: $prefs.paragraphIndent, in: 0.0...3.0, step: 0.2) {
-                                Text("Paragraph Indent: \(prefs.paragraphIndent, specifier: "%.1f")")
-                            }
-                            
-                            Stepper(value: $prefs.paragraphSpacing, in: 0.0...2.0, step: 0.1) {
-                                Text("Paragraph Spacing: \(prefs.paragraphSpacing, specifier: "%.1f")")
-                            }
-                            
-                            Toggle("Hyphens", isOn: $prefs.hyphens)
-                        }
-                    }
-                    
-                    Stepper(value: $prefs.pageMargins, in: 0.0...4.0, step: 0.3) {
-                        Text("Page Margins: \(prefs.pageMargins, specifier: "%.1f")")
-                    }
-                    
+                } else {
+                    // For Fixed-layout (PDF/CBZ), we still show Vertical Margin in Paged Mode
                     if !prefs.scroll {
-                        Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
-                            Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
+                        Section(header: Text("Layout")) {
+                            Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
+                                Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
+                            }
                         }
                     }
                 }

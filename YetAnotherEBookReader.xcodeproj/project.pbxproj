@@ -118,7 +118,6 @@
 		2AF53FD32675FA89006E92E0 /* ReaderOptionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */; };
 		2AF6FE0A2701B205002BA27E /* YabrReadiumPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */; };
 		2AF6FE0C2701D0F7002BA27E /* YabrReadiumReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */; };
-		2AF6FE0E2701E1DA002BA27E /* YabrReadiumCBZViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */; };
 		2AF858972711372600FA87AD /* YabrLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */; };
 		2AF8589D2712825400FA87AD /* ReaderOptionsFormatHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF8589C2712825400FA87AD /* ReaderOptionsFormatHelpView.swift */; };
 		4C8D6A8BE24380426C1F893E /* (null) in Frameworks */ = {isa = PBXBuildFile; };
@@ -146,7 +145,6 @@
 		6E7B80E728FBA7AD008B075C /* YabrPDFThumbnailViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E792835228F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift */; };
 		6E7B80E828FBA7AD008B075C /* YabrEBookReaderNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2A8539275C699500C17825 /* YabrEBookReaderNavigationController.swift */; };
 		6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
-		6E7B80EA28FBA7AD008B075C /* YabrReadiumCBZViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */; };
 		6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */; };
 		6E7B80EC28FBA7AD008B075C /* YabrReadiumReaderViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */; };
 		6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAB2997271415E10080B0CB /* AppInfoView.swift */; };
@@ -354,7 +352,6 @@
 		2AF53FD22675FA89006E92E0 /* ReaderOptionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsView.swift; sourceTree = "<group>"; };
 		2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumPDFViewController.swift; sourceTree = "<group>"; };
 		2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumReaderViewController.swift; sourceTree = "<group>"; };
-		2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumCBZViewController.swift; sourceTree = "<group>"; };
 		2AF858962711372600FA87AD /* YabrLaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = YabrLaunchScreen.storyboard; path = YetAnotherEBookReader/YabrLaunchScreen.storyboard; sourceTree = "<group>"; };
 		2AF8589C2712825400FA87AD /* ReaderOptionsFormatHelpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderOptionsFormatHelpView.swift; sourceTree = "<group>"; };
 		6E7733BF26663D51008318C3 /* BookFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookFiles.swift; sourceTree = "<group>"; };
@@ -490,7 +487,6 @@
 		2A21BCE62701948A00825BBB /* ReadiumView */ = {
 			isa = PBXGroup;
 			children = (
-				2AF6FE0D2701E1DA002BA27E /* YabrReadiumCBZViewController.swift */,
 				2A107D412661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift */,
 				2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */,
 				2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */,
@@ -987,7 +983,6 @@
 				E730405C28EBDAB50013BA01 /* BookAnnotation.swift in Sources */,
 				E70A25D12F7D1A69004F006E /* YabrReaderNavigationView.swift in Sources */,
 				2AAE40A1267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
-				2AF6FE0E2701E1DA002BA27E /* YabrReadiumCBZViewController.swift in Sources */,
 				E7C777AB28ED4A5500939D63 /* YabrPDFBookmarkListCell.swift in Sources */,
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
 				2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */,
@@ -1148,7 +1143,6 @@
 				6E7B80E728FBA7AD008B075C /* YabrPDFThumbnailViewController.swift in Sources */,
 				6E7B80E828FBA7AD008B075C /* YabrEBookReaderNavigationController.swift in Sources */,
 				6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */,
-				6E7B80EA28FBA7AD008B075C /* YabrReadiumCBZViewController.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
 				6E7B80EC28FBA7AD008B075C /* YabrReadiumReaderViewController.swift in Sources */,
 				6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */,
@@ -1360,7 +1354,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 128;
+				CURRENT_PROJECT_VERSION = 129;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;
@@ -1445,7 +1439,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 128;
+				CURRENT_PROJECT_VERSION = 129;
 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				ENABLE_PREVIEWS = YES;

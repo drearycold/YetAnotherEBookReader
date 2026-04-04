@@ -95,12 +95,10 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                     
                     guard let readerVC = { () -> YabrReadiumReaderViewController? in
                         switch(self.readerInfo.readerType) {
-                        case .ReadiumEPUB:
+                        case .ReadiumEPUB, .ReadiumCBZ:
                             return YabrReadiumEPUBViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
                         case .ReadiumPDF:
                             return YabrReadiumPDFViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
-                        case .ReadiumCBZ:
-                            return YabrReadiumCBZViewController(publication: publication, initialLocation: initialLocation, environment: readiumEnv)
                         default:
                             return nil      //shouldn't fall here
                         }

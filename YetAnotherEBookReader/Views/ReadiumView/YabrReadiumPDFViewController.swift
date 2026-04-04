@@ -9,10 +9,11 @@ import Foundation
 import UIKit
 import ReadiumNavigator
 import ReadiumShared
+import RealmSwift
 
 import ReadiumAdapterGCDWebServer
 
-final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNavigatorDelegate {
+final class YabrReadiumPDFViewController: YabrReadiumReaderViewController {
     
     init?(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
         guard let navigator = try? PDFNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer) else {
@@ -24,63 +25,35 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
         navigator.delegate = self
     }
     
+    var pdfNavigator: PDFNavigatorViewController {
+        return navigator as! PDFNavigatorViewController
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
     }
-
-    override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
-        super.navigator(navigator, locationDidChange: locator)
-        
-        Task { [weak self] in
-            guard let self = self else { return }
-            var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
-            
-            updatedReadingPosition.2["pageNumber"] = locator.locations.position
-            let positionsResult = await self.publication.positionsByReadingOrder()
-            updatedReadingPosition.2["maxPage"] = (try? positionsResult.get())?.first?.count ?? 1
-
-            updatedReadingPosition.2["pageOffsetX"] = 0
-            
-            updatedReadingPosition.0 = locator.locations.progression ?? 0.0
-            updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
-            
-            let tocResult = await self.publication.tableOfContents()
-            let tableOfContents = (try? tocResult.get()) ?? []
-            
-            if let title = locator.title {
-                updatedReadingPosition.3 = title
-            } else if let fragment = locator.locations.fragments.first,
-                      let tocLink = tableOfContents.firstDeep(withFRAGMENT: fragment),
-                      let tocTitle = tocLink.title {
-                updatedReadingPosition.3 = tocTitle
-            } else if let fragment = locator.locations.fragments.first,
-                      let locPageNumberValue = fragment.split(separator: "=").last,
-                      let locPageNumber = Int(locPageNumberValue),
-                        let tocLink = tableOfContents.filter( { link in
-                            guard let tocFragmentIndex = link.href.firstIndex(of: "#"),
-                                  let tocFragment = link.href[tocFragmentIndex..<link.href.endIndex] as Substring?,
-                                  let pageNumberValue = tocFragment.split(separator: "=").last,
-                                  let pageNumber = Int(pageNumberValue),
-                                  pageNumber <= locPageNumber
-                            else { return false }
-                            
-                            return true
-                        }).last,
-                      let tocTitle = tocLink.title {
-                updatedReadingPosition.3 = tocTitle
-            } else {
-                updatedReadingPosition.3 = "Unknown Title"
-            }
-            
-            self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
-        }
+    
+    override func applyPreferences(_ prefs: ReadiumPreferenceRealm) {
+        pdfNavigator.submitPreferences(prefs.toPDFPreferences())
     }
-}
-
-fileprivate extension Array where Element == Link {
-    func firstDeep(withFRAGMENT fragment: String) -> Link? {
-        return first {
-            URL(string: $0.href)?.fragment == fragment || $0.children.firstDeep(withFRAGMENT: fragment) != nil
+    
+    override func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+        let isScroll = self.pdfNavigator.settings.scroll
+        
+        if isScroll {
+            return nil
         }
+        
+        let safeArea = self.view.window?.safeAreaInsets ?? self.view.safeAreaInsets
+        let additional = self.navigator.additionalSafeAreaInsets
+        
+        let inset = UIEdgeInsets(
+            top: safeArea.top + additional.top,
+            left: safeArea.left + additional.left,
+            bottom: safeArea.bottom + additional.bottom,
+            right: safeArea.right + additional.right
+        )
+        self.log(.debug, "navigatorContentInset called, additionalTop=\(additional.top), returning: \(inset)")
+        return inset
     }
 }
