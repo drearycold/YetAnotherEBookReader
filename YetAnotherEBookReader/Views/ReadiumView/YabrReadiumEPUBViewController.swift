@@ -73,7 +73,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 // Initial vertical margin (Only in Paged Mode)
                 let isScroll = self.readiumPrefs?.scroll ?? false
                 let vMargin = isScroll ? 0 : CGFloat(self.readiumPrefs?.verticalMargin ?? 0.0)
-                print("DEBUG: YabrEPUB: Initial vMargin set to \(vMargin) (isScroll: \(isScroll))")
+                self.log(.debug, "Initial vMargin set to \(vMargin) (isScroll: \(isScroll))")
                 navigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
                 
                 // Set initial background color to match theme
@@ -106,7 +106,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                         // Only applied in Paged Mode to prevent gaps between chapters in Scroll Mode.
                         let isScroll = prefs.scroll
                         let vMargin = isScroll ? 0 : CGFloat(prefs.verticalMargin)
-                        print("DEBUG: YabrEPUB: preference change detected, updating additionalSafeAreaInsets to \(vMargin) (isScroll: \(isScroll))")
+                        self.log(.debug, "preference change detected, updating additionalSafeAreaInsets to \(vMargin) (isScroll: \(isScroll))")
                         self.epubNavigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
                     }
                 }
@@ -263,7 +263,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         
         if isScroll {
             guard let scrollView = getActiveVerticalScrollView() else {
-                print("VolumeKeyPaging: No active scroll view found, falling back to jump")
+                self.log(.debug, "No active scroll view found, falling back to jump")
                 Task {
                     if up { await self.epubNavigator.goBackward(options: .animated) }
                     else { await self.epubNavigator.goForward(options: .animated) }
@@ -278,21 +278,21 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             
             if up {
                 if offset.y <= 0 {
-                    print("VolumeKeyPaging: At top, jumping backward")
+                    self.log(.debug, "At top, jumping backward")
                     Task { await self.epubNavigator.goBackward(options: .animated) }
                 } else {
                     let newY = max(0, offset.y - scrollAmount)
-                    print("VolumeKeyPaging: Scrolling up to \(newY)")
+                    self.log(.debug, "Scrolling up to \(newY)")
                     scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
                 }
             } else {
                 let maxOffsetY = max(0, contentHeight - viewHeight)
                 if offset.y >= maxOffsetY - 1 { // 1pt tolerance
-                    print("VolumeKeyPaging: At bottom, jumping forward")
+                    self.log(.debug, "At bottom, jumping forward")
                     Task { await self.epubNavigator.goForward(options: .animated) }
                 } else {
                     let newY = min(maxOffsetY, offset.y + scrollAmount)
-                    print("VolumeKeyPaging: Scrolling down to \(newY)")
+                    self.log(.debug, "Scrolling down to \(newY)")
                     scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
                 }
             }
@@ -335,16 +335,16 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             // Force layout to instantiate the UISlider quickly
             view.setNeedsLayout()
             view.layoutIfNeeded()
-            print("VolumeKeyPaging: MPVolumeView initialized")
+            self.log(.debug, "MPVolumeView initialized")
         }
         
         let session = AVAudioSession.sharedInstance()
         do {
             try session.setCategory(.ambient, options: [.mixWithOthers])
             try session.setActive(true)
-            print("VolumeKeyPaging: AVAudioSession activated")
+            self.log(.debug, "AVAudioSession activated")
         } catch {
-            print("VolumeKeyPaging: Failed to activate audio session: \(error)")
+            self.log(.error, "Failed to activate audio session: \(error)")
         }
         
         setSystemVolume(0.5)
@@ -356,11 +356,11 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                           let newVol = change.newValue,
                           let oldVol = change.oldValue else { return }
                     
-                    print("VolumeKeyPaging: RAW Change detected \(oldVol) -> \(newVol)")
+                    self.log(.debug, "RAW Change detected \(oldVol) -> \(newVol)")
                     
                     // 1. Exact Programmatic Match: Ignore completely
                     if let lastReq = self.lastRequestedVolume, abs(newVol - lastReq) < 0.01 {
-                        print("VolumeKeyPaging: Exact programmatic change handled (\(newVol))")
+                        self.log(.debug, "Programmatic change handled (\(newVol))")
                         self.lastRequestedVolume = nil
                         return
                     }
@@ -371,7 +371,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                     // If there's a massive jump (>0.15) while a request is pending, our programmatic setting
                     // was combined with a physical key press. Compare against the TARGET, not the old volume.
                     if let lastReq = self.lastRequestedVolume, abs(newVol - oldVol) > 0.15 {
-                        print("VolumeKeyPaging: Massive jump. Target: \(lastReq), Actual: \(newVol)")
+                        self.log(.debug, "Massive jump. Target: \(lastReq), Actual: \(newVol)")
                         // If the actual volume fell short of the 0.5 target, they pressed DOWN.
                         // If it overshot the 0.5 target, they pressed UP.
                         isUp = newVol > lastReq
@@ -385,13 +385,13 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                     
                     // 4. Rate Limiting
                     if self.isHandlingVolumeChange { 
-                        print("VolumeKeyPaging: Busy, skipping event")
+                        self.log(.debug, "Busy, skipping event")
                         return 
                     }
                     self.isHandlingVolumeChange = true
                     
                     // 5. Process
-                    print("VolumeKeyPaging: USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
+                    self.log(.debug, "USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
                     self.handleVolumeKey(up: isUp)
                     
                     // 6. Reset to baseline 0.5
@@ -401,12 +401,12 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                     }
                 }
             }
-            print("VolumeKeyPaging: Observer attached")
+            self.log(.debug, "Observer attached")
         }
     }
     
     func teardownVolumeKeyPaging() {
-        print("VolumeKeyPaging: Teardown called")
+        self.log(.debug, "Teardown called")
         volumeObserver?.invalidate()
         volumeObserver = nil
         volumeView?.removeFromSuperview()
@@ -440,8 +440,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     override func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
         super.navigator(navigator, locationDidChange: locator)
         
-        print("EpubReadiumReaderContainerNavigatorDelegate \(locator)")
-        print("EpubReadiumReaderContainerNavigatorDelegate otherLocations=\(locator.locations.otherLocations)")
+        self.log(.debug, "locationDidChange: \(locator)")
         
         Task { [weak self] in
             guard let self = self else { return }
@@ -491,7 +490,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             bottom: safeArea.bottom + additional.bottom,
             right: safeArea.right + additional.right
         )
-        print("DEBUG: YabrEPUB: navigatorContentInset called, additionalTop=\(additional.top), returning: \(inset)")
+        self.log(.debug, "navigatorContentInset called, additionalTop=\(additional.top), returning: \(inset)")
         return inset
     }
 }

@@ -228,7 +228,7 @@ class YabrReadiumReaderViewController:
     
     // MARK: - NavigatorDelegate
     func navigator(_ navigator: Navigator, didFailToLoadResourceAt href: RelativeURL, withError error: ReadError) {
-        print("ReadiumReaderViewController didFailToLoadResourceAt \(href.string) \(error)")
+        log(.error, "ReadiumReaderViewController didFailToLoadResourceAt \(href.string) \(error)")
     }
 
     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
@@ -243,7 +243,7 @@ class YabrReadiumReaderViewController:
     }
 
     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
-        print("ReadiumReaderViewController presentError \(error)")
+        log(.error, "ReadiumReaderViewController presentError \(error)")
     }
 
     func navigator(_ navigator: VisualNavigator, didTapAt point: CGPoint) {
