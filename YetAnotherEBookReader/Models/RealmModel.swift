@@ -1453,5 +1453,6 @@ class ReadiumPreferenceRealm: Object, ObjectKeyIdentifiable {
     @Persisted var paragraphSpacing: Double = 0.0
     
     @Persisted var volumeKeyPaging: Bool = false
+    @Persisted var verticalMargin: Double = 0.0
 }
 

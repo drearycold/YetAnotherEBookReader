@@ -75,9 +75,7 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNa
                 updatedReadingPosition.3 = "Unknown Title"
             }
             
-            DispatchQueue.main.async {
-                self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
-            }
+            self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
         }
     }
 }

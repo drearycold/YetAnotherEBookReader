@@ -135,6 +135,12 @@ struct YabrReaderSettingsView: View {
                     Stepper(value: $prefs.pageMargins, in: 0.0...4.0, step: 0.3) {
                         Text("Page Margins: \(prefs.pageMargins, specifier: "%.1f")")
                     }
+                    
+                    if !prefs.scroll {
+                        Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
+                            Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
+                        }
+                    }
                 }
             }
             .navigationTitle("Reader Settings")

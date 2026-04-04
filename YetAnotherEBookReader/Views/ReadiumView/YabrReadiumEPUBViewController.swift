@@ -33,7 +33,18 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     private var lastRequestedVolume: Float?
 
     init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        let navigator = try! EPUBNavigatorViewController(publication: publication, initialLocation: initialLocation)
+        // Set contentInset to zero to allow additionalSafeAreaInsets to fully control margins
+        var config = EPUBNavigatorViewController.Configuration()
+        config.contentInset = [
+            .compact: (top: 0, bottom: 0),
+            .regular: (top: 0, bottom: 0)
+        ]
+        
+        let navigator = try! EPUBNavigatorViewController(
+            publication: publication,
+            initialLocation: initialLocation,
+            config: config
+        )
 
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
 
@@ -58,6 +69,12 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 
                 self.preferences = self.readiumPrefs!.toEPUBPreferences()
                 navigator.submitPreferences(self.preferences)
+                
+                // Initial vertical margin (Only in Paged Mode)
+                let isScroll = self.readiumPrefs?.scroll ?? false
+                let vMargin = isScroll ? 0 : CGFloat(self.readiumPrefs?.verticalMargin ?? 0.0)
+                print("DEBUG: YabrEPUB: Initial vMargin set to \(vMargin) (isScroll: \(isScroll))")
+                navigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
                 
                 // Set initial background color to match theme
                 self.view.backgroundColor = self.readiumPrefs?.themeColor ?? .white
@@ -84,6 +101,13 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                         
                         // React to volume key paging toggle
                         self.setupVolumeKeyPaging()
+                        
+                        // Apply vertical margin directly via additionalSafeAreaInsets
+                        // Only applied in Paged Mode to prevent gaps between chapters in Scroll Mode.
+                        let isScroll = prefs.scroll
+                        let vMargin = isScroll ? 0 : CGFloat(prefs.verticalMargin)
+                        print("DEBUG: YabrEPUB: preference change detected, updating additionalSafeAreaInsets to \(vMargin) (isScroll: \(isScroll))")
+                        self.epubNavigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
                     }
                 }
             }
@@ -446,10 +470,29 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
                 updatedReadingPosition.3 = "Unknown Chapter"
             }
             
-            DispatchQueue.main.async {
-                self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
-            }
+            self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
         }
+    }
+    
+    override func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+        let prefs = readiumPrefs
+        let isScroll = prefs?.scroll ?? false
+        
+        if isScroll {
+            return nil
+        }
+        
+        let safeArea = self.view.window?.safeAreaInsets ?? .zero
+        let additional = self.epubNavigator.additionalSafeAreaInsets
+        
+        let inset = UIEdgeInsets(
+            top: safeArea.top + additional.top,
+            left: safeArea.left + additional.left,
+            bottom: safeArea.bottom + additional.bottom,
+            right: safeArea.right + additional.right
+        )
+        print("DEBUG: YabrEPUB: navigatorContentInset called, additionalTop=\(additional.top), returning: \(inset)")
+        return inset
     }
 }
 

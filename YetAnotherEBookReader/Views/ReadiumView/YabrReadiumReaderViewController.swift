@@ -119,15 +119,7 @@ class YabrReadiumReaderViewController:
         super.viewDidLayoutSubviews()
         
         // Calculate the effective top inset to avoid status bar but ignore navigation bar
-        let statusBarHeight: CGFloat
-        if let nav = navigationController, !nav.isNavigationBarHidden {
-            // When nav bar is visible, safeAreaInsets.top includes both status bar and nav bar
-            let navBarHeight = nav.navigationBar.frame.height
-            statusBarHeight = max(0, view.safeAreaInsets.top - navBarHeight)
-        } else {
-            // When nav bar is hidden, safeAreaInsets.top is just the status bar (or notch) height
-            statusBarHeight = view.safeAreaInsets.top
-        }
+        let statusBarHeight = view.window?.safeAreaInsets.top ?? 0
         
         // Update constraint to ensure content starts exactly below the system safe area inset (status bar)
         // while allowing it to be covered by the navigation bar when it appears.
@@ -259,12 +251,18 @@ class YabrReadiumReaderViewController:
         let leftEdge = viewport.width * 0.2
         let rightEdge = viewport.width * 0.8
         
-        if point.x < leftEdge {
+        let isScroll = (navigator as? EPUBNavigatorViewController)?.settings.scroll ?? false
+        
+        if point.x < leftEdge && !isScroll {
             Task { await navigator.goLeft(options: .animated) }
-        } else if point.x > rightEdge {
+        } else if point.x > rightEdge && !isScroll {
             Task { await navigator.goRight(options: .animated) }
         } else {
             toggleNavigationBar()
         }
+    }
+    
+    func navigatorContentInset(_ navigator: VisualNavigator) -> UIEdgeInsets? {
+        return nil
     }
 }
