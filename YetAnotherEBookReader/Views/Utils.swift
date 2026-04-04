@@ -101,7 +101,7 @@ class ImageLoader: ObservableObject {
     }
 }
 
-struct AsyncImage<Placeholder: View>: View {
+struct YabrAsyncImage<Placeholder: View>: View {
     @StateObject private var loader: ImageLoader
     private let placeholder: Placeholder
 
@@ -129,15 +129,14 @@ struct AsyncImage<Placeholder: View>: View {
 
 struct TestView: View {
     let url = URL(string: "https://image.tmdb.org/t/p/original/pThyQovXQrw2m0s9x82twj48Jq4.jpg")!
-    
+
     var body: some View {
-        AsyncImage(
+        YabrAsyncImage(
             url: url) {
             Text("Loading ...")
         }.aspectRatio(contentMode: .fit)
     }
 }
-
 extension URL {
     public var isHTTP: Bool {
         ["http", "https"].contains(scheme?.lowercased())

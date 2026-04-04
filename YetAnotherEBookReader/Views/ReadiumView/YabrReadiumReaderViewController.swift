@@ -119,7 +119,7 @@ class YabrReadiumReaderViewController:
         super.viewDidLayoutSubviews()
         
         // Calculate the effective top inset to avoid status bar but ignore navigation bar
-        let statusBarHeight = view.window?.safeAreaInsets.top ?? 0
+        let statusBarHeight = view.window?.safeAreaInsets.top ?? view.safeAreaInsets.top
         
         // Update constraint to ensure content starts exactly below the system safe area inset (status bar)
         // while allowing it to be covered by the navigation bar when it appears.

@@ -93,7 +93,7 @@ class FolioReaderPreferenceRealm: Object {
     
     @objc dynamic var currentNavigationMenuIndex: Int = .min
     @objc dynamic var currentAnnotationMenuIndex: Int = .min
-    @objc dynamic var currentNavigationMenuBookListSyle: Int = .min
+    @objc dynamic var currentNavigationMenuBookListStyle: Int = .min
     
     @objc dynamic var currentVMarginLinked: Bool = true
     @objc dynamic var currentMarginTop: Int = .min

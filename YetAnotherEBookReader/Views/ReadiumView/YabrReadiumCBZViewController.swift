@@ -25,8 +25,10 @@ import ReadiumAdapterGCDWebServer
 
 class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
 
-    init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        let navigator = try! CBZNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
+    init?(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+        guard let navigator = try? CBZNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer) else {
+            return nil
+        }
         
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
         

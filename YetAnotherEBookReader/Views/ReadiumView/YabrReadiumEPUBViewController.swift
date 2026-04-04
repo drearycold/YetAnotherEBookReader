@@ -32,7 +32,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
     private var isHandlingVolumeChange = false
     private var lastRequestedVolume: Float?
 
-    init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+    init?(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
         // Set contentInset to zero to allow additionalSafeAreaInsets to fully control margins
         var config = EPUBNavigatorViewController.Configuration()
         config.contentInset = [
@@ -40,11 +40,13 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             .regular: (top: 0, bottom: 0)
         ]
         
-        let navigator = try! EPUBNavigatorViewController(
+        guard let navigator = try? EPUBNavigatorViewController(
             publication: publication,
             initialLocation: initialLocation,
             config: config
-        )
+        ) else {
+            return nil
+        }
 
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
 

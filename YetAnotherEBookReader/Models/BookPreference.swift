@@ -48,8 +48,15 @@ extension BookAnnotation {
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 125 {
-                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListSyle")
                     migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                }
+                
+                if oldSchemaVersion < 128 {
+                    if (oldSchemaVersion >= 125) {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationMenuBookListSyle", to: "currentNavigationMenuBookListStyle")
+                    } else {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
+                    }
                 }
             },
             objectTypes: [

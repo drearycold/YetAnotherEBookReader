@@ -14,12 +14,9 @@ import ReadiumAdapterGCDWebServer
 
 final class YabrReadiumPDFViewController: YabrReadiumReaderViewController, PDFNavigatorDelegate {
     
-    init(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        let navigator: PDFNavigatorViewController
-        do {
-            navigator = try PDFNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer)
-        } catch {
-            fatalError("Failed to initialize PDFNavigatorViewController: \(error)")
+    init?(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+        guard let navigator = try? PDFNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer) else {
+            return nil
         }
         
         super.init(navigator: navigator, publication: publication, initialLocation: initialLocation, environment: environment)
