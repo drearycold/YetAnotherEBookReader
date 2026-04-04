@@ -93,7 +93,7 @@ class YabrReadiumReaderViewController:
         stackViewTopConstraint = stackView.topAnchor.constraint(equalTo: view.topAnchor)
         
         NSLayoutConstraint.activate([
-            stackViewTopConstraint,
+            isVoiceOverRunning ? accessibilityTopMargin : stackViewTopConstraint,
             stackView.rightAnchor.constraint(equalTo: view.rightAnchor),
             stackView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             stackView.leftAnchor.constraint(equalTo: view.leftAnchor)
@@ -103,7 +103,9 @@ class YabrReadiumReaderViewController:
         stackView.addArrangedSubview(navigator.view)
         navigator.didMove(toParent: self)
         
-        stackView.addArrangedSubview(accessibilityToolbar)
+        if isVoiceOverRunning {
+            stackView.addArrangedSubview(accessibilityToolbar)
+        }
         
         positionLabel.translatesAutoresizingMaskIntoConstraints = false
         positionLabel.font = .systemFont(ofSize: 12)
@@ -212,8 +214,20 @@ class YabrReadiumReaderViewController:
             return
         }
         isVoiceOverRunning = isRunning
+        
+        // Ensure constraints are mutually exclusive to avoid conflicts
         accessibilityTopMargin.isActive = isRunning
+        stackViewTopConstraint.isActive = !isRunning
+        
         accessibilityToolbar.isHidden = !isRunning
+        
+        if isRunning {
+            stackView.addArrangedSubview(accessibilityToolbar)
+        } else {
+            stackView.removeArrangedSubview(accessibilityToolbar)
+            accessibilityToolbar.removeFromSuperview()
+        }
+        
         updateNavigationBar()
     }
     
