@@ -21,12 +21,21 @@ import UIKit
 import ReadiumNavigator
 import ReadiumShared
 
-import ReadiumAdapterGCDWebServer
-
 class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
 
     init?(publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
-        guard let navigator = try? CBZNavigatorViewController(publication: publication, initialLocation: initialLocation, httpServer: environment.httpServer) else {
+        // Set contentInset to zero to allow additionalSafeAreaInsets to fully control margins
+        var config = EPUBNavigatorViewController.Configuration()
+        config.contentInset = [
+            .compact: (top: 0, bottom: 0),
+            .regular: (top: 0, bottom: 0)
+        ]
+        
+        guard let navigator = try? EPUBNavigatorViewController(
+            publication: publication,
+            initialLocation: initialLocation,
+            config: config
+        ) else {
             return nil
         }
         
@@ -68,5 +77,5 @@ class YabrReadiumCBZViewController: YabrReadiumReaderViewController {
     }
 }
 
-extension YabrReadiumCBZViewController: CBZNavigatorDelegate {
+extension YabrReadiumCBZViewController: EPUBNavigatorDelegate {
 }

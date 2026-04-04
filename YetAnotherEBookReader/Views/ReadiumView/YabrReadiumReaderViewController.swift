@@ -147,8 +147,6 @@ class YabrReadiumReaderViewController:
     
     func makeNavigationBarButtons() -> [UIBarButtonItem] {
         var buttons: [UIBarButtonItem] = []
-        // Table of Contents
-        buttons.append(UIBarButtonItem(image: UIImage(systemName: "line.3.horizontal"), style: .plain, target: self, action: #selector(presentOutline)))
         
         return buttons
     }
@@ -171,12 +169,6 @@ class YabrReadiumReaderViewController:
         return false
     }
 
-    
-    // MARK: - Outlines
-
-    @objc func presentOutline() {
-        // Display YABR TOC UI here
-    }
     
     // MARK: - Accessibility
     
