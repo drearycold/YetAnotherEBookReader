@@ -45,7 +45,7 @@ struct Banner: View{
     
     var body: some View{
         HStack {
-            if let adUnitID = modelData.yabrGADBannerShelfUnitID {
+            if let adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID {
                 Spacer()
                 BannerVC(adUnitID: adUnitID).frame(width: 320, height: 50, alignment: .center)
                 Spacer()

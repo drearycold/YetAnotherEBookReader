@@ -67,10 +67,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                 width:  GADAdSizeBanner.size.width,
                 height: GADAdSizeBanner.size.height)
         )
-        bannerView.adUnitID = modelData.yabrGADBannerShelfUnitID
+        bannerView.adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID
 
         #if DEBUG
-        if let deviceId = modelData.yabrGADDeviceIdentifierTest {
+        if let deviceId = YabrAppInfo.shared.gadDeviceIdentifierTest {
             GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ deviceId ]
         }
         #endif

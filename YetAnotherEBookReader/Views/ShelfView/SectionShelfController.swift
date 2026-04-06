@@ -95,10 +95,10 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 y: shelfView.frame.maxY,
                 width:  GADAdSizeBanner.size.width,
                 height: GADAdSizeBanner.size.height))
-        bannerView.adUnitID = modelData.yabrGADBannerShelfUnitID
+        bannerView.adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID
 
         #if DEBUG
-        if let yabrGADDeviceIdentifierTest = modelData.yabrGADDeviceIdentifierTest {
+        if let yabrGADDeviceIdentifierTest = YabrAppInfo.shared.gadDeviceIdentifierTest {
             GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ yabrGADDeviceIdentifierTest ]
         }
         #endif

@@ -190,18 +190,18 @@ struct MainView: View {
                     (Dismissing this notice means you will accept.")
                     """)
                 
-                if let yabrPrivacyHtml = modelData.yabrPrivacyHtml {
+                if let yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml {
                     Button(action: { privacyWebViewPresenting = true }) {
                         Text("Private Policy")
                     }.sheet(isPresented: $privacyWebViewPresenting) {
-                        WebViewUI(content: yabrPrivacyHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: yabrPrivacyHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
-                if let yabrTermsHtml = modelData.yabrTermsHtml {
+                if let yabrTermsHtml = YabrAppInfo.shared.termsHtml {
                     Button(action: { termsWebViewPresenting = true }) {
                         Text("Terms & Conditions")
                     }.sheet(isPresented: $termsWebViewPresenting) {
-                        WebViewUI(content: yabrTermsHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: yabrTermsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
                 

@@ -111,8 +111,8 @@ struct SettingsView: View {
                 header: Text("Support"),
                 footer: HStack {
                     Spacer()
-                    Text("Version \(modelData.yarbVersion)")
-                    Text("Build \(modelData.yabrBuild)")
+                    Text("Version \(YabrAppInfo.shared.version)")
+                    Text("Build \(YabrAppInfo.shared.build)")
                     Spacer()
                 }
                 .font(.caption)

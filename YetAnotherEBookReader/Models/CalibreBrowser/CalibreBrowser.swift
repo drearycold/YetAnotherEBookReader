@@ -204,7 +204,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         
         /*
         var cacheRealmConf = Realm.Configuration()
-        cacheRealmConf.schemaVersion = UInt64(service.modelData.yabrBuild) ?? 1
+        cacheRealmConf.schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
         cacheRealmConf.fileURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("cache.realm")
         
         

@@ -177,21 +177,8 @@ final class ModelData: ObservableObject {
 
     @Published var bookModelSection = [ShelfModelSection]()
 
-    var resourceFileDictionary: NSDictionary?
-    var yabrResourceFileDictionary: NSDictionary?
-    
     init(mock: Bool = false) {
         ModelData.shared = self
-        
-        //Load content of Info.plist into resourceFileDictionary dictionary
-        if let path = Bundle.main.path(forResource: "Info", ofType: "plist") {
-            resourceFileDictionary = NSDictionary(contentsOfFile: path)
-        } else {
-            resourceFileDictionary = try? NSDictionary(contentsOf: Bundle.main.bundleURL.appendingPathComponent("Contents", isDirectory: true).appendingPathComponent("Info.plist", isDirectory: false), error: ())
-        }
-        if let path = Bundle.main.path(forResource: "YabrInfo", ofType: "plist", inDirectory: "YabrResources") {
-            yabrResourceFileDictionary = NSDictionary(contentsOfFile: path)
-        }
         
         kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
@@ -313,7 +300,7 @@ final class ModelData: ObservableObject {
     }
     
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-        ModelData.RealmSchemaVersion = UInt64(self.yabrBuild) ?? 1
+        ModelData.RealmSchemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
         realmConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in

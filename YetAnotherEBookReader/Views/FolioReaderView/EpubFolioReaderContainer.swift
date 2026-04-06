@@ -108,9 +108,9 @@ extension EpubFolioReaderContainer: FolioReaderDelegate {
         let bannerView = GADBannerView(
             frame: .init(origin: .zero, size: bannerSize.size)
         )
-        bannerView.adUnitID = modelData?.yabrGADBannerShelfUnitID
+        bannerView.adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID
 #if DEBUG
-        if let deviceIdentifier = modelData?.yabrGADDeviceIdentifierTest {
+        if let deviceIdentifier = YabrAppInfo.shared.gadDeviceIdentifierTest {
             GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ deviceIdentifier ]
         }
 #endif
