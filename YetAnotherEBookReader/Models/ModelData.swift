@@ -68,8 +68,9 @@ final class ModelData: ObservableObject {
     
     var calibreCancellables = Set<AnyCancellable>()
     
-    let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
     let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
+    
+    @Published var downloadManager = BookDownloadManager()
     
     var readingBookInShelfId: String? = nil {
         didSet {
@@ -129,9 +130,6 @@ final class ModelData: ObservableObject {
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
     
-    lazy var downloadService = BookFormatDownloadService(modelData: self)
-    @Published var activeDownloads: [URL: BookFormatDownload] = [:]
-
     lazy var calibreServerService = CalibreServerService(modelData: self)
     @Published var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
 
@@ -195,7 +193,7 @@ final class ModelData: ObservableObject {
         formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
-        downloadService.modelData = self
+        downloadManager.modelData = self
         
         self.reloadCustomFonts()
         
@@ -223,8 +221,6 @@ final class ModelData: ObservableObject {
         bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
         }.store(in: &calibreCancellables)
-        
-        self.calibreServerService.registerBookFormatDownloadHandler()
         
         if mock {
             try? tryInitializeDatabase() { _ in
@@ -494,6 +490,7 @@ final class ModelData: ObservableObject {
             configuration: realmConf
         )
         logger = CalibreActivityLogger(realmConf: realmConf)
+        downloadManager.setup(modelData: self, realmConf: realmConf)
         ModelData.SaveBooksMetadataRealmQueue.sync {
             self.realmSaveBooksMetadata = try! Realm(
                 configuration: realmConf, queue: ModelData.SaveBooksMetadataRealmQueue
@@ -1345,35 +1342,23 @@ final class ModelData: ObservableObject {
     }
     
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
-        return downloadService.startDownload(book, format: format, overwrite: overwrite)
+        return downloadManager.startDownload(book, format: format, overwrite: overwrite)
     }
     
     func cancelDownloadFormat(book: CalibreBook, format: Format) {
-        return downloadService.cancelDownload(book, format: format)
+        return downloadManager.cancelDownload(book, format: format)
     }
     
     func pauseDownloadFormat(book: CalibreBook, format: Format) {
-        return downloadService.pauseDownload(book, format: format)
+        return downloadManager.pauseDownload(book, format: format)
     }
     
     func resumeDownloadFormat(book: CalibreBook, format: Format) -> Bool {
-        let result = downloadService.resumeDownload(book, format: format)
+        let result = downloadManager.resumeDownload(book, format: format)
         if !result {
-            downloadService.cancelDownload(book, format: format)
+            downloadManager.cancelDownload(book, format: format)
         }
         return result
-    }
-    
-    func startBatchDownload(books: [CalibreBook], formats: [String]) {
-        books.forEach { book in
-            let downloadFormats = formats.compactMap { format -> Format? in
-                guard let f = Format(rawValue: format),
-                      let formatInfo = book.formats[format],
-                      formatInfo.serverSize > 0 else { return nil }
-                return f
-            }
-            self.addToShelf(book: book, formats: downloadFormats)
-        }
     }
     
     func clearCache(inShelfId: String) {

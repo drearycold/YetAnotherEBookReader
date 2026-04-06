@@ -260,7 +260,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         let readerInfo = modelData.prepareBookReading(book: book)
         
         if readerInfo.missing {
-            if let activeDownload = modelData.activeDownloads.first(where: {
+            if let activeDownload = modelData.downloadManager.activeDownloads.first(where: {
                 $0.value.book == book && $0.value.format == readerInfo.format
             }),
                activeDownload.value.isDownloading {
@@ -269,7 +269,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     alert.dismiss(animated: true)
                 }))
                 alert.addAction(UIAlertAction(title: "Restart", style: .default, handler: { _ in
-                    self.modelData.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
+                    self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
                     alert.dismiss(animated: true)
                 }))
                 self.present(alert, animated: true)
@@ -279,7 +279,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
                     alert.dismiss(animated: true)
                 }))
                 alert.addAction(UIAlertAction(title: "Download", style: .default, handler: { _ in
-                    self.modelData.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
+                    self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: readerInfo.format))
                     alert.dismiss(animated: true)
                 }))
                 self.present(alert, animated: true)
@@ -352,7 +352,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
 
-            self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
+            self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     

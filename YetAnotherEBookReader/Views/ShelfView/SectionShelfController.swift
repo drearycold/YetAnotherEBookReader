@@ -571,7 +571,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
 
-            self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
+            self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     

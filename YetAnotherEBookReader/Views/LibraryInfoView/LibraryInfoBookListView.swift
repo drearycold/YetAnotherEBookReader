@@ -351,7 +351,7 @@ struct LibraryInfoBookListView: View {
                         .opacity(0.8)
                 }
                 
-                if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                if let download = modelData.downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
                     ZStack {
                         Rectangle()
                             .frame(width: 64, height: 64, alignment: .center)

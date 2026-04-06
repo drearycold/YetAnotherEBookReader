@@ -345,13 +345,13 @@ extension ModelData {
                         } else {
                             missingFormats.forEach {
                                 guard let format = Format(rawValue: $0.key) else { return }
-                                self.bookFormatDownloadSubject.send((book: book, format: format))
+                                self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
                             }
                             
                             if !bookUptoDate {
                                 bookStatus = .HASUPDATE
                             }
-                            if self.activeDownloads.contains(where: { (url, download) in
+                            if self.downloadManager.activeDownloads.contains(where: { (url, download) in
                                 download.isDownloading && download.book.inShelfId == inShelfId
                             }) {
                                 bookStatus = .DOWNLOADING
