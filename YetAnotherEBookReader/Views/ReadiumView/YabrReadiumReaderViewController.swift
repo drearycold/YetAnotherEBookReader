@@ -106,6 +106,8 @@ class YabrReadiumReaderViewController:
         super.init(nibName: nil, bundle: nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(voiceOverStatusDidChange), name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         
         // Initialize preference store and load preferences
         if let book = environment.book {
@@ -238,6 +240,11 @@ class YabrReadiumReaderViewController:
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        
+        if !(readiumPrefs?.scroll ?? false), let margin = readiumPrefs?.verticalMargin {
+            (navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: margin, left: 0, bottom: margin, right: 0)
+        }
+        
         updateNavigationBarTheme()
         updateNavigationBar(animated: false)
         setupVolumeKeyPaging(isEnabled: readiumPrefs?.volumeKeyPaging ?? false)
@@ -251,6 +258,9 @@ class YabrReadiumReaderViewController:
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         teardownVolumeKeyPaging()
+        
+        // Restore default navigation bar tint color to avoid leaking the theme
+        navigationController?.navigationBar.tintColor = nil
     }
     
     override func viewDidLayoutSubviews() {
@@ -312,7 +322,13 @@ class YabrReadiumReaderViewController:
     @objc func presentSettings() {
         guard let prefs = readiumPrefs else { return }
         
-        let settingsView = YabrReaderSettingsView(prefs: prefs, publication: self.publication)
+        let viewModel = YabrReaderSettingsViewModel(prefs: prefs, publication: self.publication, navigator: self.navigator)
+        viewModel.onChanged = { [weak self] in
+            self?.updateNavigationBarTheme()
+            self?.setupVolumeKeyPaging(isEnabled: self?.readiumPrefs?.volumeKeyPaging ?? false)
+        }
+        
+        let settingsView = YabrReaderSettingsView(model: viewModel)
         let hostingController = UIHostingController(rootView: settingsView)
         hostingController.modalPresentationStyle = .popover
         hostingController.popoverPresentationController?.barButtonItem = popoverUserconfigurationAnchor
@@ -364,7 +380,8 @@ class YabrReadiumReaderViewController:
     }
     
     private func updateNavigationBar(animated: Bool = true) {
-        navigationController?.setNavigationBarHidden(navigationBarHidden, animated: animated)
+        let hidden = navigationBarHidden && !isVoiceOverRunning
+        navigationController?.setNavigationBarHidden(hidden, animated: animated)
         setNeedsStatusBarAppearanceUpdate()
     }
     
@@ -433,7 +450,7 @@ class YabrReadiumReaderViewController:
                 }
                 
                 // 1. Try finding by HREF (exact resource match)
-                if !(navigator is PDFNavigatorViewController) {
+                if !(self.navigator is PDFNavigatorViewController) {
                     if let tocLink = tableOfContents.firstDeep(withHREF: locator.href.string),
                        let tocTitle = tocLink.title {
                         return tocTitle
@@ -451,8 +468,7 @@ class YabrReadiumReaderViewController:
                 if let locPageNumber = locator.locations.position,
                    let tocLink = tableOfContents.flattened().filter({ link in
                        guard let tocFragmentIndex = link.href.firstIndex(of: "#"),
-                             let tocFragment = link.href[tocFragmentIndex..<link.href.endIndex] as Substring?,
-                             let pageNumberValue = tocFragment.split(separator: "=").last,
+                             let pageNumberValue = link.href[tocFragmentIndex...].split(separator: "=").last,
                              let pageNumber = Int(pageNumberValue)
                        else { return false }
                        return pageNumber <= locPageNumber
@@ -620,12 +636,29 @@ class YabrReadiumReaderViewController:
         }
     }
     
+    @objc private func appDidBecomeActive() {
+        guard viewIfLoaded?.window != nil else { return }
+        if readiumPrefs?.volumeKeyPaging == true {
+            log(.debug, "App became active, re-setting up volume key paging")
+            teardownVolumeKeyPaging()
+            setupVolumeKeyPaging(isEnabled: true)
+        }
+    }
+    
+    @objc private func appDidEnterBackground() {
+        if readiumPrefs?.volumeKeyPaging == true {
+            log(.debug, "App entered background, tearing down volume key paging")
+            teardownVolumeKeyPaging()
+        }
+    }
+    
     func teardownVolumeKeyPaging() {
         self.log(.debug, "Teardown called")
         volumeObserver?.invalidate()
         volumeObserver = nil
         volumeView?.removeFromSuperview()
         volumeView = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
     
     private func setSystemVolume(_ volume: Float, retryCount: Int = 0) {

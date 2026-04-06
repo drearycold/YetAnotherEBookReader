@@ -58,6 +58,12 @@ extension BookAnnotation {
                         migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
                     }
                 }
+                
+                if oldSchemaVersion < 131 {
+                    migration.enumerateObjects(ofType: ReadiumPreferenceRealm.className()) { oldObject, newObject in
+                        newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
+                    }
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,

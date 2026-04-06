@@ -104,8 +104,10 @@ class ImageLoader: ObservableObject {
 struct YabrAsyncImage<Placeholder: View>: View {
     @StateObject private var loader: ImageLoader
     private let placeholder: Placeholder
+    private let url: URL
 
     init(url: URL, @ViewBuilder placeholder: () -> Placeholder) {
+        self.url = url
         self.placeholder = placeholder()
         _loader = StateObject(wrappedValue: ImageLoader(url: url))
     }
@@ -113,6 +115,7 @@ struct YabrAsyncImage<Placeholder: View>: View {
     var body: some View {
         content
             .onAppear(perform: loader.load)
+            .id(url)
     }
 
     private var content: some View {
