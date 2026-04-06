@@ -90,3 +90,8 @@ fastlane/test_output
 iOSInjectionProject/
 
 .DS_Store
+
+.gemini
+
+.gemini/
+gha-creds-*.json

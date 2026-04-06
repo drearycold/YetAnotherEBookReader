@@ -12,12 +12,7 @@ import SwiftUI
 import OSLog
 import Kingfisher
 import ShelfView
-
 import CryptoSwift
-#if canImport(R2Shared)
-import R2Shared
-import R2Streamer
-#endif
 
 final class ModelData: ObservableObject {
     static var shared: ModelData?
@@ -468,6 +463,23 @@ final class ModelData: ObservableObject {
                         if let items = oldObject?["items"] as? RealmSwift.List<DynamicObject> {
                             newObject?["itemsCount"] = items.count
                         }
+                    }
+                }
+                
+                if oldSchemaVersion < 125 {
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                }
+                
+                if oldSchemaVersion < 128 {
+                    if (oldSchemaVersion >= 125) {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationMenuBookListSyle", to: "currentNavigationMenuBookListStyle")
+                    } else {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
+                    }
+                }
+                if oldSchemaVersion < 131 {
+                    migration.enumerateObjects(ofType: ReadiumPreferenceRealm.className()) { oldObject, newObject in
+                        newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
                     }
                 }
                 

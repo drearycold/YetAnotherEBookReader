@@ -1,0 +1,1504 @@
+diff --git a/YetAnotherEBookReader.xcodeproj/project.pbxproj b/YetAnotherEBookReader.xcodeproj/project.pbxproj
+index 735d2cb..583fcc2 100644
+--- a/YetAnotherEBookReader.xcodeproj/project.pbxproj
++++ b/YetAnotherEBookReader.xcodeproj/project.pbxproj
+@@ -1337,53 +1337,53 @@
+ 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+ 				MTL_ENABLE_DEBUG_INFO = NO;
+ 				MTL_FAST_MATH = YES;
+ 				SDKROOT = iphoneos;
+ 				SWIFT_COMPILATION_MODE = wholemodule;
+ 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+ 				VALIDATE_PRODUCT = YES;
+ 			};
+ 			name = Release;
+ 		};
+ 		2AC3EC4325BDBC11004A6633 /* Debug */ = {
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = YabrAppIcon;
+ 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+ 				CLANG_ENABLE_MODULES = YES;
+ 				CODE_SIGN_ENTITLEMENTS = YetAnotherEBookReader/YetAnotherEBookReader.entitlements;
+ 				CODE_SIGN_IDENTITY = "Apple Development";
+ 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+ 				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 129;
++				CURRENT_PROJECT_VERSION = 131;
+ 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
+ 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
+ 				ENABLE_PREVIEWS = YES;
+ 				INFOPLIST_FILE = YetAnotherEBookReader/Info.plist;
+ 				INFOPLIST_KEY_CFBundleDisplayName = D.S.Reader;
+ 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
+ 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+ 				);
+-				MARKETING_VERSION = 0.2.5;
++				MARKETING_VERSION = 0.2.9;
+ 				OTHER_LDFLAGS = (
+ 					"$(inherited)",
+ 					"-l\"c++\"",
+ 					"-l\"sqlite3\"",
+ 					"-l\"z\"",
+ 					"-framework",
+ 					"\"AVFoundation\"",
+ 					"-framework",
+ 					"\"AudioToolbox\"",
+ 					"-framework",
+ 					"\"CFNetwork\"",
+ 					"-framework",
+ 					"\"CoreGraphics\"",
+ 					"-framework",
+ 					"\"CoreMedia\"",
+ 					"-framework",
+ 					"\"CoreTelephony\"",
+ 					"-framework",
+ 					"\"CoreVideo\"",
+ 					"-framework",
+@@ -1422,53 +1422,53 @@
+ 				SUPPORTS_MACCATALYST = NO;
+ 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+ 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+ 				SWIFT_OBJC_BRIDGING_HEADER = "";
+ 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+ 				SWIFT_VERSION = 5.0;
+ 				TARGETED_DEVICE_FAMILY = "1,2";
+ 			};
+ 			name = Debug;
+ 		};
+ 		2AC3EC4425BDBC11004A6633 /* Release */ = {
+ 			isa = XCBuildConfiguration;
+ 			buildSettings = {
+ 				ASSETCATALOG_COMPILER_APPICON_NAME = YabrAppIcon;
+ 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+ 				CLANG_ENABLE_MODULES = YES;
+ 				CODE_SIGN_ENTITLEMENTS = YetAnotherEBookReader/YetAnotherEBookReader.entitlements;
+ 				CODE_SIGN_IDENTITY = "Apple Development";
+ 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
+ 				CODE_SIGN_STYLE = Automatic;
+-				CURRENT_PROJECT_VERSION = 129;
++				CURRENT_PROJECT_VERSION = 131;
+ 				DEVELOPMENT_ASSET_PATHS = "\"YetAnotherEBookReader/Preview Content\"";
+ 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
+ 				ENABLE_PREVIEWS = YES;
+ 				INFOPLIST_FILE = YetAnotherEBookReader/Info.plist;
+ 				INFOPLIST_KEY_CFBundleDisplayName = D.S.Reader;
+ 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
+ 				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+ 				LD_RUNPATH_SEARCH_PATHS = (
+ 					"$(inherited)",
+ 					"@executable_path/Frameworks",
+ 				);
+-				MARKETING_VERSION = 0.2.5;
++				MARKETING_VERSION = 0.2.9;
+ 				OTHER_LDFLAGS = (
+ 					"$(inherited)",
+ 					"-l\"c++\"",
+ 					"-l\"sqlite3\"",
+ 					"-l\"z\"",
+ 					"-framework",
+ 					"\"AVFoundation\"",
+ 					"-framework",
+ 					"\"AudioToolbox\"",
+ 					"-framework",
+ 					"\"CFNetwork\"",
+ 					"-framework",
+ 					"\"CoreGraphics\"",
+ 					"-framework",
+ 					"\"CoreMedia\"",
+ 					"-framework",
+ 					"\"CoreTelephony\"",
+ 					"-framework",
+ 					"\"CoreVideo\"",
+ 					"-framework",
+diff --git a/YetAnotherEBookReader/Models/BookPreference.swift b/YetAnotherEBookReader/Models/BookPreference.swift
+index 256f8ac..1d566f7 100644
+--- a/YetAnotherEBookReader/Models/BookPreference.swift
++++ b/YetAnotherEBookReader/Models/BookPreference.swift
+@@ -41,34 +41,40 @@ extension BookAnnotation {
+     }
+     
+     static func getBookPreferenceServerConfig(_ server: CalibreServer) -> Realm.Configuration {
+         let applicationSupportURL = try! FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+         
+         return Realm.Configuration(
+             fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
+             schemaVersion: ModelData.RealmSchemaVersion,
+             migrationBlock: { migration, oldSchemaVersion in
+                 if oldSchemaVersion < 125 {
+                     migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                 }
+                 
+                 if oldSchemaVersion < 128 {
+                     if (oldSchemaVersion >= 125) {
+                         migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationMenuBookListSyle", to: "currentNavigationMenuBookListStyle")
+                     } else {
+                         migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
+                     }
+                 }
++                
++                if oldSchemaVersion < 131 {
++                    migration.enumerateObjects(ofType: ReadiumPreferenceRealm.className()) { oldObject, newObject in
++                        newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
++                    }
++                }
+             },
+             objectTypes: [
+                 BookDeviceReadingPositionRealm.self,
+                 BookDeviceReadingPositionHistoryRealm.self,
+                 FolioReaderPreferenceRealm.self,
+                 BookHighlightRealm.self,
+                 BookBookmarkRealm.self,
+                 YabrPDFOptionsRealm.self,
+                 ReadiumPreferenceRealm.self
+             ]
+         )
+     }
+ }
+ 
+diff --git a/YetAnotherEBookReader/Models/ModelData.swift b/YetAnotherEBookReader/Models/ModelData.swift
+index e91332f..eafee09 100644
+--- a/YetAnotherEBookReader/Models/ModelData.swift
++++ b/YetAnotherEBookReader/Models/ModelData.swift
+@@ -460,40 +460,45 @@ final class ModelData: ObservableObject {
+                 if oldSchemaVersion < 110 {
+                     migration.enumerateObjects(ofType: CalibreUnifiedCategoryObject.className()) { oldObject, newObject in
+                         newObject?["search"] = ""
+                         if let items = oldObject?["items"] as? RealmSwift.List<DynamicObject> {
+                             newObject?["itemsCount"] = items.count
+                         }
+                     }
+                 }
+                 
+                 if oldSchemaVersion < 125 {
+                     migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                 }
+                 
+                 if oldSchemaVersion < 128 {
+                     if (oldSchemaVersion >= 125) {
+                         migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationMenuBookListSyle", to: "currentNavigationMenuBookListStyle")
+                     } else {
+                         migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
+                     }
+                 }
++                if oldSchemaVersion < 131 {
++                    migration.enumerateObjects(ofType: ReadiumPreferenceRealm.className()) { oldObject, newObject in
++                        newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
++                    }
++                }
+                 
+                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
+             },
+             shouldCompactOnLaunch: { fileSize, dataSize in
+                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize
+             }
+         )
+         
+         if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+             realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
+             if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+                 let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")
+                 if FileManager.default.fileExists(atPath: existingRealmURL.path) {
+                     try? FileManager.default.moveItem(at: existingRealmURL, to: realmConf.fileURL!)
+                 }
+             }
+         }
+         
+         let _ = try Realm(configuration: realmConf)
+         realmConf.migrationBlock = nil
+diff --git a/YetAnotherEBookReader/Models/RealmModel.swift b/YetAnotherEBookReader/Models/RealmModel.swift
+index b442de2..bec59fd 100644
+--- a/YetAnotherEBookReader/Models/RealmModel.swift
++++ b/YetAnotherEBookReader/Models/RealmModel.swift
+@@ -1439,146 +1439,306 @@ class ReadiumPreferenceRealm: Object, ObjectKeyIdentifiable {
+     @Persisted var lineHeight: Double = 1.2
+     @Persisted var pageMargins: Double = 1.0
+     @Persisted var publisherStyles: Bool = true
+     @Persisted var scroll: Bool = false
+     @Persisted var textAlign: Int = 0
+     
+     @Persisted var columnCount: Int = 0
+     @Persisted var fontWeight: Double = 1.0
+     @Persisted var letterSpacing: Double = 0.0
+     @Persisted var wordSpacing: Double = 0.0
+     @Persisted var hyphens: Bool = false
+     @Persisted var imageFilter: Int = 0
+     @Persisted var textNormalization: Bool = false
+     @Persisted var typeScale: Double = 1.2
+     @Persisted var paragraphIndent: Double = 0.0
+     @Persisted var paragraphSpacing: Double = 0.0
+     
+     @Persisted var volumeKeyPaging: Bool = false
+     @Persisted var verticalMargin: Double = 0.0
+     @Persisted var readingProgression: Int = 0 // 0: LTR, 1: RTL
++    
++    @Persisted var fit: Int = 0 // 0: auto, 1: page, 2: width
++    @Persisted var ligatures: Bool = false
++    @Persisted var offsetFirstPage: Bool?
++    @Persisted var spread: Int = 0 // 0: auto, 1: never, 2: always
++    @Persisted var verticalText: Bool = false
++
++    @Persisted var pageSpacing: Double = 0.0
++    @Persisted var scrollAxis: Int = 0 // 0: vertical, 1: horizontal
++    @Persisted var visibleScrollbar: Bool = true
+ }
+ 
+ import ReadiumNavigator
+ import ReadiumShared
+ 
+ extension ReadiumPreferenceRealm {
+     
+     var themeColor: UIColor {
+         switch themeMode {
+         case 1: // Sepia
+             return UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1.0) // #FAF4E8
+         case 2: // Dark
+             return .black
+         default: // Light
+             return .white
+         }
+     }
+ 
+     func toEPUBPreferences() -> EPUBPreferences {
+         EPUBPreferences(
+             columnCount: self.columnCount == 0 ? .auto : (self.columnCount == 1 ? .one : .two),
++            fit: {
++                switch self.fit {
++                case 1: return .page
++                case 2: return .width
++                default: return .auto
++                }
++            }(),
+             fontFamily: self.fontFamily == "Original" ? nil : ReadiumNavigator.FontFamily(rawValue: self.fontFamily),
+             fontSize: self.fontSizePercentage / 100.0,
+             fontWeight: self.fontWeight,
+             hyphens: self.hyphens,
+             imageFilter: self.imageFilter == 0 ? nil : (self.imageFilter == 1 ? .darken : .invert),
+             letterSpacing: self.letterSpacing,
++            ligatures: self.ligatures,
+             lineHeight: self.lineHeight,
++            offsetFirstPage: self.offsetFirstPage,
+             pageMargins: self.pageMargins,
+             paragraphIndent: self.paragraphIndent,
+             paragraphSpacing: self.paragraphSpacing,
+             publisherStyles: self.publisherStyles,
+             readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
+             scroll: self.scroll,
++            spread: {
++                switch self.spread {
++                case 1: return .never
++                case 2: return .always
++                default: return .auto
++                }
++            }(),
+             textAlign: {
+                 switch self.textAlign {
+                 case 1: return .start
+                 case 2: return .left
+                 case 3: return .right
+                 case 4: return .justify
+                 default: return nil
+                 }
+             }(),
+             textNormalization: self.textNormalization,
+             theme: {
+                 switch self.themeMode {
+                 case 1: return .sepia
+                 case 2: return .dark
+                 default: return .light
+                 }
+             }(),
+             typeScale: self.typeScale,
++            verticalText: self.verticalText,
+             wordSpacing: self.wordSpacing
+         )
+     }
+     
+     func toPDFPreferences() -> PDFPreferences {
+         PDFPreferences(
++            fit: {
++                switch self.fit {
++                case 1: return .page
++                case 2: return .width
++                default: return .auto
++                }
++            }(),
++            offsetFirstPage: self.offsetFirstPage,
++            pageSpacing: self.pageSpacing,
+             readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
+-            scroll: self.scroll
++            scroll: self.scroll,
++            scrollAxis: self.scrollAxis == 1 ? .horizontal : .vertical,
++            spread: {
++                switch self.spread {
++                case 1: return .never
++                case 2: return .always
++                default: return .auto
++                }
++            }(),
++            visibleScrollbar: self.visibleScrollbar
+         )
+     }
+     
+     func update(from settings: EPUBSettings) {
+         switch settings.theme {
+         case .light: self.themeMode = 0
+         case .sepia: self.themeMode = 1
+         case .dark: self.themeMode = 2
+         }
+         
+         self.fontSizePercentage = settings.fontSize * 100.0
+-        
+-        if let fontFamily = settings.fontFamily {
+-            self.fontFamily = fontFamily.rawValue
+-        } else {
+-            self.fontFamily = "Original"
+-        }
+-        
++        self.fontFamily = settings.fontFamily?.rawValue ?? "Original"
+         self.lineHeight = settings.lineHeight ?? 1.2
+         self.pageMargins = settings.pageMargins
+         self.publisherStyles = settings.publisherStyles
+         self.scroll = settings.scroll
+         self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
+         
+         switch settings.textAlign {
+         case .start: self.textAlign = 1
+         case .left: self.textAlign = 2
+         case .right: self.textAlign = 3
+         case .justify: self.textAlign = 4
+         default: self.textAlign = 0
+         }
+         
+         switch settings.columnCount {
+         case .auto: self.columnCount = 0
+         case .one: self.columnCount = 1
+         case .two: self.columnCount = 2
+-        default: self.columnCount = 0
+         }
+         
+         self.fontWeight = settings.fontWeight ?? 1.0
+         self.letterSpacing = settings.letterSpacing ?? 0.0
+         self.wordSpacing = settings.wordSpacing ?? 0.0
+         self.hyphens = settings.hyphens ?? false
+         
+-        if let filter = settings.imageFilter {
+-            switch filter {
+-            case .darken: self.imageFilter = 1
+-            case .invert: self.imageFilter = 2
+-            @unknown default: self.imageFilter = 0
+-            }
+-        } else {
+-            self.imageFilter = 0
++        switch settings.imageFilter {
++        case .darken: self.imageFilter = 1
++        case .invert: self.imageFilter = 2
++        default: self.imageFilter = 0
+         }
+         
+         self.textNormalization = settings.textNormalization
+         self.typeScale = settings.typeScale ?? 1.2
+         self.paragraphIndent = settings.paragraphIndent ?? 0.0
+         self.paragraphSpacing = settings.paragraphSpacing ?? 0.0
++        self.ligatures = settings.ligatures ?? false
++        self.offsetFirstPage = settings.offsetFirstPage ?? false
++        self.verticalText = settings.verticalText
++        
++        switch settings.spread {
++        case .never: self.spread = 1
++        case .always: self.spread = 2
++        default: self.spread = 0
++        }
++        
++        switch settings.fit {
++        case .page: self.fit = 1
++        case .width: self.fit = 2
++        default: self.fit = 0
++        }
+     }
+     
+     func update(from settings: PDFSettings) {
+         self.scroll = settings.scroll
+         self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
++        self.offsetFirstPage = settings.offsetFirstPage
++        self.pageSpacing = settings.pageSpacing
++        self.scrollAxis = settings.scrollAxis == .horizontal ? 1 : 0
++        self.visibleScrollbar = settings.visibleScrollbar
++        
++        switch settings.fit {
++        case .page: self.fit = 1
++        case .width: self.fit = 2
++        default: self.fit = 0
++        }
++        
++        switch settings.spread {
++        case .never: self.spread = 1
++        case .always: self.spread = 2
++        default: self.spread = 0
++        }
++    }
++    
++    func update(from preferences: EPUBPreferences) {
++        switch preferences.theme {
++        case .light?: self.themeMode = 0
++        case .sepia?: self.themeMode = 1
++        case .dark?: self.themeMode = 2
++        case nil: self.themeMode = 0
++        }
++        
++        self.fontSizePercentage = (preferences.fontSize ?? 1.0) * 100.0
++        self.fontFamily = preferences.fontFamily?.rawValue ?? "Original"
++        self.lineHeight = preferences.lineHeight ?? 1.2
++        self.pageMargins = preferences.pageMargins ?? 1.0
++        self.publisherStyles = preferences.publisherStyles ?? true
++        self.scroll = preferences.scroll ?? false
++        
++        if let readingProgression = preferences.readingProgression {
++            self.readingProgression = readingProgression == .rtl ? 1 : 0
++        } else {
++            self.readingProgression = 0
++        }
++        
++        switch preferences.textAlign {
++        case .start?: self.textAlign = 1
++        case .left?: self.textAlign = 2
++        case .right?: self.textAlign = 3
++        case .justify?: self.textAlign = 4
++        default: self.textAlign = 0
++        }
++        
++        switch preferences.columnCount {
++        case .one?: self.columnCount = 1
++        case .two?: self.columnCount = 2
++        default: self.columnCount = 0
++        }
++        
++        self.fontWeight = preferences.fontWeight ?? 1.0
++        self.letterSpacing = preferences.letterSpacing ?? 0.0
++        self.wordSpacing = preferences.wordSpacing ?? 0.0
++        self.hyphens = preferences.hyphens ?? false
++        
++        switch preferences.imageFilter {
++        case .darken?: self.imageFilter = 1
++        case .invert?: self.imageFilter = 2
++        default: self.imageFilter = 0
++        }
++        
++        self.textNormalization = preferences.textNormalization ?? false
++        self.typeScale = preferences.typeScale ?? 1.2
++        self.paragraphIndent = preferences.paragraphIndent ?? 0.0
++        self.paragraphSpacing = preferences.paragraphSpacing ?? 0.0
++        self.ligatures = preferences.ligatures ?? false
++        self.offsetFirstPage = preferences.offsetFirstPage
++        self.verticalText = preferences.verticalText ?? false
++        
++        switch preferences.spread {
++        case .never?: self.spread = 1
++        case .always?: self.spread = 2
++        default: self.spread = 0
++        }
++        
++        switch preferences.fit {
++        case .page?: self.fit = 1
++        case .width?: self.fit = 2
++        default: self.fit = 0
++        }
++    }
++    
++    func update(from preferences: PDFPreferences) {
++        self.scroll = preferences.scroll ?? false
++        
++        if let readingProgression = preferences.readingProgression {
++            self.readingProgression = readingProgression == .rtl ? 1 : 0
++        } else {
++            self.readingProgression = 0
++        }
++        
++        self.offsetFirstPage = preferences.offsetFirstPage
++        self.pageSpacing = preferences.pageSpacing ?? 0.0
++        self.scrollAxis = preferences.scrollAxis == .horizontal ? 1 : 0
++        self.visibleScrollbar = preferences.visibleScrollbar ?? true
++        
++        switch preferences.fit {
++        case .page?: self.fit = 1
++        case .width?: self.fit = 2
++        default: self.fit = 0
++        }
++        
++        switch preferences.spread {
++        case .never?: self.spread = 1
++        case .always?: self.spread = 2
++        default: self.spread = 0
++        }
+     }
+ }
+ 
++
+diff --git a/YetAnotherEBookReader/Views/Reader/YabrReaderSettingsView.swift b/YetAnotherEBookReader/Views/Reader/YabrReaderSettingsView.swift
+index dfefc89..3832484 100644
+--- a/YetAnotherEBookReader/Views/Reader/YabrReaderSettingsView.swift
++++ b/YetAnotherEBookReader/Views/Reader/YabrReaderSettingsView.swift
+@@ -1,174 +1,458 @@
+-//
+-//  YabrReaderSettingsView.swift
+-//  YetAnotherEBookReader
+-//
+-//  Created by Gemini CLI on 2024/03/26.
+-//
+-
+ import SwiftUI
+ import RealmSwift
+ import ReadiumShared
++import ReadiumNavigator
+ 
+-struct YabrReaderSettingsView: View {
+-    @ObservedRealmObject var prefs: ReadiumPreferenceRealm
++class YabrReaderSettingsViewModel: ObservableObject {
++    @Published var epubEditor: EPUBPreferencesEditor?
++    @Published var pdfEditor: PDFPreferencesEditor?
++    
++    let prefs: ReadiumPreferenceRealm
+     let publication: Publication
++    let navigator: Navigator
+     
+-    let supportedFontFamilies: [String] = [
+-        "Original",
+-        "serif",
+-        "sans-serif",
+-        "monospace",
+-        "IA Writer Duospace",
+-        "AccessibleDfA",
+-        "OpenDyslexic",
+-        "Iowan Old Style",
+-        "Palatino"
+-    ]
++    var onChanged: (() -> Void)?
++    
++    init(prefs: ReadiumPreferenceRealm, publication: Publication, navigator: Navigator) {
++        self.prefs = prefs
++        self.publication = publication
++        self.navigator = navigator
++        
++        if let epub = navigator as? EPUBNavigatorViewController {
++            self.epubEditor = EPUBPreferencesEditor(
++                initialPreferences: prefs.toEPUBPreferences(),
++                metadata: publication.metadata,
++                defaults: EPUBDefaults()
++            )
++        } else if let pdf = navigator as? PDFNavigatorViewController {
++            self.pdfEditor = PDFPreferencesEditor(
++                initialPreferences: prefs.toPDFPreferences(),
++                metadata: publication.metadata,
++                defaults: PDFDefaults()
++            )
++        }
++    }
++    
++    func commit() {
++        let updateAction = { [weak self] in
++            guard let self = self else { return }
++            if let epubEditor = self.epubEditor {
++                self.prefs.update(from: epubEditor.preferences)
++            } else if let pdfEditor = self.pdfEditor {
++                self.prefs.update(from: pdfEditor.preferences)
++            }
++        }
++        
++        if let realm = prefs.realm {
++            try? realm.write { updateAction() }
++        } else {
++            updateAction()
++        }
++        
++        // Decouple navigator UI update from Realm write lock
++        if let epubEditor = epubEditor {
++            (navigator as? EPUBNavigatorViewController)?.submitPreferences(epubEditor.preferences)
++        } else if let pdfEditor = pdfEditor {
++            (navigator as? PDFNavigatorViewController)?.submitPreferences(pdfEditor.preferences)
++        }
++        
++        onChanged?()
++        objectWillChange.send()
++    }
++    
++    func updateVerticalMargin(_ value: Double) {
++        let updateAction = { [weak self] in
++            self?.prefs.verticalMargin = value
++        }
++        
++        if let realm = prefs.realm {
++            try? realm.write { updateAction() }
++        } else {
++            updateAction()
++        }
++        
++        (navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: value, left: 0, bottom: value, right: 0)
++        
++        onChanged?()
++        objectWillChange.send()
++    }
++}
++
++extension Preference {
++    func binding(onSet: @escaping () -> Void = {}) -> Binding<Value> {
++        Binding(
++            get: { value ?? effectiveValue },
++            set: { set($0); onSet() }
++        )
++    }
+     
+-    private var isReflowable: Bool {
+-        publication.metadata.layout == .reflowable
++    func optionalBinding(onSet: @escaping () -> Void = {}) -> Binding<Value?> {
++        Binding(
++            get: { value },
++            set: { set($0); onSet() }
++        )
+     }
++}
++
++struct YabrReaderSettingsView: View {
++    @ObservedObject var model: YabrReaderSettingsViewModel
++    
++    let supportedFontFamilies: [FontFamily] = [
++        .serif,
++        .sansSerif,
++        .monospace,
++        .iaWriterDuospace,
++        .accessibleDfA,
++        .openDyslexic,
++        .iowanOldStyle,
++        .palatino,
++        .athelas,
++        .georgia,
++        .helveticaNeue,
++        .seravek,
++        .arial
++    ]
+     
+     var body: some View {
+         NavigationView {
+             Form {
+                 Section(header: Text("Appearance")) {
+-                    Picker("Theme", selection: $prefs.themeMode) {
++                    Picker("Theme", selection: Binding(
++                        get: { model.prefs.themeMode },
++                        set: { value in
++                            if let realm = model.prefs.realm {
++                                try? realm.write {
++                                    model.prefs.themeMode = value
++                                }
++                            } else {
++                                model.prefs.themeMode = value
++                            }
++                            
++                            // Sync with Readium editor if available
++                            if let editor = model.epubEditor {
++                                switch value {
++                                case 1: editor.theme.set(.sepia)
++                                case 2: editor.theme.set(.dark)
++                                default: editor.theme.set(.light)
++                                }
++                            }
++                            model.commit()
++                        }
++                    )) {
+                         Text("Light").tag(0)
+                         Text("Sepia").tag(1)
+                         Text("Dark").tag(2)
+                     }
+                     .pickerStyle(SegmentedPickerStyle())
+                     
+-                    if prefs.themeMode == 2 { // Dark mode
+-                        Picker("Image Filter", selection: $prefs.imageFilter) {
+-                            Text("None").tag(0)
+-                            Text("Darken").tag(1)
+-                            Text("Invert").tag(2)
++                    if let editor = model.epubEditor, editor.imageFilter.isEffective {
++                        Picker("Image Filter", selection: editor.imageFilter.optionalBinding(onSet: {
++                            model.commit()
++                        })) {
++                            Text("None").tag(nil as ImageFilter?)
++                            Text("Darken").tag(ImageFilter.darken as ImageFilter?)
++                            Text("Invert").tag(ImageFilter.invert as ImageFilter?)
+                         }
+                     }
+                     
+-                    Toggle("Scroll Mode", isOn: $prefs.scroll)
+-                    Toggle("Volume Key Paging", isOn: $prefs.volumeKeyPaging)
++                    Toggle("Scroll Mode", isOn: Binding(
++                        get: { model.prefs.scroll },
++                        set: { value in
++                            if let realm = model.prefs.realm {
++                                try? realm.write {
++                                    model.prefs.scroll = value
++                                }
++                            } else {
++                                model.prefs.scroll = value
++                            }
++                            
++                            // Sync with Readium editor
++                            if let editor = model.epubEditor {
++                                editor.scroll.set(value)
++                            } else if let editor = model.pdfEditor {
++                                editor.scroll.set(value)
++                            }
++                            
++                            // Reset or apply vertical margin insets based on scroll mode
++                            if value {
++                                (model.navigator as? UIViewController)?.additionalSafeAreaInsets = .zero
++                            } else {
++                                let margin = model.prefs.verticalMargin
++                                (model.navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: margin, left: 0, bottom: margin, right: 0)
++                            }
++                            
++                            model.commit()
++                        }
++                    ))
+                     
+-                    Picker("Progression", selection: $prefs.readingProgression) {
++                    Toggle("Volume Key Paging", isOn: Binding(
++                        get: { model.prefs.volumeKeyPaging },
++                        set: { value in
++                            if let realm = model.prefs.realm {
++                                try? realm.write {
++                                    model.prefs.volumeKeyPaging = value
++                                }
++                            } else {
++                                model.prefs.volumeKeyPaging = value
++                            }
++                            model.commit()
++                        }
++                    ))
++                    
++                    Picker("Progression", selection: Binding(
++                        get: { model.prefs.readingProgression },
++                        set: { value in
++                            if let realm = model.prefs.realm {
++                                try? realm.write {
++                                    model.prefs.readingProgression = value
++                                }
++                            } else {
++                                model.prefs.readingProgression = value
++                            }
++                            
++                            let direction: ReadiumNavigator.ReadingProgression = (value == 1) ? .rtl : .ltr
++                            if let editor = model.epubEditor {
++                                editor.readingProgression.set(direction)
++                            } else if let editor = model.pdfEditor {
++                                editor.readingProgression.set(direction)
++                            }
++                            model.commit()
++                        }
++                    )) {
+                         Text("LTR").tag(0)
+                         Text("RTL").tag(1)
+                     }
+                     .pickerStyle(SegmentedPickerStyle())
+                     
+-                    if isReflowable && !prefs.scroll {
+-                        Picker("Columns", selection: $prefs.columnCount) {
+-                            Text("Auto").tag(0)
+-                            Text("1").tag(1)
+-                            Text("2").tag(2)
++                    if let editor = model.epubEditor {
++                        if editor.columnCount.isEffective {
++                            Picker("Columns", selection: editor.columnCount.binding(onSet: model.commit)) {
++                                Text("Auto").tag(ColumnCount.auto)
++                                Text("1").tag(ColumnCount.one)
++                                Text("2").tag(ColumnCount.two)
++                            }
+                         }
+                     }
+                 }
+                 
+-                if isReflowable {
+-                    Section(header: Text("Typography")) {
+-                        Picker("Typeface", selection: $prefs.fontFamily) {
+-                            ForEach(supportedFontFamilies, id: \.self) {
+-                                Text($0).tag($0)
++                if let editor = model.epubEditor {
++                    if editor.layout == .reflowable {
++                        Section(header: Text("Typography")) {
++                            Picker("Typeface", selection: editor.fontFamily.optionalBinding(onSet: model.commit)) {
++                                Text("Original").tag(nil as FontFamily?)
++                                ForEach(supportedFontFamilies, id: \.rawValue) { ff in
++                                    Text(ff.rawValue).tag(ff as FontFamily?)
++                                }
++                            }
++                            
++                            HStack {
++                                Button(action: { editor.fontSize.decrement(); model.commit() }) {
++                                    Image(systemName: "textformat.size.smaller")
++                                }
++                                .buttonStyle(BorderlessButtonStyle())
++                                Spacer()
++                                Text("Font Size: \(editor.fontSize.format(value: editor.fontSize.value ?? editor.fontSize.effectiveValue))")
++                                    .font(.subheadline)
++                                Spacer()
++                                Button(action: { editor.fontSize.increment(); model.commit() }) {
++                                    Image(systemName: "textformat.size.larger")
++                                }
++                                .buttonStyle(BorderlessButtonStyle())
++                            }
++                            
++                            if editor.fontWeight.isEffective {
++                                HStack {
++                                    Stepper("Font Weight", onIncrement: { editor.fontWeight.increment(); model.commit() }, onDecrement: { editor.fontWeight.decrement(); model.commit() })
++                                    Text(editor.fontWeight.format(value: editor.fontWeight.value ?? editor.fontWeight.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            Toggle("Text Normalization", isOn: editor.textNormalization.binding(onSet: model.commit))
++                            
++                            if editor.ligatures.isEffective {
++                                Toggle("Ligatures", isOn: editor.ligatures.binding(onSet: model.commit))
+                             }
+                         }
+                         
+-                        HStack {
+-                            Button(action: { 
+-                                if prefs.fontSizePercentage > 50 { 
+-                                    $prefs.fontSizePercentage.wrappedValue -= 10 
+-                                } 
+-                            }) {
+-                                Image(systemName: "textformat.size.smaller")
+-                            }
+-                            .buttonStyle(BorderlessButtonStyle())
+-                            Spacer()
+-                            Text("Font Size: \(Int(prefs.fontSizePercentage))%")
+-                                .font(.subheadline)
+-                            Spacer()
+-                            Button(action: { 
+-                                if prefs.fontSizePercentage < 300 { 
+-                                    $prefs.fontSizePercentage.wrappedValue += 10 
+-                                } 
+-                            }) {
+-                                Image(systemName: "textformat.size.larger")
+-                            }
+-                            .buttonStyle(BorderlessButtonStyle())
++                        Section(header: Text("Layout")) {
++                            Toggle("Publisher Styles", isOn: editor.publisherStyles.binding(onSet: model.commit))
++                            
++                            if editor.textAlign.isEffective {
++                                Picker("Alignment", selection: editor.textAlign.optionalBinding(onSet: model.commit)) {
++                                    Text("Default").tag(nil as ReadiumNavigator.TextAlignment?)
++                                    Text("Start").tag(ReadiumNavigator.TextAlignment.start as ReadiumNavigator.TextAlignment?)
++                                    Text("Left").tag(ReadiumNavigator.TextAlignment.left as ReadiumNavigator.TextAlignment?)
++                                    Text("Right").tag(ReadiumNavigator.TextAlignment.right as ReadiumNavigator.TextAlignment?)
++                                    Text("Justify").tag(ReadiumNavigator.TextAlignment.justify as ReadiumNavigator.TextAlignment?)
++                                }
++                            }
++                            
++                            if editor.lineHeight.isEffective {
++                                HStack {
++                                    Stepper("Line Height", onIncrement: { editor.lineHeight.increment(); model.commit() }, onDecrement: { editor.lineHeight.decrement(); model.commit() })
++                                    Text(editor.lineHeight.format(value: editor.lineHeight.value ?? editor.lineHeight.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.typeScale.isEffective {
++                                HStack {
++                                    Stepper("Type Scale", onIncrement: { editor.typeScale.increment(); model.commit() }, onDecrement: { editor.typeScale.decrement(); model.commit() })
++                                    Text(editor.typeScale.format(value: editor.typeScale.value ?? editor.typeScale.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.wordSpacing.isEffective {
++                                HStack {
++                                    Stepper("Word Spacing", onIncrement: { editor.wordSpacing.increment(); model.commit() }, onDecrement: { editor.wordSpacing.decrement(); model.commit() })
++                                    Text(editor.wordSpacing.format(value: editor.wordSpacing.value ?? editor.wordSpacing.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.letterSpacing.isEffective {
++                                HStack {
++                                    Stepper("Letter Spacing", onIncrement: { editor.letterSpacing.increment(); model.commit() }, onDecrement: { editor.letterSpacing.decrement(); model.commit() })
++                                    Text(editor.letterSpacing.format(value: editor.letterSpacing.value ?? editor.letterSpacing.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.paragraphIndent.isEffective {
++                                HStack {
++                                    Stepper("Paragraph Indent", onIncrement: { editor.paragraphIndent.increment(); model.commit() }, onDecrement: { editor.paragraphIndent.decrement(); model.commit() })
++                                    Text(editor.paragraphIndent.format(value: editor.paragraphIndent.value ?? editor.paragraphIndent.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.paragraphSpacing.isEffective {
++                                HStack {
++                                    Stepper("Paragraph Spacing", onIncrement: { editor.paragraphSpacing.increment(); model.commit() }, onDecrement: { editor.paragraphSpacing.decrement(); model.commit() })
++                                    Text(editor.paragraphSpacing.format(value: editor.paragraphSpacing.value ?? editor.paragraphSpacing.effectiveValue))
++                                        .font(.caption)
++                                }
++                            }
++                            
++                            if editor.hyphens.isEffective {
++                                Toggle("Hyphens", isOn: editor.hyphens.binding(onSet: model.commit))
++                            }
++                            
++                            if editor.verticalText.isEffective {
++                                Toggle("Vertical Text", isOn: editor.verticalText.binding(onSet: model.commit))
++                            }
++                            
++                            HStack {
++                                Stepper("Page Margins", onIncrement: { editor.pageMargins.increment(); model.commit() }, onDecrement: { editor.pageMargins.decrement(); model.commit() })
++                                Text(editor.pageMargins.format(value: editor.pageMargins.value ?? editor.pageMargins.effectiveValue))
++                                    .font(.caption)
++                            }
++                            
++                            verticalMarginStepper()
+                         }
+-                        
+-                        Stepper(value: $prefs.fontWeight, in: 0.0...2.5, step: 0.25) {
+-                            Text("Font Weight: \(prefs.fontWeight, specifier: "%.2f")")
++                    } else {
++                        // Fixed-layout EPUB
++                        Section(header: Text("Layout")) {
++                            if editor.fit.isEffective {
++                                Picker("Fit", selection: editor.fit.binding(onSet: model.commit)) {
++                                    Text("Auto").tag(ReadiumNavigator.Fit.auto)
++                                    Text("Page").tag(ReadiumNavigator.Fit.page)
++                                    Text("Width").tag(ReadiumNavigator.Fit.width)
++                                }
++                            }
++                            
++                            if editor.spread.isEffective {
++                                Picker("Spread", selection: editor.spread.binding(onSet: model.commit)) {
++                                    Text("Auto").tag(ReadiumNavigator.Spread.auto)
++                                    Text("Never").tag(ReadiumNavigator.Spread.never)
++                                    Text("Always").tag(ReadiumNavigator.Spread.always)
++                                }
++                            }
++                            
++                            if editor.offsetFirstPage.isEffective {
++                                Picker("Offset First Page", selection: editor.offsetFirstPage.optionalBinding(onSet: model.commit)) {
++                                    Text("Auto").tag(nil as Bool?)
++                                    Text("Yes").tag(true as Bool?)
++                                    Text("No").tag(false as Bool?)
++                                }
++                            }
++                            
++                            verticalMarginStepper()
+                         }
+-                        
+-                        Toggle("Text Normalization", isOn: $prefs.textNormalization)
+                     }
+-                    
++                } else if let editor = model.pdfEditor {
+                     Section(header: Text("Layout")) {
+-                        Toggle("Publisher Styles", isOn: $prefs.publisherStyles)
++                        if editor.fit.isEffective {
++                            Picker("Fit", selection: editor.fit.binding(onSet: model.commit)) {
++                                Text("Auto").tag(ReadiumNavigator.Fit.auto)
++                                Text("Page").tag(ReadiumNavigator.Fit.page)
++                                Text("Width").tag(ReadiumNavigator.Fit.width)
++                            }
++                        }
+                         
+-                        if !prefs.publisherStyles {
+-                            Group {
+-                                Picker("Alignment", selection: $prefs.textAlign) {
+-                                    Text("Default").tag(0)
+-                                    Text("Start").tag(1)
+-                                    Text("Left").tag(2)
+-                                    Text("Right").tag(3)
+-                                    Text("Justify").tag(4)
+-                                }
+-                                
+-                                Stepper(value: $prefs.lineHeight, in: 1.0...2.0, step: 0.1) {
+-                                    Text("Line Height: \(prefs.lineHeight, specifier: "%.1f")")
+-                                }
+-                                
+-                                Stepper(value: $prefs.typeScale, in: 1.0...2.0, step: 0.1) {
+-                                    Text("Type Scale: \(prefs.typeScale, specifier: "%.1f")")
+-                                }
+-                                
+-                                Stepper(value: $prefs.wordSpacing, in: 0.0...1.0, step: 0.1) {
+-                                    Text("Word Spacing: \(prefs.wordSpacing, specifier: "%.1f")")
+-                                }
+-                                
+-                                Stepper(value: $prefs.letterSpacing, in: 0.0...1.0, step: 0.1) {
+-                                    Text("Letter Spacing: \(prefs.letterSpacing, specifier: "%.1f")")
+-                                }
+-                                
+-                                Stepper(value: $prefs.paragraphIndent, in: 0.0...3.0, step: 0.2) {
+-                                    Text("Paragraph Indent: \(prefs.paragraphIndent, specifier: "%.1f")")
+-                                }
+-                                
+-                                Stepper(value: $prefs.paragraphSpacing, in: 0.0...2.0, step: 0.1) {
+-                                    Text("Paragraph Spacing: \(prefs.paragraphSpacing, specifier: "%.1f")")
+-                                }
+-                                
+-                                Toggle("Hyphens", isOn: $prefs.hyphens)
++                        if editor.spread.isEffective {
++                            Picker("Spread", selection: editor.spread.binding(onSet: model.commit)) {
++                                Text("Auto").tag(ReadiumNavigator.Spread.auto)
++                                Text("Never").tag(ReadiumNavigator.Spread.never)
++                                Text("Always").tag(ReadiumNavigator.Spread.always)
+                             }
+                         }
+                         
+-                        Stepper(value: $prefs.pageMargins, in: 0.0...4.0, step: 0.3) {
+-                            Text("Page Margins: \(prefs.pageMargins, specifier: "%.1f")")
++                        if editor.offsetFirstPage.isEffective {
++                            Picker("Offset First Page", selection: editor.offsetFirstPage.optionalBinding(onSet: model.commit)) {
++                                Text("Auto").tag(nil as Bool?)
++                                Text("Yes").tag(true as Bool?)
++                                Text("No").tag(false as Bool?)
++                            }
+                         }
+                         
+-                        if !prefs.scroll {
+-                            Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
+-                                Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
++                        if editor.pageSpacing.isEffective {
++                            HStack {
++                                Stepper("Page Spacing", onIncrement: { editor.pageSpacing.increment(); model.commit() }, onDecrement: { editor.pageSpacing.decrement(); model.commit() })
++                                Text(editor.pageSpacing.format(value: editor.pageSpacing.value ?? editor.pageSpacing.effectiveValue))
++                                    .font(.caption)
+                             }
+                         }
+-                    }
+-                } else {
+-                    // For Fixed-layout (PDF/CBZ), we still show Vertical Margin in Paged Mode
+-                    if !prefs.scroll {
+-                        Section(header: Text("Layout")) {
+-                            Stepper(value: $prefs.verticalMargin, in: 0.0...100.0, step: 5.0) {
+-                                Text("Vertical Margin: \(Int(prefs.verticalMargin))pt")
++                        
++                        verticalMarginStepper()
++                        
++                        if editor.scroll.isEffective {
++                            if editor.scrollAxis.isEffective {
++                                Picker("Scroll Axis", selection: editor.scrollAxis.binding(onSet: model.commit)) {
++                                    Text("Vertical").tag(ReadiumNavigator.Axis.vertical)
++                                    Text("Horizontal").tag(ReadiumNavigator.Axis.horizontal)
++                                }
++                                .pickerStyle(SegmentedPickerStyle())
++                            }
++                            
++                            if editor.visibleScrollbar.isEffective {
++                                Toggle("Visible Scrollbar", isOn: editor.visibleScrollbar.binding(onSet: model.commit))
+                             }
+                         }
+                     }
++                } else if !model.prefs.scroll {
++                    // Fallback for Fixed-layout formats without a specialized editor (like CBZ/Images)
++                    Section(header: Text("Layout")) {
++                        verticalMarginStepper()
++                    }
+                 }
+             }
+             .navigationTitle("Reader Settings")
+             .navigationBarTitleDisplayMode(.inline)
+         }
+         .frame(minWidth: 320, minHeight: 500)
+     }
++    
++    @ViewBuilder private func verticalMarginStepper() -> some View {
++        if !model.prefs.scroll {
++            Stepper(value: Binding(
++                get: { model.prefs.verticalMargin },
++                set: { model.updateVerticalMargin($0) }
++            ), in: 0.0...100.0, step: 5.0) {
++                Text("Vertical Margin: \(Int(model.prefs.verticalMargin))pt")
++            }
++        }
++    }
+ }
+diff --git a/YetAnotherEBookReader/Views/ReadiumView/YabrReadiumReaderViewController.swift b/YetAnotherEBookReader/Views/ReadiumView/YabrReadiumReaderViewController.swift
+index 43cf1a4..bbd77ed 100644
+--- a/YetAnotherEBookReader/Views/ReadiumView/YabrReadiumReaderViewController.swift
++++ b/YetAnotherEBookReader/Views/ReadiumView/YabrReadiumReaderViewController.swift
+@@ -89,40 +89,42 @@ class YabrReadiumReaderViewController:
+     /// This regex matches any string with at least 2 consecutive letters (not limited to ASCII).
+     /// It's used when evaluating whether to display the body of a noteref referrer as the note's title.
+     /// I.e. a `*` or `1` would not be used as a title, but `on` or `好書` would.
+     private static var noterefTitleRegex: NSRegularExpression = {
+         return try! NSRegularExpression(pattern: "[\\p{Ll}\\p{Lu}\\p{Lt}\\p{Lo}]{2}")
+     }()
+     
+     // MARK: - Navigation bar
+     
+     private var navigationBarHidden: Bool = true
+     
+     init(navigator: UIViewController & Navigator, publication: Publication, initialLocation: Locator?, environment: YabrReadiumEnvironment) {
+         self.initialLocation = initialLocation
+         self.navigator = navigator
+         self.publication = publication
+         self.environment = environment
+ 
+         super.init(nibName: nil, bundle: nil)
+         
+         NotificationCenter.default.addObserver(self, selector: #selector(voiceOverStatusDidChange), name: UIAccessibility.voiceOverStatusDidChangeNotification, object: nil)
++        NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
++        NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+         
+         // Initialize preference store and load preferences
+         if let book = environment.book {
+             let config = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
+             if let realm = try? Realm(configuration: config) {
+                 let bookId = book.readPos.bookPrefId
+                 if let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) {
+                     self.readiumPrefs = savedPrefs
+                 } else {
+                     let newPrefs = ReadiumPreferenceRealm()
+                     newPrefs.id = bookId
+                     
+                     if let epub = navigator as? EPUBNavigatorViewController {
+                         newPrefs.update(from: epub.settings)
+                     } else if let pdf = navigator as? PDFNavigatorViewController {
+                         newPrefs.update(from: pdf.settings)
+                     }
+                     
+                     try? realm.write {
+                         realm.add(newPrefs)
+@@ -221,53 +223,61 @@ class YabrReadiumReaderViewController:
+         navigator.didMove(toParent: self)
+         
+         if isVoiceOverRunning {
+             stackView.addArrangedSubview(accessibilityToolbar)
+         }
+         
+         positionLabel.translatesAutoresizingMaskIntoConstraints = false
+         positionLabel.font = .systemFont(ofSize: 12)
+         positionLabel.textColor = .darkGray
+         view.addSubview(positionLabel)
+         NSLayoutConstraint.activate([
+             positionLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+             positionLabel.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10)
+         ])
+         
+         updateNavigationBarTheme()
+     }
+     
+     override func viewWillAppear(_ animated: Bool) {
+         super.viewWillAppear(animated)
++        
++        if !(readiumPrefs?.scroll ?? false), let margin = readiumPrefs?.verticalMargin {
++            (navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: margin, left: 0, bottom: margin, right: 0)
++        }
++        
+         updateNavigationBarTheme()
+         updateNavigationBar(animated: false)
+         setupVolumeKeyPaging(isEnabled: readiumPrefs?.volumeKeyPaging ?? false)
+         
+         // Initial metadata and title sync
+         if let location = navigator.currentLocation {
+             updateMetadata(for: location)
+         }
+     }
+     
+     override func viewWillDisappear(_ animated: Bool) {
+         super.viewWillDisappear(animated)
+         teardownVolumeKeyPaging()
++        
++        // Restore default navigation bar tint color to avoid leaking the theme
++        navigationController?.navigationBar.tintColor = nil
+     }
+     
+     override func viewDidLayoutSubviews() {
+         super.viewDidLayoutSubviews()
+         
+         // Calculate the effective top inset to avoid status bar but ignore navigation bar
+         let statusBarHeight = view.window?.safeAreaInsets.top ?? view.safeAreaInsets.top
+         
+         // Update constraint to ensure content starts exactly below the system safe area inset (status bar)
+         // This is only set if VoiceOver is NOT running (which uses its own top margin constraint).
+         if !isVoiceOverRunning {
+             if stackViewTopConstraint.constant != statusBarHeight {
+                 stackViewTopConstraint.constant = statusBarHeight
+                 view.setNeedsLayout()
+             }
+         }
+     }
+     
+     func updateNavigationBarTheme() {
+         guard let prefs = readiumPrefs else { return }
+@@ -295,41 +305,47 @@ class YabrReadiumReaderViewController:
+ 
+     func makeNavigationBarButtons() -> [UIBarButtonItem] {
+         var buttons: [UIBarButtonItem] = []
+         
+         // User configuration button
+         let settingsButton = UIBarButtonItem(image: UIImage(systemName: "textformat.size"), style: .plain, target: self, action: #selector(presentSettings))
+         buttons.append(settingsButton)
+         popoverUserconfigurationAnchor = settingsButton
+         
+         // Navigation panel button
+         let tocButton = UIBarButtonItem(image: UIImage(systemName: "list.bullet"), style: .plain, target: self, action: #selector(presentNavigationPanel))
+         buttons.append(tocButton)
+         popoverNavigationAnchor = tocButton
+         
+         return buttons
+     }
+     
+     @objc func presentSettings() {
+         guard let prefs = readiumPrefs else { return }
+         
+-        let settingsView = YabrReaderSettingsView(prefs: prefs, publication: self.publication)
++        let viewModel = YabrReaderSettingsViewModel(prefs: prefs, publication: self.publication, navigator: self.navigator)
++        viewModel.onChanged = { [weak self] in
++            self?.updateNavigationBarTheme()
++            self?.setupVolumeKeyPaging(isEnabled: self?.readiumPrefs?.volumeKeyPaging ?? false)
++        }
++        
++        let settingsView = YabrReaderSettingsView(model: viewModel)
+         let hostingController = UIHostingController(rootView: settingsView)
+         hostingController.modalPresentationStyle = .popover
+         hostingController.popoverPresentationController?.barButtonItem = popoverUserconfigurationAnchor
+         hostingController.popoverPresentationController?.delegate = self
+         
+         present(hostingController, animated: true)
+     }
+     
+     @objc func presentNavigationPanel() {
+         let vm = YabrReaderNavigationViewModel(publication: self.publication)
+         vm.loadAnnotations(book: environment.book)
+         
+         let navigationView = YabrReaderNavigationView(viewModel: vm)
+         let hostingController = UIHostingController(rootView: navigationView)
+         hostingController.modalPresentationStyle = .popover
+         hostingController.popoverPresentationController?.barButtonItem = popoverNavigationAnchor
+         hostingController.popoverPresentationController?.delegate = self
+         
+         vm.onNavigateToLink = { [weak self, weak hostingController] link in
+             hostingController?.dismiss(animated: true) {
+@@ -347,41 +363,42 @@ class YabrReadiumReaderViewController:
+             }
+         }
+         
+         present(hostingController, animated: true)
+     }
+     
+     func applyPreferences(_ prefs: ReadiumPreferenceRealm) {
+         if let epub = navigator as? EPUBNavigatorViewController {
+             epub.submitPreferences(prefs.toEPUBPreferences())
+         } else if let pdf = navigator as? PDFNavigatorViewController {
+             pdf.submitPreferences(prefs.toPDFPreferences())
+         }
+     }
+     
+     func toggleNavigationBar() {
+         navigationBarHidden = !navigationBarHidden
+         updateNavigationBar()
+     }
+     
+     private func updateNavigationBar(animated: Bool = true) {
+-        navigationController?.setNavigationBarHidden(navigationBarHidden, animated: animated)
++        let hidden = navigationBarHidden && !isVoiceOverRunning
++        navigationController?.setNavigationBarHidden(hidden, animated: animated)
+         setNeedsStatusBarAppearanceUpdate()
+     }
+     
+     func navigator(_ navigator: Navigator, didFailToLoadResourceAt href: RelativeURL, withError error: ReadError) {
+         log(.error, "ReadiumReaderViewController didFailToLoadResourceAt \(href.string) \(error)")
+     }
+     
+     func navigator(_ navigator: Navigator, presentExternalURL url: URL) {
+         let safariVC = SFSafariViewController(url: url)
+         present(safariVC, animated: true)
+     }
+     
+     func navigator(_ navigator: Navigator, presentError error: NavigatorError) {
+         log(.error, "ReadiumReaderViewController presentError \(error)")
+     }
+     
+     func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
+         updateMetadata(for: locator)
+     }
+     
+@@ -416,60 +433,59 @@ class YabrReadiumReaderViewController:
+                 let positionsResult = await self.publication.positionsByReadingOrder()
+                 updatedReadingPosition.2["maxPage"] = (try? positionsResult.get())?.first?.count ?? 1
+                 updatedReadingPosition.2["pageOffsetX"] = 0
+             } else {
+                 // Default fallback (e.g. CBZ)
+                 updatedReadingPosition.2["pageNumber"] = locator.locations.position
+                 updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
+                 updatedReadingPosition.2["pageOffsetX"] = 0
+             }
+             
+             // Title resolution
+             let tocResult = await self.publication.tableOfContents()
+             let tableOfContents = (try? tocResult.get()) ?? []
+             
+             let currentTitle: String = {
+                 if let title = locator.title {
+                     return title
+                 }
+                 
+                 // 1. Try finding by HREF (exact resource match)
+-                if !(navigator is PDFNavigatorViewController) {
++                if !(self.navigator is PDFNavigatorViewController) {
+                     if let tocLink = tableOfContents.firstDeep(withHREF: locator.href.string),
+                        let tocTitle = tocLink.title {
+                         return tocTitle
+                     }
+ 
+                     // 2. Try finding by Fragment (exact anchor match)
+                     if let fragment = locator.locations.fragments.first,
+                        let tocLink = tableOfContents.firstDeep(withFRAGMENT: fragment),
+                        let tocTitle = tocLink.title {
+                         return tocTitle
+                     }
+                 }
+                 
+                 // 3. Try finding by Page Range (for PDF/CBZ or fixed-layout EPUB)
+                 if let locPageNumber = locator.locations.position,
+                    let tocLink = tableOfContents.flattened().filter({ link in
+                        guard let tocFragmentIndex = link.href.firstIndex(of: "#"),
+-                             let tocFragment = link.href[tocFragmentIndex..<link.href.endIndex] as Substring?,
+-                             let pageNumberValue = tocFragment.split(separator: "=").last,
++                             let pageNumberValue = link.href[tocFragmentIndex...].split(separator: "=").last,
+                              let pageNumber = Int(pageNumberValue)
+                        else { return false }
+                        return pageNumber <= locPageNumber
+                    }).last,
+                    let tocTitle = tocLink.title {
+                     return tocTitle
+                 }
+                 
+                 // 4. Fallback to page number or unknown
+                 if let pageNumber = locator.locations.position {
+                     return "Page \(pageNumber)"
+                 }
+                 return "Unknown Title"
+             }()
+             
+             updatedReadingPosition.3 = currentTitle
+             
+             self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
+             
+             DispatchQueue.main.async {
+@@ -603,46 +619,63 @@ class YabrReadiumReaderViewController:
+                         self.log(.debug, "Busy, skipping event")
+                         return
+                     }
+                     self.isHandlingVolumeChange = true
+                     
+                     // 5. Process
+                     self.log(.debug, "USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
+                     self.handleVolumeKey(up: isUp)
+                     
+                     // 6. Reset to baseline 0.5
+                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                         self.setSystemVolume(0.5)
+                         self.isHandlingVolumeChange = false
+                     }
+                 }
+             }
+             self.log(.debug, "Observer attached")
+         }
+     }
+     
++    @objc private func appDidBecomeActive() {
++        guard viewIfLoaded?.window != nil else { return }
++        if readiumPrefs?.volumeKeyPaging == true {
++            log(.debug, "App became active, re-setting up volume key paging")
++            teardownVolumeKeyPaging()
++            setupVolumeKeyPaging(isEnabled: true)
++        }
++    }
++    
++    @objc private func appDidEnterBackground() {
++        if readiumPrefs?.volumeKeyPaging == true {
++            log(.debug, "App entered background, tearing down volume key paging")
++            teardownVolumeKeyPaging()
++        }
++    }
++    
+     func teardownVolumeKeyPaging() {
+         self.log(.debug, "Teardown called")
+         volumeObserver?.invalidate()
+         volumeObserver = nil
+         volumeView?.removeFromSuperview()
+         volumeView = nil
++        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+     }
+     
+     private func setSystemVolume(_ volume: Float, retryCount: Int = 0) {
+         guard let volumeView = volumeView else { return }
+         self.lastRequestedVolume = volume
+         
+         DispatchQueue.main.async {
+             func findSlider(in view: UIView) -> UISlider? {
+                 if let slider = view as? UISlider { return slider }
+                 for subview in view.subviews {
+                     if let found = findSlider(in: subview) { return found }
+                 }
+                 return nil
+             }
+             
+             if let slider = findSlider(in: volumeView) {
+                 slider.value = volume
+             } else if retryCount < 10 {
+                 // Slider might not be ready yet due to lazy loading of MPVolumeView subviews
+                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+diff --git a/YetAnotherEBookReader/Views/Utils.swift b/YetAnotherEBookReader/Views/Utils.swift
+index 4ae25c3..61c065c 100644
+--- a/YetAnotherEBookReader/Views/Utils.swift
++++ b/YetAnotherEBookReader/Views/Utils.swift
+@@ -87,49 +87,52 @@ class ImageLoader: ObservableObject {
+     deinit {
+         cancel()
+     }
+     
+     func load() {
+         cancellable = URLSession.shared.dataTaskPublisher(for: url)
+                     .map { UIImage(data: $0.data) }
+                     .replaceError(with: nil)
+                     .receive(on: DispatchQueue.main)
+                     .sink { [weak self] in self?.image = $0 }
+     }
+ 
+     func cancel() {
+         cancellable?.cancel()
+     }
+ }
+ 
+ struct YabrAsyncImage<Placeholder: View>: View {
+     @StateObject private var loader: ImageLoader
+     private let placeholder: Placeholder
++    private let url: URL
+ 
+     init(url: URL, @ViewBuilder placeholder: () -> Placeholder) {
++        self.url = url
+         self.placeholder = placeholder()
+         _loader = StateObject(wrappedValue: ImageLoader(url: url))
+     }
+ 
+     var body: some View {
+         content
+             .onAppear(perform: loader.load)
++            .id(url)
+     }
+ 
+     private var content: some View {
+         Group {
+             if loader.image != nil {
+                 Image(uiImage: loader.image!)
+                     .resizable()
+             } else {
+                 placeholder
+             }
+         }
+     }
+ }
+ 
+ struct TestView: View {
+     let url = URL(string: "https://image.tmdb.org/t/p/original/pThyQovXQrw2m0s9x82twj48Jq4.jpg")!
+ 
+     var body: some View {
+         YabrAsyncImage(
+             url: url) {

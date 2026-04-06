@@ -12,7 +12,7 @@ import FolioReaderKit
 extension EpubFolioReaderContainer {
     static func Configuration(bookURL: URL) -> FolioReaderConfig {
         let config = FolioReaderConfig(withIdentifier: bookURL.deletingPathExtension().lastPathComponent)
-        config.shouldHideNavigationOnTap = false
+        config.shouldHideNavigationOnTap = true
         config.canChangeScrollDirection = true
         config.allowSharing = true
         config.enableTTS = false

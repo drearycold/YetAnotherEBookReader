@@ -805,7 +805,7 @@ struct CalibreServerService {
         
         probeUrlComponents.queryItems = probeUrlQueryItems
         
-        guard let probeUrl = probeUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let probeUrl = probeUrlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -821,7 +821,7 @@ struct CalibreServerService {
         }
         var urlComponents = URLComponents()
         urlComponents.path = "/get/json/\(bookId)/\(library.key)"
-        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -838,7 +838,7 @@ struct CalibreServerService {
         }
         var urlComponents = URLComponents()
         urlComponents.path = "/get/json/\(book.id)/\(book.library.key)"
-        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -859,7 +859,7 @@ struct CalibreServerService {
         urlComponents.queryItems = [
             URLQueryItem(name: "ids", value: bookIds.joined(separator: ","))
         ]
-        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -878,13 +878,13 @@ struct CalibreServerService {
         
         var lastReadPositionUrlComponents = URLComponents()
         lastReadPositionUrlComponents.path = "/book-get-last-read-position/\(library.key)/\(which)"
-        guard let lastReadPositionEndpointUrl = lastReadPositionUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let lastReadPositionEndpointUrl = lastReadPositionUrlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
         var annotationsUrlComponents = URLComponents()
         annotationsUrlComponents.path = "/book-get-annotations/\(library.key)/\(which)"
-        guard let annotationsEndpointUrl = annotationsUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let annotationsEndpointUrl = annotationsUrlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -999,7 +999,7 @@ struct CalibreServerService {
         
         var lastReadPositionUrlComponents = URLComponents()
         lastReadPositionUrlComponents.path = "/book-set-last-read-position/\(library.key)/\(bookId)/\(format.rawValue)"
-        guard let lastReadPositionEndpointUrl = lastReadPositionUrlComponents.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let lastReadPositionEndpointUrl = lastReadPositionUrlComponents.url(relativeTo: serverUrl) else {
             return nil
         }
         
@@ -1041,7 +1041,7 @@ struct CalibreServerService {
         
         var endpointURLComponent = URLComponents()
         endpointURLComponent.path = "/book-update-annotations/\(library.key)/\(bookId)/\(format.rawValue)"
-        guard let endpointUrl = endpointURLComponent.url(relativeTo: serverUrl)?.absoluteURL else {
+        guard let endpointUrl = endpointURLComponent.url(relativeTo: serverUrl) else {
             return nil
         }
         

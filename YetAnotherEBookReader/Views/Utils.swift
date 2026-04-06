@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Foundation
+import Combine
 
 struct AlertItem : Identifiable, Equatable {
     static func == (lhs: AlertItem, rhs: AlertItem) -> Bool {
@@ -71,5 +72,76 @@ internal extension UIColor {
         } else {
             return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
         }
+    }
+}
+
+class ImageLoader: ObservableObject {
+    @Published var image: UIImage?
+    private let url: URL
+    private var cancellable: AnyCancellable?
+
+    init(url: URL) {
+        self.url = url
+    }
+
+    deinit {
+        cancel()
+    }
+    
+    func load() {
+        cancellable = URLSession.shared.dataTaskPublisher(for: url)
+                    .map { UIImage(data: $0.data) }
+                    .replaceError(with: nil)
+                    .receive(on: DispatchQueue.main)
+                    .sink { [weak self] in self?.image = $0 }
+    }
+
+    func cancel() {
+        cancellable?.cancel()
+    }
+}
+
+struct YabrAsyncImage<Placeholder: View>: View {
+    @StateObject private var loader: ImageLoader
+    private let placeholder: Placeholder
+    private let url: URL
+
+    init(url: URL, @ViewBuilder placeholder: () -> Placeholder) {
+        self.url = url
+        self.placeholder = placeholder()
+        _loader = StateObject(wrappedValue: ImageLoader(url: url))
+    }
+
+    var body: some View {
+        content
+            .onAppear(perform: loader.load)
+            .id(url)
+    }
+
+    private var content: some View {
+        Group {
+            if loader.image != nil {
+                Image(uiImage: loader.image!)
+                    .resizable()
+            } else {
+                placeholder
+            }
+        }
+    }
+}
+
+struct TestView: View {
+    let url = URL(string: "https://image.tmdb.org/t/p/original/pThyQovXQrw2m0s9x82twj48Jq4.jpg")!
+
+    var body: some View {
+        YabrAsyncImage(
+            url: url) {
+            Text("Loading ...")
+        }.aspectRatio(contentMode: .fit)
+    }
+}
+extension URL {
+    public var isHTTP: Bool {
+        ["http", "https"].contains(scheme?.lowercased())
     }
 }

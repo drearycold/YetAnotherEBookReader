@@ -6,56 +6,55 @@ YetAnotherEBookReader (publicly known as D.S.Reader) is a comprehensive e-book r
 
 - **Purpose**: A high-performance e-book reader with cloud synchronization via Calibre.
 - **Main Technologies**:
-  - **Frameworks**: SwiftUI (iOS 14+), UIKit.
+  - **Frameworks**: SwiftUI (iOS 15+), UIKit.
   - **Reader Engines**: FolioReaderKit (EPUB), Readium R2 SDK (EPUB, PDF, CBZ).
   - **Data Persistence**: RealmSwift (Metadata, progress, highlights, shelf data).
   - **Networking**: GCDWebServer (Local content serving), Kingfisher (Image caching), Combine (Reactive state).
-  - **Infrastructure**: CocoaPods (Dependency management), Carthage (Optional/Legacy dependencies).
+  - **Infrastructure**: Swift Package Manager (SPM) for dependency management.
 
 ## Architecture
 
-- **`ModelData`**: The central `@StateObject` that manages application state, database initialization, server connectivity, and book metadata.
-- **`YabrEBookReader`**: A routing layer that selects the appropriate reader engine based on book format and user preference.
+- **`ModelData`**: The central `@StateObject` that manages application state, database initialization, server connectivity, and book metadata. Located in `YetAnotherEBookReader/Models/ModelData.swift`.
+- **`YetAnotherEBookReaderApp`**: The SwiftUI App entry point that initializes `ModelData` and handles scene phase changes.
 - **`CalibreServerService`**: Handles all API interactions with Calibre servers.
-- **Local Web Server**: Uses `GCDWebServer` to serve book assets locally to web-based reader views (like FolioReader), ensuring high performance and compatibility.
+- **Reader Integration**: Uses `FolioReaderKit` and `Readium` for rendering different book formats.
+- **Local Web Server**: Uses `GCDWebServer` to serve book assets locally to web-based reader views.
 
 ## Building and Running
 
-### Prerequisites
-- Xcode 13+ (Supporting iOS 14.0+ / macOS 11.0+)
-- CocoaPods (`gem install cocoapods`)
-- `cocoapods-patch` plugin (`gem install cocoapods-patch`)
+The project is an SPM-based Xcode project. It does **not** use CocoaPods or a Workspace.
 
-### Steps
-1.  **Install Dependencies**:
-    ```bash
-    pod install
-    ```
-    *Note: If there are Carthage dependencies, run `./makedeps.sh`.*
-2.  **Open Workspace**:
-    ```bash
-    open YetAnotherEBookReader.xcworkspace
-    ```
-3.  **Select Target**:
-    - `YetAnotherEBookReader` for iOS.
-    - `YetAnotherEBookReader-Catalyst` for macOS.
-4.  **Build & Run**: Press `Cmd + R` in Xcode.
+### Commands for Terminal Compilation
+
+#### Build for iOS Simulator:
+```bash
+xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build
+```
+
+#### Build for Mac Catalyst:
+```bash
+xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' build
+```
+
+### Development Environment
+- **Xcode**: Supporting iOS 15.0+ / macOS 12.0+ (Catalyst).
+- **Dependencies**: Managed via `YetAnotherEBookReader.xcodeproj`'s Swift Packages.
 
 ## Development Conventions
 
-- **State Management**: Always use `ModelData.shared` or `@EnvironmentObject var modelData: ModelData` for app-wide state.
+- **State Management**: Use `@EnvironmentObject var modelData: ModelData` for app-wide state.
 - **Database**:
-  - Use Realm for all persistent data.
-  - Database migrations MUST be registered in `ModelData.swift` within `tryInitializeDatabase`.
-  - Prefer using `ModelData.RealmSchemaVersion` for tracking schema updates.
-- **Reader Integration**:
-  - New reader engines should be implemented as `UIViewController` containers.
-  - Integration into the app should be done via `EBookReaderSwiftUI` (`UIViewControllerRepresentable`).
+  - Realm is used for persistent data.
+  - Initialize the database via `modelData.tryInitializeDatabase()`.
+- **Info.plist**:
+  - iOS target uses `YetAnotherEBookReader/Info.plist`.
+  - Catalyst target uses `YetAnotherEBookReader for macOS/Info.plist`.
 - **Asynchronous Operations**: Extensively use `Combine` and `DispatchQueue` for non-blocking I/O and server requests.
-- **Resource Management**: Large files (books) are managed via `Downloader.swift` and served locally via `GCDWebServer` in `EpubFolioReaderContainer.swift`.
+- **Resource Management**: Large files (books) are managed via `Downloader.swift` and served locally where required by the reader engine.
 
 ## Key Directories
 - `YetAnotherEBookReader/Models/`: Data models and core logic (`ModelData.swift`, `Book.swift`, `RealmModel.swift`).
 - `YetAnotherEBookReader/Views/`: SwiftUI views for the main interface and reader wrappers.
 - `YetAnotherEBookReader/Network/`: Networking logic and server services.
-- `YetAnotherEBookReader/Views/FolioReaderView/`: Specific implementation for the FolioReader engine, including the local web server.
+- `YetAnotherEBookReader/Readium/`: Readium R2 SDK integration.
+- `YetAnotherEBookReader for macOS/`: Specific resources for the Catalyst/macOS target.

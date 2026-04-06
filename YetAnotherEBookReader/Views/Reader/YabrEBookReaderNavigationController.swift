@@ -9,7 +9,23 @@ import Foundation
 import UIKit
 import Combine
 
+extension UIViewController {
+    /// Finds the first child view controller with the given type, recursively.
+    func findChildViewController<T: UIViewController>() -> T? {
+        for childViewController in children {
+            if let found = childViewController as? T {
+                return found
+            }
+            if let found: T = childViewController.findChildViewController() {
+                return found
+            }
+        }
+        return nil
+    }
+}
+
 class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate {
+    
     var modelData: ModelData
     
     let book: CalibreBook

@@ -40,7 +40,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 
     let snaptshotQueue = DispatchQueue(label: "section-shelf-snapshot", qos: .userInitiated)
     
-    let refreshBarButtonItem = BarButtonItem()
+    let refreshBarButtonItem = UIBarButtonItem()
     
     ///
     var shelfObjects: [SearchCriteriaMergedKey: CalibreUnifiedSearchObject] = [:]

@@ -47,7 +47,23 @@ extension BookAnnotation {
             fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 125 {
+                    migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
+                }
                 
+                if oldSchemaVersion < 128 {
+                    if (oldSchemaVersion >= 125) {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationMenuBookListSyle", to: "currentNavigationMenuBookListStyle")
+                    } else {
+                        migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "currentNavigationBookListStyle", to: "currentNavigationMenuBookListStyle")
+                    }
+                }
+                
+                if oldSchemaVersion < 131 {
+                    migration.enumerateObjects(ofType: ReadiumPreferenceRealm.className()) { oldObject, newObject in
+                        newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
+                    }
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,
@@ -55,8 +71,10 @@ extension BookAnnotation {
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
                 BookBookmarkRealm.self,
-                YabrPDFOptionsRealm.self
+                YabrPDFOptionsRealm.self,
+                ReadiumPreferenceRealm.self
             ]
         )
     }
 }
+
