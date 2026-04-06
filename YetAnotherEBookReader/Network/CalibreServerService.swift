@@ -77,7 +77,7 @@ struct CalibreServerService {
         print("\(#function) listRequest \(endpointUrl.absoluteString) \(String(data: data, encoding: .utf8))")
         
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        modelData.logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
 
         let a = urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
@@ -96,7 +96,7 @@ struct CalibreServerService {
                 if let list = listResult["result"] {
                     result.list = list
                 }
-                modelData.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
+                modelData.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
                 return result
             }
             .eraseToAnyPublisher()
@@ -127,13 +127,13 @@ struct CalibreServerService {
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+        modelData.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
 
         let task = urlSession(server: oldbook.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknonwn Error"
             var bookResult = oldbook
             defer {
-                modelData.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                modelData.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
                 
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
@@ -477,12 +477,12 @@ struct CalibreServerService {
         let request = URLRequest(url: endpointUrl)
         
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        modelData.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
         let task = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             defer {
-                modelData.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                modelData.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
                     modelData.updatingMetadata = false
@@ -553,11 +553,11 @@ struct CalibreServerService {
 //            updatingMetadataTask!.cancel()
 //        }
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+        modelData.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
 
         let updatingMetadataTask = urlSession(server: library.server).dataTask(with: request) { [self] data, response, error in
             print("\(#function) \(data) \(response) \(error)")
-            modelData.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
+            modelData.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
         }
         
         updatingMetadataTask.resume()
@@ -608,14 +608,14 @@ struct CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         let startDatetime = Date()
-        modelData.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        modelData.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
         
         let updatingMetadataTask = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
             var updatingMetadataStatus = "Unknown Error"
             var newBook = book
             
             defer {
-                modelData.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                modelData.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
 
                 DispatchQueue.main.async {
                     modelData.updatingMetadataStatus = updatingMetadataStatus
