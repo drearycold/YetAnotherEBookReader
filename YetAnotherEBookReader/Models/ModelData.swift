@@ -146,7 +146,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     /// inShelfId for single book
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
-    let setLastReadPositionSubject = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
     
     @Published var librarySyncStatus = [String: CalibreSyncStatus]()
 
@@ -198,7 +197,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         registerSyncLibraryCancellable()
         registerSaveBooksMetadataCancellable()
         registerGetBooksMetadataCancellable()
-        registerSetLastReadPositionCancellable()
         
         registerRecentShelfUpdater()
         
@@ -2268,7 +2266,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                                 format: format,
                                 entry: $0
                             ) else { return }
-                            self.setLastReadPositionSubject.send(task)
+                            Task {
+                                await self.calibreServerService.setLastReadPositionByTask(task: task)
+                            }
                         }
                         
                         if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 || book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0,
@@ -2340,19 +2340,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     self.calibreUpdatedSubject.send(.book(book))
                 }
             }.store(in: &calibreCancellables)
-    }
-    
-    func registerSetLastReadPositionCancellable() {
-        let queue = DispatchQueue(label: "set-last-read-position", qos: .userInitiated)
-        setLastReadPositionSubject
-            .eraseToAnyPublisher()
-            .receive(on: queue)
-            .flatMap { task in
-                return self.calibreServerService.setLastReadPositionByTask(task: task)
-            }
-            .sink(receiveValue: { output in
-                print("\(#function) output=\(output)")
-            }).store(in: &calibreCancellables)
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {

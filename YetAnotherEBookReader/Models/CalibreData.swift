@@ -1578,6 +1578,7 @@ struct CalibreBookSetLastReadPositionTask {
     var urlRequest: URLRequest
     var urlResponse: URLResponse?
     var data: Data?
+    let startDatetime: Date
 }
 
 struct CalibreBookUpdateAnnotationsTask {

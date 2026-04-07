@@ -1081,10 +1081,32 @@ final class CalibreServerService {
             bookId: bookId,
             format: format,
             entry: entry,
-            urlRequest: urlRequest
+            urlRequest: urlRequest,
+            startDatetime: Date()
         )
     }
     
+    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) async -> CalibreBookSetLastReadPositionTask {
+        await self.logger.logStartCalibreActivity(type: "Set Last Read Position", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
+        
+        var resultTask = task
+        do {
+            let (data, response) = try await self.urlSession(server: task.library.server).data(for: task.urlRequest)
+            resultTask.urlResponse = response
+            resultTask.data = data
+        } catch {
+            // keep task with error
+        }
+        
+        var logErrMsg = "Unknown"
+        if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
+            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
+        }
+        await self.logger.logFinishCalibreActivity(type: "Set Last Read Position", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
+        
+        return resultTask
+    }
+
     func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, Never> {
         self.urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
             .map { result -> CalibreBookSetLastReadPositionTask in
