@@ -22,6 +22,7 @@ struct YetAnotherEBookReaderApp: App {
                     .environmentObject(modelData)
                     .environmentObject(modelData.downloadManager)
                     .environmentObject(modelData.sessionManager)
+                    .environmentObject(modelData.fontsManager)
                 
                 if upgradingDatabase {
                     VStack(spacing: 8) {

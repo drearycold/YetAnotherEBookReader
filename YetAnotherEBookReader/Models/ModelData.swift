@@ -160,7 +160,11 @@ final class ModelData: ObservableObject {
     
     @Published var librarySyncStatus = [String: CalibreSyncStatus]()
 
-    @Published var userFontInfos = [String: FontInfo]()
+    @Published var fontsManager = FontsManager()
+    var userFontInfos: [String: FontInfo] {
+        get { fontsManager.userFontInfos }
+        set { fontsManager.userFontInfos = newValue }
+    }
 
     @Published var bookModelSection = [ShelfModelSection]()
 
@@ -187,7 +191,7 @@ final class ModelData: ObservableObject {
         downloadManager.modelData = self
         sessionManager.modelData = self
         
-        self.reloadCustomFonts()
+        fontsManager.reloadCustomFonts()
         
 //        calibreServerService.defaultUrlSessionConfiguration.timeoutIntervalForRequest = 600
 //        calibreServerService.defaultUrlSessionConfiguration.httpMaximumConnectionsPerHost = 2
@@ -503,48 +507,15 @@ final class ModelData: ObservableObject {
     }
     
     func importCustomFonts(urls: [URL]) -> [CFArray]? {
-        guard let documentDirectory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-        else { return nil }
-        
-        let fontsDirectory = documentDirectory.appendingPathComponent("Fonts",  isDirectory: true)
-        guard let _ = try? FileManager.default.createDirectory(atPath: fontsDirectory.path, withIntermediateDirectories: true, attributes: nil) else { return nil }
-    
-        var fontDescriptorArrays = [CFArray]()
-
-        urls.forEach { url in
-            guard let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
-            else { return }
-            
-            let fontDestFile = fontsDirectory.appendingPathComponent(url.lastPathComponent)
-            do {
-                try FileManager.default.moveItem(atPath: url.path, toPath: fontDestFile.path)
-                fontDescriptorArrays.append(ctFontDescriptorArray)
-            } catch {
-                print("importCustomFonts \(error.localizedDescription)")
-            }
-        }
-        
-        return fontDescriptorArrays
+        return fontsManager.importCustomFonts(urls: urls)
     }
     
     func removeCustomFonts(at offsets: IndexSet) {
-        let list = userFontInfos.sorted {
-            ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
-        }
-        let candidates = offsets.map { list[$0] }
-        candidates.forEach { (fontId, fontInfo) in
-            guard let fileURL = fontInfo.fileURL else { return }
-            try? FileManager.default.removeItem(atPath: fileURL.path)
-        }
+        fontsManager.removeCustomFonts(at: offsets)
     }
     
     func reloadCustomFonts() {
-        if let userFontDescriptors = loadUserFonts() {
-            self.userFontInfos = userFontDescriptors.mapValues { FontInfo(descriptor: $0) }
-        } else {
-            self.userFontInfos.removeAll()
-        }
-        
+        fontsManager.reloadCustomFonts()
     }
     
     func populateBookShelf() {
