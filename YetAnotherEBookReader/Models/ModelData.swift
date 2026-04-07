@@ -2424,56 +2424,16 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     }
     
     func removeCalibreActivity(obj: CalibreActivityLogEntry) {
-        guard let realm = try? Realm(configuration: self.realmConf) else { return }
+        logger.removeCalibreActivity(obj: obj)
+    }
 
-        try? realm.write {
-            realm.delete(obj)
-        }
-    }
-    
     func listCalibreActivities(libraryId: String? = nil, bookId: Int32? = nil, startDatetime: Date = Date(timeIntervalSinceNow: TimeInterval(-86400))) -> [CalibreActivityLogEntry] {
-        guard let realm = try? Realm(configuration: self.realmConf) else { return [] }
-        
-        var pred = NSPredicate()
-        if let libraryId = libraryId {
-            if let bookId = bookId {
-                pred = NSPredicate(
-                    format: "startDatetime >= %@ AND libraryId = %@ AND bookId = %@",
-                    Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate,
-                    libraryId,
-                    NSNumber(value: bookId)
-                )
-            } else {
-                pred = NSPredicate(
-                    format: "startDatetime >= %@ AND libraryId = %@",
-                    Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate,
-                    libraryId
-                )
-            }
-        } else {
-            pred = NSPredicate(
-                format: "startDatetime > %@",
-                Date(timeIntervalSinceNow: TimeInterval(86400) * -1) as NSDate
-            )
-        }
-        
-        let activities = realm.objects(CalibreActivityLogEntry.self).filter(pred)
-        
-        return activities.map { $0 }.sorted { $1.startDatetime < $0.startDatetime }
+        return logger.listCalibreActivities(libraryId: libraryId, bookId: bookId, startDatetime: startDatetime)
     }
-    
+
     func cleanCalibreActivities(startDatetime: Date) {
-        let activities = realm.objects(CalibreActivityLogEntry.self).filter(
-            NSPredicate(
-                format: "startDatetime < %@",
-                startDatetime as NSDate
-            )
-        )
-        try? realm.write {
-            realm.delete(activities)
-        }
+        logger.cleanCalibreActivities(startDatetime: startDatetime)
     }
-    
     /**
      key: inShelfId
      */

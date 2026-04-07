@@ -4,27 +4,39 @@
 //
 //  Created by 京太郎 on 2021/11/1.
 //
-
 import SwiftUI
+
+class ActivityListViewModel: ObservableObject {
+    @Published var activities: [CalibreActivityLogEntry] = []
+
+    func load(modelData: ModelData, libraryId: String?, bookId: Int32?) {
+        activities = modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId)
+    }
+}
 
 struct ActivityList: View {
     @EnvironmentObject var modelData: ModelData
-    
+
     @Binding var presenting: Bool
-    
+
     var libraryId: String? = nil
     var bookId: Int32? = nil
-    
+
+    @StateObject private var viewModel = ActivityListViewModel()
+
     var body: some View {
         List {
-            ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
-                NavigationLink(destination: detail(obj: obj), label: {
+            ForEach(viewModel.activities, id: \.self) { obj in
+                NavigationLink(destination: ActivityDetailView(obj: obj), label: {
                     row(obj: obj)
                 })
             }
         }
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            viewModel.load(modelData: modelData, libraryId: libraryId, bookId: bookId)
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction, content: {
                 if presenting {
@@ -71,9 +83,13 @@ struct ActivityList: View {
             }.font(.caption)
         }
     }
+}
+
+struct ActivityDetailView: View {
+    @EnvironmentObject var modelData: ModelData
+    var obj: CalibreActivityLogEntry
     
-    @ViewBuilder
-    private func detail(obj: CalibreActivityLogEntry) -> some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 if let libraryId = obj.libraryId,
