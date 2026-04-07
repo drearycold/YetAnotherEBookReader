@@ -147,7 +147,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
     let setLastReadPositionSubject = PassthroughSubject<CalibreBookSetLastReadPositionTask, Never>()
-    let updateAnnotationsSubject = PassthroughSubject<CalibreBookUpdateAnnotationsTask, Never>()
     
     @Published var librarySyncStatus = [String: CalibreSyncStatus]()
 
@@ -200,7 +199,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         registerSaveBooksMetadataCancellable()
         registerGetBooksMetadataCancellable()
         registerSetLastReadPositionCancellable()
-        registerUpdateAnnotationsCancellable()
         
         registerRecentShelfUpdater()
         
@@ -2283,7 +2281,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                             },
                             bookmarks: book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
                            ) {
-                            self.updateAnnotationsSubject.send(task)
+                            Task {
+                                await self.updateAnnotations(task: task)
+                            }
                         }
                     }
                 }
@@ -2355,40 +2355,16 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             }).store(in: &calibreCancellables)
     }
     
-    func registerUpdateAnnotationsCancellable() {
-        let queue = DispatchQueue(label: "update-annotations", qos: .userInitiated)
-        updateAnnotationsSubject
-            .eraseToAnyPublisher()
-            .receive(on: queue)
-            .flatMap { task -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> in
-                self.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
-                return self.calibreServerService.updateAnnotationByTask(task: task)
-            }
-            .receive(on: DispatchQueue.main)
-            .sink(
-                receiveCompletion: { completion in
-                    print("updateAnnotations \(completion)")
-//                    switch completion {
-//                    case .finished:
-//                        self.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Empty Result")
-//                        break
-//                    case .failure(let error):
-//                        self.logFinishCalibreActivity(type: "Update Annotations", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
-//                        break
-//                    }
-                },
-                receiveValue: { task in
-//                    print("updateAnnotations count=\(results.count)")
-//                    results.forEach { result in
-//                        print("updateAnnotations \(result)")
-//                    }
-                    var logErrMsg = "Unknown"
-                    if let httpUrlResponse = task.urlResponse as? HTTPURLResponse {
-                        logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
-                    }
-                    self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
-                }
-            ).store(in: &calibreCancellables)
+    func updateAnnotations(task: CalibreBookUpdateAnnotationsTask) async {
+        self.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
+        
+        let resultTask = await self.calibreServerService.updateAnnotationByTask(task: task)
+        
+        var logErrMsg = "Unknown"
+        if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
+            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
+        }
+        self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {

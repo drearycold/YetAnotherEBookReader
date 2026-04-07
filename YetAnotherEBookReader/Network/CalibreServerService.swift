@@ -1139,6 +1139,18 @@ final class CalibreServerService {
         )
     }
     
+    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) async -> CalibreBookUpdateAnnotationsTask {
+        do {
+            let (data, response) = try await self.urlSession(server: task.library.server).data(for: task.urlRequest)
+            var task = task
+            task.urlResponse = response
+            task.data = data
+            return task
+        } catch {
+            return task
+        }
+    }
+
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> {
         self.urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
             .map { result -> CalibreBookUpdateAnnotationsTask in
