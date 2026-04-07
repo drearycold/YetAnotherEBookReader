@@ -61,8 +61,6 @@ final class ModelData: ObservableObject {
         }
     }
     
-    @Published var selectedPosition = ""
-    
     let bookReaderClosedSubject = PassthroughSubject<(book: CalibreBook, position: BookDeviceReadingPosition), Never>()
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
     
@@ -71,36 +69,29 @@ final class ModelData: ObservableObject {
     let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
     
     @Published var downloadManager = BookDownloadManager()
-    
-    var readingBookInShelfId: String? = nil {
-        didSet {
-            guard let readingBookInShelfId = readingBookInShelfId else {
-                readingBook = nil
-                return
-            }
-            if readingBook?.inShelfId != readingBookInShelfId {
-                readingBook = booksInShelf[readingBookInShelfId] ?? getBook(for: readingBookInShelfId)
-            }
-        }
+    @Published var sessionManager = ReadingSessionManager()
+
+    var readingBookInShelfId: String? {
+        get { sessionManager.readingBookInShelfId }
+        set { sessionManager.readingBookInShelfId = newValue }
+    }
+    var readingBook: CalibreBook? {
+        get { sessionManager.readingBook }
+        set { sessionManager.readingBook = newValue }
+    }
+    var readerInfo: ReaderInfo? {
+        get { sessionManager.readerInfo }
+        set { sessionManager.readerInfo = newValue }
+    }
+    var presentingEBookReaderFromShelf: Bool {
+        get { sessionManager.presentingEBookReaderFromShelf }
+        set { sessionManager.presentingEBookReaderFromShelf = newValue }
+    }
+    var selectedPosition: String {
+        get { sessionManager.selectedPosition }
+        set { sessionManager.selectedPosition = newValue }
     }
     
-    @available(*, deprecated)
-    @Published var readingBook: CalibreBook? = nil {
-        didSet {
-            guard let readingBook = readingBook else {
-                self.selectedPosition = ""
-                return
-            }
-            
-            readerInfo = prepareBookReading(book: readingBook)
-            self.selectedPosition = readerInfo?.position.id ?? deviceName
-        }
-    }
-    
-    @Published var readerInfo: ReaderInfo? = nil
-    
-    @Published var presentingEBookReaderFromShelf = false
-        
     @Published var updatingMetadata = false {
         didSet {
             if updatingMetadata {
@@ -194,6 +185,7 @@ final class ModelData: ObservableObject {
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
         downloadManager.modelData = self
+        sessionManager.modelData = self
         
         self.reloadCustomFonts()
         
@@ -1531,49 +1523,11 @@ final class ModelData: ObservableObject {
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        var candidatePositions = [BookDeviceReadingPosition]()
-
-        //preference: device, latest, selected, any
-        if let position = book.readPos.getPosition(deviceName) {
-            candidatePositions.append(position)
-        }
-        if let position = book.readPos.getDevices().first {
-            candidatePositions.append(position)
-        }
-//        candidatePositions.append(contentsOf: book.readPos.getDevices())
-        if let format = getPreferredFormat(for: book) {
-            candidatePositions.append(
-                book.readPos.createInitial(
-                    deviceName: self.deviceName,
-                    reader: getPreferredReader(for: format)
-                )
-            )
-        }
-        
-        let formatReaderPairArray: [(Format, ReaderType, BookDeviceReadingPosition)] = candidatePositions.compactMap { position in
-            guard let reader = ReaderType(rawValue: position.readerName), reader != .UNSUPPORTED else { return nil }
-            let format = reader.format
-            
-            return (format, reader, position)
-        }
-        
-        let formatReaderPair = formatReaderPairArray.first ?? (Format.UNKNOWN, ReaderType.UNSUPPORTED, BookDeviceReadingPosition.init(readerName: ReaderType.UNSUPPORTED.id))
-        let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) ?? URL(fileURLWithPath: "/invalid")
-        let urlMissing = !FileManager.default.fileExists(atPath: savedURL.path)
-        
-        return ReaderInfo(deviceName: deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
+        return sessionManager.prepareBookReading(book: book)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
-        let readerInfo = ReaderInfo(
-            deviceName: deviceName,
-            url: url,
-            missing: false,
-            format: format,
-            readerType: readerType,
-            position: position
-        )
-        self.readerInfo = readerInfo
+        sessionManager.prepareBookReading(url: url, format: format, readerType: readerType, position: position)
     }
     
     func removeDeleteBooksFromServer(server: CalibreServer) {

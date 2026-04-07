@@ -17,6 +17,7 @@ import UserMessagingPlatform
 @available(macCatalyst 14.0, *)
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
 
     @State private var alertItem: AlertItem?
@@ -123,8 +124,8 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf) {
-            if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
+        .fullScreenCover(isPresented: $sessionManager.presentingEBookReaderFromShelf) {
+            if let book = sessionManager.readingBook, let readerInfo = sessionManager.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {
                 NavigationView {
@@ -132,7 +133,7 @@ struct MainView: View {
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button(action: {
-                                    modelData.presentingEBookReaderFromShelf = false
+                                    sessionManager.presentingEBookReaderFromShelf = false
                                 }) {
                                     Image(systemName: "xmark")
                                 }
@@ -241,9 +242,9 @@ struct MainView: View {
                             guard let localLibrary = modelData.localLibrary else { return }
                             let book = CalibreBook(id: bookId, library: localLibrary)
                             modelData.readingBookInShelfId = book.inShelfId
-                            guard modelData.readingBook != nil, modelData.readerInfo != nil else { return }
+                            guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
 
-                            modelData.presentingEBookReaderFromShelf = true
+                            sessionManager.presentingEBookReaderFromShelf = true
                         }),
                         .cancel()
                     ]
@@ -291,7 +292,7 @@ struct MainView: View {
             
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
-                modelData.presentingEBookReaderFromShelf = false
+                sessionManager.presentingEBookReaderFromShelf = false
                 positionActionPresenting = false
             }
 
@@ -415,6 +416,7 @@ struct MainView_Previews: PreviewProvider {
     static var previews: some View {
         MainView()
             .environmentObject(modelData)
+            .environmentObject(modelData.sessionManager)
         // ReaderView()
     }
 }
