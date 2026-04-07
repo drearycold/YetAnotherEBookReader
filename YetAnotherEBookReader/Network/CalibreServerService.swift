@@ -88,6 +88,151 @@ final class CalibreServerService {
         return urlSession
     }
     
+    func syncLibrary(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) async -> CalibreSyncLibraryResult {
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server) else {
+            var result = resultPrev
+            result.errmsg = "Server not Reachable"
+            return result
+        }
+        
+        guard var urlComponents = URLComponents(string: serverUrl.absoluteString) else {
+            var result = resultPrev
+            result.errmsg = "Internal Error"
+            return result
+        }
+        
+        urlComponents.path = "/cdb/cmd/list/\(resultPrev.request.library.key)"
+        
+        var urlRequest = URLRequest(url: urlComponents.url!)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let payload: [String : Any] = [
+            "args" : [
+                "[\"last_modified\"]",
+                filter,
+                order
+            ],
+            "kwargs" : [:]
+        ]
+        
+        urlRequest.httpBody = try? JSONSerialization.data(withJSONObject: payload, options: [])
+        
+        let startDatetime = Date()
+        Task {
+            await logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        }
+        
+        do {
+            let (data, response) = try await self.urlSession(server: resultPrev.request.library.server).data(for: urlRequest)
+            var result = resultPrev
+            if let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode) {
+                if let list = try? JSONDecoder().decode(CalibreCdbCmdListResult.self, from: data) {
+                    result.list = list
+                }
+            }
+            
+            Task {
+                await self.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
+            }
+            return result
+        } catch {
+            var result = resultPrev
+            result.errmsg = error.localizedDescription
+            return result
+        }
+    }
+
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) async -> CalibreBooksTask {
+        guard let metadataUrl = task.metadataUrl,
+              metadataUrl.isHTTP else {
+            return task
+        }
+        guard task.books.isEmpty == false else {
+            return task
+        }
+        
+        do {
+            let (data, response) = try await self.urlSession(server: task.library.server, qos: qos).data(from: metadataUrl)
+            var resultTask = task
+            resultTask.booksMetadataJSON = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+            
+            if let entries = try? JSONDecoder().decode([String: CalibreBookEntry].self, from: data) {
+                resultTask.booksMetadataEntry = entries
+            }
+            
+            return resultTask
+        } catch {
+            return task
+        }
+    }
+
+    func getAnnotations(task: CalibreBooksTask) async -> CalibreBooksTask {
+        guard let annotationsUrl = task.annotationsUrl,
+              annotationsUrl.isHTTP else {
+            return task
+        }
+        
+        do {
+            let (data, _) = try await self.urlSession(server: task.library.server).data(from: annotationsUrl)
+            var resultTask = task
+            resultTask.booksAnnotationsEntry = try? JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
+            return resultTask
+        } catch {
+            return task
+        }
+    }
+
+    func getCustomColumns(request: CalibreSyncLibraryRequest) async -> CalibreSyncLibraryResult {
+        let errorResult: [String: [String:CalibreCustomColumnInfo]] = ["error":[:]]
+        
+        guard let serverURL = getServerUrlByReachability(server: request.library.server),
+              var endpointURLComponent = URLComponents(string: serverURL.absoluteString) else {
+            return CalibreSyncLibraryResult(request: request, result: errorResult)
+        }
+        
+        endpointURLComponent.path = "/cdb/cmd/custom_columns/\(request.library.key)"
+        guard let url = endpointURLComponent.url else {
+            return CalibreSyncLibraryResult(request: request, result: errorResult)
+        }
+        
+        do {
+            let (data, _) = try await self.urlSession(server: request.library.server).data(from: url)
+            if let result = try? JSONDecoder().decode([String: [String: CalibreCustomColumnInfo]].self, from: data) {
+                return CalibreSyncLibraryResult(request: request, result: result)
+            }
+            return CalibreSyncLibraryResult(request: request, result: errorResult)
+        } catch {
+            return CalibreSyncLibraryResult(request: request, result: errorResult)
+        }
+    }
+
+    func getLibraryCategories(resultPrev: CalibreSyncLibraryResult) async -> CalibreSyncLibraryResult {
+        var urlComponents = URLComponents()
+        urlComponents.path = "ajax/categories/\(resultPrev.request.library.key)"
+        
+        guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server),
+              let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
+            var result = resultPrev
+            result.errmsg = "Server not Reachable"
+            return result
+        }
+        
+        do {
+            let (data, _) = try await self.urlSession(server: resultPrev.request.library.server).data(from: endpointUrl)
+            var result = resultPrev
+            if let categories = try? JSONDecoder().decode([CalibreLibraryCategory].self, from: data) {
+                result.categories = categories
+            }
+            return result
+        } catch {
+            var result = resultPrev
+            result.errmsg = error.localizedDescription
+            return result
+        }
+    }
+
     func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         guard let serverUrl = getServerUrlByReachability(server: resultPrev.request.library.server) else {
             var result = resultPrev
