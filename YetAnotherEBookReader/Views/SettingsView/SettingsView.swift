@@ -329,10 +329,11 @@ struct SettingsView: View {
         if let server = modelData.calibreServers[server.id] {
             try? modelData.updateServerRealm(server: server)
         }
-        self.modelData.removeServerSubject.send(server)
-        
-        serverListDelete = nil
-    }
+        Task {
+            await self.modelData.removeServer(server: server)
+        }
+
+        serverListDelete = nil    }
     
 }
 

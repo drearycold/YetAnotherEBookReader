@@ -126,13 +126,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     lazy var shelfDataModel = YabrShelfDataModel(service: self.calibreServerService, searchManager: librarySearchManager, modelData: self)
     
-    let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
-    let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
-    let removeServerSubject = PassthroughSubject<CalibreServer, Never>()
-    
-    let probeLibrarySubject = PassthroughSubject<CalibreProbeLibraryRequest, Never>()
-    let removeLibrarySubject = PassthroughSubject<CalibreLibrary, Never>()
-    
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
     
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
@@ -184,13 +177,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         
 //        calibreServerService.defaultUrlSessionConfiguration.timeoutIntervalForRequest = 600
 //        calibreServerService.defaultUrlSessionConfiguration.httpMaximumConnectionsPerHost = 2
-        
-        registerProbeServerCancellable()
-        registerProbeServerResult()
-        registerRemoveServerCancellable()
-        
-        registerProbeLibraryCancellable()
-        registerRemoveLibraryCancellable()
         
         registerProbeLibraryLastModifiedCancellable()
         
@@ -1550,9 +1536,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             $0.value.isLocal == false
             && (serverIds.isEmpty || serverIds.contains($0.value.id))
         }.forEach { serverId, server in
-            self.probeServerSubject.send(.init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+            Task {
+                await self.probeServer(request: .init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+            }
             if server.hasPublicUrl {
-                self.probeServerSubject.send(.init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+                Task {
+                    await self.probeServer(request: .init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
+                }
             }
         }
     }
@@ -1609,228 +1599,151 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         }
     }
     
-    func registerProbeServerCancellable() {
-        let queue = DispatchQueue(label: "probe-server", qos: .userInitiated)
-        probeServerSubject.receive(on: DispatchQueue.main)
-            .map { request -> CalibreServerInfo in
-                if var info = self.calibreServerInfoStaging[request.id] {
-                    info.probing = true
-                    info.errorMsg = "Connecting"
-                    info.request = request
-                    info.url = URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/")
-                    self.calibreServerInfoStaging[request.id] = info
-                    return info
-                } else {
-                    let info = CalibreServerInfo(
-                        server: request.server,
-                        isPublic: request.isPublic,
-                        url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
-                        probing: true,
-                        errorMsg: "Connecting",
-                        defaultLibrary: request.server.defaultLibrary,
-                        request: request
-                    )
-                    self.calibreServerInfoStaging[request.id] = info
-                    return info
-                }
-            }
-            .receive(on: queue)
-            .flatMap { serverInfo -> AnyPublisher<CalibreServerInfo, Never> in
-                self.calibreServerService.probeServerReachabilityNew(serverInfo: serverInfo)
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { newServerInfo in
-                guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return }
-                serverInfo.probing = false
-                serverInfo.errorMsg = newServerInfo.errorMsg
+    @discardableResult
+    @MainActor
+    func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
+        if var info = self.calibreServerInfoStaging[request.id] {
+            info.probing = true
+            info.errorMsg = "Connecting"
+            info.request = request
+            info.url = URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/")
+            self.calibreServerInfoStaging[request.id] = info
+        } else {
+            let info = CalibreServerInfo(
+                server: request.server,
+                isPublic: request.isPublic,
+                url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
+                probing: true,
+                errorMsg: "Connecting",
+                defaultLibrary: request.server.defaultLibrary,
+                request: request
+            )
+            self.calibreServerInfoStaging[request.id] = info
+        }
+        
+        guard let info = self.calibreServerInfoStaging[request.id] else { return nil }
+        
+        let newServerInfo = await calibreServerService.probeServerReachability(serverInfo: info)
+        
+        guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return nil }
+        serverInfo.probing = false
+        serverInfo.errorMsg = newServerInfo.errorMsg
 
-                if newServerInfo.libraryMap.isEmpty {
-                    serverInfo.reachable = false
-                    if serverInfo.errorMsg.isEmpty {
-                        serverInfo.errorMsg = "Empty Server"
-                    }
-                } else {
-                    serverInfo.reachable = newServerInfo.reachable
-                    serverInfo.libraryMap = newServerInfo.libraryMap
-                    serverInfo.defaultLibrary = newServerInfo.defaultLibrary
-                }
-                self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
-                
-                self.probeServerResultSubject.send(serverInfo)
-            }.store(in: &calibreCancellables)
-    }
-    
-    func registerProbeServerResult() {
-        probeServerResultSubject.receive(on: DispatchQueue.main)
-            .filter {
-                $0.server.isLocal == false && $0.request.updateLibrary
+        if newServerInfo.libraryMap.isEmpty {
+            serverInfo.reachable = false
+            if serverInfo.errorMsg.isEmpty {
+                serverInfo.errorMsg = "Empty Server"
             }
-            .map { serverInfo -> CalibreServerInfo in
-                serverInfo.libraryMap.forEach { key, name in
-                    let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-                    if self.calibreLibraries[newLibrary.id] == nil {
-                        self.calibreLibraries[newLibrary.id] = newLibrary
-                        try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
-                    }
+        } else {
+            serverInfo.reachable = newServerInfo.reachable
+            serverInfo.libraryMap = newServerInfo.libraryMap
+            serverInfo.defaultLibrary = newServerInfo.defaultLibrary
+        }
+        self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
+        
+        if serverInfo.server.isLocal == false && serverInfo.request.updateLibrary {
+            serverInfo.libraryMap.forEach { key, name in
+                let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
+                if self.calibreLibraries[newLibrary.id] == nil {
+                    self.calibreLibraries[newLibrary.id] = newLibrary
+                    try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
                 }
-                
-                return serverInfo
             }
-            .sink { serverInfo in
-                if serverInfo.request.autoUpdateOnly == false {
-                    self.syncServerHelperConfigSubject.send(serverInfo.server.id)
-                }
+            
+            if serverInfo.request.autoUpdateOnly == false {
+                self.syncServerHelperConfigSubject.send(serverInfo.server.id)
+            }
+            
+            // TODO: replace sync library with library search
+            self.calibreLibraries.filter {
+                $0.value.server.id == serverInfo.server.id
+            }.forEach { id, library in
+                self.syncLibrarySubject.send(
+                    .init(
+                        library: library,
+                        autoUpdateOnly: serverInfo.request.autoUpdateOnly,
+                        incremental: serverInfo.request.incremental
+                    )
+                )
+            }
+            
+            if serverInfo.reachable {
+                self.calibreUpdatedSubject.send(.server(serverInfo.server))
                 
-                // TODO: replace sync library with library search
                 self.calibreLibraries.filter {
                     $0.value.server.id == serverInfo.server.id
                 }.forEach { id, library in
-                    self.syncLibrarySubject.send(
-                        .init(
-                            library: library,
-                            autoUpdateOnly: serverInfo.request.autoUpdateOnly,
-                            incremental: serverInfo.request.incremental
-                        )
-                    )
-                }
-                
-                /*
-                self.librarySearchManager.refreshSearchResult(
-                    libraryIds: Set(self.calibreLibraries.filter({ $0.value.server.id == serverInfo.server.id }).keys),
-                    searchCriteria: .init(searchString: "", sortCriteria: .init(), filterCriteriaCategory: [:])
-                )
-                 */
-                
-                //TODO: refresh shelf
-                if serverInfo.reachable {
-                    self.calibreUpdatedSubject.send(.server(serverInfo.server))
-                    
-                    self.calibreLibraries.filter {
-                        $0.value.server.id == serverInfo.server.id
-                    }.forEach { id, library in
-                        self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
-                    }
-                    
-                }
-                
-            }.store(in: &calibreCancellables)
-    }
-    
-    func registerRemoveServerCancellable() {
-        let queue = DispatchQueue(label: "remove-server", qos: .background)
-        removeServerSubject.receive(on: DispatchQueue.main)
-            .map { server -> CalibreServer in
-                
-                self.calibreLibraries.filter {
-                    $0.value.server.id == server.id
-                }.forEach {
-                    self.hideLibrary(libraryId: $0.key)
-                    
-                    self.removeLibrarySubject.send($0.value)
-                }
-                
-                self.calibreUpdatedSubject.send(.shelf)
-                
-                return server
-            }
-            .sink { server in
-                //FIXME: when to remove server from self?
-                return;
-                
-                //remove server
-                self.calibreServers.removeValue(forKey: server.id)
-                
-                let serverRealms = self.realm.objects(CalibreServerRealm.self).filter(
-                    NSPredicate(format: "baseUrl = %@ AND username = %@",
-                                server.baseUrl,
-                                server.username
-                               )
-                )
-                try? self.realm.write {
-                    self.realm.delete(serverRealms)
+                    self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
-            .store(in: &calibreCancellables)
-    }
-    
-    func registerProbeLibraryCancellable() {
-        let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
-        probeLibrarySubject.receive(on: queue)
-            .flatMap { request -> AnyPublisher<CalibreLibraryProbeTask, Never> in
-                if let task = self.calibreServerService.buildProbeLibraryTask(library: request.library) {
-                    return self.calibreServerService.urlSession(server: task.library.server).dataTaskPublisher(for: task.probeUrl)
-                        .map { response -> CalibreLibraryProbeTask in
-                            var task = task
-                            task.probeResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: response.data)
-                
-                            return task
-                        }
-                        .replaceError(with: task)
-                        .eraseToAnyPublisher()
-                } else {
-                    return Just(CalibreLibraryProbeTask(library: request.library, probeUrl: .init(fileURLWithPath: "/realm"), probeResult: nil))
-                        .setFailureType(to: Never.self)
-                        .eraseToAnyPublisher()
-                }
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { task in
-                if let probeResult = task.probeResult {
-                    self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: probeResult.total_num, errorMessage: "Success")
-                } else {
-                    self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: 0, errorMessage: "Failed")
-                }
-            }
-            .store(in: &calibreCancellables)
-    }
-    
-    func registerRemoveLibraryCancellable() {
-        let queue = DispatchQueue(label: "remove-library", qos: .background)
+        }
         
-        removeLibrarySubject.receive(on: DispatchQueue.main)
-            .map { library -> CalibreLibrary in
-                self.librarySyncStatus[library.id]?.isSync = true
+        return serverInfo
+    }
+    
+    @MainActor
+    func removeServer(server: CalibreServer) async {
+        let librariesToRemove = self.calibreLibraries.filter { $0.value.server.id == server.id }
+        for (_, library) in librariesToRemove {
+            self.hideLibrary(libraryId: library.id)
+            await self.removeLibrary(library: library)
+        }
+        
+        self.calibreUpdatedSubject.send(.shelf)
+    }
+    
+    @discardableResult
+    @MainActor
+    func probeLibrary(request: CalibreProbeLibraryRequest) async -> CalibreLibraryProbeTask {
+        let task = await calibreServerService.probeLibrary(library: request.library)
+        
+        if let probeResult = task.probeResult {
+            self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: probeResult.total_num, errorMessage: "Success")
+        } else {
+            self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: 0, errorMessage: "Failed")
+        }
+        
+        return task
+    }
+    
+    @MainActor
+    func removeLibrary(library: CalibreLibrary) async {
+        if librarySyncStatus[library.id] != nil {
+            librarySyncStatus[library.id]?.isSync = true
+        } else {
+            librarySyncStatus[library.id] = .init(library: library, isSync: true)
+        }
+        
+        //remove cached book files
+        let libraryBooksInShelf = self.booksInShelf.filter {
+            $0.value.library.id == library.id
+        }
+        libraryBooksInShelf.forEach {
+            self.clearCache(inShelfId: $0.key)
+            self.removeFromShelf(inShelfId: $0.key)     //just in case
+        }
+        
+        let serverUUIDString = library.server.uuid.uuidString
+        let libraryName = library.name
+        let realmConf = self.realmConf!
+        
+        await Task.detached(priority: .background) {
+            guard let realm = try? Realm(configuration: realmConf)
+            else { return }
+            
+            //remove library info
+            let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", serverUUIDString, libraryName)
+            while true {
+                let booksToDelete = realm.objects(CalibreBookRealm.self).filter(predicate).prefix(256).map { $0 }
+                if booksToDelete.isEmpty { break }
                 
-                //remove cached book files
-                let libraryBooksInShelf = self.booksInShelf.filter {
-                    $0.value.library.id == library.id
+                try? realm.write {
+                    realm.delete(booksToDelete)
                 }
-                libraryBooksInShelf.forEach {
-                    self.clearCache(inShelfId: $0.key)
-                    self.removeFromShelf(inShelfId: $0.key)     //just in case
-                }
-                return library
             }
-            .receive(on: queue)
-            .map { library -> CalibreLibrary in
-                guard let realm = try? Realm(configuration: self.realmConf)
-                else { return library }
-                
-                //remove library info
-                let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", library.server.uuid.uuidString, library.name)
-                var booksCached: [CalibreBookRealm] = realm.objects(CalibreBookRealm.self)
-                    .filter(predicate)
-                    .prefix(256)
-                    .map{ $0 }
-                while booksCached.isEmpty == false {
-                    print("\(#function) will delete \(booksCached.count) entries of \(library.id)")
-                    try? realm.write {
-                        realm.delete(booksCached)
-                    }
-                    booksCached = realm.objects(CalibreBookRealm.self)
-                        .filter(predicate)
-                        .prefix(256)
-                        .map{ $0 }
-                }
-                
-                return library
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { library in
-                self.librarySyncStatus[library.id]?.isSync = false
-//                self.calibreLibraries.removeValue(forKey: library.id)
-            }
-            .store(in: &calibreCancellables)
+        }.value
+        
+        self.librarySyncStatus[library.id]?.isSync = false
     }
     
     func registerProbeLibraryLastModifiedCancellable() {

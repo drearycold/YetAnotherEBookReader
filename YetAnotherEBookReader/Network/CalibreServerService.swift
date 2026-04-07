@@ -796,8 +796,74 @@ final class CalibreServerService {
         }
     }
     
+    // MARK: - Async Methods
+
+    func probeServerReachability(serverInfo: CalibreServerInfo) async -> CalibreServerInfo {
+        var resultInfo = serverInfo
+        resultInfo.reachable = false
+        resultInfo.errorMsg = "Cannot connect"
+        
+        var url = resultInfo.url
+        url.appendPathComponent("/ajax/library-info", isDirectory: false)
+        
+        do {
+            let request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 10)
+            let (data, response) = try await self.urlSession(server: resultInfo.server, timeout: 10).data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                resultInfo.errorMsg = "Cannot get HTTP response"
+                return resultInfo
+            }
+            guard (200...299).contains(httpResponse.statusCode) else {
+                resultInfo.errorMsg = httpResponse.description
+                return resultInfo
+            }
+            guard let libraryInfo = try? JSONDecoder().decode(CalibreServerLibraryInfo.self, from: data) else {
+                resultInfo.errorMsg = "Cannot parse library list"
+                return resultInfo
+            }
+            guard let defaultLibrary = libraryInfo.defaultLibrary,
+                  libraryInfo.libraryMap.count > 0 else {
+                resultInfo.errorMsg = "Server has no library"
+                return resultInfo
+            }
+      
+            resultInfo.defaultLibrary = defaultLibrary
+            resultInfo.libraryMap = libraryInfo.libraryMap
+            resultInfo.errorMsg = "Success"
+            resultInfo.reachable = true
+
+            return resultInfo
+        } catch let error as URLError {
+            if error.code == URLError.Code.cancelled {
+                resultInfo.errorMsg = "cancelled, server may require authentication"
+            } else {
+                resultInfo.errorMsg = error.localizedDescription
+            }
+            return resultInfo
+        } catch {
+            resultInfo.errorMsg = error.localizedDescription
+            return resultInfo
+        }
+    }
+
     // MARK: - Combine style below
     
+    func probeLibrary(library: CalibreLibrary) async -> CalibreLibraryProbeTask {
+        if let task = self.buildProbeLibraryTask(library: library) {
+            do {
+                let (data, _) = try await self.urlSession(server: task.library.server).data(from: task.probeUrl)
+                var task = task
+                task.probeResult = try? JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: data)
+                return task
+            } catch {
+                return task
+            }
+        } else {
+            return CalibreLibraryProbeTask(library: library, probeUrl: .init(fileURLWithPath: "/realm"), probeResult: nil)
+        }
+    }
+
     func probeServerReachabilityNew(serverInfo: CalibreServerInfo) -> AnyPublisher<CalibreServerInfo, Never> {
         var serverInfo = serverInfo
         
