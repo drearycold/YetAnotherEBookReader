@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import SwiftUI
+import RealmSwift
 
 class ReadingSessionManager: ObservableObject {
     @Published var presentingEBookReaderFromShelf = false
@@ -98,5 +99,58 @@ class ReadingSessionManager: ObservableObject {
             position: position
         )
         self.readerInfo = readerInfo
+    }
+    
+    func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
+        guard let modelData = modelData, let realm = try? Realm(configuration: modelData.realmConf) else { return [:] }
+        
+        var pred: NSPredicate?
+        if let library = library, let bookId = bookId {
+            pred = NSPredicate(format: "bookId = %@", "\(library.key) - \(bookId)")
+            if let startDateAfter = startDateAfter {
+                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", "\(library.key) - \(bookId)", startDateAfter as NSDate)
+            }
+        } else {
+            if let startDateAfter = startDateAfter {
+                pred = NSPredicate(
+                    format: "startDatetime >= %@",
+                    startDateAfter as NSDate
+                )
+            }
+        }
+        
+        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self);
+        if let predNotNil = pred {
+            results = results.filter(predNotNil)
+        }
+        results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+        
+        var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
+            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
+        
+        if let library = library, let bookId = bookId {
+            let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
+            if let book = modelData.booksInShelf[bookInShelfId] {
+                historyList.append(contentsOf: book.readPos.sessions(list: startDateAfter))
+            }
+        } else {
+            modelData.booksInShelf.forEach {
+                historyList.append(contentsOf: $0.value.readPos.sessions(list: startDateAfter))
+            }
+        }
+        
+        let idMap = modelData.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
+            partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
+        }
+        
+        return historyList.sorted(by:{ $0.startDatetime > $1.startDatetime }).removingDuplicates().reduce(into: [:]) { partialResult, history in
+            guard let inShelfId = idMap[history.bookId] else { return }
+            
+            if partialResult[inShelfId] == nil {
+                partialResult[inShelfId] = [history]
+            } else {
+                partialResult[inShelfId]?.append(history)
+            }
+        }
     }
 }

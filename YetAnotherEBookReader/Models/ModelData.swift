@@ -2478,70 +2478,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
      key: inShelfId
      */
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String:[BookDeviceReadingPositionHistory]] {
-        guard let realm = try? Realm(configuration: self.realmConf) else { return [:] }
-
-        var pred: NSPredicate? = nil
-        if let library = library, let bookId = bookId {
-            pred = NSPredicate(format: "bookId = %@", "\(library.key) - \(bookId)")
-            if let startDateAfter = startDateAfter {
-                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", "\(library.key) - \(bookId)", startDateAfter as NSDate)
-            }
-        } else {
-            if let startDateAfter = startDateAfter {
-                pred = NSPredicate(
-                    format: "startDatetime >= %@",
-                    startDateAfter as NSDate
-                )
-            }
-        }
-        
-        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self);
-        if let predNotNil = pred {
-            results = results.filter(predNotNil)
-        }
-        results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-        print("\(#function) \(results.count)")
-        
-        var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
-            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
-        
-        if let library = library, let bookId = bookId {
-            let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
-            if let book = self.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: book.readPos.sessions(list: startDateAfter))
-            }
-        } else {
-            self.booksInShelf.forEach {
-                historyList.append(contentsOf: $0.value.readPos.sessions(list: startDateAfter))
-            }
-        }
-        
-        let idMap = booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
-            partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
-        }
-
-        return historyList.sorted(by:{ $0.startDatetime > $1.startDatetime }).removingDuplicates().reduce(into: [:]) { partialResult, history in
-            guard let inShelfId = idMap[history.bookId] else { return }
-            
-            if partialResult[inShelfId] == nil {
-                partialResult[inShelfId] = [history]
-            } else {
-                partialResult[inShelfId]?.append(history)
-            }
-        }
+        return sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDateAfter)
     }
     
     func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
-        let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
-            guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
-            let duration = epoch - history.startDatetime.timeIntervalSince1970
-            let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
-            let nowDayDate = Calendar.current.startOfDay(for: Date())
-            let offset = limitDays - Int(floor(nowDayDate.timeIntervalSince(readDayDate) / 86400.0))
-            if offset < 0 || offset > limitDays { return }
-            result[offset] += duration / 60
-        }
-        return result
+        return BookDeviceReadingPositionHistory.getReadingStatistics(list: list, limitDays: limitDays)
     }
     
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {

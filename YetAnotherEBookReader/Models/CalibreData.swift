@@ -962,6 +962,21 @@ struct BookDeviceReadingPositionHistory : Hashable, Codable {
     }
 }
 
+extension BookDeviceReadingPositionHistory {
+    static func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
+        let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
+            guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
+            let duration = epoch - history.startDatetime.timeIntervalSince1970
+            let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
+            let nowDayDate = Calendar.current.startOfDay(for: Date())
+            let offset = limitDays - Int(floor(nowDayDate.timeIntervalSince(readDayDate) / 86400.0))
+            if offset < 0 || offset > limitDays { return }
+            result[offset] += duration / 60
+        }
+        return result
+    }
+}
+
 struct BookBookmark {
     let bookId: String
     let page: Int
