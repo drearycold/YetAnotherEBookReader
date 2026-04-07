@@ -5,14 +5,7 @@
 //  Created by 京太郎 on 2021/11/1.
 //
 import SwiftUI
-
-class ActivityListViewModel: ObservableObject {
-    @Published var activities: [CalibreActivityLogEntry] = []
-
-    func load(modelData: ModelData, libraryId: String?, bookId: Int32?) {
-        activities = modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId)
-    }
-}
+import RealmSwift
 
 struct ActivityList: View {
     @EnvironmentObject var modelData: ModelData
@@ -22,11 +15,62 @@ struct ActivityList: View {
     var libraryId: String? = nil
     var bookId: Int32? = nil
 
-    @StateObject private var viewModel = ActivityListViewModel()
+    @ObservedResults(
+        CalibreActivityLogEntry.self,
+        sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+    ) var activities
+
+    init(presenting: Bool? = nil, libraryId: String? = nil, bookId: Int32? = nil) {
+        self._presenting = Binding<Bool>(get: { presenting ?? false }, set: { _ in })
+        self.libraryId = libraryId
+        self.bookId = bookId
+        
+        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
+        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
+        
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
+            } else {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
+            }
+        }
+        
+        _activities = ObservedResults(
+            CalibreActivityLogEntry.self,
+            filter: predicate,
+            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+        )
+        print("ActivityList initialized with Realm URL: \(activities.realm?.configuration.fileURL?.absoluteString ?? "Unknown")")
+    }
+    
+    init(presenting: Binding<Bool>, libraryId: String? = nil, bookId: Int32? = nil) {
+        self._presenting = presenting
+        self.libraryId = libraryId
+        self.bookId = bookId
+        
+        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
+        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
+        
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
+            } else {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
+            }
+        }
+        
+        _activities = ObservedResults(
+            CalibreActivityLogEntry.self,
+            filter: predicate,
+            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+        )
+        print("ActivityList initialized with Realm URL: \(activities.realm?.configuration.fileURL?.absoluteString ?? "Unknown")")
+    }
 
     var body: some View {
         List {
-            ForEach(viewModel.activities, id: \.self) { obj in
+            ForEach(activities, id: \.self) { obj in
                 NavigationLink(destination: ActivityDetailView(obj: obj), label: {
                     row(obj: obj)
                 })
@@ -34,9 +78,6 @@ struct ActivityList: View {
         }
         .navigationTitle("Recent Activities")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            viewModel.load(modelData: modelData, libraryId: libraryId, bookId: bookId)
-        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction, content: {
                 if presenting {

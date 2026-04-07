@@ -451,7 +451,21 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
                     }
                 }
-                
+                if oldSchemaVersion < 133 {
+                    var count = 0
+                    migration.enumerateObjects(ofType: CalibreActivityLogEntry.className()) { oldObject, newObject in
+                        newObject?["id"] = UUID().uuidString
+                        
+                        let properties = ["type", "startDatetime", "finishDatetime", "bookId", "libraryId", "endpoingURL", "httpMethod", "httpBody", "errMsg", "requestHeaders"]
+                        for prop in properties {
+                            if let old = oldObject, old.objectSchema.properties.contains(where: { $0.name == prop }) {
+                                newObject?[prop] = old[prop]
+                            }
+                        }
+                        count += 1
+                    }
+                    print("Migrated \(count) CalibreActivityLogEntry records.")
+                }
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
@@ -2416,23 +2430,21 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
-        logger.logStartCalibreActivity(type: type, request: request, startDatetime: startDatetime, bookId: bookId, libraryId: libraryId)
+        Task {
+            await logger.logStartCalibreActivity(type: type, request: request, startDatetime: startDatetime, bookId: bookId, libraryId: libraryId)
+        }
     }
     
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
-        logger.logFinishCalibreActivity(type: type, request: request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
+        Task {
+            await logger.logFinishCalibreActivity(type: type, request: request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
+        }
     }
     
-    func removeCalibreActivity(obj: CalibreActivityLogEntry) {
-        logger.removeCalibreActivity(obj: obj)
-    }
-
-    func listCalibreActivities(libraryId: String? = nil, bookId: Int32? = nil, startDatetime: Date = Date(timeIntervalSinceNow: TimeInterval(-86400))) -> [CalibreActivityLogEntry] {
-        return logger.listCalibreActivities(libraryId: libraryId, bookId: bookId, startDatetime: startDatetime)
-    }
-
     func cleanCalibreActivities(startDatetime: Date) {
-        logger.cleanCalibreActivities(startDatetime: startDatetime)
+        Task {
+            await logger.cleanCalibreActivities(startDatetime: startDatetime)
+        }
     }
     /**
      key: inShelfId

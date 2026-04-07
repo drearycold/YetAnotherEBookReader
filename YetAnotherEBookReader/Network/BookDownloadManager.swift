@@ -54,7 +54,7 @@ class BookDownloadManager: ObservableObject {
         download.value.downloadTask?.cancel()
         
         if let request = download.value.downloadTask?.originalRequest {
-            modelData?.logger.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Cancelled")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Cancelled")
         }
 
         activeDownloads[download.key]?.isDownloading = false
@@ -77,7 +77,7 @@ class BookDownloadManager: ObservableObject {
         })
         
         if let request = download.value.downloadTask?.originalRequest {
-            modelData?.logger.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Paused")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Paused")
         }
     }
     
@@ -108,7 +108,7 @@ class BookDownloadManager: ObservableObject {
         activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
         
         if let request = downloadTask.originalRequest {
-            modelData?.logger.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Resumed")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Resumed")
         }
         
         downloadTask.resume()
@@ -155,7 +155,7 @@ class BookDownloadManager: ObservableObject {
         let downloadTask = downloadSession.downloadTask(with: url)
         
         if let request = downloadTask.originalRequest {
-            modelData?.logger.logStartCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, bookId: book.id, libraryId: book.library.id)
+            modelData?.logStartCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, bookId: book.id, libraryId: book.library.id)
         }
 
         if book.library.server.username.count > 0 && book.library.server.password.count > 0 {
@@ -286,7 +286,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.bookDownloadedSubject.send(self.download.book)
                 
                 guard let request = task.originalRequest else { return }
-                modelData.logger.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(self.fileSize)")
+                modelData.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(self.fileSize)")
             }
         } else {
             DispatchQueue.main.async { [weak self] in
@@ -297,7 +297,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
                 
-                modelData.logger.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: error?.localizedDescription))")
+                modelData.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: error?.localizedDescription))")
             }
         }
     }

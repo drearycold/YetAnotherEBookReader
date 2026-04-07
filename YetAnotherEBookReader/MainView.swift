@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 import AppTrackingTransparency
+import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -84,6 +85,7 @@ struct MainView: View {
                     SettingsView()
                 }
                 .navigationViewStyle(StackNavigationViewStyle())
+                .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
                 .tabItem {
                     Image(systemName: "gearshape.fill")
                     Text("Settings")

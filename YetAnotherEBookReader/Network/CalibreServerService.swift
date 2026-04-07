@@ -129,7 +129,9 @@ final class CalibreServerService {
         print("\(#function) listRequest \(endpointUrl.absoluteString) \(String(data: data, encoding: .utf8))")
         
         let startDatetime = Date()
-        self.logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        Task { [weak self] in
+            await self?.logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        }
 
         let a = self.urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
@@ -148,7 +150,9 @@ final class CalibreServerService {
                 if let list = listResult["result"] {
                     result.list = list
                 }
-                self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
+                Task { [weak self] in
+                    await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
+                }
                 return result
             }
             .eraseToAnyPublisher()
@@ -179,14 +183,18 @@ final class CalibreServerService {
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         let startDatetime = Date()
-        self.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+        Task { [weak self] in
+            await self?.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+        }
 
         let task = self.urlSession(server: oldbook.library.server).dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             var updatingMetadataStatus = "Unknonwn Error"
             var bookResult = oldbook
             defer {
-                self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                Task { [weak self] in
+                    await self?.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                }
                 
                 DispatchQueue.main.async {
                     self.updatingMetadataStatus = updatingMetadataStatus
@@ -518,13 +526,17 @@ final class CalibreServerService {
         let request = URLRequest(url: endpointUrl)
         
         let startDatetime = Date()
-        self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        Task { [weak self] in
+            await self?.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        }
 
         let task = self.urlSession(server: book.library.server).dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
             var updatingMetadataStatus = "Unknown Error"
             defer {
-                self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                Task { [weak self] in
+                    await self?.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                }
                 DispatchQueue.main.async {
                     self.updatingMetadataStatus = updatingMetadataStatus
                     self.updatingMetadata = false
@@ -595,11 +607,15 @@ final class CalibreServerService {
 //            updatingMetadataTask!.cancel()
 //        }
         let startDatetime = Date()
-        self.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+        Task { [weak self] in
+            await self?.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+        }
 
         let updatingMetadataTask = self.urlSession(server: library.server).dataTask(with: request) { [weak self] data, response, error in
             print("\(#function) \(String(describing: data)) \(String(describing: response)) \(String(describing: error))")
-            self?.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
+            Task { [weak self] in
+                await self?.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
+            }
         }
         
         updatingMetadataTask.resume()
@@ -650,7 +666,9 @@ final class CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         let startDatetime = Date()
-        self.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        Task { [weak self] in
+            await self?.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        }
         
         let updatingMetadataTask = self.urlSession(server: book.library.server).dataTask(with: request) { [weak self] data, response, error in
             guard let self = self else { return }
@@ -658,7 +676,9 @@ final class CalibreServerService {
             var newBook = book
             
             defer {
-                self.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                Task { [weak self] in
+                    await self?.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                }
 
                 DispatchQueue.main.async {
                     self.updatingMetadataStatus = updatingMetadataStatus

@@ -414,6 +414,10 @@ struct BookDetailView: View {
                     NavigationView {
                         ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
                             .environmentObject(modelData)
+                            .environmentObject(modelData.downloadManager)
+                            .environmentObject(modelData.sessionManager)
+                            .environmentObject(modelData.fontsManager)
+                            .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
                     }
                 })
             }
