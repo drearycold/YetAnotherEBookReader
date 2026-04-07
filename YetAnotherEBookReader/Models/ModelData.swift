@@ -14,7 +14,7 @@ import Kingfisher
 import ShelfView
 import CryptoSwift
 
-final class ModelData: ObservableObject {
+final class ModelData: ObservableObject, CalibreServerConfigProvider {
     static var shared: ModelData?
     
     @Published var deviceName = UIDevice.current.name
@@ -121,12 +121,13 @@ final class ModelData: ObservableObject {
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
     
-    lazy var calibreServerService = CalibreServerService(modelData: self)
-    @Published var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
-
-    lazy var librarySearchManager = CalibreLibrarySearchManager(service: self.calibreServerService)
+    var databaseService = DatabaseService.shared
     
-    lazy var shelfDataModel = YabrShelfDataModel(service: self.calibreServerService, searchManager: librarySearchManager)
+    lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
+
+    lazy var librarySearchManager = CalibreLibrarySearchManager(service: self.calibreServerService, modelData: self)
+    
+    lazy var shelfDataModel = YabrShelfDataModel(service: self.calibreServerService, searchManager: librarySearchManager, modelData: self)
     
     let probeServerSubject = PassthroughSubject<CalibreProbeServerRequest, Never>()
     let probeServerResultSubject = PassthroughSubject<CalibreServerInfo, Never>()
@@ -144,13 +145,6 @@ final class ModelData: ObservableObject {
     let getBooksMetadataSubject = PassthroughSubject<CalibreBooksMetadataRequest, Never>()
     
     var probeTimer: AnyCancellable?
-    
-    lazy var metadataQueue: OperationQueue = {
-        var queue = OperationQueue()
-        queue.name = "Book Metadata queue"
-        queue.maxConcurrentOperationCount = 2
-        return queue
-    }()
     
     /// inShelfId for single book
     /// empty string for full update
@@ -486,6 +480,7 @@ final class ModelData: ObservableObject {
             configuration: realmConf
         )
         logger = CalibreActivityLogger(realmConf: realmConf)
+        databaseService.setup(conf: realmConf)
         downloadManager.setup(modelData: self, realmConf: realmConf)
         ModelData.SaveBooksMetadataRealmQueue.sync {
             self.realmSaveBooksMetadata = try! Realm(

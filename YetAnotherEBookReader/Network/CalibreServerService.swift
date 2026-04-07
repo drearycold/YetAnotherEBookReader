@@ -9,14 +9,66 @@ import Foundation
 import OSLog
 import Combine
 
-struct CalibreServerService {
-    var modelData: ModelData
-
-    var defaultLog = Logger()
+final class CalibreServerService {
+    private var logger: CalibreActivityLogger
+    weak var config: CalibreServerConfigProvider?
+    var database: DatabaseService
+    var defaultLog = Logger(subsystem: "io.github.dsreader", category: "CalibreServerService")
+    var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
+    lazy var metadataQueue: OperationQueue = {
+        var queue = OperationQueue()
+        queue.name = "Book Metadata queue"
+        queue.maxConcurrentOperationCount = 2
+        return queue
+    }()
+    
+    init(logger: CalibreActivityLogger, config: CalibreServerConfigProvider, database: DatabaseService) {
+        self.logger = logger
+        self.config = config
+        self.database = database
+    }
+    
+    // Mapping Computed Properties
+    var updatingMetadataStatus: String {
+        get { config?.updatingMetadataStatus ?? "" }
+        set { config?.updatingMetadataStatus = newValue }
+    }
+    var updatingMetadata: Bool {
+        get { config?.updatingMetadata ?? false }
+        set { config?.updatingMetadata = newValue }
+    }
+    var updatingMetadataSucceed: Bool {
+        get { config?.updatingMetadataSucceed ?? false }
+        set { config?.updatingMetadataSucceed = newValue }
+    }
+    var librarySyncStatus: [String: CalibreSyncStatus] {
+        get { config?.librarySyncStatus ?? [:] }
+        set { config?.librarySyncStatus = newValue }
+    }
+    var deviceName: String {
+        config?.deviceName ?? ""
+    }
+    var calibreLibraries: [String: CalibreLibrary] {
+        config?.calibreLibraries ?? [:]
+    }
+    var calibreServerInfoStaging: [String: CalibreServerInfo] {
+        config?.calibreServerInfoStaging ?? [:]
+    }
+    
+    // Mapping methods
+    func updateBook(book: CalibreBook) {
+        config?.updateBook(book: book)
+    }
+    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
+        config?.getBookRealm(forPrimaryKey: forPrimaryKey)
+    }
+    func getPreferredFormat(for book: CalibreBook) -> Format? {
+        config?.getPreferredFormat(for: book)
+    }
 
     func urlSession(server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> URLSession {
         let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-        if let session = modelData.metadataSessions[key] {
+        if let session = metadataSessions[key] {
             return session
         }
         let urlSessionConfiguration = URLSessionConfiguration.default
@@ -24,13 +76,13 @@ struct CalibreServerService {
         urlSessionConfiguration.timeoutIntervalForRequest = timeout
         urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
         let urlSessionDelegate = CalibreServerTaskDelegate(server)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: modelData.metadataQueue)
+        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
         
         if Thread.isMainThread {
-            modelData.metadataSessions[key] = urlSession
+            metadataSessions[key] = urlSession
         } else {
-            DispatchQueue.main.sync {
-                modelData.metadataSessions[key] = urlSession
+            DispatchQueue.main.sync { [weak self] in
+                self?.metadataSessions[key] = urlSession
             }
         }
         return urlSession
@@ -77,9 +129,9 @@ struct CalibreServerService {
         print("\(#function) listRequest \(endpointUrl.absoluteString) \(String(data: data, encoding: .utf8))")
         
         let startDatetime = Date()
-        modelData.logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        self.logger.logStartCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
 
-        let a = urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: urlRequest)
+        let a = self.urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: urlRequest)
             .tryMap { output in
                 // print("\(#function) \(output.response.debugDescription) \(output.data.debugDescription)")
                 guard let response = output.response as? HTTPURLResponse, response.statusCode == 200 else {
@@ -91,12 +143,12 @@ struct CalibreServerService {
             }
             .decode(type: [String: CalibreCdbCmdListResult].self, decoder: JSONDecoder())
             .replaceError(with: ["result": CalibreCdbCmdListResult(book_ids: [-1])])
-            .map { listResult -> CalibreSyncLibraryResult in
+            .map { [weak self] listResult -> CalibreSyncLibraryResult in
                 var result = resultPrev
                 if let list = listResult["result"] {
                     result.list = list
                 }
-                modelData.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
+                self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
                 return result
             }
             .eraseToAnyPublisher()
@@ -106,20 +158,20 @@ struct CalibreServerService {
     
     func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
         guard oldbook.library.server.isLocal == false else {
-            modelData.updatingMetadataStatus = "Local File"
-            modelData.updatingMetadataSucceed = true
+            self.updatingMetadataStatus = "Local File"
+            self.updatingMetadataSucceed = true
             return
         }
         
         guard let serverUrl = getServerUrlByReachability(server: oldbook.library.server) else {
-            modelData.updatingMetadataStatus = "Server not Reachable"
+            self.updatingMetadataStatus = "Server not Reachable"
             return
         }
         
         var urlComponents = URLComponents()
         urlComponents.path = "/get/json/\(oldbook.id)/\(oldbook.library.key)"
         guard let endpointUrl = urlComponents.url(relativeTo: serverUrl) else {
-            modelData.updatingMetadataStatus = "Internal Error"
+            self.updatingMetadataStatus = "Internal Error"
             return
         }
         
@@ -127,43 +179,44 @@ struct CalibreServerService {
 
         let request = URLRequest(url: endpointUrl, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
         let startDatetime = Date()
-        modelData.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+        self.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
 
-        let task = urlSession(server: oldbook.library.server).dataTask(with: request) { [self] data, response, error in
+        let task = self.urlSession(server: oldbook.library.server).dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
             var updatingMetadataStatus = "Unknonwn Error"
             var bookResult = oldbook
             defer {
-                modelData.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
                 
                 DispatchQueue.main.async {
-                    modelData.updatingMetadataStatus = updatingMetadataStatus
-                    modelData.updatingMetadata = false
+                    self.updatingMetadataStatus = updatingMetadataStatus
+                    self.updatingMetadata = false
                     
                     if updatingMetadataStatus == "Success",
-                       modelData.getBookRealm(forPrimaryKey: bookResult.inShelfId) != nil {
-                        modelData.updateBook(book: bookResult)
+                       self.getBookRealm(forPrimaryKey: bookResult.inShelfId) != nil {
+                        self.updateBook(book: bookResult)
                     }
                     
                     completion?(bookResult)
                 }
             }
             if let error = error {
-                defaultLog.warning("error: \(error.localizedDescription)")
+                self.defaultLog.warning("error: \(error.localizedDescription)")
                 updatingMetadataStatus = error.localizedDescription
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
                 updatingMetadataStatus = response.debugDescription
                 return
             }
             guard httpResponse.statusCode != 404 else {
-                defaultLog.warning("statusCode 404: \(httpResponse.debugDescription)")
+                self.defaultLog.warning("statusCode 404: \(httpResponse.debugDescription)")
                 updatingMetadataStatus = "Deleted"
                 return
             }
             guard (200...299).contains(httpResponse.statusCode) else {
-                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                self.defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                 if let data = data,
                    let msg = String(data: data, encoding: .utf8) {
                     updatingMetadataStatus = msg
@@ -181,7 +234,7 @@ struct CalibreServerService {
             }
             
                 
-            guard let newbook = handleLibraryBookOne(oldbook: oldbook, json: data) else {
+            guard let newbook = self.handleLibraryBookOne(oldbook: oldbook, json: data) else {
                 updatingMetadataStatus = "Failed to Parse Calibre Server Response."
                 return
             }
@@ -199,7 +252,7 @@ struct CalibreServerService {
             bookResult = newbook
         }
         
-        modelData.updatingMetadata = true
+        self.updatingMetadata = true
         
         task.resume()
     }
@@ -260,7 +313,7 @@ struct CalibreServerService {
             }
             
             //Parse Reading Position
-            if let pluginReadingPosition = modelData.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
+            if let pluginReadingPosition = self.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
                let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
                let readPosData = Data(base64Encoded: readPosString) {
                 if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
@@ -270,7 +323,7 @@ struct CalibreServerService {
                         let deviceName = key// as! String
                         
                         if let oldPos = book.readPos.getPosition(deviceName) {
-                            guard deviceName != modelData.deviceName else { return }    //trust local record
+                            guard deviceName != self.deviceName else { return }    //trust local record
                             guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                         }
                         
@@ -279,7 +332,7 @@ struct CalibreServerService {
                         
                         book.readPos.updatePosition(deviceReadingPosition)
                         
-                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                        self.defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                     }
                     
                 } else if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPositionLegacy]].self, from: readPosData),
@@ -291,7 +344,7 @@ struct CalibreServerService {
                         let deviceName = key// as! String
                         
                         if let oldPos = book.readPos.getPosition(deviceName) {
-                            guard deviceName != modelData.deviceName else { return }    //trust local record
+                            guard deviceName != self.deviceName else { return }    //trust local record
                             guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                         }
                         
@@ -314,7 +367,7 @@ struct CalibreServerService {
                         
                         book.readPos.updatePosition(deviceReadingPosition)
                         
-                        defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
+                        self.defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
                     }
                 }
             }
@@ -400,7 +453,7 @@ struct CalibreServerService {
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
         let readPos = bookRealm.readPos(library: library)
         //Parse Reading Position
-        if let pluginReadingPosition = modelData.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
+        if let pluginReadingPosition = self.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
            let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
            let readPosData = Data(base64Encoded: readPosString) {
             
@@ -411,7 +464,7 @@ struct CalibreServerService {
                     let deviceName = key// as! String
                     
                     if let oldPos = readPos.getPosition(deviceName) {
-                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard deviceName != self.deviceName else { return }    //trust local record
                         guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                     }
                     
@@ -431,7 +484,7 @@ struct CalibreServerService {
                     let deviceName = key// as! String
                     
                     if let oldPos = readPos.getPosition(deviceName) {
-                        guard deviceName != modelData.deviceName else { return }    //trust local record
+                        guard deviceName != self.deviceName else { return }    //trust local record
                         guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
                     }
                     
@@ -457,18 +510,6 @@ struct CalibreServerService {
             }
             
         }
-        
-        /* FIXME: deprecated
-        let encoder = JSONEncoder()
-        let deviceMapSerialize = readPos.getCopy().compactMapValues { (value) -> Any? in
-            try? JSONSerialization.jsonObject(with: encoder.encode(value))
-        }
-        bookRealm.readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []) as NSData
-        
-        bookRealm.lastProgress = readPos.getDevices().max(by: { lbdrp, rbdrp in
-            lbdrp.lastProgress < rbdrp.lastProgress
-        })?.lastProgress ?? 0.0
-         */
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
@@ -477,25 +518,26 @@ struct CalibreServerService {
         let request = URLRequest(url: endpointUrl)
         
         let startDatetime = Date()
-        modelData.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
-        let task = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
+        let task = self.urlSession(server: book.library.server).dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
             var updatingMetadataStatus = "Unknown Error"
             defer {
-                modelData.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
                 DispatchQueue.main.async {
-                    modelData.updatingMetadataStatus = updatingMetadataStatus
-                    modelData.updatingMetadata = false
+                    self.updatingMetadataStatus = updatingMetadataStatus
+                    self.updatingMetadata = false
                     completion?(data)
                 }
             }
             if let error = error {
-                defaultLog.warning("error: \(error.localizedDescription)")
+                self.defaultLog.warning("error: \(error.localizedDescription)")
                 updatingMetadataStatus = error.localizedDescription
                 return
             }
             guard let httpResponse = response as? HTTPURLResponse else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
                 updatingMetadataStatus = response.debugDescription
                 return
             }
@@ -506,7 +548,7 @@ struct CalibreServerService {
             }
             
             guard (200...299).contains(httpResponse.statusCode) else {
-                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                self.defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                 updatingMetadataStatus = httpResponse.debugDescription
                 return
             }
@@ -517,7 +559,7 @@ struct CalibreServerService {
             }
         }
         
-        modelData.updatingMetadata = true
+        self.updatingMetadata = true
 
         task.resume()
     }
@@ -541,7 +583,7 @@ struct CalibreServerService {
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             return -1
         }
-        defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
+        self.defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
         
         var request = URLRequest(url: endpointUrl)
         request.httpMethod = "POST"
@@ -553,11 +595,11 @@ struct CalibreServerService {
 //            updatingMetadataTask!.cancel()
 //        }
         let startDatetime = Date()
-        modelData.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+        self.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
 
-        let updatingMetadataTask = urlSession(server: library.server).dataTask(with: request) { [self] data, response, error in
-            print("\(#function) \(data) \(response) \(error)")
-            modelData.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
+        let updatingMetadataTask = self.urlSession(server: library.server).dataTask(with: request) { [weak self] data, response, error in
+            print("\(#function) \(String(describing: data)) \(String(describing: response)) \(String(describing: error))")
+            self?.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
         }
         
         updatingMetadataTask.resume()
@@ -599,7 +641,7 @@ struct CalibreServerService {
         guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
             return -1
         }
-        defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
+        self.defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
         
         var request = URLRequest(url: endpointUrl)
         request.httpMethod = "POST"
@@ -608,21 +650,22 @@ struct CalibreServerService {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         
         let startDatetime = Date()
-        modelData.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
+        self.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
         
-        let updatingMetadataTask = urlSession(server: book.library.server).dataTask(with: request) { [self] data, response, error in
+        let updatingMetadataTask = self.urlSession(server: book.library.server).dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
             var updatingMetadataStatus = "Unknown Error"
             var newBook = book
             
             defer {
-                modelData.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
+                self.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
 
                 DispatchQueue.main.async {
-                    modelData.updatingMetadataStatus = updatingMetadataStatus
-                    modelData.updatingMetadata = false
+                    self.updatingMetadataStatus = updatingMetadataStatus
+                    self.updatingMetadata = false
                     
                     if updatingMetadataStatus == "Success" {
-                        modelData.updateBook(book: newBook)
+                        self.updateBook(book: newBook)
                         success?()
                     } else {
                         alertDelegate?.alert(msg: updatingMetadataStatus)
@@ -630,7 +673,7 @@ struct CalibreServerService {
                 }
             }
             if let error = error {
-                defaultLog.warning("error: \(error.localizedDescription)")
+                self.defaultLog.warning("error: \(error.localizedDescription)")
                 updatingMetadataStatus = error.localizedDescription
                 return
             }
@@ -639,12 +682,12 @@ struct CalibreServerService {
                 dataAsString = s
             }
             guard let httpResponse = response as? HTTPURLResponse else {
-                defaultLog.warning("not httpResponse: \(response.debugDescription)")
+                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
                 updatingMetadataStatus = dataAsString + response.debugDescription
                 return
             }
             if !(200...299).contains(httpResponse.statusCode) {
-                defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
+                self.defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
                 updatingMetadataStatus =
                     httpResponse.statusCode.description
                     + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
@@ -695,7 +738,7 @@ struct CalibreServerService {
             updatingMetadataStatus = "Success"
         }
         
-        modelData.updatingMetadata = true
+        self.updatingMetadata = true
         
         updatingMetadataTask.resume()
         
@@ -723,7 +766,7 @@ struct CalibreServerService {
     }
     
     func getServerUrlByReachability(server: CalibreServer) -> URL? {
-        let serverInfos = modelData.calibreServerInfoStaging.filter { $1.reachable && $1.server.id == server.id }.sorted { !$0.value.isPublic && $1.value.isPublic }
+        let serverInfos = self.calibreServerInfoStaging.filter { $1.reachable && $1.server.id == server.id }.sorted { !$0.value.isPublic && $1.value.isPublic }
         guard let serverInfo = serverInfos.first else { return nil }
         
         if serverInfo.value.isPublic {
@@ -744,7 +787,7 @@ struct CalibreServerService {
         var url = serverInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
         
-        return urlSession(server: serverInfo.server, timeout: 10).dataTaskPublisher(for: url)
+        return self.urlSession(server: serverInfo.server, timeout: 10).dataTaskPublisher(for: url)
             .map { data, response in
                 guard let httpResponse = response as? HTTPURLResponse else {
                     serverInfo.errorMsg = "Cannot get HTTP response"
@@ -785,7 +828,7 @@ struct CalibreServerService {
     
     func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {
         guard let serverUrl =
-                modelData.librarySyncStatus[library.id]?.isError == true
+                self.librarySyncStatus[library.id]?.isError == true
                 ? URL(fileURLWithPath: "/realm")
                 : (
                     getServerUrlByReachability(server: library.server) ?? (
@@ -863,12 +906,12 @@ struct CalibreServerService {
             return nil
         }
         
-        let which = books.map { book in
+        let which = books.map { [weak self] book in
             let id = book.id.description
             if book.inShelf {
                 return book.formats.filter { $0.value.cached }.map { "\(id)-\($0.key)" }.joined(separator: "_")
             } else {
-                if let format = modelData.getPreferredFormat(for: book) {
+                if let format = self?.getPreferredFormat(for: book) {
                     return "\(id)-\(format.rawValue)"
                 } else {
                     return ""
@@ -900,7 +943,7 @@ struct CalibreServerService {
     }
     
     func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
-        return urlSession(server: task.server).dataTaskPublisher(for: task.url)
+        return self.urlSession(server: task.server).dataTaskPublisher(for: task.url)
             .map { $0.data }
             .decode(type: CalibreBookEntry.self, decoder: JSONDecoder())
             .replaceError(with: CalibreBookEntry())
@@ -909,7 +952,7 @@ struct CalibreServerService {
     }
     
     func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
-        return urlSession(server: task.server)
+        return self.urlSession(server: task.server)
             .dataTaskPublisher(for: task.url)
             .map { (task, $0.data, $0.response) }
             .eraseToAnyPublisher()
@@ -924,7 +967,7 @@ struct CalibreServerService {
             return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
         }
         
-        return urlSession(server: task.library.server, qos: qos)
+        return self.urlSession(server: task.library.server, qos: qos)
             .dataTaskPublisher(for: metadataUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
@@ -961,7 +1004,7 @@ struct CalibreServerService {
                 .setFailureType(to: URLError.self)
                 .eraseToAnyPublisher()
         }
-        return urlSession(server: task.library.server).dataTaskPublisher(for: lastReadPositionUrl)
+        return self.urlSession(server: task.library.server).dataTaskPublisher(for: lastReadPositionUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.lastReadPositionsData = result.data
@@ -978,7 +1021,7 @@ struct CalibreServerService {
                 .setFailureType(to: URLError.self)
                 .eraseToAnyPublisher()
         }
-        return urlSession(server: task.library.server).dataTaskPublisher(for: annotationsUrl)
+        return self.urlSession(server: task.library.server).dataTaskPublisher(for: annotationsUrl)
             .map { result -> CalibreBooksTask in
                 var task = task
                 task.annotationsData = result.data
@@ -1023,7 +1066,7 @@ struct CalibreServerService {
     }
     
     func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, Never> {
-        urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
+        self.urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
             .map { result -> CalibreBookSetLastReadPositionTask in
                 var task = task
                 task.urlResponse = result.response
@@ -1077,7 +1120,7 @@ struct CalibreServerService {
     }
     
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> {
-        urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
+        self.urlSession(server: task.library.server).dataTaskPublisher(for: task.urlRequest)
             .map { result -> CalibreBookUpdateAnnotationsTask in
                 var task = task
                 task.urlResponse = result.response
@@ -1128,7 +1171,7 @@ struct CalibreServerService {
         urlRequest.addValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.addValue("application/json", forHTTPHeaderField: "Accept")
 
-        let a = urlSession(server: request.library.server)
+        let a = self.urlSession(server: request.library.server)
             .dataTaskPublisher(for: urlRequest)
             .map { output -> CalibreSyncLibraryResult in
                 if let result = try? JSONDecoder().decode([String: [String:CalibreCustomColumnInfo]].self, from: output.data) {
@@ -1169,7 +1212,7 @@ struct CalibreServerService {
             return Just(result).setFailureType(to: Never.self).eraseToAnyPublisher()
         }
         
-        return urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: endpointUrl)
+        return self.urlSession(server: resultPrev.request.library.server).dataTaskPublisher(for: endpointUrl)
             .map {
                 $0.data
             }
