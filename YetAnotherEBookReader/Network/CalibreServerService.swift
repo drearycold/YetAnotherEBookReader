@@ -1140,15 +1140,24 @@ final class CalibreServerService {
     }
     
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) async -> CalibreBookUpdateAnnotationsTask {
+        await self.logger.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
+        
+        var resultTask = task
         do {
             let (data, response) = try await self.urlSession(server: task.library.server).data(for: task.urlRequest)
-            var task = task
-            task.urlResponse = response
-            task.data = data
-            return task
+            resultTask.urlResponse = response
+            resultTask.data = data
         } catch {
-            return task
+            // Keep original task with error
         }
+        
+        var logErrMsg = "Unknown"
+        if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
+            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
+        }
+        await self.logger.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
+        
+        return resultTask
     }
 
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> {

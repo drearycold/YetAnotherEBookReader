@@ -2282,7 +2282,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                             bookmarks: book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
                            ) {
                             Task {
-                                await self.updateAnnotations(task: task)
+                                await self.calibreServerService.updateAnnotationByTask(task: task)
                             }
                         }
                     }
@@ -2353,18 +2353,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             .sink(receiveValue: { output in
                 print("\(#function) output=\(output)")
             }).store(in: &calibreCancellables)
-    }
-    
-    func updateAnnotations(task: CalibreBookUpdateAnnotationsTask) async {
-        self.logStartCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, bookId: task.bookId, libraryId: task.library.id)
-        
-        let resultTask = await self.calibreServerService.updateAnnotationByTask(task: task)
-        
-        var logErrMsg = "Unknown"
-        if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
-            logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
-        }
-        self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
