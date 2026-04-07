@@ -101,6 +101,11 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
             self.book.readPos.session(end: position)
         }
         
-        ModelData.shared?.bookReaderClosedSubject.send((book: book, position: readerInfo.position))
+        let bookToClose = book
+        let positionAtClose = readerInfo.position
+        
+        Task {
+            await self.modelData.sessionManager.onBookReaderClosed(book: bookToClose, lastPosition: positionAtClose)
+        }
     }
 }

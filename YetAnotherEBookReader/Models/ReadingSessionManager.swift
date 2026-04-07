@@ -42,6 +42,7 @@ class ReadingSessionManager: ObservableObject {
     @Published var selectedPosition = ""
     
     weak var modelData: ModelData?
+    private var cancellables = Set<AnyCancellable>()
     
     init(modelData: ModelData? = nil) {
         self.modelData = modelData
@@ -49,6 +50,10 @@ class ReadingSessionManager: ObservableObject {
     
     func setup(modelData: ModelData) {
         self.modelData = modelData
+    }
+    
+    func onBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
+        await handleBookReaderClosed(book: book, lastPosition: lastPosition)
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
@@ -150,6 +155,32 @@ class ReadingSessionManager: ObservableObject {
                 partialResult[inShelfId] = [history]
             } else {
                 partialResult[inShelfId]?.append(history)
+            }
+        }
+    }
+    
+    func handleBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
+        guard let modelData = modelData else { return }
+        
+        modelData.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
+
+        guard let updatedReadingPosition = book.readPos.getDevices().first else { return }
+
+        if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
+           let library = modelData.calibreLibraries[book.library.id],
+           let goodreadsId = book.identifiers["goodreads"],
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData.shouldAutoUpdateGoodreads(library: library),
+           dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
+            
+            let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+            
+            // These are currently dataTask based with internal resume()
+            _ = connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+
+            if goodreadsSync.isEnabled(), goodreadsSync.readingProgressColumnName.count > 1 {
+                modelData.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
+                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                ])
             }
         }
     }

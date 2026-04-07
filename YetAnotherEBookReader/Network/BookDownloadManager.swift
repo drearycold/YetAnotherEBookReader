@@ -29,7 +29,7 @@ class BookDownloadManager: ObservableObject {
         registerBookFormatDownloadHandler()
     }
     
-    func setup(modelData: ModelData, realmConf: Realm.Configuration) {
+    func setup(modelData: ModelData, realmConf: Realm.Configuration?) {
         self.modelData = modelData
         self.realmConf = realmConf
     }

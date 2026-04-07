@@ -61,12 +61,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         }
     }
     
-    let bookReaderClosedSubject = PassthroughSubject<(book: CalibreBook, position: BookDeviceReadingPosition), Never>()
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
     
     var calibreCancellables = Set<AnyCancellable>()
-    
-    let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
     
     @Published var downloadManager = BookDownloadManager()
     @Published var sessionManager = ReadingSessionManager()
@@ -183,7 +180,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
 
         downloadManager.modelData = self
-        sessionManager.modelData = self
+        sessionManager.setup(modelData: self)
         
         fontsManager.reloadCustomFonts()
         
@@ -204,11 +201,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         registerGetBooksMetadataCancellable()
         registerSetLastReadPositionCancellable()
         registerUpdateAnnotationsCancellable()
-        registerBookReaderClosedCancellable()
         
         registerRecentShelfUpdater()
         
-        bookDownloadedSubject.sink { book in
+        downloadManager.bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
         }.store(in: &calibreCancellables)
         
@@ -2393,40 +2389,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     self.logFinishCalibreActivity(type: "Update Annotations", request: task.urlRequest, startDatetime: task.startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
                 }
             ).store(in: &calibreCancellables)
-    }
-    
-    func registerBookReaderClosedCancellable() {
-        bookReaderClosedSubject.sink { subject in
-            let book = subject.book
-            let lastPosition = subject.position
-            
-            /* deprecated
-            book.formats.forEach {
-                guard let format = Format(rawValue: $0.key), $0.value.cached else { return }
-                readPosToLastReadPosition(book: book, format: format, formatInfo: $0.value)
-            }
-             */
-
-            self.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
-            
-            guard let updatedReadingPosition = book.readPos.getDevices().first
-            else { return }
-            
-            if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
-               let library = self.calibreLibraries[book.library.id],
-               let goodreadsId = book.identifiers["goodreads"],
-               let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = self.shouldAutoUpdateGoodreads(library: library),
-               dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
-                let connector = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-                connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-                
-                if goodreadsSync.isEnabled(), goodreadsSync.readingProgressColumnName.count > 1 {
-                    self.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
-                        [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                    ])
-                }
-            }
-        }.store(in: &calibreCancellables)
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
