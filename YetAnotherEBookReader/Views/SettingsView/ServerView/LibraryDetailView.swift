@@ -72,7 +72,7 @@ struct LibraryDetailView: View {
                         
                         Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
                     }
-                    .disabled( !dsreaderHelperLibrary.isEnabled() )
+                    .disabled( !dsreaderHelperLibrary.isEnabled )
                 } else {
                     Text("Plugin not available").foregroundColor(.red)
                 }

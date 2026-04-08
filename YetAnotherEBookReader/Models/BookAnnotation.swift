@@ -119,14 +119,14 @@ class BookAnnotation {
                     case PDFOptionsRealm.className():
                         individualRealm.objects(PDFOptionsRealm.self)
                             .forEach { oldObj in
-                                guard serverRealm.objects(YabrPDFOptionsRealm.self)
+                                guard serverRealm.objects(PDFOptions.self)
                                     .where({ $0.bookId == id && $0.libraryName == library.name })
                                     .isEmpty
                                 else {
                                     return
                                 }
                                 
-                                let newObj = YabrPDFOptionsRealm()
+                                let newObj = PDFOptions()
                                 newObj.bookId = oldObj.id
                                 newObj.libraryName = oldObj.libraryName
                                 

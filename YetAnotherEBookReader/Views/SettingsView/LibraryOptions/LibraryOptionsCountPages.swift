@@ -44,7 +44,7 @@ struct LibraryOptionsCountPages: View {
                     unmatched: library.customColumnInfoNumberKeys)
                 
             }
-            .disabled(!countPages.isEnabled())
+            .disabled(!countPages.isEnabled)
         }
     }
     

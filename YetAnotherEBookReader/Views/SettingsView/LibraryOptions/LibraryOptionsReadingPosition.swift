@@ -37,7 +37,7 @@ struct LibraryOptionsReadingPosition: View {
                             Text("\($1)\n\($0)").tag($1)
                         }
                     }.pickerStyle(MenuPickerStyle())
-                    .disabled(!readingPosition.isEnabled())
+                    .disabled(!readingPosition.isEnabled)
                 } else {
                     Text("Column Name:     No Available Column")
                 }
@@ -73,7 +73,7 @@ struct LibraryOptionsReadingPosition: View {
                     
                     Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
                 }
-                .disabled( !dsreaderHelperLibrary.isEnabled() )
+                .disabled( !dsreaderHelperLibrary.isEnabled )
             }
             .disabled(
                 !(dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled ?? false)

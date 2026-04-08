@@ -16,40 +16,22 @@ public protocol Persistable {
 }
 
 class CalibreServerRealm: Object {
-    @objc dynamic var primaryKey: String?   //uuidString
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-    @objc dynamic var name: String?
+    @Persisted var name: String?
+    @Persisted var baseUrl: String?
+    @Persisted var hasPublicUrl = false
+    @Persisted var publicUrl: String?
     
-    @objc dynamic var baseUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
+    @Persisted var hasAuth = false
+    @Persisted var username: String?
+    @Persisted var password: String?
     
-    @objc dynamic var hasPublicUrl = false
+    @Persisted var defaultLibrary: String?
     
-    @objc dynamic var publicUrl: String?
+    @Persisted var removed = false
     
-    @objc dynamic var hasAuth = false
-    
-    @objc dynamic var username: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var password: String?
-    
-    @objc dynamic var defaultLibrary: String?
-    
-    @objc dynamic var removed = false
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
-    func updatePrimaryKey() {
-//        primaryKey = "\(username ?? "-")@\(baseUrl ?? "-")"
-    }
+    @Persisted var dsreaderHelper: CalibreServerDSReaderHelper?
 }
 
 extension CalibreServer: Persistable {
@@ -90,60 +72,32 @@ extension CalibreServer {
 }
 
 class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
-    @objc dynamic var primaryKey: String?
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-    @objc dynamic var key: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var name: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-    @objc dynamic var serverUUID: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-//    @objc dynamic var serverUrl: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-//    @objc dynamic var serverUsername: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
+    @Persisted var key: String?
+    @Persisted var name: String?
+    @Persisted var serverUUID: String?
     
     func updatePrimaryKey() {
-//        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
         primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: name ?? "-")
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String) -> String {
         return [libraryName, "@", serverUUID].joined()
     }
-    var customColumns = List<CalibreCustomColumnRealm>()
-    @objc dynamic var pluginDSReaderHelper:     CalibreLibraryDSReaderHelperRealm?
-    @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
-    @objc dynamic var pluginDictionaryViewer:   CalibreLibraryDictionaryViewerRealm?
-
-    @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
-    @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
     
-    @objc dynamic var autoUpdate = true
-    @objc dynamic var discoverable = true
-    @objc dynamic var hidden = false
-    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
+    var customColumns = List<CalibreCustomColumnRealm>()
+    @Persisted var pluginDSReaderHelper:     CalibreLibraryDSReaderHelper?
+    @Persisted var pluginReadingPosition:    CalibreLibraryReadingPosition?
+    @Persisted var pluginDictionaryViewer:   CalibreLibraryDictionaryViewer?
+
+    @Persisted var pluginGoodreadsSync:      CalibreLibraryGoodreadsSync?
+    @Persisted var pluginCountPages:         CalibreLibraryCountPages?
+    
+    @Persisted var autoUpdate = true
+    @Persisted var discoverable = true
+    @Persisted var hidden = false
+    @Persisted var lastModified = Date(timeIntervalSince1970: 0)
 }
 
 class CalibreBookRealm: Object, ObjectKeyIdentifiable {
@@ -507,132 +461,176 @@ extension CalibreCustomColumnInfo: Persistable {
     }
 }
 
-class CalibreLibraryGoodreadsSyncRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
+class CalibreLibraryGoodreadsSync: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
+    @Persisted var _isEnabled = false
+    @Persisted var _isDefault = false
+    @Persisted var _isOverride = false
     
-    @objc dynamic var profileName: String?
-    @objc dynamic var tagsColumnName: String?
-    @objc dynamic var ratingColumnName: String?
-    @objc dynamic var dateReadColumnName: String?
-    @objc dynamic var reviewColumnName: String?
-    @objc dynamic var readingProgressColumnName: String?
-}
-
-extension CalibreLibraryGoodreadsSync: Persistable {
-    public init(managedObject: CalibreLibraryGoodreadsSyncRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        profileName = managedObject.profileName ?? profileName
-        tagsColumnName = managedObject.tagsColumnName ?? tagsColumnName
-        ratingColumnName = managedObject.ratingColumnName ?? ratingColumnName
-        dateReadColumnName = managedObject.dateReadColumnName ?? dateReadColumnName
-        reviewColumnName = managedObject.reviewColumnName ?? reviewColumnName
-        readingProgressColumnName = managedObject.readingProgressColumnName ?? readingProgressColumnName
+    @Persisted var profileName: String = ""
+    @Persisted var tagsColumnName: String = "#"
+    @Persisted var ratingColumnName: String = "#"
+    @Persisted var dateReadColumnName: String = "#"
+    @Persisted var reviewColumnName: String = "#"
+    @Persisted var readingProgressColumnName: String = "#"
+    
+    convenience init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        self.init()
+        self.setup(libraryId: libraryId, configuration: configuration)
     }
     
-    public func managedObject() -> CalibreLibraryGoodreadsSyncRealm {
-        let obj = CalibreLibraryGoodreadsSyncRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.profileName = profileName
-        obj.tagsColumnName = tagsColumnName
-        obj.ratingColumnName = ratingColumnName
-        obj.dateReadColumnName = dateReadColumnName
-        obj.reviewColumnName = reviewColumnName
-        obj.readingProgressColumnName = readingProgressColumnName
-        return obj
-    }
-}
-
-class CalibreLibraryCountPageRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var pageCountCN: String?
-    @objc dynamic var wordCountCN: String?
-    @objc dynamic var fleschReadingEaseCN: String?
-    @objc dynamic var fleschKincaidGradeCN: String?
-    @objc dynamic var gunningFogIndexCN: String?
-}
-
-extension CalibreLibraryCountPages: Persistable {
-    public init(managedObject: CalibreLibraryCountPageRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        pageCountCN = managedObject.pageCountCN ?? pageCountCN
-        wordCountCN = managedObject.wordCountCN ?? wordCountCN
-        fleschReadingEaseCN = managedObject.fleschReadingEaseCN ?? fleschReadingEaseCN
-        fleschKincaidGradeCN = managedObject.fleschKincaidGradeCN ?? fleschKincaidGradeCN
-        gunningFogIndexCN = managedObject.gunningFogIndexCN ?? gunningFogIndexCN
+    func getID() -> String { return CalibreLibrary.PLUGIN_GOODREADS_SYNC }
+    
+    func setup(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        guard let grsync_plugin_prefs = configuration?.goodreads_sync_prefs?.plugin_prefs else { return }
+        tagsColumnName = grsync_plugin_prefs.Goodreads.tagMappingColumn
+        dateReadColumnName = grsync_plugin_prefs.Goodreads.dateReadColumn
+        ratingColumnName = grsync_plugin_prefs.Goodreads.ratingColumn
+        reviewColumnName = grsync_plugin_prefs.Goodreads.reviewTextColumn
+        readingProgressColumnName = grsync_plugin_prefs.Goodreads.readingProgressColumn
+        if grsync_plugin_prefs.Users.count == 1 {
+            profileName = grsync_plugin_prefs.Users.keys.first!
+        } else {
+            profileName = ""
+        }
+        _isEnabled = hasValidColumn()
     }
     
-    public func managedObject() -> CalibreLibraryCountPageRealm {
-        let obj = CalibreLibraryCountPageRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.pageCountCN = pageCountCN
-        obj.wordCountCN = wordCountCN
-        obj.fleschReadingEaseCN = fleschReadingEaseCN
-        obj.fleschKincaidGradeCN = fleschKincaidGradeCN
-        obj.gunningFogIndexCN = gunningFogIndexCN
-        return obj
+    func hasValidColumn() -> Bool {
+        return profileName.count > 0
+            || mappedColumnsCount() > 0
+    }
+
+    func mappedColumnsCount() -> Int {
+        return [(tagsColumnName.count > 0 && tagsColumnName != "#"),
+                (ratingColumnName.count > 0 && ratingColumnName != "#"),
+                (dateReadColumnName.count > 0 && dateReadColumnName != "#"),
+                (reviewColumnName.count > 0 && reviewColumnName != "#"),
+                (readingProgressColumnName.count > 0 && readingProgressColumnName != "#")].filter{$0}.count
     }
 }
 
-class CalibreLibraryReadingPositionRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
+class CalibreLibraryCountPages: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
+    @Persisted var _isEnabled = false
+    @Persisted var _isDefault = false
+    @Persisted var _isOverride = false
 
-    @objc dynamic var readingPositionCN: String?
-}
-
-extension CalibreLibraryReadingPosition: Persistable {
-    public init(managedObject: CalibreLibraryReadingPositionRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        readingPositionCN = managedObject.readingPositionCN ?? readingPositionCN
+    @Persisted var pageCountCN: String = "#"
+    @Persisted var wordCountCN: String = "#"
+    @Persisted var fleschReadingEaseCN: String = "#"
+    @Persisted var fleschKincaidGradeCN: String = "#"
+    @Persisted var gunningFogIndexCN: String = "#"
+    
+    convenience init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        self.init()
+        self.setup(libraryId: libraryId, configuration: configuration)
     }
     
-    public func managedObject() -> CalibreLibraryReadingPositionRealm {
-        let obj = CalibreLibraryReadingPositionRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.readingPositionCN = readingPositionCN
-        return obj
-    }
-}
+    func getID() -> String { return CalibreLibrary.PLUGIN_COUNT_PAGES }
 
-class CalibreLibraryDictionaryViewerRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var readingPositionCN: String?
-}
-
-extension CalibreLibraryDictionaryViewer: Persistable {
-    public init(managedObject: CalibreLibraryDictionaryViewerRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
+    func setup(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        guard let libraryName = ModelData.shared?.calibreLibraries[libraryId]?.name,
+              let library_config = configuration?.count_pages_prefs?.library_config?[libraryName] else { return }
+        pageCountCN = library_config.customColumnPages
+        wordCountCN = library_config.customColumnWords
+        fleschReadingEaseCN = library_config.customColumnFleschReading
+        fleschKincaidGradeCN = library_config.customColumnFleschGrade
+        gunningFogIndexCN = library_config.customColumnGunningFog
+        _isEnabled = hasValidColumn()
     }
     
-    public func managedObject() -> CalibreLibraryDictionaryViewerRealm {
-        let obj = CalibreLibraryDictionaryViewerRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        return obj
+    func hasValidColumn() -> Bool {
+        return mappedColumnsCount() > 0
+    }
+    
+    func mappedColumnsCount() -> Int {
+        return [(pageCountCN.count > 0 && pageCountCN != "#"),
+                (wordCountCN.count > 0 && wordCountCN != "#"),
+                (fleschReadingEaseCN.count > 0 && fleschReadingEaseCN != "#"),
+                (fleschKincaidGradeCN.count > 0 && fleschKincaidGradeCN != "#"),
+                (gunningFogIndexCN.count > 0 && gunningFogIndexCN != "#")].filter{$0}.count
+    }
+}
+
+class CalibreLibraryReadingPosition: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
+    @Persisted var _isEnabled = false
+    @Persisted var _isDefault = false
+    @Persisted var _isOverride = false
+
+    @Persisted var readingPositionCN: String = "#"
+    
+    convenience init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        self.init()
+        self.setup(libraryId: libraryId, configuration: configuration)
+    }
+    
+    func getID() -> String { return CalibreLibrary.PLUGIN_READING_POSITION }
+    
+    func setup(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        guard let library = ModelData.shared?.calibreLibraries[libraryId] else { return }
+        let library_config = configuration?.reading_position_prefs?.library_config[library.name]
+        if let column_info = library_config?.readingPositionColumns[library.server.username],
+           column_info.exists {
+            readingPositionCN = "#" + column_info.label
+        } else if library.server.username.isEmpty,
+                  let prefix = library_config?.readingPositionOptions.prefix,
+                  prefix.isEmpty == false,
+                  let column_info = library.customColumnInfos[prefix],
+                  column_info.datatype == "comments" {
+            readingPositionCN = "#" + column_info.label
+        }
+        else {
+            let filtered = library.customColumnInfoCommentsKeysFull.filter { $0.label.localizedCaseInsensitiveContains("read") && $0.label.localizedCaseInsensitiveContains("pos") }
+            guard filtered.count > 0 else { return }
+            if filtered.count == 1, let first = filtered.first {
+                readingPositionCN = "#" + first.label
+            } else {
+                let filtered_username = filtered.filter { $0.label.localizedCaseInsensitiveContains(library.server.username) }
+                if filtered_username.count == 1, let first = filtered_username.first {
+                    readingPositionCN = "#" + first.label
+                }
+            }
+        }
+        
+        _isEnabled = hasValidColumn()
+    }
+    
+    func hasValidColumn() -> Bool {
+        return mappedColumnsCount() > 0
+    }
+    
+    func mappedColumnsCount() -> Int {
+        return [(readingPositionCN.count > 0 && readingPositionCN != "#")].filter{$0}.count
+    }
+}
+
+class CalibreLibraryDictionaryViewer: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
+    @Persisted var _isEnabled = false
+    @Persisted var _isDefault = false
+    @Persisted var _isOverride = false
+
+    @Persisted var readingPositionCN: String = "#"
+    
+    convenience init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        self.init()
+        self.setup(libraryId: libraryId, configuration: configuration)
+    }
+    
+    func getID() -> String { return CalibreLibrary.PLUGIN_DICTIONARY_VIEWER }
+
+    func setup(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        if let prefs = configuration?.dsreader_helper_prefs?.plugin_prefs {
+            _isEnabled = prefs.Options.dictViewerEnabled
+        } else {
+            _isEnabled = false
+        }
+    }
+    
+    func hasValidColumn() -> Bool {
+        return _isEnabled
+    }
+    
+    func mappedColumnsCount() -> Int {
+        return (readingPositionCN.count > 0 && readingPositionCN != "#") ? 1 : 0
     }
 }
 
@@ -1213,65 +1211,65 @@ extension FolioReaderHighlightRealm {
     }
 }
 
-class CalibreServerDSReaderHelperRealm: Object {
-    @objc dynamic var id: String?
-    @objc dynamic var port: Int = 0
-    @objc dynamic var data: Data?
+class CalibreServerDSReaderHelper: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var id: String?
+    @Persisted var port: Int = 0
+    @Persisted var configurationData: Data?
     
-    override static func primaryKey() -> String? {
-        return "id"
+    convenience init(id: String?, port: Int) {
+        self.init()
+        self.id = id
+        self.port = port
     }
-}
-
-extension CalibreServerDSReaderHelper: Persistable {
-    public init(managedObject: CalibreServerDSReaderHelperRealm) {
-        self.id = managedObject.id ?? ""
-        self.port = managedObject.port
-        self.configurationData = managedObject.data
-        if let data = self.configurationData {
-            self.configuration = try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+    
+    var configuration: CalibreDSReaderHelperConfiguration? {
+        get {
+            guard let data = configurationData else { return nil }
+            return try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        }
+        set {
+            if let newValue = newValue {
+                configurationData = try? JSONEncoder().encode(newValue)
+            } else {
+                configurationData = nil
+            }
         }
     }
-    
-    public func managedObject() -> CalibreServerDSReaderHelperRealm {
-        let obj = CalibreServerDSReaderHelperRealm()
-        obj.id = self.id
-        obj.port = self.port
-        obj.data = self.configurationData
-        
-        return obj
-    }
 }
 
-class CalibreLibraryDSReaderHelperRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
+class CalibreLibraryDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
+    @Persisted var _isEnabled = false
+    @Persisted var _isDefault = false
+    @Persisted var _isOverride = false
 
-    @objc dynamic var port = Int()
+    @Persisted var port: Int = 0
     
-    @objc dynamic var autoUpdateGoodreadsProgress = false
-    @objc dynamic var autoUpdateGoodreadsBookShelf = false
-}
-
-extension CalibreLibraryDSReaderHelper: Persistable {
-    public init(managedObject: CalibreLibraryDSReaderHelperRealm) {
-        self._isEnabled = managedObject.isEnabled
-        self._isDefault = managedObject.isDefault
-        self._isOverride = managedObject.isOverride
-        self.autoUpdateGoodreadsProgress = managedObject.autoUpdateGoodreadsProgress
-        self.autoUpdateGoodreadsBookShelf = managedObject.autoUpdateGoodreadsBookShelf
+    @Persisted var autoUpdateGoodreadsProgress = false
+    @Persisted var autoUpdateGoodreadsBookShelf = false
+    
+    convenience init(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        self.init()
+        self.setup(libraryId: libraryId, configuration: configuration)
     }
     
-    public func managedObject() -> CalibreLibraryDSReaderHelperRealm {
-        let obj = CalibreLibraryDSReaderHelperRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.autoUpdateGoodreadsProgress = self.autoUpdateGoodreadsProgress
-        obj.autoUpdateGoodreadsBookShelf = self.autoUpdateGoodreadsBookShelf
+    func getID() -> String { return CalibreLibrary.PLUGIN_DSREADER_HELPER }
+
+    func setup(libraryId: String, configuration: CalibreDSReaderHelperConfiguration?) {
+        guard let prefs = configuration?.dsreader_helper_prefs?.plugin_prefs, prefs.Options.goodreadsSyncEnabled else { return }
+        guard let users = configuration?.goodreads_sync_prefs?.plugin_prefs.Users, users.count == 1 || users.contains(where: { $0.key == "Default" }) else { return }
         
-        return obj
+        autoUpdateGoodreadsBookShelf = true
+        autoUpdateGoodreadsProgress = true
+        
+        _isEnabled = hasValidColumn()
+    }
+    
+    func hasValidColumn() -> Bool {
+        return (autoUpdateGoodreadsProgress || autoUpdateGoodreadsBookShelf)
+    }
+    
+    func mappedColumnsCount() -> Int {
+        return 0
     }
 }
 
@@ -1326,7 +1324,7 @@ extension BookBookmark: Persistable {
 
 
 //MARK: PDF
-@available(*, deprecated, renamed: "YabrPDFOptionsRealm")
+@available(*, deprecated, renamed: "YabrPDFOptions")
 class PDFOptionsRealm: Object {
     @objc dynamic var id: Int32 = 0
     @objc dynamic var libraryName = ""
@@ -1355,11 +1353,11 @@ extension PDFLayoutMode: PersistableEnum {}
 extension PDFReadDirection: PersistableEnum {}
 extension PDFScrollDirection: PersistableEnum {}
 
-class YabrPDFOptionsRealm: Object, ObjectKeyIdentifiable {
+class PDFOptions: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
     @Persisted var bookId: Int32 = 0
-    @Persisted var libraryName: String
+    @Persisted var libraryName: String = ""
     
     @Persisted var themeMode = PDFThemeMode.serpia
     @Persisted var selectedAutoScaler = PDFAutoScaler.Width
@@ -1374,60 +1372,45 @@ class YabrPDFOptionsRealm: Object, ObjectKeyIdentifiable {
     @Persisted var marginOffset = 0.0
     @Persisted var lastScale = 1.0
     @Persisted var rememberInPagePosition = true
-}
+    
+    var isDark: Bool {
+        themeMode == .dark
+    }
 
-extension PDFOptions: Persistable {
-    public init(managedObject: YabrPDFOptionsRealm) {
-        self.id = managedObject.bookId
-        self.libraryName = managedObject.libraryName
-        self.themeMode = managedObject.themeMode
-        self.selectedAutoScaler = managedObject.selectedAutoScaler
-        self.pageMode = managedObject.pageMode
-        self.readingDirection = managedObject.readingDirection
-        self.scrollDirection = managedObject.scrollDirection
-        self.hMarginAutoScaler = managedObject.hMarginAutoScaler
-        self.vMarginAutoScaler = managedObject.vMarginAutoScaler
-        self.hMarginDetectStrength = managedObject.hMarginDetectStrength
-        self.vMarginDetectStrength = managedObject.vMarginDetectStrength
-        self.marginOffset = managedObject.marginOffset
-        self.lastScale = managedObject.lastScale
-        self.rememberInPagePosition = managedObject.rememberInPagePosition
+    func isDark<T>(_ f: T, _ l: T) -> T{
+        isDark ? f : l
+    }
+
+    var fillColor: CGColor {
+        switch (themeMode) {
+        case .none:
+            return .init(gray: 0.0, alpha: 0.0)
+        case .serpia:   //#FBF0D9
+            return CGColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
+        case .forest:   //#BAD5C1
+            return CGColor(
+                red: CGFloat(Int("BA", radix: 16) ?? 255) / 255.0,
+                green: CGFloat(Int("D5", radix: 16) ?? 255) / 255.0,
+                blue: CGFloat(Int("C1", radix: 16) ?? 255) / 255.0,
+                alpha: 1.0)
+        case .dark:
+            return .init(gray: 0.0, alpha: 1.0)
+        }
     }
     
-    public func managedObject() -> YabrPDFOptionsRealm {
-        let obj = YabrPDFOptionsRealm()
-        
-        obj.bookId = self.id
-        obj.libraryName = self.libraryName
-        obj.themeMode = self.themeMode
-        obj.selectedAutoScaler = self.selectedAutoScaler
-        obj.pageMode = self.pageMode
-        obj.readingDirection = self.readingDirection
-        obj.scrollDirection = self.scrollDirection
-        obj.hMarginAutoScaler = self.hMarginAutoScaler
-        obj.vMarginAutoScaler = self.vMarginAutoScaler
-        obj.hMarginDetectStrength = self.hMarginDetectStrength
-        obj.vMarginDetectStrength = self.vMarginDetectStrength
-        obj.marginOffset = self.marginOffset
-        obj.lastScale = self.lastScale
-        obj.rememberInPagePosition = self.rememberInPagePosition
-        
-        return obj
-    }
-    
-    public func update(obj: YabrPDFOptionsRealm) {
-        obj.themeMode = self.themeMode
-        obj.selectedAutoScaler = self.selectedAutoScaler
-        obj.pageMode = self.pageMode
-        obj.readingDirection = self.readingDirection
-        obj.scrollDirection = self.scrollDirection
-        obj.hMarginAutoScaler = self.hMarginAutoScaler
-        obj.vMarginAutoScaler = self.vMarginAutoScaler
-        obj.hMarginDetectStrength = self.hMarginDetectStrength
-        obj.vMarginDetectStrength = self.vMarginDetectStrength
-        obj.marginOffset = self.marginOffset
-        obj.lastScale = self.lastScale
-        obj.rememberInPagePosition = self.rememberInPagePosition
+    public func update(other: PDFOptions) {
+        self.themeMode = other.themeMode
+        self.selectedAutoScaler = other.selectedAutoScaler
+        self.pageMode = other.pageMode
+        self.readingDirection = other.readingDirection
+        self.scrollDirection = other.scrollDirection
+        self.hMarginAutoScaler = other.hMarginAutoScaler
+        self.vMarginAutoScaler = other.vMarginAutoScaler
+        self.hMarginDetectStrength = other.hMarginDetectStrength
+        self.vMarginDetectStrength = other.vMarginDetectStrength
+        self.marginOffset = other.marginOffset
+        self.lastScale = other.lastScale
+        self.rememberInPagePosition = other.rememberInPagePosition
     }
 }
 

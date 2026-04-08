@@ -466,7 +466,7 @@ final class CalibreServerService {
             }
             
             //Parse Reading Position
-            if let pluginReadingPosition = self.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
+            if let pluginReadingPosition = self.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled,
                let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
                let readPosData = Data(base64Encoded: readPosString) {
                 if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
@@ -606,7 +606,7 @@ final class CalibreServerService {
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
         let readPos = bookRealm.readPos(library: library)
         //Parse Reading Position
-        if let pluginReadingPosition = self.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
+        if let pluginReadingPosition = self.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled,
            let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
            let readPosData = Data(base64Encoded: readPosString) {
             

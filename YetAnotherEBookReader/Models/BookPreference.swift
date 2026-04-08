@@ -71,7 +71,7 @@ extension BookAnnotation {
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
                 BookBookmarkRealm.self,
-                YabrPDFOptionsRealm.self,
+                PDFOptions.self,
                 ReadiumPreferenceRealm.self
             ]
         )

@@ -106,7 +106,7 @@ struct BookDetailView: View {
                     bookFormatViewContent(book: book, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
+                    if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled {
                         countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     }
@@ -122,7 +122,7 @@ struct BookDetailView: View {
                         bookFormatViewContent(book: book, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
+                        if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled {
                             countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                                 .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         }
@@ -295,7 +295,7 @@ struct BookDetailView: View {
                 HStack {
                     metadataIcon(systemName: "books.vertical")
                     if let pluginGoodreadsSync = book.library.pluginGoodreadsSyncWithDefault,
-                       pluginGoodreadsSync.isEnabled(), pluginGoodreadsSync.tagsColumnName.count > 0,
+                       pluginGoodreadsSync.isEnabled, pluginGoodreadsSync.tagsColumnName.count > 0,
                        let shelves = book.userMetadatas[pluginGoodreadsSync.tagsColumnName] as? [String],
                        shelves.count > 0 {
                         Text(shelves.joined(separator: ", "))

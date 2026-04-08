@@ -20,19 +20,19 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     var refText: String?
     
-    let prefObj: YabrPDFOptionsRealm
+    let prefObj: PDFOptions
     
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
         self.readerInfo = readerInfo
         
         if let prefObj = book.readPos.realm?
-            .objects(YabrPDFOptionsRealm.self)
+            .objects(PDFOptions.self)
             .where({ $0.bookId == book.id && $0.libraryName == book.library.name })
             .first {
             self.prefObj = prefObj
         } else {
-            self.prefObj = YabrPDFOptionsRealm()
+            self.prefObj = PDFOptions()
             self.prefObj.bookId = book.id
             self.prefObj.libraryName = book.library.name
             try? book.readPos.realm?.write {
@@ -98,12 +98,12 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
-        return PDFOptions(managedObject: prefObj)
+        return prefObj
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
         try? prefObj.realm?.write({
-            options.update(obj: prefObj)
+            prefObj.update(other: options)
         })
         
         updateDictViewerStyle(options: options)

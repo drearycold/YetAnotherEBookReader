@@ -42,7 +42,7 @@ struct LibraryOptionsGoodreadsSync: View {
                     unmatched: library.customColumnInfoNumberKeys)
                 
             }
-            .disabled(!goodreadsSync.isEnabled())
+            .disabled(!goodreadsSync.isEnabled)
         }   //ends VStack
         
     }
