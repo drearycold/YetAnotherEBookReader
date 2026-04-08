@@ -468,6 +468,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                                     }
                                 } else if className == "CalibreLibraryReadingPosition" || className == "CalibreLibraryDictionaryViewer" {
                                     newPluginDict["readingPositionCN"] = oldPlugin["readingPositionCN"] ?? "#"
+                                } else if className == "CalibreLibraryDSReaderHelper" {
+                                    newPluginDict["port"] = oldPlugin["port"] ?? 0
+                                    newPluginDict["autoUpdateGoodreadsProgress"] = oldPlugin["autoUpdateGoodreadsProgress"] ?? false
+                                    newPluginDict["autoUpdateGoodreadsBookShelf"] = oldPlugin["autoUpdateGoodreadsBookShelf"] ?? false
                                 }
                                 
                                 newObject?[propName] = newPluginDict
@@ -1129,12 +1133,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         
-        // Ensure embedded objects are initialized
-        libraryRealm.pluginDSReaderHelper = .init()
-        libraryRealm.pluginReadingPosition = .init()
-        libraryRealm.pluginDictionaryViewer = .init()
-        libraryRealm.pluginGoodreadsSync = .init()
-        libraryRealm.pluginCountPages = .init()
+        // Clear embedded objects to maintain `nil` fallback state if not overridden in pluginColumns
+        libraryRealm.pluginDSReaderHelper = nil
+        libraryRealm.pluginReadingPosition = nil
+        libraryRealm.pluginDictionaryViewer = nil
+        libraryRealm.pluginGoodreadsSync = nil
+        libraryRealm.pluginCountPages = nil
         
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {

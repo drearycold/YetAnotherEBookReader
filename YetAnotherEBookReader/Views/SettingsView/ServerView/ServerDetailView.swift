@@ -146,11 +146,43 @@ struct ServerDetailView: View {
             ).navigationTitle(library.name)
             .onDisappear {
                 var updatedLibrary = library
-                if let helper = libraryRealm.pluginDSReaderHelper { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(value: helper) }
-                if let position = libraryRealm.pluginReadingPosition { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(value: position) }
-                if let dict = libraryRealm.pluginDictionaryViewer { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(value: dict) }
-                if let sync = libraryRealm.pluginGoodreadsSync { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(value: sync) }
-                if let pages = libraryRealm.pluginCountPages { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(value: pages) }
+                
+                if let helper = libraryRealm.pluginDSReaderHelper {
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(value: helper)
+                }
+                
+                if let position = libraryRealm.pluginReadingPosition {
+                    let copy = CalibreLibraryReadingPosition(value: position)
+                    if library.pluginReadingPosition != copy {
+                        copy._isOverride = true
+                    }
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = copy
+                }
+                
+                if let dict = libraryRealm.pluginDictionaryViewer {
+                    let copy = CalibreLibraryDictionaryViewer(value: dict)
+                    if library.pluginDictionaryViewer != copy {
+                        copy._isOverride = true
+                    }
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = copy
+                }
+                
+                if let sync = libraryRealm.pluginGoodreadsSync {
+                    let copy = CalibreLibraryGoodreadsSync(value: sync)
+                    if library.pluginGoodreadsSync != copy {
+                        copy._isOverride = true
+                    }
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = copy
+                }
+                
+                if let pages = libraryRealm.pluginCountPages {
+                    let copy = CalibreLibraryCountPages(value: pages)
+                    if library.pluginCountPages != copy {
+                        copy._isOverride = true
+                    }
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = copy
+                }
+                
                 modelData.calibreLibraries[library.id] = updatedLibrary
             }
         }

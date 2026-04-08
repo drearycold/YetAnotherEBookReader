@@ -138,6 +138,7 @@ class BookAnnotation {
                                 newObj.vMarginAutoScaler = oldObj.vMarginAutoScaler
                                 newObj.hMarginDetectStrength = oldObj.hMarginDetectStrength
                                 newObj.vMarginDetectStrength = oldObj.vMarginDetectStrength
+                                newObj.marginOffset = oldObj.marginOffset
                                 newObj.lastScale = oldObj.lastScale
                                 newObj.rememberInPagePosition = oldObj.rememberInPagePosition
                                 
