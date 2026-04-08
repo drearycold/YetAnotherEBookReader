@@ -144,6 +144,15 @@ struct ServerDetailView: View {
                 library: library,
                 libraryRealm: libraryRealm
             ).navigationTitle(library.name)
+            .onDisappear {
+                var updatedLibrary = library
+                if let helper = libraryRealm.pluginDSReaderHelper { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(value: helper) }
+                if let position = libraryRealm.pluginReadingPosition { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(value: position) }
+                if let dict = libraryRealm.pluginDictionaryViewer { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(value: dict) }
+                if let sync = libraryRealm.pluginGoodreadsSync { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(value: sync) }
+                if let pages = libraryRealm.pluginCountPages { updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(value: pages) }
+                modelData.calibreLibraries[library.id] = updatedLibrary
+            }
         }
     }
     
