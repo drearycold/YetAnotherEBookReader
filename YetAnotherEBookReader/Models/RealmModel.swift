@@ -26,11 +26,11 @@ class CalibreServerRealm: Object {
     @Persisted var hasAuth = false
     @Persisted var username: String?
     @Persisted var password: String?
-    
+
     @Persisted var defaultLibrary: String?
-    
+
     @Persisted var removed = false
-    
+
     @Persisted var dsreaderHelper: CalibreServerDSReaderHelper?
 }
 
@@ -101,79 +101,70 @@ class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
 }
 
 class CalibreBookRealm: Object, ObjectKeyIdentifiable {
-    @objc dynamic var primaryKey: String?
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-//    @objc dynamic var serverUrl: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-//    @objc dynamic var serverUsername: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
+    @Persisted var serverUUID: String?
     
-    @objc dynamic var serverUUID: String?
+    @Persisted(indexed: true) var libraryName: String?
     
-    @objc dynamic var libraryName: String?
-    
-    @objc dynamic var idInLib: Int32 = 0 {
+    @Persisted(indexed: true) var idInLib: Int32 = 0 {
         didSet {
             updatePrimaryKey()
         }
     }
-    @objc dynamic var title = ""
-    @objc dynamic var authorFirst: String?
-    @objc dynamic var authorSecond: String?
-    @objc dynamic var authorThird: String?
-    let authorsMore = List<String>()
-    @objc dynamic var comments = ""
-    @objc dynamic var publisher = ""
-    @objc dynamic var series = ""
-    @objc dynamic var seriesIndex = 0.0
-    @objc dynamic var rating = 0
-    @objc dynamic var size = 0
-    @objc dynamic var pubDate = Date(timeIntervalSince1970: 0)
-    @objc dynamic var timestamp = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastSynced = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastUpdated = Date(timeIntervalSince1970: 0)  //local only
-    @objc dynamic var lastProgress = 0.0
+    @Persisted(indexed: true) var title = ""
+    @Persisted(indexed: true) var authorFirst: String?
+    @Persisted var authorSecond: String?
+    @Persisted var authorThird: String?
+    @Persisted var authorsMore = List<String>()
+    @Persisted var comments = ""
+    @Persisted var publisher = ""
+    @Persisted(indexed: true) var series = ""
+    @Persisted var seriesIndex = 0.0
+    @Persisted var rating = 0
+    @Persisted var size = 0
+    @Persisted(indexed: true) var pubDate = Date(timeIntervalSince1970: 0)
+    @Persisted var timestamp = Date(timeIntervalSince1970: 0)
+    @Persisted var lastModified = Date(timeIntervalSince1970: 0)
+    @Persisted var lastSynced = Date(timeIntervalSince1970: 0)
+    @Persisted var lastUpdated = Date(timeIntervalSince1970: 0)  //local only
+    @Persisted var lastProgress = 0.0
     
-    @objc dynamic var tagFirst: String?
-    @objc dynamic var tagSecond: String?
-    @objc dynamic var tagThird: String?
-    let tagsMore = List<String>()
-    @objc dynamic var formatsData: NSData?
-    @objc dynamic var readPosData: NSData?
-    @objc dynamic var identifiersData: NSData?
-    @objc dynamic var userMetaData: NSData?
+    @Persisted(indexed: true) var tagFirst: String?
+    @Persisted var tagSecond: String?
+    @Persisted var tagThird: String?
+    @Persisted var tagsMore = List<String>()
+    @Persisted var formatsData: Data?
+    @Persisted var readPosData: Data?
+    @Persisted var identifiersData: Data?
+    @Persisted var userMetaData: Data?
     
-    @objc dynamic var inShelf = false
+    @Persisted(indexed: true) var inShelf = false
+    
+    @Persisted var pdfOptions: PDFOptions?
     
     func formats() -> [String: FormatInfo] {
-        guard let formatsData = formatsData as Data? else { return [:] }
+        guard let formatsData = formatsData else { return [:] }
         return (try? JSONDecoder().decode([String:FormatInfo].self, from: formatsData)) ?? [:]
         //return (try? JSONSerialization.jsonObject(with: formatsData as Data, options: []) as? [String: String]) ?? [:]
     }
     
     func identifiers() -> [String: String] {
-        guard let identifiersData = identifiersData as Data? else { return [:] }
+        guard let identifiersData = identifiersData else { return [:] }
         return (try? JSONDecoder().decode([String:String].self, from: identifiersData)) ?? [:]
 //        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
 //        return identifiers
     }
     
     func userMetadatas() -> [String: Any] {
-        guard let userMetaData = userMetaData as Data? else { return [:] }
+        guard let userMetaData = userMetaData else { return [:] }
         return (try? JSONSerialization.jsonObject(with: userMetaData, options: []) as? [String:Any]) ?? [:]
     }
     
     func readPos(library: CalibreLibrary) -> BookAnnotation {
         let readPos = BookAnnotation(id: idInLib, library: library)
         
-        guard let readPosData = readPosData as? Data,
+        guard let readPosData = readPosData,
               let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
               let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary
         else {
@@ -223,20 +214,12 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
         return readPos
     }
     
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
     func updatePrimaryKey() {
         primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: idInLib.description)
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
         return [id, "^", libraryName, "@", serverUUID].joined()
-    }
-    
-    override static func indexedProperties() -> [String] {
-        return ["serverUrl", "serverUsername", "libraryName", "idInLib", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
     }
     
     var ratingDescription: String {
@@ -376,12 +359,12 @@ extension CalibreBook: Persistable {
         bookRealm.inShelf = self.inShelf
         
         let encoder = JSONEncoder()
-        bookRealm.formatsData = try? encoder.encode(self.formats) as NSData
+        bookRealm.formatsData = try? encoder.encode(self.formats)
         
         //bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
-        bookRealm.identifiersData = try? encoder.encode(self.identifiers) as NSData
+        bookRealm.identifiersData = try? encoder.encode(self.identifiers)
         
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: []) as NSData
+        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: [])
         
 //        let deviceMapSerialize = self.readPos.getCopy().compactMapValues { (value) -> Any? in
 //            try? JSONSerialization.jsonObject(with: encoder.encode(value))
@@ -1211,14 +1194,12 @@ extension FolioReaderHighlightRealm {
     }
 }
 
-class CalibreServerDSReaderHelper: Object, ObjectKeyIdentifiable {
-    @Persisted(primaryKey: true) var id: String?
+class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var port: Int = 0
     @Persisted var configurationData: Data?
     
-    convenience init(id: String?, port: Int) {
+    convenience init(port: Int) {
         self.init()
-        self.id = id
         self.port = port
     }
     
@@ -1353,9 +1334,7 @@ extension PDFLayoutMode: PersistableEnum {}
 extension PDFReadDirection: PersistableEnum {}
 extension PDFScrollDirection: PersistableEnum {}
 
-class PDFOptions: Object, ObjectKeyIdentifiable {
-    @Persisted(primaryKey: true) var _id: ObjectId
-    
+class PDFOptions: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var bookId: Int32 = 0
     @Persisted var libraryName: String = ""
     

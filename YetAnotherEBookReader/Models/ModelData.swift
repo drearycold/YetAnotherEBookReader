@@ -1167,19 +1167,15 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         guard let realm = Thread.isMainThread ? self.realm : try? Realm(configuration: self.realmConf) else { return nil }
         
-        let objs = realm.objects(CalibreServerDSReaderHelper.self).filter(
-            NSPredicate(format: "id = %@", server.id)
-        )
-        guard objs.count > 0 else { return nil }
-//        objs.forEach {
-//            print("\(#function) \($0)")
-//        }
-        return objs.first
+        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id) else { return nil }
+        
+        return serverRealm.dsreaderHelper
     }
     
-    func updateServerDSReaderHelper(dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
+        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
         try! realm.write {
-            realm.add(dsreaderHelper, update: .modified)
+            serverRealm.dsreaderHelper = dsreaderHelper
         }
     }
     
@@ -1804,12 +1800,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 
             } receiveValue: { task in
                 if let config = task.config, config.dsreader_helper_prefs != nil {
-                    let dsreaderHelper = CalibreServerDSReaderHelper(id: task.id, port: task.port)
+                    let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
                     dsreaderHelper.configurationData = task.data
                     
-                    try? self.realm.write {
-                        self.realm.add(dsreaderHelper, update: .all)
-                    }
+                    self.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
                 }
             }.store(in: &calibreCancellables)
     }

@@ -13,7 +13,7 @@ struct ServerOptionsDSReaderHelper: View {
     @Environment(\.openURL) var openURL
 
     @Binding var server: CalibreServer
-    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
+    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
     
     @State private var portStr = ""
     @State private var configurationData: Data? = nil
@@ -238,7 +238,7 @@ struct ServerOptionsDSReaderHelper: View {
     
     private func setStates() {
         let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(id: server.id, port: 0)
+            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
             if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }
@@ -336,7 +336,7 @@ struct ServerOptionsDSReaderHelper: View {
         dsreaderHelperServer.configuration = configuration
         dsreaderHelperServer.configurationData = configurationData
         
-        modelData.updateServerDSReaderHelper(dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
+        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
         
         helperStatus = nil
     }
@@ -443,7 +443,7 @@ struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
 
     @State static private var server = CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
 
-    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: server.id, port: 1234)
+    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 1234)
     @State static private var updater = 0
     static var previews: some View {
         NavigationView {

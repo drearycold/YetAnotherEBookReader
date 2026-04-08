@@ -26,18 +26,19 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         self.book = book
         self.readerInfo = readerInfo
         
-        if let prefObj = book.readPos.realm?
-            .objects(PDFOptions.self)
-            .where({ $0.bookId == book.id && $0.libraryName == book.library.name })
-            .first {
+        let bookRealm = book.readPos.realm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: book.inShelfId)
+        if let prefObj = bookRealm?.pdfOptions {
             self.prefObj = prefObj
         } else {
-            self.prefObj = PDFOptions()
-            self.prefObj.bookId = book.id
-            self.prefObj.libraryName = book.library.name
+            let newObj = PDFOptions()
+            // bookId and libraryName might be redundant now but keep them if they are used elsewhere
+            newObj.bookId = book.id
+            newObj.libraryName = book.library.name
+            
             try? book.readPos.realm?.write {
-                book.readPos.realm?.add(self.prefObj)
+                bookRealm?.pdfOptions = newObj
             }
+            self.prefObj = newObj
         }
     }
     

@@ -94,8 +94,9 @@ struct DSReaderHelperConnector {
     
     func refreshConfiguration() -> AnyPublisher<(id: String, port: Int, data: Data), URLError>? {
         guard let url = endpointConfiguration()?.url else { return nil }
+        let serverId = self.server.uuid.uuidString
         let publisher = urlSession.dataTaskPublisher(for: url)
-            .map{ (id: dsreaderHelperServer.id ?? "", port: dsreaderHelperServer.port, data: $0.data) }
+            .map { (id: serverId, port: self.dsreaderHelperServer.port, data: $0.data) }
             .eraseToAnyPublisher()
         
         return publisher

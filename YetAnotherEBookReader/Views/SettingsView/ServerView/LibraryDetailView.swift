@@ -17,7 +17,7 @@ struct LibraryDetailView: View {
     @Binding var discoverable: Bool
     @Binding var autoUpdate: Bool
 
-    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
+    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
     @Binding var dsreaderHelperLibrary: CalibreLibraryDSReaderHelper
     @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
     @Binding var countPages: CalibreLibraryCountPages

@@ -119,12 +119,10 @@ class BookAnnotation {
                     case PDFOptionsRealm.className():
                         individualRealm.objects(PDFOptionsRealm.self)
                             .forEach { oldObj in
-                                guard serverRealm.objects(PDFOptions.self)
-                                    .where({ $0.bookId == id && $0.libraryName == library.name })
-                                    .isEmpty
-                                else {
-                                    return
-                                }
+                                let bookPrimaryKey = CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: id.description)
+                                guard let bookRealm = serverRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookPrimaryKey) else { return }
+                                
+                                guard bookRealm.pdfOptions == nil else { return }
                                 
                                 let newObj = PDFOptions()
                                 newObj.bookId = oldObj.id
@@ -143,7 +141,7 @@ class BookAnnotation {
                                 newObj.lastScale = oldObj.lastScale
                                 newObj.rememberInPagePosition = oldObj.rememberInPagePosition
                                 
-                                serverRealm.add(newObj)
+                                bookRealm.pdfOptions = newObj
                             }
                     case CalibreBookLastReadPositionRealm.className():
                         break   //ignore deprecated types

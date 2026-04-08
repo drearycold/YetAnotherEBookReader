@@ -584,13 +584,13 @@ final class CalibreServerService {
             
             $0[$1.key.uppercased()] = formatInfo
         }
-        bookRealm.formatsData = try? JSONEncoder().encode(formats) as NSData?
+        bookRealm.formatsData = try? JSONEncoder().encode(formats)
         
         bookRealm.size = 0   //parse later
         
         bookRealm.rating = Int(entry.rating * 2)
         
-        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers) as NSData
+        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers)
         bookRealm.comments = entry.comments ?? ""
         
         var userMetadatas = bookRealm.userMetadatas()
@@ -603,7 +603,7 @@ final class CalibreServerService {
                 $0[label] = value
             }
         }
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
+        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: [])
         let readPos = bookRealm.readPos(library: library)
         //Parse Reading Position
         if let pluginReadingPosition = self.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled,

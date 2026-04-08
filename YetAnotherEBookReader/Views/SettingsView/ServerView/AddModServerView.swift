@@ -565,8 +565,8 @@ struct AddModServerView: View {
         modelData.addServer(server: newServer, libraries: libraries)
         if let url = URL(string: newServer.baseUrl) {
             modelData.updateServerDSReaderHelper(
+                serverId: newServer.id,
                 dsreaderHelper: CalibreServerDSReaderHelper(
-                    id: newServer.id,
                     port: (url.port ?? -1) + 1
                 ),
                 realm: modelData.realm)
