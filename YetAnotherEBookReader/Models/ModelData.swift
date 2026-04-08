@@ -500,6 +500,27 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                             newServer["dsreaderHelper"] = newHelperDict
                         }
                     }
+
+                    var newBooksMap = [String: MigrationObject]()
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldBook, newBook in
+                        guard let oldBook = oldBook, let newBook = newBook else { return }
+                        let libraryName = oldBook["libraryName"] as? String ?? ""
+                        let idInLib = oldBook["idInLib"] as? Int32 ?? 0
+                        newBooksMap["\(libraryName)_\(idInLib)"] = newBook
+                    }
+
+                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldOptions, _ in
+                        guard let oldOptions = oldOptions else { return }
+                        let bookId = oldOptions["bookId"] as? Int32 ?? 0
+                        let libraryName = oldOptions["libraryName"] as? String ?? ""
+                        if let newBook = newBooksMap["\(libraryName)_\(bookId)"] {
+                            var newOptionsDict: [String: Any] = [:]
+                            for key in ["bookId", "libraryName", "themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", "marginOffset", "lastScale", "rememberInPagePosition"] {
+                                newOptionsDict[key] = oldOptions[key]
+                            }
+                            newBook["pdfOptions"] = newOptionsDict
+                        }
+                    }
                 }
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
