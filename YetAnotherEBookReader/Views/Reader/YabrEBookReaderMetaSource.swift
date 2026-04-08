@@ -38,7 +38,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
             try? book.readPos.realm?.write {
                 bookRealm?.pdfOptions = newObj
             }
-            self.prefObj = newObj
+            self.prefObj = bookRealm?.pdfOptions ?? newObj
         }
     }
     

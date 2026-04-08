@@ -451,26 +451,26 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         
                         for (propName, className) in pluginProps {
                             if let oldPlugin = oldObject?[propName] as? DynamicObject {
-                                let newPlugin = migration.create(className)
-                                // Map properties
-                                newPlugin["_isEnabled"] = oldPlugin["isEnabled"] ?? false
-                                newPlugin["_isDefault"] = oldPlugin["isDefault"] ?? false
-                                newPlugin["_isOverride"] = oldPlugin["isOverride"] ?? false
+                                var newPluginDict: [String: Any] = [
+                                    "_isEnabled": oldPlugin["isEnabled"] ?? false,
+                                    "_isDefault": oldPlugin["isDefault"] ?? false,
+                                    "_isOverride": oldPlugin["isOverride"] ?? false
+                                ]
                                 
                                 // Specific mappings
                                 if className == "CalibreLibraryGoodreadsSync" {
                                     ["profileName", "tagsColumnName", "ratingColumnName", "dateReadColumnName", "reviewColumnName", "readingProgressColumnName"].forEach { key in
-                                        newPlugin[key] = oldPlugin[key] ?? (key == "profileName" ? "" : "#")
+                                        newPluginDict[key] = oldPlugin[key] ?? (key == "profileName" ? "" : "#")
                                     }
                                 } else if className == "CalibreLibraryCountPages" {
                                     ["pageCountCN", "wordCountCN", "fleschReadingEaseCN", "fleschKincaidGradeCN", "gunningFogIndexCN"].forEach { key in
-                                        newPlugin[key] = oldPlugin[key] ?? "#"
+                                        newPluginDict[key] = oldPlugin[key] ?? "#"
                                     }
                                 } else if className == "CalibreLibraryReadingPosition" || className == "CalibreLibraryDictionaryViewer" {
-                                    newPlugin["readingPositionCN"] = oldPlugin["readingPositionCN"] ?? "#"
+                                    newPluginDict["readingPositionCN"] = oldPlugin["readingPositionCN"] ?? "#"
                                 }
                                 
-                                newObject?[propName] = newPlugin
+                                newObject?[propName] = newPluginDict
                             }
                         }
                     }
@@ -487,10 +487,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         guard let oldHelper = oldHelper else { return }
                         let serverId = oldHelper["id"] as? String ?? ""
                         if let newServer = newServersMap[serverId] {
-                            let newHelper = migration.create("CalibreServerDSReaderHelper")
-                            newHelper["port"] = oldHelper["port"]
-                            newHelper["configurationData"] = oldHelper["data"]
-                            newServer["dsreaderHelper"] = newHelper
+                            var newHelperDict: [String: Any] = [
+                                "port": oldHelper["port"] ?? 0
+                            ]
+                            if let data = oldHelper["data"] {
+                                newHelperDict["configurationData"] = data
+                            }
+                            newServer["dsreaderHelper"] = newHelperDict
                         }
                     }
                     
@@ -509,11 +512,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         let libraryName = oldOptions["libraryName"] as? String ?? ""
                         
                         if let newBook = newBooksMap["\(libraryName)-\(bookId)"] {
-                            let newPDFOptions = migration.create("PDFOptions")
+                            var newPDFOptions: [String: Any] = [:]
                             ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
                              "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
                              "marginOffset", "lastScale", "rememberInPagePosition", "bookId", "libraryName"].forEach { key in
-                                newPDFOptions[key] = oldOptions[key]
+                                if let val = oldOptions[key] {
+                                    newPDFOptions[key] = val
+                                }
                             }
                             newBook["pdfOptions"] = newPDFOptions
                         }
