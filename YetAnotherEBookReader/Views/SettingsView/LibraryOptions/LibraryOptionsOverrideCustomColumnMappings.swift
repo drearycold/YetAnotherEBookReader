@@ -6,19 +6,20 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct LibraryOptionsOverrideCustomColumnMappings: View {
     let library: CalibreLibrary
     let configuration: CalibreDSReaderHelperConfiguration
 
-    @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
-    @Binding var countPages: CalibreLibraryCountPages
+    @ObservedRealmObject var goodreadsSync: CalibreLibraryGoodreadsSync
+    @ObservedRealmObject var countPages: CalibreLibraryCountPages
 
     var body: some View {
         Form {
-            LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
+            LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: goodreadsSync)
             
-            LibraryOptionsCountPages(library: library, configuration: configuration, countPages: $countPages)
+            LibraryOptionsCountPages(library: library, configuration: configuration, countPages: countPages)
         }
     }
 }
@@ -32,7 +33,7 @@ struct LibraryOptionsOverrideCustomColumnMappings_Previews: PreviewProvider {
 
     static var previews: some View {
         NavigationView {
-            LibraryOptionsOverrideCustomColumnMappings(library: library, configuration: configuration, goodreadsSync: $goodreadsSync, countPages: $countPages)
+            LibraryOptionsOverrideCustomColumnMappings(library: library, configuration: configuration, goodreadsSync: goodreadsSync, countPages: countPages)
         }
     }
 }

@@ -13,14 +13,10 @@ struct LibraryDetailView: View {
 
     @ObservedResults(CalibreBookRealm.self) var books
     
-    @Binding var library: CalibreLibrary
-    @Binding var discoverable: Bool
-    @Binding var autoUpdate: Bool
+    var library: CalibreLibrary
+    @ObservedRealmObject var libraryRealm: CalibreLibraryRealm
 
     @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
-    @Binding var dsreaderHelperLibrary: CalibreLibraryDSReaderHelper
-    @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
-    @Binding var countPages: CalibreLibraryCountPages
     
     @State private var configuration: CalibreDSReaderHelperConfiguration? = nil
     @State private var overrideMappingPresenting = false
@@ -33,46 +29,38 @@ struct LibraryDetailView: View {
     var body: some View {
         Form {
             Section(header: Text("Browsable")) {
-                Toggle("Include in Discover", isOn: $discoverable)
+                Toggle("Include in Discover", isOn: $libraryRealm.discoverable)
                 
-                Toggle("Available when Offline", isOn: $autoUpdate)
+                Toggle("Available when Offline", isOn: $libraryRealm.autoUpdate)
                 
-                NavigationLink(
-                    destination: LibraryOptionsOverrideCustomColumnMappings(
-                        library: library,
-                        configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
-                        goodreadsSync: $goodreadsSync,
-                        countPages: $countPages
-                    )
-                    .navigationTitle("\(library.name) - Custom Column Mappings")
-                ) {
-                    Text("Custom Column Mappings")
+                if let goodreadsSync = libraryRealm.pluginGoodreadsSync,
+                   let countPages = libraryRealm.pluginCountPages {
+                    NavigationLink(
+                        destination: LibraryOptionsOverrideCustomColumnMappings(
+                            library: library,
+                            configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
+                            goodreadsSync: goodreadsSync,
+                            countPages: countPages
+                        )
+                        .navigationTitle("\(library.name) - Custom Column Mappings")
+                    ) {
+                        Text("Custom Column Mappings")
+                    }
                 }
             }
             
             Section {
-                if true == dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled {
-                    Toggle("Enable Automation", isOn: $dsreaderHelperLibrary._isEnabled)
+                if let pluginDSReaderHelper = libraryRealm.pluginDSReaderHelper,
+                   true == dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled {
                     
-                    Group {
-                        HStack {
-                            if let names = dsreaderHelperServer.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
-                                Picker("Profile Name:     \(goodreadsSync.profileName)", selection: $goodreadsSync.profileName) {
-                                    ForEach(names, id: \.self) { name in
-                                        Text(name)
-                                    }
-                                }
-                                .pickerStyle(MenuPickerStyle())
-                            } else {
-                                Text("Profile Name:     Empty Profile List")
-                            }
-                        }
-                        
-                        Toggle("Auto Update Reading Progress", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsProgress)
-                        
-                        Toggle("Auto Update Book Shelf", isOn: $dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf)
+                    PluginDSReaderHelperView(plugin: pluginDSReaderHelper)
+                    
+                    if let goodreadsSync = libraryRealm.pluginGoodreadsSync {
+                        PluginGoodreadsSyncView(
+                            goodreadsSync: goodreadsSync,
+                            configuration: dsreaderHelperServer.configuration
+                        )
                     }
-                    .disabled( !dsreaderHelperLibrary.isEnabled )
                 } else {
                     Text("Plugin not available").foregroundColor(.red)
                 }
@@ -171,17 +159,49 @@ struct LibraryDetailView_Previews: PreviewProvider {
     @State static private var countPages = CalibreLibraryCountPages()
     
     static var previews: some View {
-        NavigationView {
+        let libraryRealm = modelData.realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) ?? CalibreLibraryRealm()
+        return NavigationView {
             LibraryDetailView(
-                library: $library,
-                discoverable: $discoverable,
-                autoUpdate: $autoUpdate,
-                dsreaderHelperLibrary: $dsreaderHelperLibrary,
-                goodreadsSync: $goodreadsSync,
-                countPages: $countPages
+                library: library,
+                libraryRealm: libraryRealm
             )
             .environmentObject(modelData)
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+}
+
+struct PluginDSReaderHelperView: View {
+    @ObservedRealmObject var plugin: CalibreLibraryDSReaderHelper
+    
+    var body: some View {
+        Toggle("Enable Automation", isOn: $plugin._isEnabled)
+        
+        Group {
+            Toggle("Auto Update Reading Progress", isOn: $plugin.autoUpdateGoodreadsProgress)
+            Toggle("Auto Update Book Shelf", isOn: $plugin.autoUpdateGoodreadsBookShelf)
+        }
+        .disabled(!plugin.isEnabled)
+    }
+}
+
+struct PluginGoodreadsSyncView: View {
+    @ObservedRealmObject var goodreadsSync: CalibreLibraryGoodreadsSync
+    var configuration: CalibreDSReaderHelperConfiguration?
+    
+    var body: some View {
+        HStack {
+            if let names = configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map{ $0.key }.sorted() {
+                Picker("Profile Name:     \(goodreadsSync.profileName)", selection: $goodreadsSync.profileName) {
+                    ForEach(names, id: \.self) { name in
+                        Text(name)
+                    }
+                }
+                .pickerStyle(MenuPickerStyle())
+            } else {
+                Text("Profile Name:     Empty Profile List")
+            }
+        }
+        .disabled(!goodreadsSync.isEnabled)
     }
 }

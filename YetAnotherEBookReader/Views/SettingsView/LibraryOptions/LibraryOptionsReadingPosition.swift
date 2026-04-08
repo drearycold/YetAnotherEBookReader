@@ -6,14 +6,15 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct LibraryOptionsReadingPosition: View {
     let library: CalibreLibrary
     
-    @Binding var dsreaderHelperServer: CalibreServerDSReaderHelper
-    @Binding var readingPosition: CalibreLibraryReadingPosition
-    @Binding var dsreaderHelperLibrary: CalibreLibraryDSReaderHelper
-    @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
+    @ObservedRealmObject var dsreaderHelperServer: CalibreServerDSReaderHelper
+    @ObservedRealmObject var readingPosition: CalibreLibraryReadingPosition
+    @ObservedRealmObject var dsreaderHelperLibrary: CalibreLibraryDSReaderHelper
+    @ObservedRealmObject var goodreadsSync: CalibreLibraryGoodreadsSync
 
     @State private var instructionPresenting = false
     
@@ -138,7 +139,7 @@ struct LibraryOptionsReadingPosition_Previews: PreviewProvider {
     
     static var previews: some View {
         NavigationView {
-            LibraryOptionsReadingPosition(library: library, dsreaderHelperServer: $dsreaderHelperServer, readingPosition: $readingPosition, dsreaderHelperLibrary: $dsreaderHelperLibrary, goodreadsSync: $goodreadsSync)
+            LibraryOptionsReadingPosition(library: library, dsreaderHelperServer: dsreaderHelperServer, readingPosition: readingPosition, dsreaderHelperLibrary: dsreaderHelperLibrary, goodreadsSync: goodreadsSync)
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }

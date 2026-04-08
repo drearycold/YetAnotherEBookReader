@@ -6,12 +6,13 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct LibraryOptionsGoodreadsSync: View {
     let library: CalibreLibrary
     let configuration: CalibreDSReaderHelperConfiguration
     
-    @Binding var goodreadsSync: CalibreLibraryGoodreadsSync
+    @ObservedRealmObject var goodreadsSync: CalibreLibraryGoodreadsSync
     
     private let columnNotSetEntry = CalibreCustomColumnInfo(label: "", name: "not set", datatype: "", editable: false, display: CalibreCustomColumnDisplayInfo(description: "", isNames: nil, compositeTemplate: nil, compositeSort: nil, useDecorations: nil, makeCategory: nil, containsHtml: nil, numberFormat: nil, headingPosition: nil, interpretAs: nil, allowHalfStars: nil), normalized: false, num: 0, isMultiple: false, multipleSeps: [:])
 
@@ -83,7 +84,7 @@ struct LibraryOptionsGoodreadsSYnc_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
             Form {
-                LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: $goodreadsSync)
+                LibraryOptionsGoodreadsSync(library: library, configuration: configuration, goodreadsSync: goodreadsSync)
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
