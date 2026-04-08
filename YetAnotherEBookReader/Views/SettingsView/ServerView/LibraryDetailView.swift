@@ -33,32 +33,31 @@ struct LibraryDetailView: View {
                 
                 Toggle("Available when Offline", isOn: $libraryRealm.autoUpdate)
                 
-                let goodreadsSync = libraryRealm.pluginGoodreadsSync ?? CalibreLibraryGoodreadsSync()
-                let countPages = libraryRealm.pluginCountPages ?? CalibreLibraryCountPages()
-                NavigationLink(
-                    destination: LibraryOptionsOverrideCustomColumnMappings(
-                        library: library,
-                        configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
-                        goodreadsSync: goodreadsSync,
-                        countPages: countPages
-                    )
-                    .navigationTitle("\(library.name) - Custom Column Mappings")
-                ) {
-                    Text("Custom Column Mappings")
+                if let goodreadsSync = libraryRealm.pluginGoodreadsSync, let countPages = libraryRealm.pluginCountPages {
+                    NavigationLink(
+                        destination: LibraryOptionsOverrideCustomColumnMappings(
+                            library: library,
+                            configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
+                            goodreadsSync: goodreadsSync,
+                            countPages: countPages
+                        )
+                        .navigationTitle("\(library.name) - Custom Column Mappings")
+                    ) {
+                        Text("Custom Column Mappings")
+                    }
                 }
             }
             
             Section {
-                let pluginDSReaderHelper = libraryRealm.pluginDSReaderHelper ?? CalibreLibraryDSReaderHelper()
                 if true == dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled {
-                    
-                    PluginDSReaderHelperView(plugin: pluginDSReaderHelper)
-                    
-                    let goodreadsSync = libraryRealm.pluginGoodreadsSync ?? CalibreLibraryGoodreadsSync()
-                    PluginGoodreadsSyncView(
-                        goodreadsSync: goodreadsSync,
-                        configuration: dsreaderHelperServer.configuration
-                    )
+                    if let pluginDSReaderHelper = libraryRealm.pluginDSReaderHelper, let goodreadsSync = libraryRealm.pluginGoodreadsSync {
+                        PluginDSReaderHelperView(plugin: pluginDSReaderHelper)
+                        
+                        PluginGoodreadsSyncView(
+                            goodreadsSync: goodreadsSync,
+                            configuration: dsreaderHelperServer.configuration
+                        )
+                    }
                 } else {
                     Text("Plugin not available").foregroundColor(.red)
                 }

@@ -1160,19 +1160,19 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
-                libraryRealm.pluginDSReaderHelper = plugin
+                libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(value: plugin)
             }
             if let plugin = $0.value as? CalibreLibraryReadingPosition {
-                libraryRealm.pluginReadingPosition = plugin
+                libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(value: plugin)
             }
             if let plugin = $0.value as? CalibreLibraryDictionaryViewer {
-                libraryRealm.pluginDictionaryViewer = plugin
+                libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(value: plugin)
             }
             if let plugin = $0.value as? CalibreLibraryGoodreadsSync {
-                libraryRealm.pluginGoodreadsSync = plugin
+                libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(value: plugin)
             }
             if let plugin = $0.value as? CalibreLibraryCountPages {
-                libraryRealm.pluginCountPages = plugin
+                libraryRealm.pluginCountPages = CalibreLibraryCountPages(value: plugin)
             }
         }
         libraryRealm.autoUpdate = library.autoUpdate
