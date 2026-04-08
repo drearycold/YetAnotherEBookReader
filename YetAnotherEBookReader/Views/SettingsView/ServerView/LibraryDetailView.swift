@@ -140,12 +140,13 @@ struct LibraryDetailView: View {
         }
         .onAppear {
             if let realm = libraryRealm.realm, !libraryRealm.isInvalidated {
+                let config = modelData.queryServerDSReaderHelper(server: library.server)?.configuration
                 try? realm.write {
-                    if libraryRealm.pluginDSReaderHelper == nil { libraryRealm.pluginDSReaderHelper = .init() }
-                    if libraryRealm.pluginReadingPosition == nil { libraryRealm.pluginReadingPosition = .init() }
-                    if libraryRealm.pluginDictionaryViewer == nil { libraryRealm.pluginDictionaryViewer = .init() }
-                    if libraryRealm.pluginGoodreadsSync == nil { libraryRealm.pluginGoodreadsSync = .init() }
-                    if libraryRealm.pluginCountPages == nil { libraryRealm.pluginCountPages = .init() }
+                    if libraryRealm.pluginDSReaderHelper == nil { libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(libraryId: library.id, configuration: config) }
+                    if libraryRealm.pluginReadingPosition == nil { libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(libraryId: library.id, configuration: config) }
+                    if libraryRealm.pluginDictionaryViewer == nil { libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(libraryId: library.id, configuration: config) }
+                    if libraryRealm.pluginGoodreadsSync == nil { libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(libraryId: library.id, configuration: config) }
+                    if libraryRealm.pluginCountPages == nil { libraryRealm.pluginCountPages = CalibreLibraryCountPages(libraryId: library.id, configuration: config) }
                 }
             }
         }

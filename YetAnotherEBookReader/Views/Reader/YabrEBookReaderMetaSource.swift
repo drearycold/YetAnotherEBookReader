@@ -26,7 +26,9 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         self.book = book
         self.readerInfo = readerInfo
         
-        let bookRealm = book.readPos.realm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: book.inShelfId)
+        let globalRealm = ModelData.shared?.realm
+        let bookRealm = globalRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: book.inShelfId)
+        
         if let prefObj = bookRealm?.pdfOptions {
             self.prefObj = prefObj
         } else {
@@ -35,7 +37,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
             newObj.bookId = book.id
             newObj.libraryName = book.library.name
             
-            try? book.readPos.realm?.write {
+            try? globalRealm?.write {
                 bookRealm?.pdfOptions = newObj
             }
             self.prefObj = bookRealm?.pdfOptions ?? newObj

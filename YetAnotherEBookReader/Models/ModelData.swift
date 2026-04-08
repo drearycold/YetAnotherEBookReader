@@ -496,33 +496,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                             newServer["dsreaderHelper"] = newHelperDict
                         }
                     }
-                    
-                    // Migrate PDFOptions into CalibreBookRealm
-                    var newBooksMap = [String: MigrationObject]()
-                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldBook, newBook in
-                        guard let oldBook = oldBook, let newBook = newBook else { return }
-                        let bookId = oldBook["idInLib"] as? Int32 ?? 0
-                        let libraryName = oldBook["libraryName"] as? String ?? ""
-                        newBooksMap["\(libraryName)-\(bookId)"] = newBook
-                    }
-                    
-                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldOptions, _ in
-                        guard let oldOptions = oldOptions else { return }
-                        let bookId = oldOptions["bookId"] as? Int32 ?? 0
-                        let libraryName = oldOptions["libraryName"] as? String ?? ""
-                        
-                        if let newBook = newBooksMap["\(libraryName)-\(bookId)"] {
-                            var newPDFOptions: [String: Any] = [:]
-                            ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
-                             "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
-                             "marginOffset", "lastScale", "rememberInPagePosition", "bookId", "libraryName"].forEach { key in
-                                if let val = oldOptions[key] {
-                                    newPDFOptions[key] = val
-                                }
-                            }
-                            newBook["pdfOptions"] = newPDFOptions
-                        }
-                    }
                 }
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
