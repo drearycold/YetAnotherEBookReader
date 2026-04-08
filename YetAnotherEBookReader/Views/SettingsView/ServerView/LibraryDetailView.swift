@@ -139,7 +139,17 @@ struct LibraryDetailView: View {
             }
             #endif
         }
-        
+        .onAppear {
+            if let realm = libraryRealm.realm, !libraryRealm.isInvalidated {
+                try? realm.write {
+                    if libraryRealm.pluginDSReaderHelper == nil { libraryRealm.pluginDSReaderHelper = .init() }
+                    if libraryRealm.pluginReadingPosition == nil { libraryRealm.pluginReadingPosition = .init() }
+                    if libraryRealm.pluginDictionaryViewer == nil { libraryRealm.pluginDictionaryViewer = .init() }
+                    if libraryRealm.pluginGoodreadsSync == nil { libraryRealm.pluginGoodreadsSync = .init() }
+                    if libraryRealm.pluginCountPages == nil { libraryRealm.pluginCountPages = .init() }
+                }
+            }
+        }
     }
 
 }
