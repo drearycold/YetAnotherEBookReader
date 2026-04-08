@@ -488,23 +488,27 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     }
                     
                     // Migrate PDFOptions into CalibreBookRealm
+                    var newBooksMap = [String: MigrationObject]()
+                    migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldBook, newBook in
+                        guard let oldBook = oldBook, let newBook = newBook else { return }
+                        let bookId = oldBook["idInLib"] as? Int32 ?? 0
+                        let libraryName = oldBook["libraryName"] as? String ?? ""
+                        newBooksMap["\(libraryName)-\(bookId)"] = newBook
+                    }
+                    
                     migration.enumerateObjects(ofType: "PDFOptionsRealm") { oldOptions, _ in
                         guard let oldOptions = oldOptions else { return }
                         let bookId = oldOptions["id"] as? Int32 ?? 0
                         let libraryName = oldOptions["libraryName"] as? String ?? ""
                         
-                        // Find the corresponding book
-                        migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldBook, newBook in
-                            guard let oldBook = oldBook, let newBook = newBook else { return }
-                            if (oldBook["idInLib"] as? Int32) == bookId && (oldBook["libraryName"] as? String) == libraryName {
-                                let newPDFOptions = migration.create("PDFOptions")
-                                ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
-                                 "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
-                                 "marginOffset", "lastScale", "rememberInPagePosition", "bookId", "libraryName"].forEach { key in
-                                    newPDFOptions[key] = oldOptions[key]
-                                }
-                                newBook["pdfOptions"] = newPDFOptions
+                        if let newBook = newBooksMap["\(libraryName)-\(bookId)"] {
+                            let newPDFOptions = migration.create("PDFOptions")
+                            ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
+                             "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
+                             "marginOffset", "lastScale", "rememberInPagePosition", "bookId", "libraryName"].forEach { key in
+                                newPDFOptions[key] = oldOptions[key]
                             }
+                            newBook["pdfOptions"] = newPDFOptions
                         }
                     }
                 }
