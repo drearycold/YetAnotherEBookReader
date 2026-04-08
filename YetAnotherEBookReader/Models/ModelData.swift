@@ -719,19 +719,19 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 pluginColumns: {
                     var result = [String: CalibreLibraryPluginColumnInfo]()
                     if let plugin = libraryRealm.pluginDSReaderHelper {
-                        result[CalibreLibrary.PLUGIN_DSREADER_HELPER] = plugin
+                        result[CalibreLibrary.PLUGIN_DSREADER_HELPER] = plugin.freeze()
                     }
                     if let plugin = libraryRealm.pluginDictionaryViewer {
-                        result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = plugin
+                        result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = plugin.freeze()
                     }
                     if let plugin = libraryRealm.pluginReadingPosition {
-                        result[CalibreLibrary.PLUGIN_READING_POSITION] = plugin
+                        result[CalibreLibrary.PLUGIN_READING_POSITION] = plugin.freeze()
                     }
                     if let plugin = libraryRealm.pluginGoodreadsSync {
-                        result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = plugin
+                        result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = plugin.freeze()
                     }
                     if let plugin = libraryRealm.pluginCountPages {
-                        result[CalibreLibrary.PLUGIN_COUNT_PAGES] = plugin
+                        result[CalibreLibrary.PLUGIN_COUNT_PAGES] = plugin.freeze()
                     }
                     return result
                 }()
@@ -1238,9 +1238,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         guard let realm = Thread.isMainThread ? self.realm : try? Realm(configuration: self.realmConf) else { return nil }
         
-        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id) else { return nil }
+        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id),
+              let helper = serverRealm.dsreaderHelper else { return nil }
         
-        return serverRealm.dsreaderHelper
+        let unmanaged = CalibreServerDSReaderHelper(port: helper.port)
+        unmanaged.configurationData = helper.configurationData
+        return unmanaged
     }
     
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
