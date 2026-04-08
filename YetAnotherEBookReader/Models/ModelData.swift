@@ -452,10 +452,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         for (propName, className) in pluginProps {
                             if let oldPlugin = oldObject?[propName] as? DynamicObject {
                                 let newPlugin = migration.create(className)
-                                // Map properties (assuming common ones like _isEnabled, _isDefault, _isOverride)
-                                ["_isEnabled", "_isDefault", "_isOverride"].forEach { key in
-                                    newPlugin[key] = oldPlugin[key.removingPrefix("_")] ?? oldPlugin[key]
-                                }
+                                // Map properties
+                                newPlugin["_isEnabled"] = oldPlugin["isEnabled"] ?? false
+                                newPlugin["_isDefault"] = oldPlugin["isDefault"] ?? false
+                                newPlugin["_isOverride"] = oldPlugin["isOverride"] ?? false
                                 
                                 // Specific mappings
                                 if className == "CalibreLibraryGoodreadsSync" {

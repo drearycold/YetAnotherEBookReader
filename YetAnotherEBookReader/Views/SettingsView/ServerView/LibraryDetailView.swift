@@ -33,19 +33,18 @@ struct LibraryDetailView: View {
                 
                 Toggle("Available when Offline", isOn: $libraryRealm.autoUpdate)
                 
-                if let goodreadsSync = libraryRealm.pluginGoodreadsSync,
-                   let countPages = libraryRealm.pluginCountPages {
-                    NavigationLink(
-                        destination: LibraryOptionsOverrideCustomColumnMappings(
-                            library: library,
-                            configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
-                            goodreadsSync: goodreadsSync,
-                            countPages: countPages
-                        )
-                        .navigationTitle("\(library.name) - Custom Column Mappings")
-                    ) {
-                        Text("Custom Column Mappings")
-                    }
+                let goodreadsSync = libraryRealm.pluginGoodreadsSync ?? CalibreLibraryGoodreadsSync()
+                let countPages = libraryRealm.pluginCountPages ?? CalibreLibraryCountPages()
+                NavigationLink(
+                    destination: LibraryOptionsOverrideCustomColumnMappings(
+                        library: library,
+                        configuration: modelData.queryServerDSReaderHelper(server: library.server)?.configuration ?? .init(),
+                        goodreadsSync: goodreadsSync,
+                        countPages: countPages
+                    )
+                    .navigationTitle("\(library.name) - Custom Column Mappings")
+                ) {
+                    Text("Custom Column Mappings")
                 }
             }
             
