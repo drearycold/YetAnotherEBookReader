@@ -460,14 +460,14 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                                 // Specific mappings
                                 if className == "CalibreLibraryGoodreadsSync" {
                                     ["profileName", "tagsColumnName", "ratingColumnName", "dateReadColumnName", "reviewColumnName", "readingProgressColumnName"].forEach { key in
-                                        newPlugin[key] = oldPlugin[key]
+                                        newPlugin[key] = oldPlugin[key] ?? (key == "profileName" ? "" : "#")
                                     }
                                 } else if className == "CalibreLibraryCountPages" {
                                     ["pageCountCN", "wordCountCN", "fleschReadingEaseCN", "fleschKincaidGradeCN", "gunningFogIndexCN"].forEach { key in
-                                        newPlugin[key] = oldPlugin[key]
+                                        newPlugin[key] = oldPlugin[key] ?? "#"
                                     }
                                 } else if className == "CalibreLibraryReadingPosition" || className == "CalibreLibraryDictionaryViewer" {
-                                    newPlugin["readingPositionCN"] = oldPlugin["readingPositionCN"]
+                                    newPlugin["readingPositionCN"] = oldPlugin["readingPositionCN"] ?? "#"
                                 }
                                 
                                 newObject?[propName] = newPlugin
@@ -475,15 +475,22 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         }
                     }
                     
-                    // Migrate CalibreServerRealm.dsreaderHelper
-                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
-                        // In the old schema, server didn't have dsreaderHelper link, it was queried by serverId.
-                        // But if it did, we migrate it here.
-                        if let oldHelper = oldObject?["dsreaderHelper"] as? DynamicObject {
+                    // Migrate CalibreServerDSReaderHelper into CalibreServerRealm
+                    var newServersMap = [String: MigrationObject]()
+                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldServer, newServer in
+                        guard let oldServer = oldServer, let newServer = newServer else { return }
+                        let primaryKey = oldServer["primaryKey"] as? String ?? ""
+                        newServersMap[primaryKey] = newServer
+                    }
+
+                    migration.enumerateObjects(ofType: "CalibreServerDSReaderHelperRealm") { oldHelper, _ in
+                        guard let oldHelper = oldHelper else { return }
+                        let serverId = oldHelper["id"] as? String ?? ""
+                        if let newServer = newServersMap[serverId] {
                             let newHelper = migration.create("CalibreServerDSReaderHelper")
                             newHelper["port"] = oldHelper["port"]
-                            newHelper["configurationData"] = oldHelper["data"] ?? oldHelper["configurationData"]
-                            newObject?["dsreaderHelper"] = newHelper
+                            newHelper["configurationData"] = oldHelper["data"]
+                            newServer["dsreaderHelper"] = newHelper
                         }
                     }
                     
@@ -496,9 +503,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         newBooksMap["\(libraryName)-\(bookId)"] = newBook
                     }
                     
-                    migration.enumerateObjects(ofType: "PDFOptionsRealm") { oldOptions, _ in
+                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldOptions, _ in
                         guard let oldOptions = oldOptions else { return }
-                        let bookId = oldOptions["id"] as? Int32 ?? 0
+                        let bookId = oldOptions["bookId"] as? Int32 ?? 0
                         let libraryName = oldOptions["libraryName"] as? String ?? ""
                         
                         if let newBook = newBooksMap["\(libraryName)-\(bookId)"] {
@@ -1260,7 +1267,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
         guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
         try! realm.write {
-            serverRealm.dsreaderHelper = dsreaderHelper
+            serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: dsreaderHelper)
         }
     }
     
