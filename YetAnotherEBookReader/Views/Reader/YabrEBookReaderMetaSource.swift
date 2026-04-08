@@ -103,9 +103,13 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        try? prefObj.realm?.write({
+        if let realm = prefObj.realm {
+            try? realm.write {
+                prefObj.update(other: options)
+            }
+        } else {
             prefObj.update(other: options)
-        })
+        }
         
         updateDictViewerStyle(options: options)
     }

@@ -1140,6 +1140,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         
+        // Ensure embedded objects are initialized
+        libraryRealm.pluginDSReaderHelper = .init()
+        libraryRealm.pluginReadingPosition = .init()
+        libraryRealm.pluginDictionaryViewer = .init()
+        libraryRealm.pluginGoodreadsSync = .init()
+        libraryRealm.pluginCountPages = .init()
+        
         library.pluginColumns.forEach {
             if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
                 libraryRealm.pluginDSReaderHelper = plugin

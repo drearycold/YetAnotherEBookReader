@@ -50,17 +50,16 @@ struct LibraryDetailView: View {
             }
             
             Section {
-                if let pluginDSReaderHelper = libraryRealm.pluginDSReaderHelper,
-                   true == dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled {
+                let pluginDSReaderHelper = libraryRealm.pluginDSReaderHelper ?? CalibreLibraryDSReaderHelper()
+                if true == dsreaderHelperServer.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.goodreadsSyncEnabled {
                     
                     PluginDSReaderHelperView(plugin: pluginDSReaderHelper)
                     
-                    if let goodreadsSync = libraryRealm.pluginGoodreadsSync {
-                        PluginGoodreadsSyncView(
-                            goodreadsSync: goodreadsSync,
-                            configuration: dsreaderHelperServer.configuration
-                        )
-                    }
+                    let goodreadsSync = libraryRealm.pluginGoodreadsSync ?? CalibreLibraryGoodreadsSync()
+                    PluginGoodreadsSyncView(
+                        goodreadsSync: goodreadsSync,
+                        configuration: dsreaderHelperServer.configuration
+                    )
                 } else {
                     Text("Plugin not available").foregroundColor(.red)
                 }
