@@ -148,13 +148,19 @@ struct ServerDetailView: View {
                 var updatedLibrary = library
                 
                 if let helper = libraryRealm.pluginDSReaderHelper {
-                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(value: helper)
+                    let copy = CalibreLibraryDSReaderHelper(value: helper)
+                    if library.pluginDSReaderHelperWithDefault?.autoUpdateGoodreadsProgress != copy.autoUpdateGoodreadsProgress ||
+                        library.pluginDSReaderHelperWithDefault?.autoUpdateGoodreadsBookShelf != copy.autoUpdateGoodreadsBookShelf ||
+                        library.pluginDSReaderHelperWithDefault?._isEnabled != copy._isEnabled {
+                        copy._isOverride = true
+                    }
+                    updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = copy
                 }
                 
                 if let position = libraryRealm.pluginReadingPosition {
                     let copy = CalibreLibraryReadingPosition(value: position)
-                    if library.pluginReadingPosition?._isEnabled != copy._isEnabled ||
-                        library.pluginReadingPosition?.readingPositionCN != copy.readingPositionCN {
+                    if library.pluginReadingPositionWithDefault?._isEnabled != copy._isEnabled ||
+                        library.pluginReadingPositionWithDefault?.readingPositionCN != copy.readingPositionCN {
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = copy
@@ -162,8 +168,8 @@ struct ServerDetailView: View {
                 
                 if let dict = libraryRealm.pluginDictionaryViewer {
                     let copy = CalibreLibraryDictionaryViewer(value: dict)
-                    if library.pluginDictionaryViewer?._isEnabled != copy._isEnabled ||
-                        library.pluginDictionaryViewer?.readingPositionCN != copy.readingPositionCN {
+                    if library.pluginDictionaryViewerWithDefault?._isEnabled != copy._isEnabled ||
+                        library.pluginDictionaryViewerWithDefault?.readingPositionCN != copy.readingPositionCN {
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = copy
@@ -171,13 +177,13 @@ struct ServerDetailView: View {
                 
                 if let sync = libraryRealm.pluginGoodreadsSync {
                     let copy = CalibreLibraryGoodreadsSync(value: sync)
-                    if library.pluginGoodreadsSync?.profileName != copy.profileName ||
-                       library.pluginGoodreadsSync?.tagsColumnName != copy.tagsColumnName ||
-                       library.pluginGoodreadsSync?.ratingColumnName != copy.ratingColumnName ||
-                       library.pluginGoodreadsSync?.dateReadColumnName != copy.dateReadColumnName ||
-                       library.pluginGoodreadsSync?.reviewColumnName != copy.reviewColumnName ||
-                       library.pluginGoodreadsSync?.readingProgressColumnName != copy.readingProgressColumnName ||
-                       library.pluginGoodreadsSync?._isEnabled != copy._isEnabled {
+                    if library.pluginGoodreadsSyncWithDefault?.profileName != copy.profileName ||
+                       library.pluginGoodreadsSyncWithDefault?.tagsColumnName != copy.tagsColumnName ||
+                       library.pluginGoodreadsSyncWithDefault?.ratingColumnName != copy.ratingColumnName ||
+                       library.pluginGoodreadsSyncWithDefault?.dateReadColumnName != copy.dateReadColumnName ||
+                       library.pluginGoodreadsSyncWithDefault?.reviewColumnName != copy.reviewColumnName ||
+                       library.pluginGoodreadsSyncWithDefault?.readingProgressColumnName != copy.readingProgressColumnName ||
+                       library.pluginGoodreadsSyncWithDefault?._isEnabled != copy._isEnabled {
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = copy
@@ -185,12 +191,12 @@ struct ServerDetailView: View {
                 
                 if let pages = libraryRealm.pluginCountPages {
                     let copy = CalibreLibraryCountPages(value: pages)
-                    if library.pluginCountPages?.pageCountCN != copy.pageCountCN ||
-                        library.pluginCountPages?.wordCountCN != copy.wordCountCN ||
-                        library.pluginCountPages?.fleschReadingEaseCN != copy.fleschReadingEaseCN ||
-                        library.pluginCountPages?.fleschKincaidGradeCN != copy.fleschKincaidGradeCN ||
-                        library.pluginCountPages?.gunningFogIndexCN != copy.gunningFogIndexCN ||
-                        library.pluginCountPages?._isEnabled != copy._isEnabled {
+                    if library.pluginCountPagesWithDefault?.pageCountCN != copy.pageCountCN ||
+                        library.pluginCountPagesWithDefault?.wordCountCN != copy.wordCountCN ||
+                        library.pluginCountPagesWithDefault?.fleschReadingEaseCN != copy.fleschReadingEaseCN ||
+                        library.pluginCountPagesWithDefault?.fleschKincaidGradeCN != copy.fleschKincaidGradeCN ||
+                        library.pluginCountPagesWithDefault?.gunningFogIndexCN != copy.gunningFogIndexCN ||
+                        library.pluginCountPagesWithDefault?._isEnabled != copy._isEnabled {
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = copy
