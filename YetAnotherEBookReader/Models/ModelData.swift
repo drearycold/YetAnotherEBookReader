@@ -437,6 +437,77 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     }
                     print("Migrated \(count) CalibreActivityLogEntry records.")
                 }
+                
+                if oldSchemaVersion < 134 {
+                    // Migrate plugins in CalibreLibraryRealm
+                    migration.enumerateObjects(ofType: CalibreLibraryRealm.className()) { oldObject, newObject in
+                        let pluginProps = [
+                            ("pluginDSReaderHelper", "CalibreLibraryDSReaderHelper"),
+                            ("pluginReadingPosition", "CalibreLibraryReadingPosition"),
+                            ("pluginDictionaryViewer", "CalibreLibraryDictionaryViewer"),
+                            ("pluginGoodreadsSync", "CalibreLibraryGoodreadsSync"),
+                            ("pluginCountPages", "CalibreLibraryCountPages")
+                        ]
+                        
+                        for (propName, className) in pluginProps {
+                            if let oldPlugin = oldObject?[propName] as? DynamicObject {
+                                let newPlugin = migration.create(className)
+                                // Map properties (assuming common ones like _isEnabled, _isDefault, _isOverride)
+                                ["_isEnabled", "_isDefault", "_isOverride"].forEach { key in
+                                    newPlugin[key] = oldPlugin[key.removingPrefix("_")] ?? oldPlugin[key]
+                                }
+                                
+                                // Specific mappings
+                                if className == "CalibreLibraryGoodreadsSync" {
+                                    ["profileName", "tagsColumnName", "ratingColumnName", "dateReadColumnName", "reviewColumnName", "readingProgressColumnName"].forEach { key in
+                                        newPlugin[key] = oldPlugin[key]
+                                    }
+                                } else if className == "CalibreLibraryCountPages" {
+                                    ["pageCountCN", "wordCountCN", "fleschReadingEaseCN", "fleschKincaidGradeCN", "gunningFogIndexCN"].forEach { key in
+                                        newPlugin[key] = oldPlugin[key]
+                                    }
+                                } else if className == "CalibreLibraryReadingPosition" || className == "CalibreLibraryDictionaryViewer" {
+                                    newPlugin["readingPositionCN"] = oldPlugin["readingPositionCN"]
+                                }
+                                
+                                newObject?[propName] = newPlugin
+                            }
+                        }
+                    }
+                    
+                    // Migrate CalibreServerRealm.dsreaderHelper
+                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
+                        // In the old schema, server didn't have dsreaderHelper link, it was queried by serverId.
+                        // But if it did, we migrate it here.
+                        if let oldHelper = oldObject?["dsreaderHelper"] as? DynamicObject {
+                            let newHelper = migration.create("CalibreServerDSReaderHelper")
+                            newHelper["port"] = oldHelper["port"]
+                            newHelper["configurationData"] = oldHelper["data"] ?? oldHelper["configurationData"]
+                            newObject?["dsreaderHelper"] = newHelper
+                        }
+                    }
+                    
+                    // Migrate PDFOptions into CalibreBookRealm
+                    migration.enumerateObjects(ofType: "PDFOptionsRealm") { oldOptions, _ in
+                        guard let oldOptions = oldOptions else { return }
+                        let bookId = oldOptions["id"] as? Int32 ?? 0
+                        let libraryName = oldOptions["libraryName"] as? String ?? ""
+                        
+                        // Find the corresponding book
+                        migration.enumerateObjects(ofType: CalibreBookRealm.className()) { oldBook, newBook in
+                            guard let oldBook = oldBook, let newBook = newBook else { return }
+                            if (oldBook["idInLib"] as? Int32) == bookId && (oldBook["libraryName"] as? String) == libraryName {
+                                let newPDFOptions = migration.create("PDFOptions")
+                                ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
+                                 "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
+                                 "marginOffset", "lastScale", "rememberInPagePosition", "bookId", "libraryName"].forEach { key in
+                                    newPDFOptions[key] = oldOptions[key]
+                                }
+                                newBook["pdfOptions"] = newPDFOptions
+                            }
+                        }
+                    }
+                }
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
