@@ -1982,9 +1982,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             let library = result.request.library
             let serverUUID = library.server.uuid.uuidString
             
-            try? await Task.detached(priority: .userInitiated) {
-                try await self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
-            }.value
+            await withCheckedContinuation { continuation in
+                ModelData.SaveBooksMetadataRealmQueue.async {
+                    try? self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
+                    continuation.resume()
+                }
+            }
             
             result.categories.filter { $0.is_category }.forEach { category in
                 self.librarySearchManager.refreshLibraryCategory(library: library, category: category)
