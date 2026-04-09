@@ -19,7 +19,7 @@ struct BookDetailView: View {
     
     @ObservedRealmObject var book: CalibreBookRealm
     
-    @ObservedResults(BookDeviceReadingPositionRealm.self) var readingPositions
+    @ObservedResults(BookDeviceReadingPositionRealm.self, configuration: ModelData.shared?.realmConf) var readingPositions
     
     var viewMode: Mode
     

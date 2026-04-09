@@ -18,7 +18,7 @@ struct LibraryInfoBookListView: View {
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
-    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
 
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()

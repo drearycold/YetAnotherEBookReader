@@ -150,6 +150,15 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     init(mock: Bool = false) {
         ModelData.shared = self
         
+        // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
+        ModelData.RealmSchemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
+        let initialConf = Realm.Configuration(
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in }
+        )
+        Realm.Configuration.defaultConfiguration = initialConf
+        self.realmConf = initialConf
+        
         kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor

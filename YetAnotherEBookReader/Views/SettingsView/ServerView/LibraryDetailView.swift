@@ -11,7 +11,7 @@ import RealmSwift
 struct LibraryDetailView: View {
     @EnvironmentObject var modelData: ModelData
 
-    @ObservedResults(CalibreBookRealm.self) var books
+    @ObservedResults(CalibreBookRealm.self, configuration: ModelData.shared?.realmConf) var books
     
     var library: CalibreLibrary
     @ObservedRealmObject var libraryRealm: CalibreLibraryRealm
