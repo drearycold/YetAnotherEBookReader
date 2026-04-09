@@ -42,7 +42,7 @@ class BookAnnotation {
         }
         
         autoreleasepool {
-            let individualRealm = try! Realm(configuration: bookPrefConf)
+            guard let individualRealm = try? Realm(configuration: bookPrefConf) else { return }
             let serverRealm = library.server.realmPerf
             individualRealm.configuration.objectTypes?.forEach { objectType in
                 guard let objectType = objectType as? Object.Type
@@ -50,7 +50,7 @@ class BookAnnotation {
                     assert(false, "Not an Object")
                     return
                 }
-                try! serverRealm.write {
+                try? serverRealm.write {
                     switch objectType.className() {
                     case BookDeviceReadingPositionRealm.className():
                         let objects = individualRealm.objects(BookDeviceReadingPositionRealm.self)

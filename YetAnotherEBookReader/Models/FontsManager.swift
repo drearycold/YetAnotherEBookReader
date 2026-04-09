@@ -26,6 +26,9 @@ class FontsManager: ObservableObject {
         var fontDescriptorArrays = [CFArray]()
 
         urls.forEach { url in
+            let isScoped = url.startAccessingSecurityScopedResource()
+            defer { if isScoped { url.stopAccessingSecurityScopedResource() } }
+
             guard let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
             else { return }
             
