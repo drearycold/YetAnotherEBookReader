@@ -139,14 +139,14 @@ struct LibraryDetailView: View {
             #endif
         }
         .onAppear {
-            if let realm = libraryRealm.realm, !libraryRealm.isInvalidated {
+            if !libraryRealm.isInvalidated, let thawed = libraryRealm.thaw(), let realm = thawed.realm {
                 let config = modelData.queryServerDSReaderHelper(server: library.server)?.configuration
                 try? realm.write {
-                    if libraryRealm.pluginDSReaderHelper == nil { libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(libraryId: library.id, configuration: config) }
-                    if libraryRealm.pluginReadingPosition == nil { libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(libraryId: library.id, configuration: config) }
-                    if libraryRealm.pluginDictionaryViewer == nil { libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(libraryId: library.id, configuration: config) }
-                    if libraryRealm.pluginGoodreadsSync == nil { libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(libraryId: library.id, configuration: config) }
-                    if libraryRealm.pluginCountPages == nil { libraryRealm.pluginCountPages = CalibreLibraryCountPages(libraryId: library.id, configuration: config) }
+                    if thawed.pluginDSReaderHelper == nil { thawed.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(libraryId: library.id, configuration: config) }
+                    if thawed.pluginReadingPosition == nil { thawed.pluginReadingPosition = CalibreLibraryReadingPosition(libraryId: library.id, configuration: config) }
+                    if thawed.pluginDictionaryViewer == nil { thawed.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(libraryId: library.id, configuration: config) }
+                    if thawed.pluginGoodreadsSync == nil { thawed.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(libraryId: library.id, configuration: config) }
+                    if thawed.pluginCountPages == nil { thawed.pluginCountPages = CalibreLibraryCountPages(libraryId: library.id, configuration: config) }
                 }
             }
         }
