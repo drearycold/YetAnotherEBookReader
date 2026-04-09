@@ -1264,11 +1264,31 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
         guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
+        let config = dsreaderHelper.configuration
         try! realm.write {
             if let existing = serverRealm.dsreaderHelper {
                 existing.update(from: dsreaderHelper)
             } else {
                 serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: dsreaderHelper)
+            }
+            
+            // Automatically propagate the configuration to all libraries of this server
+            let libraries = realm.objects(CalibreLibraryRealm.self).filter("serverUUID == %@", serverId)
+            for libraryRealm in libraries {
+                if libraryRealm.pluginDSReaderHelper == nil { libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper() }
+                libraryRealm.pluginDSReaderHelper?.setup(libraryId: libraryRealm.key ?? "", configuration: config)
+                
+                if libraryRealm.pluginReadingPosition == nil { libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition() }
+                libraryRealm.pluginReadingPosition?.setup(libraryId: libraryRealm.key ?? "", configuration: config)
+                
+                if libraryRealm.pluginDictionaryViewer == nil { libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer() }
+                libraryRealm.pluginDictionaryViewer?.setup(libraryId: libraryRealm.key ?? "", configuration: config)
+                
+                if libraryRealm.pluginGoodreadsSync == nil { libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync() }
+                libraryRealm.pluginGoodreadsSync?.setup(libraryId: libraryRealm.key ?? "", configuration: config)
+                
+                if libraryRealm.pluginCountPages == nil { libraryRealm.pluginCountPages = CalibreLibraryCountPages() }
+                libraryRealm.pluginCountPages?.setup(libraryId: libraryRealm.key ?? "", configuration: config)
             }
         }
     }
