@@ -1216,6 +1216,11 @@ class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
             }
         }
     }
+
+    func update(from other: CalibreServerDSReaderHelper) {
+        self.port = other.port
+        self.configurationData = other.configurationData
+    }
 }
 
 class CalibreLibraryDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {

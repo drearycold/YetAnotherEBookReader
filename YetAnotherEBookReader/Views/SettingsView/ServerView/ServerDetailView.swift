@@ -152,6 +152,9 @@ struct ServerDetailView: View {
                     if library.pluginDSReaderHelperWithDefault?.autoUpdateGoodreadsProgress != copy.autoUpdateGoodreadsProgress ||
                         library.pluginDSReaderHelperWithDefault?.autoUpdateGoodreadsBookShelf != copy.autoUpdateGoodreadsBookShelf ||
                         library.pluginDSReaderHelperWithDefault?._isEnabled != copy._isEnabled {
+                        if let realm = libraryRealm.realm, !helper._isOverride {
+                            try? realm.write { helper._isOverride = true }
+                        }
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = copy
@@ -161,6 +164,9 @@ struct ServerDetailView: View {
                     let copy = CalibreLibraryReadingPosition(value: position)
                     if library.pluginReadingPositionWithDefault?._isEnabled != copy._isEnabled ||
                         library.pluginReadingPositionWithDefault?.readingPositionCN != copy.readingPositionCN {
+                        if let realm = libraryRealm.realm, !position._isOverride {
+                            try? realm.write { position._isOverride = true }
+                        }
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = copy
@@ -170,6 +176,9 @@ struct ServerDetailView: View {
                     let copy = CalibreLibraryDictionaryViewer(value: dict)
                     if library.pluginDictionaryViewerWithDefault?._isEnabled != copy._isEnabled ||
                         library.pluginDictionaryViewerWithDefault?.readingPositionCN != copy.readingPositionCN {
+                        if let realm = libraryRealm.realm, !dict._isOverride {
+                            try? realm.write { dict._isOverride = true }
+                        }
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = copy
@@ -184,6 +193,9 @@ struct ServerDetailView: View {
                        library.pluginGoodreadsSyncWithDefault?.reviewColumnName != copy.reviewColumnName ||
                        library.pluginGoodreadsSyncWithDefault?.readingProgressColumnName != copy.readingProgressColumnName ||
                        library.pluginGoodreadsSyncWithDefault?._isEnabled != copy._isEnabled {
+                        if let realm = libraryRealm.realm, !sync._isOverride {
+                            try? realm.write { sync._isOverride = true }
+                        }
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = copy
@@ -197,6 +209,9 @@ struct ServerDetailView: View {
                         library.pluginCountPagesWithDefault?.fleschKincaidGradeCN != copy.fleschKincaidGradeCN ||
                         library.pluginCountPagesWithDefault?.gunningFogIndexCN != copy.gunningFogIndexCN ||
                         library.pluginCountPagesWithDefault?._isEnabled != copy._isEnabled {
+                        if let realm = libraryRealm.realm, !pages._isOverride {
+                            try? realm.write { pages._isOverride = true }
+                        }
                         copy._isOverride = true
                     }
                     updatedLibrary.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = copy
