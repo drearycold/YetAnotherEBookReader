@@ -71,21 +71,22 @@ extension BookAnnotation {
                     }
                     
                     // Legacy YabrPDFOptionsRealm migration (if any data exists in this realm)
-                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldObject, newObject in
+                    var existingKeys = Set<String>()
+                    migration.enumerateObjects(ofType: PDFOptions.className()) { oldObject, _ in
+                        if let oldObject = oldObject,
+                           let bookId = oldObject["bookId"] as? Int32,
+                           let libraryName = oldObject["libraryName"] as? String {
+                            existingKeys.insert("\(libraryName)_\(bookId)")
+                        }
+                    }
+
+                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldObject, _ in
                         guard let oldObject = oldObject else { return }
                         let bookId = oldObject["bookId"] as? Int32 ?? 0
                         let libraryName = oldObject["libraryName"] as? String ?? ""
+                        let key = "\(libraryName)_\(bookId)"
                         
-                        // Check if already migrated to the new PDFOptions table
-                        var exists = false
-                        migration.enumerateObjects(ofType: PDFOptions.className()) { oldNew, _ in
-                            if let oldNew = oldNew, 
-                               (oldNew["bookId"] as? Int32) == bookId && (oldNew["libraryName"] as? String) == libraryName {
-                                exists = true
-                            }
-                        }
-                        
-                        if !exists {
+                        if !existingKeys.contains(key) {
                             let newObj = migration.create(PDFOptions.className())
                             newObj["_id"] = ObjectId.generate()
                             newObj["bookId"] = bookId
@@ -97,6 +98,7 @@ extension BookAnnotation {
                                         "marginOffset", "lastScale", "rememberInPagePosition"] {
                                 newObj[key] = oldObject[key]
                             }
+                            existingKeys.insert(key)
                         }
                     }
                 }
