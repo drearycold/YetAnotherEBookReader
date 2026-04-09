@@ -12,7 +12,7 @@ import OSLog
 import SwiftUI
 
 @available(macCatalyst 14.0, *)
-class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
+class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, ObservableObject {
     let pdfView = YabrPDFView()
     let pdfViewAux = YabrPDFView()
     
@@ -45,7 +45,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
-    var pdfOptions = PDFOptions() {
+    @Published var pdfOptions = PDFOptions() {
         didSet {
             PDFPageWithBackground.fillColor = pdfOptions.fillColor
             
@@ -381,10 +381,13 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 image: UIImage(systemName: "doc.badge.gearshape"),
                 primaryAction: UIAction { (UIAction) in
                     //self.present(self.optionMenu, animated: true, completion: nil)
-                    let optionView = PDFOptionView(pdfViewController: Binding<YabrPDFViewController>(
-                        get: { return self },
-                        set: { _ in }
-                    ))
+                    let optionView = PDFOptionView(
+                        pdfViewController: Binding<YabrPDFViewController>(
+                            get: { return self },
+                            set: { _ in }
+                        ),
+                        pdfOptions: self.pdfOptions
+                    )
                     
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
                     optionViewController.preferredContentSize = CGSize(width:340, height:700)
@@ -1315,30 +1318,44 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     func handleOptionsChange(pdfOptions: PDFOptions) {
         print(pdfOptions)
-        if self.pdfOptions != pdfOptions {
-            var needRedraw = false
-            if self.pdfOptions.themeMode != pdfOptions.themeMode {
-                needRedraw = true
-            }
-            self.pdfOptions = pdfOptions
-            if needRedraw {
-//                self.pdfView.layoutDocumentView()
-                //self.pdfView.invalidateIntrinsicContentSize()
-                let scaleFactor = self.pdfView.scaleFactor
-                self.pdfView.scaleFactor = 1.0
-                self.pdfView.scaleFactor = scaleFactor
-            }
-            if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
-                self.pageViewPositionHistory[pageNum]?.scaler = 0
-                switch pdfOptions.readingDirection {
-                case .LtR_TtB:
-                    self.pageViewPositionHistory[pageNum]?.point.x = .nan
-                case .TtB_RtL:
-                    self.pageViewPositionHistory[pageNum]?.point.y = .nan
+        
+        let oldOptions = PDFOptions(value: self.pdfOptions)
+        
+        if self.pdfOptions !== pdfOptions {
+            if let realm = self.pdfOptions.realm {
+                try? realm.write {
+                    self.pdfOptions.update(other: pdfOptions)
                 }
+            } else {
+                self.pdfOptions = pdfOptions
+                return
             }
-            handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
+        
+        if oldOptions.pageMode != self.pdfOptions.pageMode || oldOptions.scrollDirection != self.pdfOptions.scrollDirection {
+            updatePageViewPositionHistory()
+        }
+        
+        // Trigger didSet for UI refresh (colors, etc.)
+        self.pdfOptions = self.pdfOptions
+        
+        if oldOptions.themeMode != self.pdfOptions.themeMode {
+//                self.pdfView.layoutDocumentView()
+            //self.pdfView.invalidateIntrinsicContentSize()
+            let scaleFactor = self.pdfView.scaleFactor
+            self.pdfView.scaleFactor = 1.0
+            self.pdfView.scaleFactor = scaleFactor
+        }
+        if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
+            self.pageViewPositionHistory[pageNum]?.scaler = 0
+            switch self.pdfOptions.readingDirection {
+            case .LtR_TtB:
+                self.pageViewPositionHistory[pageNum]?.point.x = .nan
+            case .TtB_RtL:
+                self.pageViewPositionHistory[pageNum]?.point.y = .nan
+            }
+        }
+        handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
     }
     
     func handleAutoScalerChange(autoScaler: PDFAutoScaler, hMarginAutoScaler: Double, vMarginAutoScaler: Double) {

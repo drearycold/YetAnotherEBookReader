@@ -6,11 +6,12 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct PDFOptionView: View {
     @Binding var pdfViewController: YabrPDFViewController
     
-    @StateObject private var pdfOptions = PDFOptions()
+    @ObservedRealmObject var pdfOptions: PDFOptions
     
     var body: some View {
         ScrollView {
@@ -115,9 +116,6 @@ struct PDFOptionView: View {
                 }
             }
             .padding(10)
-            .onAppear() {
-                self.pdfOptions.update(other: self.pdfViewController.pdfOptions)
-            }
             .onChange(of: pdfOptions.themeMode) {_ in handleOptionsChange() }
             .onChange(of: pdfOptions.selectedAutoScaler) {_ in handleOptionsChange() }
             .onChange(of: pdfOptions.pageMode) {_ in handleOptionsChange() }
@@ -142,6 +140,6 @@ struct PDFOptionView_Previews: PreviewProvider {
     @State static var pdfViewController = YabrPDFViewController()
     
     static var previews: some View {
-        PDFOptionView(pdfViewController: $pdfViewController).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
+        PDFOptionView(pdfViewController: $pdfViewController, pdfOptions: PDFOptions()).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
     }
 }
