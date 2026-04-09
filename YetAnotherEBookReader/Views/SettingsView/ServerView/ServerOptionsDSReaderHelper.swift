@@ -13,7 +13,7 @@ struct ServerOptionsDSReaderHelper: View {
     @Environment(\.openURL) var openURL
 
     @Binding var server: CalibreServer
-    @StateObject var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
+    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
     
     @State private var portStr = ""
     @State private var configurationData: Data? = nil
