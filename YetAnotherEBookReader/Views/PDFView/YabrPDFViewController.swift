@@ -1347,7 +1347,16 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     @objc func handleScaleChange(_ sender: Any?)
     {
-        pdfOptions.lastScale = pdfView.scaleFactor
+        let newScale = pdfView.scaleFactor
+        guard abs(pdfOptions.lastScale - newScale) > 0.0001 else { return }
+        
+        if let realm = pdfOptions.realm {
+            try? realm.write {
+                pdfOptions.lastScale = newScale
+            }
+        } else {
+            pdfOptions.lastScale = newScale
+        }
         print("handleScaleChange: \(pdfOptions.lastScale)")
     }
     
