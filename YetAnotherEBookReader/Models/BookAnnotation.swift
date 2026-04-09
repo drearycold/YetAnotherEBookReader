@@ -116,33 +116,38 @@ class BookAnnotation {
                                 serverRealm.add(newObj)
                                 // realm.delete(oldObj)
                             }
-                    case PDFOptionsRealm.className():
-                        individualRealm.objects(PDFOptionsRealm.self)
+                    case PDFOptionsRealm.className(), "YabrPDFOptionsRealm":
+                        individualRealm.objects(objectType.self)
                             .forEach { oldObj in
-                                let bookPrimaryKey = CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: id.description)
-                                guard let bookRealm = serverRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookPrimaryKey) else { return }
+                                let bookId = (oldObj["id"] as? Int32) ?? (oldObj["bookId"] as? Int32) ?? 0
+                                let libraryName = (oldObj["libraryName"] as? String) ?? ""
                                 
-                                guard bookRealm.pdfOptions == nil else { return }
+                                guard serverRealm.objects(PDFOptions.self)
+                                    .where({ $0.bookId == bookId && $0.libraryName == libraryName })
+                                    .isEmpty
+                                else {
+                                    return
+                                }
                                 
                                 let newObj = PDFOptions()
-                                newObj.bookId = oldObj.id
-                                newObj.libraryName = oldObj.libraryName
+                                newObj.bookId = bookId
+                                newObj.libraryName = libraryName
                                 
-                                newObj.themeMode = PDFThemeMode(rawValue: oldObj.themeMode) ?? .serpia
-                                newObj.selectedAutoScaler = PDFAutoScaler(rawValue: oldObj.selectedAutoScaler) ?? .Width
-                                newObj.pageMode = PDFLayoutMode(rawValue: oldObj.pageMode) ?? .Page
-                                newObj.readingDirection = PDFReadDirection(rawValue: oldObj.readingDirection) ?? .LtR_TtB
-                                newObj.scrollDirection = PDFScrollDirection(rawValue: oldObj.scrollDirection) ?? .Vertical
+                                newObj.themeMode = PDFThemeMode(rawValue: (oldObj["themeMode"] as? String) ?? "") ?? .serpia
+                                newObj.selectedAutoScaler = PDFAutoScaler(rawValue: (oldObj["selectedAutoScaler"] as? String) ?? "") ?? .Width
+                                newObj.pageMode = PDFLayoutMode(rawValue: (oldObj["pageMode"] as? String) ?? "") ?? .Page
+                                newObj.readingDirection = PDFReadDirection(rawValue: (oldObj["readingDirection"] as? String) ?? "") ?? .LtR_TtB
+                                newObj.scrollDirection = PDFScrollDirection(rawValue: (oldObj["scrollDirection"] as? String) ?? "") ?? .Vertical
                                 
-                                newObj.hMarginAutoScaler = oldObj.hMarginAutoScaler
-                                newObj.vMarginAutoScaler = oldObj.vMarginAutoScaler
-                                newObj.hMarginDetectStrength = oldObj.hMarginDetectStrength
-                                newObj.vMarginDetectStrength = oldObj.vMarginDetectStrength
-                                newObj.marginOffset = oldObj.marginOffset
-                                newObj.lastScale = oldObj.lastScale
-                                newObj.rememberInPagePosition = oldObj.rememberInPagePosition
+                                newObj.hMarginAutoScaler = (oldObj["hMarginAutoScaler"] as? Double) ?? 5.0
+                                newObj.vMarginAutoScaler = (oldObj["vMarginAutoScaler"] as? Double) ?? 5.0
+                                newObj.hMarginDetectStrength = (oldObj["hMarginDetectStrength"] as? Double) ?? 2.0
+                                newObj.vMarginDetectStrength = (oldObj["vMarginDetectStrength"] as? Double) ?? 2.0
+                                newObj.marginOffset = (oldObj["marginOffset"] as? Double) ?? 0.0
+                                newObj.lastScale = (oldObj["lastScale"] as? Double) ?? 1.0
+                                newObj.rememberInPagePosition = (oldObj["rememberInPagePosition"] as? Bool) ?? true
                                 
-                                bookRealm.pdfOptions = newObj
+                                serverRealm.add(newObj)
                             }
                     case CalibreBookLastReadPositionRealm.className():
                         break   //ignore deprecated types

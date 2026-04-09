@@ -141,8 +141,6 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     
     @Persisted(indexed: true) var inShelf = false
     
-    @Persisted var pdfOptions: PDFOptions?
-    
     func formats() -> [String: FormatInfo] {
         guard let formatsData = formatsData else { return [:] }
         return (try? JSONDecoder().decode([String:FormatInfo].self, from: formatsData)) ?? [:]
@@ -1339,7 +1337,9 @@ extension PDFLayoutMode: PersistableEnum {}
 extension PDFReadDirection: PersistableEnum {}
 extension PDFScrollDirection: PersistableEnum {}
 
-class PDFOptions: EmbeddedObject, ObjectKeyIdentifiable {
+class PDFOptions: Object, ObjectKeyIdentifiable {
+    @Persisted(primaryKey: true) var _id: ObjectId
+    
     @Persisted var bookId: Int32 = 0
     @Persisted var libraryName: String = ""
     

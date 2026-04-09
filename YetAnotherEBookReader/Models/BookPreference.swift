@@ -64,6 +64,42 @@ extension BookAnnotation {
                         newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
                     }
                 }
+                
+                if oldSchemaVersion < 134 {
+                    migration.enumerateObjects(ofType: PDFOptions.className()) { oldObject, newObject in
+                        newObject?["_id"] = ObjectId.generate()
+                    }
+                    
+                    // Legacy YabrPDFOptionsRealm migration (if any data exists in this realm)
+                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldObject, newObject in
+                        guard let oldObject = oldObject else { return }
+                        let bookId = oldObject["bookId"] as? Int32 ?? 0
+                        let libraryName = oldObject["libraryName"] as? String ?? ""
+                        
+                        // Check if already migrated to the new PDFOptions table
+                        var exists = false
+                        migration.enumerateObjects(ofType: PDFOptions.className()) { oldNew, _ in
+                            if let oldNew = oldNew, 
+                               (oldNew["bookId"] as? Int32) == bookId && (oldNew["libraryName"] as? String) == libraryName {
+                                exists = true
+                            }
+                        }
+                        
+                        if !exists {
+                            let newObj = migration.create(PDFOptions.className())
+                            newObj["_id"] = ObjectId.generate()
+                            newObj["bookId"] = bookId
+                            newObj["libraryName"] = libraryName
+                            
+                            // Map all other properties
+                            for key in ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
+                                        "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
+                                        "marginOffset", "lastScale", "rememberInPagePosition"] {
+                                newObj[key] = oldObject[key]
+                            }
+                        }
+                    }
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,
@@ -71,6 +107,7 @@ extension BookAnnotation {
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
                 BookBookmarkRealm.self,
+                PDFOptions.self,
                 ReadiumPreferenceRealm.self
             ]
         )

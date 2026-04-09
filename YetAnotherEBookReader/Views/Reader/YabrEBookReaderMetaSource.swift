@@ -26,21 +26,20 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         self.book = book
         self.readerInfo = readerInfo
         
-        let globalRealm = ModelData.shared?.realm
-        let bookRealm = globalRealm?.object(ofType: CalibreBookRealm.self, forPrimaryKey: book.inShelfId)
+        let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
+        let realm = try! Realm(configuration: realmConfig)
         
-        if let prefObj = bookRealm?.pdfOptions {
+        if let prefObj = realm.objects(PDFOptions.self).where({ $0.bookId == book.id && $0.libraryName == book.library.name }).first {
             self.prefObj = prefObj
         } else {
             let newObj = PDFOptions()
-            // bookId and libraryName might be redundant now but keep them if they are used elsewhere
             newObj.bookId = book.id
             newObj.libraryName = book.library.name
             
-            try? globalRealm?.write {
-                bookRealm?.pdfOptions = newObj
+            try? realm.write {
+                realm.add(newObj)
             }
-            self.prefObj = bookRealm?.pdfOptions ?? newObj
+            self.prefObj = newObj
         }
     }
     
