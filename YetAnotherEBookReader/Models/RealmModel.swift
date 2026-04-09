@@ -75,8 +75,16 @@ class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var primaryKey: String?
     
     @Persisted var key: String?
-    @Persisted var name: String?
-    @Persisted var serverUUID: String?
+    @Persisted var name: String? {
+        didSet {
+            updatePrimaryKey()
+        }
+    }
+    @Persisted var serverUUID: String? {
+        didSet {
+            updatePrimaryKey()
+        }
+    }
     
     func updatePrimaryKey() {
         primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: name ?? "-")

@@ -510,6 +510,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         }
                     }
                 }
+                
+                if oldSchemaVersion < 135 {
+                    // Fix missing primary keys in CalibreLibraryRealm
+                    migration.enumerateObjects(ofType: CalibreLibraryRealm.className()) { oldObject, newObject in
+                        guard let oldObject = oldObject, let newObject = newObject else { return }
+                        let serverUUID = oldObject["serverUUID"] as? String ?? "-"
+                        let libraryName = oldObject["name"] as? String ?? "-"
+                        let primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)
+                        newObject["primaryKey"] = primaryKey
+                    }
+                }
+                
                 BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
