@@ -488,6 +488,18 @@ class CalibreLibraryGoodreadsSync: EmbeddedObject, ObjectKeyIdentifiable, Calibr
                 (reviewColumnName.count > 0 && reviewColumnName != "#"),
                 (readingProgressColumnName.count > 0 && readingProgressColumnName != "#")].filter{$0}.count
     }
+
+    func update(from other: CalibreLibraryGoodreadsSync) {
+        self._isEnabled = other._isEnabled
+        self._isDefault = other._isDefault
+        self._isOverride = other._isOverride
+        self.profileName = other.profileName
+        self.tagsColumnName = other.tagsColumnName
+        self.ratingColumnName = other.ratingColumnName
+        self.dateReadColumnName = other.dateReadColumnName
+        self.reviewColumnName = other.reviewColumnName
+        self.readingProgressColumnName = other.readingProgressColumnName
+    }
 }
 
 class CalibreLibraryCountPages: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
@@ -529,6 +541,17 @@ class CalibreLibraryCountPages: EmbeddedObject, ObjectKeyIdentifiable, CalibreLi
                 (fleschReadingEaseCN.count > 0 && fleschReadingEaseCN != "#"),
                 (fleschKincaidGradeCN.count > 0 && fleschKincaidGradeCN != "#"),
                 (gunningFogIndexCN.count > 0 && gunningFogIndexCN != "#")].filter{$0}.count
+    }
+
+    func update(from other: CalibreLibraryCountPages) {
+        self._isEnabled = other._isEnabled
+        self._isDefault = other._isDefault
+        self._isOverride = other._isOverride
+        self.pageCountCN = other.pageCountCN
+        self.wordCountCN = other.wordCountCN
+        self.fleschReadingEaseCN = other.fleschReadingEaseCN
+        self.fleschKincaidGradeCN = other.fleschKincaidGradeCN
+        self.gunningFogIndexCN = other.gunningFogIndexCN
     }
 }
 
@@ -582,6 +605,13 @@ class CalibreLibraryReadingPosition: EmbeddedObject, ObjectKeyIdentifiable, Cali
     func mappedColumnsCount() -> Int {
         return [(readingPositionCN.count > 0 && readingPositionCN != "#")].filter{$0}.count
     }
+
+    func update(from other: CalibreLibraryReadingPosition) {
+        self._isEnabled = other._isEnabled
+        self._isDefault = other._isDefault
+        self._isOverride = other._isOverride
+        self.readingPositionCN = other.readingPositionCN
+    }
 }
 
 class CalibreLibraryDictionaryViewer: EmbeddedObject, ObjectKeyIdentifiable, CalibreLibraryPluginColumnInfo {
@@ -612,6 +642,13 @@ class CalibreLibraryDictionaryViewer: EmbeddedObject, ObjectKeyIdentifiable, Cal
     
     func mappedColumnsCount() -> Int {
         return (readingPositionCN.count > 0 && readingPositionCN != "#") ? 1 : 0
+    }
+
+    func update(from other: CalibreLibraryDictionaryViewer) {
+        self._isEnabled = other._isEnabled
+        self._isDefault = other._isDefault
+        self._isOverride = other._isOverride
+        self.readingPositionCN = other.readingPositionCN
     }
 }
 
@@ -1254,6 +1291,15 @@ class CalibreLibraryDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable, Calib
     
     func mappedColumnsCount() -> Int {
         return 0
+    }
+
+    func update(from other: CalibreLibraryDSReaderHelper) {
+        self._isEnabled = other._isEnabled
+        self._isDefault = other._isDefault
+        self._isOverride = other._isOverride
+        self.port = other.port
+        self.autoUpdateGoodreadsProgress = other.autoUpdateGoodreadsProgress
+        self.autoUpdateGoodreadsBookShelf = other.autoUpdateGoodreadsBookShelf
     }
 }
 

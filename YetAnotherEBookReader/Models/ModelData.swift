@@ -1136,31 +1136,31 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         // Safely update embedded objects without deleting them to preserve active @ObservedRealmObject UI bindings
         if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] as? CalibreLibraryDSReaderHelper {
             if let existing = libraryRealm.pluginDSReaderHelper {
-                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+                existing.update(from: plugin)
             } else { libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(value: plugin) }
         } else { libraryRealm.pluginDSReaderHelper = nil }
 
         if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] as? CalibreLibraryReadingPosition {
             if let existing = libraryRealm.pluginReadingPosition {
-                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+                existing.update(from: plugin)
             } else { libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(value: plugin) }
         } else { libraryRealm.pluginReadingPosition = nil }
 
         if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] as? CalibreLibraryDictionaryViewer {
             if let existing = libraryRealm.pluginDictionaryViewer {
-                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+                existing.update(from: plugin)
             } else { libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(value: plugin) }
         } else { libraryRealm.pluginDictionaryViewer = nil }
 
         if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] as? CalibreLibraryGoodreadsSync {
             if let existing = libraryRealm.pluginGoodreadsSync {
-                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+                existing.update(from: plugin)
             } else { libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(value: plugin) }
         } else { libraryRealm.pluginGoodreadsSync = nil }
 
         if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] as? CalibreLibraryCountPages {
             if let existing = libraryRealm.pluginCountPages {
-                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+                existing.update(from: plugin)
             } else { libraryRealm.pluginCountPages = CalibreLibraryCountPages(value: plugin) }
         } else { libraryRealm.pluginCountPages = nil }
         
