@@ -219,6 +219,8 @@ struct ServerDetailView: View {
                 
                 modelData.calibreLibraries[library.id] = updatedLibrary
             }
+        } else {
+            Text("Library not found in database.")
         }
     }
     

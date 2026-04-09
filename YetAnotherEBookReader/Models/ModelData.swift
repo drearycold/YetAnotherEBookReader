@@ -1154,30 +1154,37 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         
         libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
         
-        // Clear embedded objects to maintain `nil` fallback state if not overridden in pluginColumns
-        libraryRealm.pluginDSReaderHelper = nil
-        libraryRealm.pluginReadingPosition = nil
-        libraryRealm.pluginDictionaryViewer = nil
-        libraryRealm.pluginGoodreadsSync = nil
-        libraryRealm.pluginCountPages = nil
+        // Safely update embedded objects without deleting them to preserve active @ObservedRealmObject UI bindings
+        if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] as? CalibreLibraryDSReaderHelper {
+            if let existing = libraryRealm.pluginDSReaderHelper {
+                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+            } else { libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(value: plugin) }
+        } else { libraryRealm.pluginDSReaderHelper = nil }
+
+        if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] as? CalibreLibraryReadingPosition {
+            if let existing = libraryRealm.pluginReadingPosition {
+                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+            } else { libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(value: plugin) }
+        } else { libraryRealm.pluginReadingPosition = nil }
+
+        if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] as? CalibreLibraryDictionaryViewer {
+            if let existing = libraryRealm.pluginDictionaryViewer {
+                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+            } else { libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(value: plugin) }
+        } else { libraryRealm.pluginDictionaryViewer = nil }
+
+        if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] as? CalibreLibraryGoodreadsSync {
+            if let existing = libraryRealm.pluginGoodreadsSync {
+                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+            } else { libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(value: plugin) }
+        } else { libraryRealm.pluginGoodreadsSync = nil }
+
+        if let plugin = library.pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] as? CalibreLibraryCountPages {
+            if let existing = libraryRealm.pluginCountPages {
+                for prop in existing.objectSchema.properties { existing[prop.name] = plugin[prop.name] }
+            } else { libraryRealm.pluginCountPages = CalibreLibraryCountPages(value: plugin) }
+        } else { libraryRealm.pluginCountPages = nil }
         
-        library.pluginColumns.forEach {
-            if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
-                libraryRealm.pluginDSReaderHelper = CalibreLibraryDSReaderHelper(value: plugin)
-            }
-            if let plugin = $0.value as? CalibreLibraryReadingPosition {
-                libraryRealm.pluginReadingPosition = CalibreLibraryReadingPosition(value: plugin)
-            }
-            if let plugin = $0.value as? CalibreLibraryDictionaryViewer {
-                libraryRealm.pluginDictionaryViewer = CalibreLibraryDictionaryViewer(value: plugin)
-            }
-            if let plugin = $0.value as? CalibreLibraryGoodreadsSync {
-                libraryRealm.pluginGoodreadsSync = CalibreLibraryGoodreadsSync(value: plugin)
-            }
-            if let plugin = $0.value as? CalibreLibraryCountPages {
-                libraryRealm.pluginCountPages = CalibreLibraryCountPages(value: plugin)
-            }
-        }
         libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
         libraryRealm.hidden = library.hidden
