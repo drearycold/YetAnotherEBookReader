@@ -69,7 +69,12 @@ class YabrShelfDataModel: ObservableObject {
         self.modelData = modelData
         
         dispatchQueue.sync {
-            realmOnQueue = try! Realm(configuration: self.modelData.realm.configuration, queue: dispatchQueue)
+            do {
+                realmOnQueue = try Realm(configuration: self.modelData.realm.configuration, queue: dispatchQueue)
+            } catch {
+                print("Failed to initialize Realm on queue: \(error)")
+                return
+            }
             
             realmOnQueue.objects(CalibreBookRealm.self)
                 .changesetPublisher(keyPaths: ["inShelf"])

@@ -54,7 +54,7 @@ class BookDownloadManager: ObservableObject {
         download.value.downloadTask?.cancel()
         
         if let request = download.value.downloadTask?.originalRequest {
-            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Cancelled")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: download.value.startDatetime, finishDatetime: Date(), errMsg: "Cancelled")
         }
 
         activeDownloads[download.key]?.isDownloading = false
@@ -77,7 +77,7 @@ class BookDownloadManager: ObservableObject {
         })
         
         if let request = download.value.downloadTask?.originalRequest {
-            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Paused")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: download.value.startDatetime, finishDatetime: Date(), errMsg: "Paused")
         }
     }
     
@@ -108,7 +108,7 @@ class BookDownloadManager: ObservableObject {
         activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
         
         if let request = downloadTask.originalRequest {
-            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: Date(), finishDatetime: Date(), errMsg: "Resumed")
+            modelData?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, finishDatetime: Date(), errMsg: "Resumed")
         }
         
         downloadTask.resume()

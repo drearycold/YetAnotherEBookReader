@@ -31,8 +31,8 @@ actor CalibreActivityLogger {
         flushTask = Task {
             // Wait for 1 second to batch activities, similar to Combine's collect
             try? await Task.sleep(nanoseconds: 1_000_000_000)
-            await flush()
             flushTask = nil
+            await flush()
         }
     }
     

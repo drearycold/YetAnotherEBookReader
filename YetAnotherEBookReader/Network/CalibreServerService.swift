@@ -22,6 +22,8 @@ final class CalibreServerService {
         return queue
     }()
     
+    private let sessionsQueue = DispatchQueue(label: "io.github.dsreader.CalibreServerService.sessions")
+    
     init(logger: CalibreActivityLogger, config: CalibreServerConfigProvider, database: DatabaseService) {
         self.logger = logger
         self.config = config
@@ -68,24 +70,21 @@ final class CalibreServerService {
 
     func urlSession(server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> URLSession {
         let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-        if let session = metadataSessions[key] {
-            return session
-        }
-        let urlSessionConfiguration = URLSessionConfiguration.default
-        urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
-        urlSessionConfiguration.timeoutIntervalForRequest = timeout
-        urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
-        let urlSessionDelegate = CalibreServerTaskDelegate(server)
-        let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
         
-        if Thread.isMainThread {
-            metadataSessions[key] = urlSession
-        } else {
-            DispatchQueue.main.sync { [weak self] in
-                self?.metadataSessions[key] = urlSession
+        return sessionsQueue.sync {
+            if let session = metadataSessions[key] {
+                return session
             }
+            let urlSessionConfiguration = URLSessionConfiguration.default
+            urlSessionConfiguration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            urlSessionConfiguration.timeoutIntervalForRequest = timeout
+            urlSessionConfiguration.httpMaximumConnectionsPerHost = 4
+            let urlSessionDelegate = CalibreServerTaskDelegate(server)
+            let urlSession = URLSession(configuration: urlSessionConfiguration, delegate: urlSessionDelegate, delegateQueue: metadataQueue)
+            
+            metadataSessions[key] = urlSession
+            return urlSession
         }
-        return urlSession
     }
     
     func syncLibrary(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) async -> CalibreSyncLibraryResult {
@@ -140,6 +139,9 @@ final class CalibreServerService {
         } catch {
             var result = resultPrev
             result.errmsg = error.localizedDescription
+            Task {
+                await self.logger.logFinishCalibreActivity(type: "Sync Library Books", request: urlRequest, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.errmsg)
+            }
             return result
         }
     }
