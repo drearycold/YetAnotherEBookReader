@@ -41,7 +41,6 @@ struct ActivityList: View {
             filter: predicate,
             sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
         )
-        print("ActivityList initialized with Realm URL: \(activities.realm?.configuration.fileURL?.absoluteString ?? "Unknown")")
     }
     
     init(presenting: Binding<Bool>, libraryId: String? = nil, bookId: Int32? = nil) {
@@ -65,7 +64,6 @@ struct ActivityList: View {
             filter: predicate,
             sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
         )
-        print("ActivityList initialized with Realm URL: \(activities.realm?.configuration.fileURL?.absoluteString ?? "Unknown")")
     }
 
     var body: some View {

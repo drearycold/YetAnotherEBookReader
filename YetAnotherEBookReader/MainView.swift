@@ -42,29 +42,28 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            TabView(selection: $modelData.activeTab) {
-                RecentShelfUI()
-                    .tabItem {
-                        Image(systemName: "doc.text.fill")
-                        Text("Recent")
-                    }
-                    .tag(0)
-                    .onAppear {
-                        modelData.calibreUpdatedSubject.send(.shelf)
-                    }
+            if let realmConf = modelData.realmConf {
+                TabView(selection: $modelData.activeTab) {
+                    RecentShelfUI()
+                        .tabItem {
+                            Image(systemName: "doc.text.fill")
+                            Text("Recent")
+                        }
+                        .tag(0)
+                        .onAppear {
+                            modelData.calibreUpdatedSubject.send(.shelf)
+                        }
+                        
+                    SectionShelfUI()
+                        .tabItem {
+                            Image(systemName: "books.vertical.fill")
+                            Text("Discover")
+                        }
+                        .tag(1)
+                        .onAppear {
+                            modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
+                        }
                     
-                SectionShelfUI()
-                    .tabItem {
-                        Image(systemName: "books.vertical.fill")
-                        Text("Discover")
-                    }
-                    .tag(1)
-                    .onAppear {
-                        modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
-                    }
-                
-//                if let realmConf = modelData.librarySearchManager.cacheRealmConf {
-                if let realmConf = modelData.realmConf {
                     LibraryInfoView()
                         .tabItem {
                             Image(systemName: "building.columns.fill")
@@ -72,26 +71,22 @@ struct MainView: View {
                         }
                         .tag(2)
                         .environment(\.realmConfiguration, realmConf)
-                } else {
-                    EmptyView()
-                        .tabItem {
-                            Image(systemName: "building.columns.fill")
-                            Text("Browse")
-                        }
-                        .tag(2)
+                    
+                    NavigationView {
+                        SettingsView()
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
+                    .environment(\.realmConfiguration, realmConf)
+                    .tabItem {
+                        Image(systemName: "gearshape.fill")
+                        Text("Settings")
+                    }
+                    .tag(3)
                 }
-                
-                NavigationView {
-                    SettingsView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
-                .tabItem {
-                    Image(systemName: "gearshape.fill")
-                    Text("Settings")
-                }
-                .tag(3)
+            } else {
+                Color.clear
             }
+            
             if modelData.activeTab < 1 && modelData.realm != nil && modelData.booksInShelf.isEmpty {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {
