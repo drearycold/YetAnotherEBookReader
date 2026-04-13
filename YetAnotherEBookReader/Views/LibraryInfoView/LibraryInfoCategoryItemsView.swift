@@ -107,7 +107,9 @@ struct LibraryInfoCategoryItemsView: View {
                             thawed.generation = .distantPast
                         }
                         
-                        modelData.syncLibrarySubject.send(.init(library: library, autoUpdateOnly: true, incremental: true))
+                        Task {
+                            await modelData.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
+                        }
                     }
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")

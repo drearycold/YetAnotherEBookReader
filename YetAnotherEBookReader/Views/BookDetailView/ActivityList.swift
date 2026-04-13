@@ -4,21 +4,72 @@
 //
 //  Created by 京太郎 on 2021/11/1.
 //
-
 import SwiftUI
+import RealmSwift
 
 struct ActivityList: View {
     @EnvironmentObject var modelData: ModelData
-    
+
     @Binding var presenting: Bool
-    
+
     var libraryId: String? = nil
     var bookId: Int32? = nil
+
+    @ObservedResults(
+        CalibreActivityLogEntry.self,
+        sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+    ) var activities
+
+    init(presenting: Bool? = nil, libraryId: String? = nil, bookId: Int32? = nil) {
+        self._presenting = Binding<Bool>(get: { presenting ?? false }, set: { _ in })
+        self.libraryId = libraryId
+        self.bookId = bookId
+        
+        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
+        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
+        
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
+            } else {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
+            }
+        }
+        
+        _activities = ObservedResults(
+            CalibreActivityLogEntry.self,
+            filter: predicate,
+            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+        )
+    }
     
+    init(presenting: Binding<Bool>, libraryId: String? = nil, bookId: Int32? = nil) {
+        self._presenting = presenting
+        self.libraryId = libraryId
+        self.bookId = bookId
+        
+        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
+        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
+        
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
+            } else {
+                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
+            }
+        }
+        
+        _activities = ObservedResults(
+            CalibreActivityLogEntry.self,
+            filter: predicate,
+            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
+        )
+    }
+
     var body: some View {
         List {
-            ForEach(modelData.listCalibreActivities(libraryId: libraryId, bookId: bookId), id: \.self) { obj in
-                NavigationLink(destination: detail(obj: obj), label: {
+            ForEach(activities, id: \.self) { obj in
+                NavigationLink(destination: ActivityDetailView(obj: obj), label: {
                     row(obj: obj)
                 })
             }
@@ -71,9 +122,13 @@ struct ActivityList: View {
             }.font(.caption)
         }
     }
+}
+
+struct ActivityDetailView: View {
+    @EnvironmentObject var modelData: ModelData
+    var obj: CalibreActivityLogEntry
     
-    @ViewBuilder
-    private func detail(obj: CalibreActivityLogEntry) -> some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 if let libraryId = obj.libraryId,

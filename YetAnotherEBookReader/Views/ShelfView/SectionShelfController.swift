@@ -95,10 +95,10 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
                 y: shelfView.frame.maxY,
                 width:  GADAdSizeBanner.size.width,
                 height: GADAdSizeBanner.size.height))
-        bannerView.adUnitID = modelData.yabrGADBannerShelfUnitID
+        bannerView.adUnitID = YabrAppInfo.shared.gadBannerShelfUnitID
 
         #if DEBUG
-        if let yabrGADDeviceIdentifierTest = modelData.yabrGADDeviceIdentifierTest {
+        if let yabrGADDeviceIdentifierTest = YabrAppInfo.shared.gadDeviceIdentifierTest {
             GADMobileAds.sharedInstance().requestConfiguration.testDeviceIdentifiers = [ yabrGADDeviceIdentifierTest ]
         }
         #endif
@@ -571,7 +571,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
 
-            self.modelData.bookFormatDownloadSubject.send((book: book, format: format))
+            self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     

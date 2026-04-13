@@ -962,6 +962,21 @@ struct BookDeviceReadingPositionHistory : Hashable, Codable {
     }
 }
 
+extension BookDeviceReadingPositionHistory {
+    static func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
+        let result = list.reduce(into: [Double].init(repeating: 0.0, count: limitDays+1) ) { result, history in
+            guard let epoch = history.endPosition?.epoch, epoch > history.startDatetime.timeIntervalSince1970 else { return }
+            let duration = epoch - history.startDatetime.timeIntervalSince1970
+            let readDayDate = Calendar.current.startOfDay(for: history.startDatetime)
+            let nowDayDate = Calendar.current.startOfDay(for: Date())
+            let offset = limitDays - Int(floor(nowDayDate.timeIntervalSince(readDayDate) / 86400.0))
+            if offset < 0 || offset > limitDays { return }
+            result[offset] += duration / 60
+        }
+        return result
+    }
+}
+
 struct BookBookmark {
     let bookId: String
     let page: Int
@@ -1563,6 +1578,7 @@ struct CalibreBookSetLastReadPositionTask {
     var urlRequest: URLRequest
     var urlResponse: URLResponse?
     var data: Data?
+    let startDatetime: Date
 }
 
 struct CalibreBookUpdateAnnotationsTask {
@@ -2238,4 +2254,20 @@ extension Array {
             Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
+}
+
+protocol CalibreServerConfigProvider: AnyObject {
+    var deviceName: String { get }
+    var calibreLibraries: [String: CalibreLibrary] { get }
+    var librarySyncStatus: [String: CalibreSyncStatus] { get set }
+    var calibreServerInfoStaging: [String: CalibreServerInfo] { get }
+    
+    var updatingMetadata: Bool { get set }
+    var updatingMetadataStatus: String { get set }
+    var updatingMetadataSucceed: Bool { get set }
+    
+    func updateBook(book: CalibreBook)
+    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm?
+    func refreshShelfMetadataV2(with servers: Set<String>, for books: Set<String>, serverReachableChanged: Bool)
+    func getPreferredFormat(for book: CalibreBook) -> Format?
 }

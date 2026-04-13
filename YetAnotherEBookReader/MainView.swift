@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 import AppTrackingTransparency
+import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -17,6 +18,7 @@ import UserMessagingPlatform
 @available(macCatalyst 14.0, *)
 struct MainView: View {
     @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
 
     @State private var alertItem: AlertItem?
@@ -40,29 +42,28 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            TabView(selection: $modelData.activeTab) {
-                RecentShelfUI()
-                    .tabItem {
-                        Image(systemName: "doc.text.fill")
-                        Text("Recent")
-                    }
-                    .tag(0)
-                    .onAppear {
-                        modelData.calibreUpdatedSubject.send(.shelf)
-                    }
+            if let realmConf = modelData.realmConf {
+                TabView(selection: $modelData.activeTab) {
+                    RecentShelfUI()
+                        .tabItem {
+                            Image(systemName: "doc.text.fill")
+                            Text("Recent")
+                        }
+                        .tag(0)
+                        .onAppear {
+                            modelData.calibreUpdatedSubject.send(.shelf)
+                        }
+                        
+                    SectionShelfUI()
+                        .tabItem {
+                            Image(systemName: "books.vertical.fill")
+                            Text("Discover")
+                        }
+                        .tag(1)
+                        .onAppear {
+                            modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
+                        }
                     
-                SectionShelfUI()
-                    .tabItem {
-                        Image(systemName: "books.vertical.fill")
-                        Text("Discover")
-                    }
-                    .tag(1)
-                    .onAppear {
-                        modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
-                    }
-                
-//                if let realmConf = modelData.librarySearchManager.cacheRealmConf {
-                if let realmConf = modelData.realmConf {
                     LibraryInfoView()
                         .tabItem {
                             Image(systemName: "building.columns.fill")
@@ -70,25 +71,22 @@ struct MainView: View {
                         }
                         .tag(2)
                         .environment(\.realmConfiguration, realmConf)
-                } else {
-                    EmptyView()
-                        .tabItem {
-                            Image(systemName: "building.columns.fill")
-                            Text("Browse")
-                        }
-                        .tag(2)
+                    
+                    NavigationView {
+                        SettingsView()
+                    }
+                    .navigationViewStyle(StackNavigationViewStyle())
+                    .environment(\.realmConfiguration, realmConf)
+                    .tabItem {
+                        Image(systemName: "gearshape.fill")
+                        Text("Settings")
+                    }
+                    .tag(3)
                 }
-                
-                NavigationView {
-                    SettingsView()
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
-                .tabItem {
-                    Image(systemName: "gearshape.fill")
-                    Text("Settings")
-                }
-                .tag(3)
+            } else {
+                Color.clear
             }
+            
             if modelData.activeTab < 1 && modelData.realm != nil && modelData.booksInShelf.isEmpty {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {
@@ -123,8 +121,8 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $modelData.presentingEBookReaderFromShelf) {
-            if let book = modelData.readingBook, let readerInfo = modelData.readerInfo {
+        .fullScreenCover(isPresented: $sessionManager.presentingEBookReaderFromShelf) {
+            if let book = sessionManager.readingBook, let readerInfo = sessionManager.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {
                 NavigationView {
@@ -132,7 +130,7 @@ struct MainView: View {
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button(action: {
-                                    modelData.presentingEBookReaderFromShelf = false
+                                    sessionManager.presentingEBookReaderFromShelf = false
                                 }) {
                                     Image(systemName: "xmark")
                                 }
@@ -190,18 +188,18 @@ struct MainView: View {
                     (Dismissing this notice means you will accept.")
                     """)
                 
-                if let yabrPrivacyHtml = modelData.yabrPrivacyHtml {
+                if let yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml {
                     Button(action: { privacyWebViewPresenting = true }) {
                         Text("Private Policy")
                     }.sheet(isPresented: $privacyWebViewPresenting) {
-                        WebViewUI(content: yabrPrivacyHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: yabrPrivacyHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
-                if let yabrTermsHtml = modelData.yabrTermsHtml {
+                if let yabrTermsHtml = YabrAppInfo.shared.termsHtml {
                     Button(action: { termsWebViewPresenting = true }) {
                         Text("Terms & Conditions")
                     }.sheet(isPresented: $termsWebViewPresenting) {
-                        WebViewUI(content: yabrTermsHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: yabrTermsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
                 
@@ -241,9 +239,9 @@ struct MainView: View {
                             guard let localLibrary = modelData.localLibrary else { return }
                             let book = CalibreBook(id: bookId, library: localLibrary)
                             modelData.readingBookInShelfId = book.inShelfId
-                            guard modelData.readingBook != nil, modelData.readerInfo != nil else { return }
+                            guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
 
-                            modelData.presentingEBookReaderFromShelf = true
+                            sessionManager.presentingEBookReaderFromShelf = true
                         }),
                         .cancel()
                     ]
@@ -291,7 +289,7 @@ struct MainView: View {
             
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
-                modelData.presentingEBookReaderFromShelf = false
+                sessionManager.presentingEBookReaderFromShelf = false
                 positionActionPresenting = false
             }
 
@@ -415,6 +413,7 @@ struct MainView_Previews: PreviewProvider {
     static var previews: some View {
         MainView()
             .environmentObject(modelData)
+            .environmentObject(modelData.sessionManager)
         // ReaderView()
     }
 }

@@ -72,7 +72,9 @@ struct ServerDetailView: View {
                         
                         self.modelData.calibreUpdatedSubject.send(.library(library))
                         
-                        self.modelData.removeLibrarySubject.send(library)
+                        Task {
+                            await self.modelData.removeLibrary(library: library)
+                        }
                     }
                     updateLibraryList()
                 })

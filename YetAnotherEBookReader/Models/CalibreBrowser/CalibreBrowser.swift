@@ -166,6 +166,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     }
     
     private let service: CalibreServerService
+    private let modelData: ModelData
     
     private var cacheSearchLibraryObjects = [LibrarySearchKey: ObjectId]()
     private(set) var cacheSearchLibraryRuntime = [LibrarySearchKey: CalibreLibrarySearchRuntime]()
@@ -198,13 +199,14 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     private let logger = Logger()
     
-    init(service: CalibreServerService) {
+    init(service: CalibreServerService, modelData: ModelData) {
         self.service = service
-        self.cacheRealmConf = service.modelData.realmConf
+        self.modelData = modelData
+        self.cacheRealmConf = modelData.realmConf
         
         /*
         var cacheRealmConf = Realm.Configuration()
-        cacheRealmConf.schemaVersion = UInt64(service.modelData.yabrBuild) ?? 1
+        cacheRealmConf.schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
         cacheRealmConf.fileURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true).appendingPathComponent("cache.realm")
         
         
@@ -487,7 +489,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
                 
                 //trigger book metadata fetcher
-                guard let library = self.service.modelData.calibreLibraries[librarySearchKey.libraryId]
+                guard let library = self.modelData.calibreLibraries[librarySearchKey.libraryId]
                 else {
                     return (nil, [])
                 }
@@ -561,7 +563,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                     break
                 }
                 
-                guard self.service.modelData.calibreLibraries[librarySearchKey.libraryId] != nil
+                guard self.modelData.calibreLibraries[librarySearchKey.libraryId] != nil
                 else {
                     return
                 }
@@ -677,7 +679,7 @@ class CalibreLibrarySearchManager: ObservableObject {
             cacheObj.unifiedOffsets.forEach {
                 //                print("\(#function) \($0.key) \($0.value?.description ?? "nil")")
                 guard merged,
-                      let library = self.service.modelData.calibreLibraries[$0.key],
+                      let library = self.modelData.calibreLibraries[$0.key],
                       library.hidden == false,
                       library.server.removed == false,
                       let unifiedOffset = $0.value,
@@ -784,7 +786,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
             }
             .map { [self] searchKey, cacheObj -> LibrarySearchKey in
-                guard let library = service.modelData.calibreLibraries[cacheObj.libraryId]
+                guard let library = modelData.calibreLibraries[cacheObj.libraryId]
                 else {
                     return searchKey
                 }
@@ -1033,7 +1035,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 
                 try? self.cacheRealm.write {
                     print("\(#function) start=\(dateFormatter.string(from: .now))")
-                    let searchResults: [String: CalibreLibrarySearchObject] = self.service.modelData.calibreLibraries.reduce(into: [:]) { partialResult, libraryEntry in
+                    let searchResults: [String: CalibreLibrarySearchObject] = self.modelData.calibreLibraries.reduce(into: [:]) { partialResult, libraryEntry in
                         guard libraryEntry.value.hidden == false,
                               libraryEntry.value.server.removed == false,
                               mergedKey.libraryIds.isEmpty || mergedKey.libraryIds.contains(libraryEntry.key)
@@ -1094,7 +1096,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 mergedObj.unifiedOffsets.forEach { unifiedOffsetEntry in
                     guard let unifiedOffsetObject = unifiedOffsetEntry.value,
                           unifiedOffsetObject.beenCutOff == true,
-                          let library = self.service.modelData.calibreLibraries[unifiedOffsetEntry.key]
+                          let library = self.modelData.calibreLibraries[unifiedOffsetEntry.key]
                     else { return }
                     
                     let searchKey = LibrarySearchKey(libraryId: unifiedOffsetEntry.key, criteria: mergedKey.criteria)
@@ -1265,7 +1267,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 let nameItems = self.cacheCategoryLibraryObjects.filter {
                     $0.key.categoryName == categoryKey.categoryName
                 }.filter {
-                    guard let library = self.service.modelData.calibreLibraries[$0.key.libraryId],
+                    guard let library = self.modelData.calibreLibraries[$0.key.libraryId],
                           library.hidden == false,
                           library.server.removed == false
                     else {
@@ -1351,7 +1353,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
         
-        self.service.modelData.calibreUpdatedSubject.receive(on: cacheRealmQueue)
+        self.modelData.calibreUpdatedSubject.receive(on: cacheRealmQueue)
             .compactMap({ calibreUpdatedSignal -> (library: CalibreLibrary, lastModified: Date)? in
                 switch calibreUpdatedSignal {
                 case .library(let library):
@@ -1433,7 +1435,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                     }
                 }
 
-                self.service.modelData.calibreUpdatedSubject.send(.library(library))
+                self.modelData.calibreUpdatedSubject.send(.library(library))
             })
             .store(in: &cancellables)
     }
@@ -1529,7 +1531,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                     libraryIds.isEmpty || libraryIds.contains(key.libraryId)
                 })
                 .filter({ key, value in
-                    guard let library = self.service.modelData.calibreLibraries[key.libraryId],
+                    guard let library = self.modelData.calibreLibraries[key.libraryId],
                           let object = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: value)
                     else {
                         return false
@@ -1662,7 +1664,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         
         var heads = mergedObj.unifiedOffsets.compactMap { unifiedOffsetEntry -> (CalibreUnifiedOffsets, CalibreLibrarySearchValueObject)? in
             
-            guard let library = service.modelData.calibreLibraries[unifiedOffsetEntry.key],
+            guard let library = modelData.calibreLibraries[unifiedOffsetEntry.key],
                   let unifiedOffset = unifiedOffsetEntry.value
             else {
                 fatalError("Shouldn't missing unifiedOffset")
@@ -1675,15 +1677,15 @@ class CalibreLibrarySearchManager: ObservableObject {
             
             guard let sourceEntry = searchObj.sources.filter({
                 if $0.key == library.server.publicUrl.replacingOccurrences(of: ".", with: "_"),
-                    service.modelData.isServerReachable(server: library.server, isPublic: true) == true {
+                    modelData.isServerReachable(server: library.server, isPublic: true) == true {
                     return true
                 }
                 if $0.key == library.server.baseUrl.replacingOccurrences(of: ".", with: "_"),
-                    service.modelData.isServerReachable(server: library.server, isPublic: false) == true {
+                    modelData.isServerReachable(server: library.server, isPublic: false) == true {
                     return true
                 }
                 if $0.key == URL(fileURLWithPath: "/realm").absoluteString,
-                   service.modelData.isServerReachable(server: library.server) == false {
+                   modelData.isServerReachable(server: library.server) == false {
                     return true
                 }
                 return false
@@ -2106,7 +2108,7 @@ extension CalibreServerService {
                 }
             }
             
-            if let realm = try? Realm(configuration: modelData.realmConf) {
+            if let realm = try? Realm(configuration: database.realmConf) {
                 let allbooks = realm.objects(CalibreBookRealm.self)
                     .filter(libraryPredicate)
                     .sorted(byKeyPath: task.searchCriteria.sortCriteria.by.sortKeyPath, ascending: task.searchCriteria.sortCriteria.ascending)

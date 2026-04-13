@@ -36,17 +36,17 @@ struct SupportInfoView: View {
         List {
             Section {
                 
-                if let privacyHtml = modelData.yabrPrivacyHtml {
+                if let privacyHtml = YabrAppInfo.shared.privacyHtml {
                     NavigationLink {
-                        WebViewUI(content: privacyHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: privacyHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     } label: {
                         Text("Private Policy")
                     }
                 }
                 
-                if let termsHtml = modelData.yabrTermsHtml {
+                if let termsHtml = YabrAppInfo.shared.termsHtml {
                     NavigationLink {
-                        WebViewUI(content: termsHtml, baseURL: modelData.yabrBaseUrl)
+                        WebViewUI(content: termsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     } label: {
                         Text("Terms & Conditions")
                     }
@@ -54,7 +54,7 @@ struct SupportInfoView: View {
                 
                 if let yabrVersionHtml = self.yabrVersionHtml {
                     NavigationLink {
-                        WebViewUI(content: yabrVersionHtml, baseURL: modelData.yabrBaseUrl?.appendingPathComponent("releases"))
+                        WebViewUI(content: yabrVersionHtml, baseURL: YabrAppInfo.shared.baseUrl?.appendingPathComponent("releases"))
                     } label: {
                         Text("Version History")
                     }
@@ -115,10 +115,10 @@ struct SupportInfoView: View {
             }
             
             Section {
-                if let issueURL = modelData.yabrNewIssueUrl {
+                if let issueURL = YabrAppInfo.shared.newIssueUrl {
                     linkButtonBuilder(title: "Report an Issue", url: issueURL).padding()
                 }
-                if let enhancementURL = modelData.yabrNewEnhancementUrl {
+                if let enhancementURL = YabrAppInfo.shared.newEnhancementUrl {
                     linkButtonBuilder(title: "Suggestion & Request", url: enhancementURL).padding()
                 }
             }
@@ -126,9 +126,9 @@ struct SupportInfoView: View {
         .navigationTitle("Support")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            self.yabrPrivacyHtml = modelData.yabrPrivacyHtml
-            self.yabrTermsHtml = modelData.yabrTermsHtml
-            self.yabrVersionHtml = modelData.yabrVersionHtml
+            self.yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml
+            self.yabrTermsHtml = YabrAppInfo.shared.termsHtml
+            self.yabrVersionHtml = YabrAppInfo.shared.versionHtml
         }
         .alert(isPresented: $showAlert) {
             Alert(

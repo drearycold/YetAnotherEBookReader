@@ -10,6 +10,7 @@ import Combine
 
 struct ReaderOptionsView: View {
     @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var fontsManager: FontsManager
 
     @State private var optionsHelpFormat = false
     @State private var optionsHelpReader = false
@@ -90,21 +91,21 @@ struct ReaderOptionsView: View {
             }) {
                 HStack {
                     Text("Loaded")
-                    Text("\(modelData.userFontInfos.count)")
+                    Text("\(fontsManager.userFontInfos.count)")
                     Text("font(s)")
                     Spacer()
                     
                     Button(action:{
-                        fontsCount = modelData.userFontInfos.count
+                        fontsCount = fontsManager.userFontInfos.count
                         fontsDetailPresenting = true
                     }) {
                         Text("View")
                     }
-                    .disabled(modelData.userFontInfos.isEmpty)
+                    .disabled(fontsManager.userFontInfos.isEmpty)
                     .buttonStyle(.borderless)
                     .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
                         fontsDetailPresenting = false
-                        let newCount = modelData.userFontInfos.count
+                        let newCount = fontsManager.userFontInfos.count
                         let deletedCount = fontsCount - newCount
                         if deletedCount > 0 {
                             fontsImportNotice = "Deleted \(deletedCount) font(s)"
@@ -114,7 +115,7 @@ struct ReaderOptionsView: View {
                         NavigationView {
                             List {
                                 ForEach(
-                                    modelData.userFontInfos.sorted {
+                                    fontsManager.userFontInfos.sorted {
                                             ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
                                         } , id: \.key ) { (fontId, fontInfo) in
                                     NavigationLink(destination: FontPreviewBuilder(fontId: fontId, fontInfo: fontInfo)) {
@@ -138,7 +139,7 @@ struct ReaderOptionsView: View {
                 })
                 
                 Button(action:{
-                    fontsCount = modelData.userFontInfos.count
+                    fontsCount = fontsManager.userFontInfos.count
                     fontsFolderPresenting = true
                 }) {
                     Text("Import Fonts")
@@ -154,12 +155,12 @@ struct ReaderOptionsView: View {
                         print("documentPicker \($0.absoluteString)")
                     }
                     fontsImportNotice = ""
-                    guard let imported = modelData.importCustomFonts(urls: urls) else {
+                    guard let imported = fontsManager.importCustomFonts(urls: urls) else {
                         fontsImportNotice = "Error occured during import"
                         return
                     }
-                    modelData.reloadCustomFonts()
-                    let newCount = modelData.userFontInfos.count
+                    fontsManager.reloadCustomFonts()
+                    let newCount = fontsManager.userFontInfos.count
                     let deletedCount = fontsCount + imported.count - newCount
                     if imported.count > 0 {
                         fontsImportNotice = "Successfully imported \(imported.count) font(s)"
@@ -273,15 +274,18 @@ struct ReaderOptionsView: View {
     
     
     func removeFontRows(at offsets: IndexSet) {
-        modelData.removeCustomFonts(at: offsets)
-        modelData.reloadCustomFonts()
+        fontsManager.removeCustomFonts(at: offsets)
+        fontsManager.reloadCustomFonts()
     }
 }
 
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {
+        let modelData = ModelData()
         NavigationView {
-            ReaderOptionsView().environmentObject(ModelData())
+            ReaderOptionsView()
+                .environmentObject(modelData)
+                .environmentObject(modelData.fontsManager)
         }.navigationViewStyle(StackNavigationViewStyle())
     }
 }

@@ -47,6 +47,7 @@ class YabrShelfDataModel: ObservableObject {
     }
     private let service: CalibreServerService
     private let searchManager: CalibreLibrarySearchManager
+    private let modelData: ModelData
     
     @Published var categories: Set<CategoryObject> = []
     
@@ -62,12 +63,13 @@ class YabrShelfDataModel: ObservableObject {
     
     var realmOnQueue: Realm!
     
-    init(service: CalibreServerService, searchManager: CalibreLibrarySearchManager) {
+    init(service: CalibreServerService, searchManager: CalibreLibrarySearchManager, modelData: ModelData) {
         self.service = service
         self.searchManager = searchManager
+        self.modelData = modelData
         
         dispatchQueue.sync {
-            realmOnQueue = try! Realm(configuration: self.service.modelData.realm.configuration, queue: dispatchQueue)
+            realmOnQueue = try! Realm(configuration: self.modelData.realmConf, queue: dispatchQueue)
             
             realmOnQueue.objects(CalibreBookRealm.self)
                 .changesetPublisher(keyPaths: ["inShelf"])
@@ -265,10 +267,10 @@ class YabrShelfDataModel: ObservableObject {
         let sectionShelf: [ShelfModel] = category.unifiedSearchObject?.books.map {
             var coverSource = ""
             if let serverUUID = $0.serverUUID,
-               let server = self.service.modelData.calibreServers[serverUUID],
+               let server = self.modelData.calibreServers[serverUUID],
                let serverUrl = service.getServerUrlByReachability(server: server) ?? URL(string: server.serverUrl),
                let libraryName = $0.libraryName,
-               let library = self.service.modelData.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] {
+               let library = self.modelData.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] {
                 
                 var coverRelativeURLComponent = URLComponents()
                 coverRelativeURLComponent.path = "get/thumb/\($0.idInLib)/\(library.key)"
@@ -345,13 +347,13 @@ extension ModelData {
                         } else {
                             missingFormats.forEach {
                                 guard let format = Format(rawValue: $0.key) else { return }
-                                self.bookFormatDownloadSubject.send((book: book, format: format))
+                                self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
                             }
                             
                             if !bookUptoDate {
                                 bookStatus = .HASUPDATE
                             }
-                            if self.activeDownloads.contains(where: { (url, download) in
+                            if self.downloadManager.activeDownloads.contains(where: { (url, download) in
                                 download.isDownloading && download.book.inShelfId == inShelfId
                             }) {
                                 bookStatus = .DOWNLOADING

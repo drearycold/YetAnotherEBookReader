@@ -34,7 +34,7 @@ struct AddModServerView: View {
     
     @State private var libraryList = [String]()
     
-    @State private var probeServerResultCancellable: AnyCancellable? = nil
+    @State private var isProbing = false
     
     @State private var calibreServerInfo: CalibreServerInfo? = nil
 
@@ -194,13 +194,13 @@ struct AddModServerView: View {
                 Button(action:{
                     processInputAction()
                 }) {
-                    if self.probeServerResultCancellable != nil {
+                    if isProbing {
                         ProgressView().progressViewStyle(.circular)
                     } else {
                         Image(systemName: "square.and.arrow.down")
                     }
                 }
-                .disabled(self.probeServerResultCancellable != nil)
+                .disabled(isProbing)
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -208,7 +208,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
-                .disabled(modelData.isServerProbing(server: server))
+                .disabled(isProbing || modelData.isServerProbing(server: server))
             }
         }
         
@@ -541,9 +541,7 @@ struct AddModServerView: View {
 //            alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
 //        }
         
-        enableProbeServerCancellable()
-        
-        modelData.probeServerSubject.send(.init(server: calibreServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
+        performProbeServer(server: calibreServer)
     }
     
     private func addServerConfirmed() {
@@ -612,8 +610,7 @@ struct AddModServerView: View {
 //                alertItem = AlertItem(id: "Unexpected Error", msg: "Failed to connect to server")
 //            }
             
-            enableProbeServerCancellable()
-            modelData.probeServerSubject.send(.init(server: newServer, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
+            performProbeServer(server: newServer)
     }
     
     private func modServerConfirmed() {
@@ -631,28 +628,31 @@ struct AddModServerView: View {
         isActive = false
     }
     
-    private func enableProbeServerCancellable() {
-        self.probeServerResultCancellable = modelData.probeServerResultSubject
-            .receive(on: DispatchQueue.main)
-            .sink { serverInfo in
-                serverInfo.libraryMap
-                    .map {
-                        self.modelData.probeLibrarySubject.send(.init(library: .init(server: serverInfo.request.server, key: $0.key, name: $0.value)))
-                        return $0
+    private func performProbeServer(server: CalibreServer) {
+        isProbing = true
+        Task {
+            let serverInfo = await modelData.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
+            
+            await MainActor.run {
+                if let serverInfo = serverInfo {
+                    serverInfo.libraryMap.forEach { key, name in
+                        Task {
+                            await modelData.probeLibrary(request: .init(library: .init(server: serverInfo.request.server, key: key, name: name)))
+                        }
+                        if calibreLibraryOptions[key] == nil {
+                            calibreLibraryOptions[key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
+                        }
                     }
-                    .filter {
-                        calibreLibraryOptions[$0.key] == nil
-                    }.forEach {
-                        calibreLibraryOptions[$0.key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
-                    }
-                self.calibreServerInfo = serverInfo
+                    self.calibreServerInfo = serverInfo
+                }
+                isProbing = false
             }
+        }
     }
     
     private func disableProbeServerCancellable() {
-        self.probeServerResultCancellable?.cancel()
-        self.probeServerResultCancellable = nil
         self.calibreServerInfo = nil
+        self.isProbing = false
     }
 }
 

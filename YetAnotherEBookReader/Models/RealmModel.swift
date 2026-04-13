@@ -636,22 +636,23 @@ extension CalibreLibraryDictionaryViewer: Persistable {
     }
 }
 
-class CalibreActivityLogEntry: Object {
-    @objc dynamic var type: String?
+class CalibreActivityLogEntry: Object, Identifiable {
+    @Persisted(primaryKey: true) var id = UUID().uuidString
+    @Persisted var type: String?
     
-    @objc dynamic var startDatetime = Date.distantPast
-    @objc dynamic var finishDatetime: Date?
+    @Persisted var startDatetime = Date.distantPast
+    @Persisted var finishDatetime: Date?
     
     //book or library, not both
-    @objc dynamic var bookId: Int32 = 0
-    @objc dynamic var libraryId: String?
+    @Persisted var bookId: Int32 = 0
+    @Persisted var libraryId: String?
     
-    @objc dynamic var endpoingURL: String?
-    @objc dynamic var httpMethod: String?
-    @objc dynamic var httpBody: Data?       //if any
-    let requestHeaders = List<String>()     //key1, value1, key2, value2, ...
+    @Persisted var endpoingURL: String?
+    @Persisted var httpMethod: String?
+    @Persisted var httpBody: Data?       //if any
+    @Persisted var requestHeaders = List<String>()     //key1, value1, key2, value2, ...
     
-    @objc dynamic var errMsg: String?
+    @Persisted var errMsg: String?
     
     var startDateByLocale: String? {
         let dateFormatter = DateFormatter()

@@ -103,16 +103,16 @@ struct SettingsView: View {
             
             Section(header: Text("More")) {
                 NavigationLink("Readers Options", destination: ReaderOptionsView())
-                NavigationLink("Reading Statistics", destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: nil, bookId: nil))
-                NavigationLink("Activity Logs", destination: ActivityList(presenting: Binding<Bool>(get: { false }, set: { _ in } )))
+                NavigationLink("Reading Statistics", destination: LazyView(ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: nil, bookId: nil)))
+                NavigationLink("Activity Logs", destination: LazyView(ActivityList(presenting: Binding<Bool>(get: { false }, set: { _ in } ))))
             }
             
             Section(
                 header: Text("Support"),
                 footer: HStack {
                     Spacer()
-                    Text("Version \(modelData.yarbVersion)")
-                    Text("Build \(modelData.yabrBuild)")
+                    Text("Version \(YabrAppInfo.shared.version)")
+                    Text("Build \(YabrAppInfo.shared.build)")
                     Spacer()
                 }
                 .font(.caption)
@@ -329,10 +329,11 @@ struct SettingsView: View {
         if let server = modelData.calibreServers[server.id] {
             try? modelData.updateServerRealm(server: server)
         }
-        self.modelData.removeServerSubject.send(server)
-        
-        serverListDelete = nil
-    }
+        Task {
+            await self.modelData.removeServer(server: server)
+        }
+
+        serverListDelete = nil    }
     
 }
 

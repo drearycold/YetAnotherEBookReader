@@ -61,13 +61,15 @@ struct BookDetailView: View {
                 viewContent(book: book, isCompat: sizeClass == .compact)
                     .onAppear() {
                         //                        modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
-                        modelData.getBooksMetadataSubject.send(
-                            .init(
-                                library: book.library,
-                                books: [book.id],
-                                getAnnotations: true
+                        Task {
+                            await modelData.getBooksMetadata(
+                                request: .init(
+                                    library: book.library,
+                                    books: [book.id],
+                                    getAnnotations: true
+                                )
                             )
-                        )
+                        }
                     }
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                     .navigationTitle(Text(book.title))
@@ -154,7 +156,7 @@ struct BookDetailView: View {
                 .resizable()
                 .scaledToFit()
             Button(action: {
-                guard modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty else { return }
+                guard modelData.downloadManager.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty else { return }
                 
                 if book.inShelf {
                     modelData.readerInfo = modelData.prepareBookReading(book: book)
@@ -168,7 +170,7 @@ struct BookDetailView: View {
                     }
                 }
             }) {
-                if modelData.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).isEmpty == false ||
+                if modelData.downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).isEmpty == false ||
                     book.formats.filter({ $0.value.selected == true && $0.value.cached == false }).isEmpty == false
                 {
                     ProgressView()
@@ -414,6 +416,10 @@ struct BookDetailView: View {
                     NavigationView {
                         ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
                             .environmentObject(modelData)
+                            .environmentObject(modelData.downloadManager)
+                            .environmentObject(modelData.sessionManager)
+                            .environmentObject(modelData.fontsManager)
+                            .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
                     }
                 })
             }
@@ -496,7 +502,7 @@ struct BookDetailView: View {
                                 book: book,
                                 format: format,
                                 formatInfo: formatInfo
-                            ).disabled(modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).count > 0)
+                            ).disabled(modelData.downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).count > 0)
                             
                             clearFormatButton(
                                 book: book,
@@ -517,7 +523,7 @@ struct BookDetailView: View {
                                     countStyle: .file
                                 )
                             )
-                            if let download = modelData.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                            if let download = modelData.downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
                                 ProgressView(value: download.progress)
                                     .progressViewStyle(LinearProgressViewStyle())
                                     .frame(maxWidth: 160)
@@ -616,13 +622,15 @@ struct BookDetailView: View {
                         modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
                     }
 //                    modelData.calibreServerService.getMetadata(oldbook: book, completion: initStates(book:))
-                    modelData.getBooksMetadataSubject.send(
-                        .init(
-                            library: book.library,
-                            books: [book.id],
-                            getAnnotations: true
+                    Task {
+                        await modelData.getBooksMetadata(
+                            request: .init(
+                                library: book.library,
+                                books: [book.id],
+                                getAnnotations: true
+                            )
                         )
-                    )
+                    }
                 }
             }) {
                 if modelData.updatingMetadata {
@@ -637,7 +645,7 @@ struct BookDetailView: View {
             Button(action: {
                 if book.inShelf {
                     modelData.clearCache(inShelfId: book.inShelfId)
-                } else if modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
+                } else if modelData.downloadManager.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).isEmpty {
                     //TODO prompt for formats
                     if let downloadFormat = modelData.getPreferredFormat(for: book) {
                         modelData.addToShelf(book: book, formats: [downloadFormat])
@@ -647,7 +655,7 @@ struct BookDetailView: View {
                 }
                 updater += 1
             }) {
-                if let download = modelData.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
+                if let download = modelData.downloadManager.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else if book.inShelf {

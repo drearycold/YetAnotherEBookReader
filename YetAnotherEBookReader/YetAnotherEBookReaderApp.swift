@@ -20,6 +20,9 @@ struct YetAnotherEBookReaderApp: App {
             ZStack {
                 MainView()
                     .environmentObject(modelData)
+                    .environmentObject(modelData.downloadManager)
+                    .environmentObject(modelData.sessionManager)
+                    .environmentObject(modelData.fontsManager)
                 
                 if upgradingDatabase {
                     VStack(spacing: 8) {
