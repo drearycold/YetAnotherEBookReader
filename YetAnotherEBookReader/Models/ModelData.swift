@@ -435,13 +435,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     var count = 0
                     migration.enumerateObjects(ofType: CalibreActivityLogEntry.className()) { oldObject, newObject in
                         newObject?["id"] = UUID().uuidString
-                        
-                        let properties = ["type", "startDatetime", "finishDatetime", "bookId", "libraryId", "endpoingURL", "httpMethod", "httpBody", "errMsg", "requestHeaders"]
-                        for prop in properties {
-                            if let old = oldObject, old.objectSchema.properties.contains(where: { $0.name == prop }) {
-                                newObject?[prop] = old[prop]
-                            }
-                        }
                         count += 1
                     }
                     print("Migrated \(count) CalibreActivityLogEntry records.")
