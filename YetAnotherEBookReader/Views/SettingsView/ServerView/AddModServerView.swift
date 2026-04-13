@@ -49,15 +49,6 @@ struct AddModServerView: View {
         didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
     }
     
-    //library control
-    @State private var calibreServerDiscover = true
-    @State private var calibreServerOffline = false
-    @State private var calibreTweakEachLibrary = false
-    @State private var calibreLibraryOptions = [String: (discover: Bool, offline: Bool)]()
-    
-    @State private var popoverForDiscover = false
-    @State private var popoverForOfflineBrowsable = false
-    
     @State private var updater = 0
     
     var defaultLog = Logger()
@@ -225,104 +216,6 @@ struct AddModServerView: View {
                 }
             }
             
-            if calibreServerInfo?.errorMsg == "Success" {
-                Section {
-                    HStack {
-                        Toggle(isOn: $calibreTweakEachLibrary) {
-                            Text("Set for each library")
-                        }
-                    }
-                    
-                    HStack {
-                        if calibreTweakEachLibrary {
-                            Text("Toggle All Discover Option")
-                            Spacer()
-                            Button {
-                                calibreLibraryOptions.keys.forEach {
-                                    calibreLibraryOptions[$0]?.discover = true
-                                }
-                            } label: {
-                                Text("On")
-                            }
-                            Divider()
-                            Button {
-                                calibreLibraryOptions.keys.forEach {
-                                    calibreLibraryOptions[$0]?.discover = false
-                                }
-                            } label: {
-                                Text("Off")
-                            }
-                        } else {
-                            Toggle(isOn: $calibreServerDiscover) {
-                                Text("Show in Discover")
-                            }
-                            .disabled(calibreTweakEachLibrary)
-                        }
-                        
-                        Divider()
-                        
-                        Button {
-                            popoverForDiscover = true
-                        } label: {
-                            Image(systemName: "questionmark.circle")
-                        }
-                        .popover(isPresented: $popoverForDiscover) {
-                            Text("If enabled, \"Discover\" tab will be populated by newly added/modified books and more books based on current reading authors/series/etc. for each library .")
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(9)
-                                .padding()
-                                .frame(width: horizontalSizeClass == .compact ? 350 : 500, alignment: .leading)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                    
-                    HStack {
-                        if calibreTweakEachLibrary {
-                            Text("Toggle All Offline Option")
-                            Spacer()
-                            Button {
-                                calibreLibraryOptions.keys.forEach {
-                                    calibreLibraryOptions[$0]?.offline = true
-                                }
-                            } label: {
-                                Text("On")
-                            }
-                            Divider()
-                            Button {
-                                calibreLibraryOptions.keys.forEach {
-                                    calibreLibraryOptions[$0]?.offline = false
-                                }
-                            } label: {
-                                Text("Off")
-                            }
-                        } else {
-                            Toggle(isOn: $calibreServerOffline) {
-                                Text("Offline Browsable")
-                            }
-                            .disabled(calibreTweakEachLibrary)
-                        }
-                        
-                        Divider()
-                        
-                        Button {
-                            popoverForOfflineBrowsable = true
-                        } label: {
-                            Image(systemName: "questionmark.circle")
-                        }
-                        .popover(isPresented: $popoverForOfflineBrowsable) {
-                            Text("If enabled, you can browse and search for books when server is not reachable.Need some time to sync book metadata after server is added.")
-                                .multilineTextAlignment(.leading)
-                                .lineLimit(9)
-                                .padding()
-                                .frame(width: horizontalSizeClass == .compact ? 350 : 500, alignment: .leading)
-                        }
-                    }
-                    .buttonStyle(.borderless)
-                } header: {
-                    Text("Options")
-                }
-            }
-            
             Section {
                 Button(action: {
                     serverCalibreInfoPresenting = false
@@ -370,35 +263,6 @@ struct AddModServerView: View {
                                 Text("Probing")
                             }
                         }
-                        if calibreTweakEachLibrary {
-                            HStack {
-                                Toggle(isOn: Binding<Bool>(get: {
-                                    calibreLibraryOptions[libraryEntry.key]?.discover ?? calibreServerDiscover
-                                }, set: { newValue in
-                                    calibreLibraryOptions[libraryEntry.key]?.discover = newValue
-                                })) {
-                                    Text("Discover")
-                                }
-                                
-                                Divider()
-                                
-                                Toggle(isOn: Binding<Bool>(get: {
-                                    calibreLibraryOptions[libraryEntry.key]?.offline ?? calibreServerOffline
-                                }, set: { newValue in
-                                    calibreLibraryOptions[libraryEntry.key]?.offline = newValue
-                                })) {
-                                    Text("Offline")
-                                }
-                            }
-                        }
-//                        HStack {
-//                            Text($0.value)
-//                            if calibreTweakEachLibrary {
-//                                Toggle(isOn: $calibreLibraryOptions[$0.key]!.discover) {
-//                                    Text("")
-//                                }
-//                            }
-//                        }
                     }
                 } else {
                     Text("Cannot Fetch Library List")
@@ -532,7 +396,6 @@ struct AddModServerView: View {
             password: calibrePassword
         )
         
-        calibreServerOffline = false
 //        modelData.calibreServerUpdating = true
 //        if let task = modelData.calibreServerService.getServerLibraries(server: calibreServer) {
 //            dataLoadingTask = task
@@ -557,8 +420,8 @@ struct AddModServerView: View {
                     server: serverInfo.server,
                     key: $0,
                     name: $1,
-                    autoUpdate: calibreTweakEachLibrary ? (calibreLibraryOptions[$0]?.offline ?? calibreServerOffline) : calibreServerOffline,
-                    discoverable: calibreTweakEachLibrary ? (calibreLibraryOptions[$0]?.discover ?? calibreServerDiscover) : calibreServerDiscover
+                    autoUpdate: false,
+                    discoverable: true
                 )
             }
         
@@ -638,9 +501,6 @@ struct AddModServerView: View {
                     serverInfo.libraryMap.forEach { key, name in
                         Task {
                             await modelData.probeLibrary(request: .init(library: .init(server: serverInfo.request.server, key: key, name: name)))
-                        }
-                        if calibreLibraryOptions[key] == nil {
-                            calibreLibraryOptions[key] = (discover: calibreServerDiscover, offline: calibreServerOffline)
                         }
                     }
                     self.calibreServerInfo = serverInfo
