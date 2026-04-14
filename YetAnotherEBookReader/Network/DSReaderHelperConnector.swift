@@ -12,7 +12,7 @@ struct DSReaderHelperConnector {
     let calibreServerService: CalibreServerService
     let server: CalibreServer
     let dsreaderHelperServer: CalibreServerDSReaderHelper
-    let goodreadsSync: CalibreLibraryGoodreadsSync?
+    let goodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs?
     
     let metadataQueue: OperationQueue = {
         var queue = OperationQueue()

@@ -101,172 +101,38 @@ struct CalibreLibrary: Hashable, Identifiable {
     var lastModified = Date(timeIntervalSince1970: 0)
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
-    var customColumnInfosUnmatched: [CalibreCustomColumnInfo] {
-        var result = customColumnInfos
-        // print("customColumnInfosUnmatched \(customColumnInfos) \(pluginReadingPositionWithDefault) \(pluginGoodreadsSyncWithDefault) \(pluginCountPagesWithDefault)")
-        result.removeValue(forKey: pluginReadingPositionWithDefault?.readingPositionCN.removingPrefix("#") ?? "_")
-
-        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.tagsColumnName.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.ratingColumnName.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.readingProgressColumnName.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.dateReadColumnName.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginGoodreadsSyncWithDefault?.reviewColumnName.removingPrefix("#") ?? "_")
-
-        result.removeValue(forKey: pluginCountPagesWithDefault?.pageCountCN.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginCountPagesWithDefault?.wordCountCN.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginCountPagesWithDefault?.fleschKincaidGradeCN.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginCountPagesWithDefault?.fleschReadingEaseCN.removingPrefix("#") ?? "_")
-        result.removeValue(forKey: pluginCountPagesWithDefault?.gunningFogIndexCN.removingPrefix("#") ?? "_")
-
-        return result.map { $0.value }
-    }
     
-    var customColumnInfoNumberKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "int" || $0.datatype == "float" }
-    }
-    var customColumnInfoTextKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "comments" || $0.datatype == "text" }
-    }
-    var customColumnInfoDateKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "datetime" }
-    }
-    var customColumnInfoRatingKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "rating" }
-    }
-    var customColumnInfoMultiTextKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "text" && $0.isMultiple }
-    }
-    var customColumnInfoCommentsKeysFull: [CalibreCustomColumnInfo] {
-        customColumnInfos.values.filter{ $0.datatype == "comments" }
-    }
-    
-    var customColumnInfoNumberKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "int" || $0.datatype == "float" }
-    }
-    var customColumnInfoTextKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "comments" || $0.datatype == "text" }
-    }
-    var customColumnInfoDateKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "datetime" }
-    }
-    var customColumnInfoRatingKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "rating" }
-    }
-    var customColumnInfoMultiTextKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "text" && $0.isMultiple }
-    }
-    var customColumnInfoCommentsKeys: [CalibreCustomColumnInfo] {
-        customColumnInfosUnmatched.filter{ $0.datatype == "comments" }
-    }
-    
-    var readPosColumnNameDefault: String {
-        if server.username.isEmpty {
-            return "#read_pos"
-        } else {
-            return "#read_pos_\(server.username)"
-        }
-    }
-    
-    var pluginColumns = [String: CalibreLibraryPluginColumnInfo]()
-    
-    var pluginDSReaderHelper: CalibreLibraryDSReaderHelper? {
-        get {
-            pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] as? CalibreLibraryDSReaderHelper
-        }
-        set {
-            pluginColumns[CalibreLibrary.PLUGIN_DSREADER_HELPER] = newValue as (any CalibreLibraryPluginColumnInfo)?
-        }
-    }
-    var pluginDSReaderHelperWithDefault: CalibreLibraryDSReaderHelper? {
-        if let dsreaderHelperUser = pluginDSReaderHelper {
-            return dsreaderHelperUser
-        } else if let modelData = ModelData.shared {
-            let plugin = CalibreLibraryDSReaderHelper()
-            plugin.setup(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
-            return plugin
-        }
+    var pluginDSReaderHelperWithDefault: CalibreDSReaderHelperPrefs.Options {
+        guard let modelData = ModelData.shared,
+              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+              let prefs = configuration.dsreader_helper_prefs?.plugin_prefs
+        else { return .init() }
         
-        return nil
-    }
-    
-    var pluginReadingPosition: CalibreLibraryReadingPosition? {
-        get {
-            pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] as? CalibreLibraryReadingPosition
-        }
-        set {
-            pluginColumns[CalibreLibrary.PLUGIN_READING_POSITION] = newValue as (any CalibreLibraryPluginColumnInfo)?
-        }
-    }
-    var pluginReadingPositionWithDefault: CalibreLibraryReadingPosition? {
-        if let readingPositionUser = pluginReadingPosition, readingPositionUser._isOverride {
-            return readingPositionUser
-        } else if let modelData = ModelData.shared {
-            let plugin = CalibreLibraryReadingPosition()
-            plugin.setup(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
-            return plugin
-        }
-        
-        return nil
+        return prefs.Options
     }
 
-    var pluginDictionaryViewer: CalibreLibraryDictionaryViewer? {
-        get {
-            pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] as? CalibreLibraryDictionaryViewer
-        }
-        set {
-            pluginColumns[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = newValue as (any CalibreLibraryPluginColumnInfo)?
-        }
-    }
-    var pluginDictionaryViewerWithDefault: CalibreLibraryDictionaryViewer? {
-        if let dictionaryViewerUser = pluginDictionaryViewer, dictionaryViewerUser._isOverride {
-            return dictionaryViewerUser
-        } else if let modelData = ModelData.shared {
-            let plugin = CalibreLibraryDictionaryViewer()
-            plugin.setup(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
-            return plugin
-        }
-        
-        return nil
+    var pluginDictionaryViewerWithDefault: CalibreDSReaderHelperPrefs.Options {
+        return pluginDSReaderHelperWithDefault
     }
     
-    var pluginGoodreadsSync: CalibreLibraryGoodreadsSync? {
-        get {
-            pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] as? CalibreLibraryGoodreadsSync
-        }
-        set {
-            pluginColumns[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = newValue as (any CalibreLibraryPluginColumnInfo)?
-        }
-    }
-    var pluginGoodreadsSyncWithDefault: CalibreLibraryGoodreadsSync? {
-        if let goodreadsSyncUser = pluginGoodreadsSync, goodreadsSyncUser._isOverride {
-            return goodreadsSyncUser
-        } else if let modelData = ModelData.shared {
-            let plugin = CalibreLibraryGoodreadsSync()
-            plugin.setup(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
-            return plugin
+    var pluginGoodreadsSyncWithDefault: CalibreGoodreadsSyncPrefs.PluginPrefs {
+        guard let modelData = ModelData.shared,
+              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+              let grsync_plugin_prefs = configuration.goodreads_sync_prefs?.plugin_prefs
+        else {
+            return .init(Goodreads: .init(), Users: [:])
         }
         
-        return nil
+        return grsync_plugin_prefs
     }
     
-    var pluginCountPages: CalibreLibraryCountPages? {
-        get {
-            pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] as? CalibreLibraryCountPages
-        }
-        set {
-            pluginColumns[CalibreLibrary.PLUGIN_COUNT_PAGES] = newValue as (any CalibreLibraryPluginColumnInfo)?
-        }
-    }
-    var pluginCountPagesWithDefault: CalibreLibraryCountPages? {
-        if let countPagesUser = pluginCountPages, countPagesUser._isOverride {
-            return countPagesUser
-        } else if let modelData = ModelData.shared {
-            let plugin = CalibreLibraryCountPages()
-            plugin.setup(libraryId: id, configuration: modelData.queryServerDSReaderHelper(server: server)?.configuration)
-            return plugin
-        }
+    var pluginCountPagesWithDefault: CalibreCountPagesPrefs.LibraryConfig {
+        guard let modelData = ModelData.shared,
+              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+              let library_config = configuration.count_pages_prefs?.library_config?[name]
+        else { return .init() }
         
-        return nil
+        return library_config
     }
     
     var urlForDeleteBook: URL? {
@@ -339,7 +205,8 @@ struct CalibreBook: Hashable {
         }
     }
     var ratingGRDescription: String? {
-        guard let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault, pluginGoodreadsSync.isEnabled,
+        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+        guard pluginGoodreadsSync.isEnabled,
               let rating = userMetadatas[pluginGoodreadsSync.ratingColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? Int else { return nil }
 
         switch(rating) {
@@ -392,7 +259,8 @@ struct CalibreBook: Hashable {
     var lastUpdated = Date(timeIntervalSince1970: .zero)
 
     var readDateGRByLocale: String? {
-        guard let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault, pluginGoodreadsSync.isEnabled,
+        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+        guard pluginGoodreadsSync.isEnabled,
               let dateReadString = userMetadatas[pluginGoodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
 
         
@@ -408,7 +276,8 @@ struct CalibreBook: Hashable {
     }
     
     var readProgressGRDescription: String? {
-        guard let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault, pluginGoodreadsSync.isEnabled,
+        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+        guard pluginGoodreadsSync.isEnabled,
               let progressAny = userMetadatas[pluginGoodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))],
               let prog = progressAny else { return nil }
         return Int(String(describing: prog))?.description
@@ -1774,21 +1643,6 @@ struct CalibreCdbCmdListResult: Codable, Hashable {
     var data = Data()
 }
 
-protocol CalibreLibraryPluginColumnInfo {
-    func getID() -> String
-    var _isEnabled: Bool { get }
-    var _isDefault: Bool { get }
-    var _isOverride: Bool { get }
-    func hasValidColumn() -> Bool
-    func mappedColumnsCount() -> Int
-}
-
-extension CalibreLibraryPluginColumnInfo {
-    var isEnabled: Bool { _isEnabled }
-    var isDefault: Bool { _isDefault }
-    var isOverride: Bool { _isOverride }
-}
-
 struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     struct Options: Codable, Hashable {
         var servicePort = 0
@@ -1799,6 +1653,10 @@ struct CalibreDSReaderHelperPrefs: Codable, Hashable {
         var readingPositionColumnName = ""
         var readingPositionColumnPrefix = ""
         var readingPositionColumnUserSeparated = false
+        
+        var isEnabled: Bool { goodreadsSyncEnabled || dictViewerEnabled }
+        var autoUpdateGoodreadsProgress: Bool { goodreadsSyncEnabled }
+        var autoUpdateGoodreadsBookShelf: Bool { goodreadsSyncEnabled }
     }
     
     struct PluginPrefs: Codable, Hashable {
@@ -1816,6 +1674,15 @@ struct CalibreCountPagesPrefs: Codable, Hashable {
         var customColumnGunningFog = ""
         var customColumnPages = ""
         var customColumnWords = ""
+        
+        var isEnabled: Bool {
+            [customColumnPages, customColumnWords, customColumnFleschReading, customColumnFleschGrade, customColumnGunningFog].contains { $0.count > 0 && $0 != "#" }
+        }
+        var pageCountCN: String { customColumnPages }
+        var wordCountCN: String { customColumnWords }
+        var fleschReadingEaseCN: String { customColumnFleschReading }
+        var fleschKincaidGradeCN: String { customColumnFleschGrade }
+        var gunningFogIndexCN: String { customColumnGunningFog }
     }
     
     var library_config: [String: LibraryConfig]? = [:]
@@ -1845,44 +1712,25 @@ struct CalibreGoodreadsSyncPrefs: Codable, Hashable {
         var Goodreads: Goodreads
 //        var Users: [String: [String: [Shelf]]]  //Profile -> "shelves" -> [Shelf]
         var Users: [String: Shelves]
-    }
-    var plugin_prefs: PluginPrefs
-}
-
-struct CalibreReadingPositionPrefs: Codable, Hashable {
-    
-    struct ReadingPositionColumn: Codable, Hashable {
-        var exists: Bool = false
-        var label: String = ""
-        var name: String = ""
-    }
-    
-    struct ReadingPositionOptions: Codable, Hashable {
-        var name: String = ""
-        var prefix: String = ""
-        var isUserSeparated: Bool = false
         
-        enum CodingKeys: String, CodingKey {
-            case name = "readingPositionColumnName"
-            case prefix = "readingPositionColumnPrefix"
-            case isUserSeparated = "readingPositionColumnUserSeparated"
+        var isEnabled: Bool { !Users.isEmpty }
+        var tagsColumnName: String { Goodreads.tagMappingColumn }
+        var ratingColumnName: String { Goodreads.ratingColumn }
+        var dateReadColumnName: String { Goodreads.dateReadColumn }
+        var reviewColumnName: String { Goodreads.reviewTextColumn }
+        var readingProgressColumnName: String { Goodreads.readingProgressColumn }
+        
+        var profileName: String {
+            Users.count == 1 ? Users.keys.first ?? "" : (Users["Default"] != nil ? "Default" : "")
         }
     }
-    
-    struct ReadingPositionLibraryConfig: Codable, Hashable {
-        var readingPositionColumns: [String: ReadingPositionColumn] = [:]
-        var readingPositionOptions: ReadingPositionOptions = .init()
-    }
-    
-    // library name -> user name -> column info
-    var library_config: [String: ReadingPositionLibraryConfig] = [:]
+    var plugin_prefs: PluginPrefs
 }
 
 struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var dsreader_helper_prefs: CalibreDSReaderHelperPrefs? = nil
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
-    var reading_position_prefs: CalibreReadingPositionPrefs? = nil
 }
 
 struct CalibreLibraryBooksResult: Codable {
