@@ -13,33 +13,6 @@ extension BookAnnotation {
         "\(library.key) - \(id)"
     }
     
-    static func getBookPreferenceIndividualConfig(bookFileURL: URL) -> Realm.Configuration {
-        return Realm.Configuration(
-            fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
-            schemaVersion: ModelData.RealmSchemaVersion) { migration, oldSchemaVersion in
-                if oldSchemaVersion < 109 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
-                        if let oldObject = oldObject,
-                           let deviceId = oldObject["id"] as? String {
-                            newObject?["deviceId"] = deviceId
-                        }
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-                
-                if oldSchemaVersion < 113 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-                if oldSchemaVersion < 114 {
-                    migration.enumerateObjects(ofType: BookBookmarkRealm.className()) { oldObject, newObject in
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-            }
-    }
-    
     static func getBookPreferenceServerConfig(_ server: CalibreServer) -> Realm.Configuration {
         let applicationSupportURL = try! FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         

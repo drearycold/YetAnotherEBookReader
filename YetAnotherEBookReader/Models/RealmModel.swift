@@ -861,65 +861,18 @@ class BookHighlightRealm: Object {
     // MARK: PDF Specific
     @objc open dynamic var ranges: String?
     
-    override static func primaryKey()-> String? {
-        return "highlightId"
+    var contentEncoded: String? {
+        content.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
     }
-}
-
-extension BookHighlight: Persistable {
-    init(managedObject: BookHighlightRealm) {
-        removed = managedObject.removed
-        
-        bookId = managedObject.bookId
-        highlightId = managedObject.highlightId
-        readerName = managedObject.readerName
-        
-        page = managedObject.page
-        startOffset = managedObject.startOffset
-        endOffset = managedObject.endOffset
-        ranges = managedObject.ranges
-        
-        date = managedObject.date
-        type = managedObject.type
-        note = managedObject.note
-        
-        tocFamilyTitles = managedObject.tocFamilyTitles.map { $0 }
-        content = managedObject.content
-        contentPost = managedObject.contentPost
-        contentPre = managedObject.contentPre
-        
-        cfiStart = managedObject.cfiStart
-        cfiEnd = managedObject.cfiEnd
-        spineName = managedObject.spineName
+    var contentPreEncoded: String? {
+        contentPre.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+    }
+    var contentPostEncoded: String? {
+        contentPost.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
     }
     
-    func managedObject() -> BookHighlightRealm {
-        let managedObject = BookHighlightRealm()
-        managedObject.removed = removed
-        
-        managedObject.bookId = bookId
-        managedObject.highlightId = highlightId
-        managedObject.readerName = readerName
-        
-        managedObject.page = page
-        managedObject.startOffset = startOffset
-        managedObject.endOffset = endOffset
-        managedObject.ranges = ranges
-        
-        managedObject.date = date
-        managedObject.type = type
-        managedObject.note = note
-        
-        managedObject.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
-        managedObject.content = content
-        managedObject.contentPost = contentPost
-        managedObject.contentPre = contentPre
-        
-        managedObject.cfiStart = cfiStart
-        managedObject.cfiEnd = cfiEnd
-        managedObject.spineName = spineName
-        
-        return managedObject
+    override static func primaryKey()-> String? {
+        return "highlightId"
     }
 }
 
@@ -983,6 +936,8 @@ class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
 }
 
 class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
+    static let PDFBookmarkPosType = "yabrpdf"
+    
     @objc dynamic var _id: ObjectId = .generate()
     @objc dynamic var bookId: String = .init()
     @objc dynamic var page: Int = .zero
@@ -999,38 +954,6 @@ class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
         return "_id"
     }
 }
-
-extension BookBookmark: Persistable {
-    public init(managedObject: BookBookmarkRealm) {
-        self.bookId = managedObject.bookId
-        self.page = managedObject.page
-        
-        self.pos_type = managedObject.pos_type
-        self.pos = managedObject.pos
-        
-        self.title = managedObject.title
-        self.date = managedObject.date
-        
-        self.removed = managedObject.removed
-    }
-    
-    public func managedObject() -> BookBookmarkRealm {
-        let obj = BookBookmarkRealm()
-        obj.bookId = self.bookId
-        obj.page = self.page
-        
-        obj.pos_type = self.pos_type
-        obj.pos = self.pos
-        
-        obj.title = self.title
-        obj.date = self.date
-        
-        obj.removed = self.removed
-        
-        return obj
-    }
-}
-
 
 //MARK: PDF
 @available(*, deprecated, renamed: "YabrPDFOptions")
@@ -1431,6 +1354,55 @@ extension ReadiumPreferenceRealm {
         case .always?: self.spread = 2
         default: self.spread = 0
         }
+    }
+}
+
+extension BookHighlightRealm {
+    func toCalibreBookAnnotationHighlightEntry() -> CalibreBookAnnotationHighlightEntry? {
+        guard let uuid = uuidFolioToCalibre(highlightId),
+              let readerType = ReaderType(rawValue: readerName)
+        else { return nil }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        switch readerType {
+        case .YabrEPUB, .YabrPDF:
+            return CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: date),
+                uuid: uuid,
+                removed: removed,
+                ranges: ranges,
+                startCfi: cfiStart,
+                endCfi: cfiEnd,
+                highlightedText: content,
+                style: ["kind":"color", "type":"builtin", "which": BookHighlightStyle.classForStyleCalibre(type)],
+                spineName: spineName,
+                spineIndex: page - 1,
+                tocFamilyTitles: tocFamilyTitles.map { $0 },
+                notes: note
+            )
+        default:
+            return nil
+        }
+    }
+}
+
+extension BookBookmarkRealm {
+    static let dateFormatter = ISO8601DateFormatter()
+    
+    func toCalibreBookAnnotationBookmarkEntry() -> CalibreBookAnnotationBookmarkEntry {
+        BookBookmarkRealm.dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        return CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: BookBookmarkRealm.dateFormatter.string(from: date),
+            pos_type: pos_type,
+            pos: pos,
+            title: title,
+            removed: removed
+        )
     }
 }
 

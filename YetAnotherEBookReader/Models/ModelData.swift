@@ -514,8 +514,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                         newObject["primaryKey"] = primaryKey
                     }
                 }
-                
-                BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize

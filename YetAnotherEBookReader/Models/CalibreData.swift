@@ -853,57 +853,6 @@ extension BookDeviceReadingPositionHistory {
     }
 }
 
-struct BookBookmark {
-    let bookId: String
-    let page: Int
-    let pos_type: String
-    let pos: String
-    
-    var title: String
-    var date: Date
-    
-    var removed: Bool
-}
-
-struct BookHighlight {
-    var removed: Bool = false
-    
-    let bookId: String
-    let highlightId: String
-    let readerName: String
-    
-    let page: Int   //starts from 1
-    let startOffset: Int
-    let endOffset: Int
-    
-    var date: Date
-    var type: Int
-    var note: String?
-    
-    let tocFamilyTitles: [String]
-    let content: String
-    let contentPost: String
-    let contentPre: String
-    
-    // MARK: EPUB Specific
-    let cfiStart: String?
-    let cfiEnd: String?
-    let spineName: String?
-    
-    // MARK: PDF Specific
-    let ranges: String?
-    
-    var contentEncoded: String? {
-        content.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-    }
-    var contentPreEncoded: String? {
-        contentPre.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-    }
-    var contentPostEncoded: String? {
-        contentPost.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
-    }
-}
-
 enum BookHighlightStyle: Int, CaseIterable, Identifiable {
     case yellow
     case green
@@ -1261,38 +1210,6 @@ extension BookAnnotation {
     }
 }
 
-extension BookHighlight {
-    func toCalibreBookAnnotationHighlightEntry() -> CalibreBookAnnotationHighlightEntry? {
-        guard let uuid = uuidFolioToCalibre(highlightId),
-              let readerType = ReaderType(rawValue: readerName)
-        else { return nil }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-        
-        switch readerType {
-        case .YabrEPUB, .YabrPDF:
-            return CalibreBookAnnotationHighlightEntry(
-                type: "highlight",
-                timestamp: dateFormatter.string(from: date),
-                uuid: uuid,
-                removed: removed,
-                ranges: ranges,
-                startCfi: cfiStart,
-                endCfi: cfiEnd,
-                highlightedText: content,
-                style: ["kind":"color", "type":"builtin", "which": BookHighlightStyle.classForStyleCalibre(type)],
-                spineName: spineName,
-                spineIndex: page - 1,
-                tocFamilyTitles: tocFamilyTitles.map { $0 },
-                notes: note
-            )
-        default:
-            return nil
-        }
-    }
-}
-
 struct CalibreBookAnnotationBookmarkEntry: Codable {
     var type: String
     var timestamp: String
@@ -1416,23 +1333,6 @@ extension BookAnnotation {
         }
     
         return pending.count
-    }
-}
-
-extension BookBookmark {
-    static let dateFormatter = ISO8601DateFormatter()
-    
-    func toCalibreBookAnnotationBookmarkEntry() -> CalibreBookAnnotationBookmarkEntry {
-        BookBookmark.dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-        
-        return CalibreBookAnnotationBookmarkEntry(
-            type: "bookmark",
-            timestamp: BookBookmark.dateFormatter.string(from: date),
-            pos_type: pos_type,
-            pos: pos,
-            title: title,
-            removed: removed
-        )
     }
 }
 

@@ -28,153 +28,7 @@ class BookAnnotation {
     }
     
     var realm: Realm? {
-        migrateIndividualRealm()
         return library.server.realmPerf
-    }
-    
-    func migrateIndividualRealm() {
-        guard let bookBaseUrl = getBookBaseUrl(id: id, library: library, localFilename: localFilename),
-           let bookPrefConf = BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: bookBaseUrl) as Realm.Configuration?,
-           let basePrefUrl = bookPrefConf.fileURL,
-           FileManager.default.fileExists(atPath: basePrefUrl.path)
-        else {
-            return
-        }
-        
-        autoreleasepool {
-            guard let individualRealm = try? Realm(configuration: bookPrefConf) else { return }
-            let serverRealm = library.server.realmPerf
-            individualRealm.configuration.objectTypes?.forEach { objectType in
-                guard let objectType = objectType as? Object.Type
-                else {
-                    assert(false, "Not an Object")
-                    return
-                }
-                try? serverRealm.write {
-                    switch objectType.className() {
-                    case BookDeviceReadingPositionRealm.className():
-                        let objects = individualRealm.objects(BookDeviceReadingPositionRealm.self)
-                            .where { !$0.bookId.ends(with: " - History") }
-                        objects.forEach { object in
-                            guard serverRealm.object(ofType: BookDeviceReadingPositionRealm.self, forPrimaryKey: object._id) == nil
-                            else {
-                                return
-                            }
-                            serverRealm.create(objectType.self, value: object)
-                        }
-                    case BookDeviceReadingPositionHistoryRealm.className(),
-                        FolioReaderPreferenceRealm.className(),
-                        BookHighlightRealm.className(),
-                        BookBookmarkRealm.className():
-                        guard let primaryKey = objectType.primaryKey()
-                        else {
-                            assert(false, "Need Primary Key")
-                            return
-                        }
-                        individualRealm.objects(objectType.self)
-                            .forEach { object in
-                                guard serverRealm.object(ofType: objectType.self, forPrimaryKey: object[primaryKey]) == nil
-                                else {
-                                    return
-                                }
-                                serverRealm.create(objectType.self, value: object)
-                            }
-                    case FolioReaderReadPositionRealm.className():
-                        individualRealm.objects(FolioReaderReadPositionRealm.self)
-                            .filter(NSPredicate(format: "maxPage > %@", NSNumber(1)))
-                            .compactMap { $0.toReadPosition()?.toBookDeviceReadingPosition()
-                            }
-                            .forEach { newPosition in
-                                let existing = serverRealm.objects(BookDeviceReadingPositionRealm.self)
-                                    .filter(
-                                        NSPredicate(
-                                            format: "bookId = %@ AND deviceId = %@ AND readerName = %@ AND structuralStyle = %@ AND positionTrackingStyle = %@ AND structuralRootPageNumber = %@",
-                                            bookPrefId,
-                                            newPosition.id,
-                                            newPosition.readerName,
-                                            NSNumber(value: newPosition.structuralStyle),
-                                            NSNumber(value: newPosition.positionTrackingStyle),
-                                            NSNumber(value: newPosition.structuralRootPageNumber)
-                                        )
-                                    )
-                                if existing.isEmpty {
-                                    serverRealm.add(newPosition.managedObject(bookId: bookPrefId))
-                                }
-                            }
-                    case FolioReaderHighlightRealm.className():
-                        individualRealm.objects(FolioReaderHighlightRealm.self)
-                            .forEach { oldObj in
-                                guard serverRealm.object(ofType: BookHighlightRealm.self, forPrimaryKey: oldObj.highlightId) == nil
-                                else {
-                                    // realm.delete(oldObj)
-                                    return
-                                }
-                                
-                                guard let newObj = oldObj.toBookHighlightRealm(readerName: ReaderType.YabrEPUB.rawValue)
-                                else { return }
-                                
-                                serverRealm.add(newObj)
-                                // realm.delete(oldObj)
-                            }
-                    case PDFOptionsRealm.className(), "YabrPDFOptionsRealm":
-                        individualRealm.objects(objectType.self)
-                            .forEach { oldObj in
-                                let bookId = (oldObj["id"] as? Int32) ?? (oldObj["bookId"] as? Int32) ?? 0
-                                let libraryName = (oldObj["libraryName"] as? String) ?? ""
-                                
-                                guard serverRealm.objects(PDFOptions.self)
-                                    .where({ $0.bookId == bookId && $0.libraryName == libraryName })
-                                    .isEmpty
-                                else {
-                                    return
-                                }
-                                
-                                let newObj = PDFOptions()
-                                newObj.bookId = bookId
-                                newObj.libraryName = libraryName
-                                
-                                newObj.themeMode = PDFThemeMode(rawValue: (oldObj["themeMode"] as? String) ?? "") ?? .serpia
-                                newObj.selectedAutoScaler = PDFAutoScaler(rawValue: (oldObj["selectedAutoScaler"] as? String) ?? "") ?? .Width
-                                newObj.pageMode = PDFLayoutMode(rawValue: (oldObj["pageMode"] as? String) ?? "") ?? .Page
-                                newObj.readingDirection = PDFReadDirection(rawValue: (oldObj["readingDirection"] as? String) ?? "") ?? .LtR_TtB
-                                newObj.scrollDirection = PDFScrollDirection(rawValue: (oldObj["scrollDirection"] as? String) ?? "") ?? .Vertical
-                                
-                                newObj.hMarginAutoScaler = (oldObj["hMarginAutoScaler"] as? Double) ?? 5.0
-                                newObj.vMarginAutoScaler = (oldObj["vMarginAutoScaler"] as? Double) ?? 5.0
-                                newObj.hMarginDetectStrength = (oldObj["hMarginDetectStrength"] as? Double) ?? 2.0
-                                newObj.vMarginDetectStrength = (oldObj["vMarginDetectStrength"] as? Double) ?? 2.0
-                                newObj.marginOffset = (oldObj["marginOffset"] as? Double) ?? 0.0
-                                newObj.lastScale = (oldObj["lastScale"] as? Double) ?? 1.0
-                                newObj.rememberInPagePosition = (oldObj["rememberInPagePosition"] as? Bool) ?? true
-                                
-                                serverRealm.add(newObj)
-                            }
-                    case CalibreBookLastReadPositionRealm.className():
-                        break   //ignore deprecated types
-                    default:
-                        assert(individualRealm.objects(objectType.self).isEmpty, "Unrecognized ObjectType \(objectType.className())")
-                    }
-                }
-            }
-        }
-        
-        if try! Realm.deleteFiles(for: bookPrefConf) {
-            let basePrefPath = basePrefUrl.deletingLastPathComponent()
-            let enumerator = FileManager.default.enumerator(atPath: basePrefPath.path)
-            
-            var toRemoveURL = [URL]()
-            while let file = enumerator?.nextObject() as? String {
-                let fileURL = basePrefPath.appendingPathComponent(file)
-                if fileURL.lastPathComponent.starts(with: basePrefUrl.lastPathComponent) {
-                    toRemoveURL.append(fileURL)
-                }
-            }
-            
-            toRemoveURL.forEach {
-                print("\(#function) removeItem=\($0.path)")
-                try? FileManager.default.removeItem(at: $0)
-            }
-        }
     }
 }
 
@@ -359,7 +213,7 @@ extension BookAnnotation {
 
 //MARK: Bookmark
 extension BookAnnotation {
-    func bookmarks(excludeRemoved: Bool = true) -> [BookBookmark] {
+    func bookmarks(excludeRemoved: Bool = true) -> [BookBookmarkRealm] {
         guard let realm = realm else { return [] }
 
         var results = realm.objects(BookBookmarkRealm.self)
@@ -368,28 +222,25 @@ extension BookAnnotation {
             results = results.filter(NSPredicate(format: "removed == false"))
         }
         
-        return results.map { BookBookmark(managedObject: $0) }
+        return Array(results)
     }
     
-    func bookmarks(andPage page: NSNumber?) -> [BookBookmark] {
+    func bookmarks(andPage page: NSNumber?) -> [BookBookmarkRealm] {
         guard let realm = realm else { return [] }
         
         let objects = realm.objects(BookBookmarkRealm.self)
             .filter(NSPredicate(format: "bookId = %@ AND removed != true", bookPrefId))
             .filter{ page == nil || $0.page == page?.intValue }
         
-        return objects.map { BookBookmark(managedObject: $0) }
+        return Array(objects)
     }
     
-    func bookmarks(getBy bookmarkPos: String) -> BookBookmark? {
+    func bookmarks(getBy bookmarkPos: String) -> BookBookmarkRealm? {
         guard let realm = realm else { return nil }
         
-        guard let obj = realm.objects(BookBookmarkRealm.self)
+        return realm.objects(BookBookmarkRealm.self)
             .filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookPrefId, bookmarkPos))
             .first
-        else { return nil }
-        
-        return BookBookmark(managedObject: obj)
     }
     
     func bookmarks(updated bookmarkPos: String, title: String) {
@@ -414,14 +265,14 @@ extension BookAnnotation {
         }
     }
     
-    func bookmarks(added bookmark: BookBookmark) -> (Int, String?) {
+    func bookmarks(added bookmark: BookBookmarkRealm) -> (Int, String?) {
         guard let realm = self.realm else { return (-1, nil) }
         
         if let existing = bookmarks(getBy: bookmark.pos) { return (-2, existing.title) }
         
         do {
             try realm.write {
-                realm.add(bookmark.managedObject())
+                realm.add(bookmark)
             }
         } catch let e as NSError {
             return (-3, e.localizedDescription)
@@ -443,7 +294,7 @@ extension BookAnnotation {
             object.date = Date()
         }
     }
-    func highlights(excludeRemoved: Bool = true) -> [BookHighlight] {
+    func highlights(excludeRemoved: Bool = true) -> [BookHighlightRealm] {
         guard let realm = self.realm else { return .init() }
         
         var results = realm.objects(BookHighlightRealm.self)
@@ -452,10 +303,10 @@ extension BookAnnotation {
             results = results.filter(NSPredicate(format: "removed == false"))
         }
         
-        return results.map { .init(managedObject: $0) }
+        return Array(results)
     }
     
-    func highlights(allByBookId bookId: String, andPage page: NSNumber?) -> [BookHighlight] {
+    func highlights(allByBookId bookId: String, andPage page: NSNumber?) -> [BookHighlightRealm] {
         guard let realm = self.realm else { return .init() }
         
         let predicate = { () -> NSPredicate in
@@ -466,17 +317,14 @@ extension BookAnnotation {
             }
         }()
         
-        return realm.objects(BookHighlightRealm.self)
-            .filter(predicate)
-            .map { .init(managedObject: $0) }
+        return Array(realm.objects(BookHighlightRealm.self)
+            .filter(predicate))
     }
     
-    func highlight(getById highlightId: String) -> BookHighlight? {
+    func highlight(getById highlightId: String) -> BookHighlightRealm? {
         guard let realm = self.realm else { return nil}
         
-        guard let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId) else { return nil }
-        
-        return .init(managedObject: object)
+        return realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId)
     }
     
     func highlight(updateById highlightId: String, type: Int) {
@@ -504,11 +352,11 @@ extension BookAnnotation {
     /**
      will replace existing entry
      */
-    func highlight(added highlight: BookHighlight) {
+    func highlight(added highlight: BookHighlightRealm) {
         guard let realm = self.realm else { return }
         
         try? realm.write {
-            realm.add(highlight.managedObject(), update: .modified)
+            realm.add(highlight, update: .modified)
         }
     }
 }
