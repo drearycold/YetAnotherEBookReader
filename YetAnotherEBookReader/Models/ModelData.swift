@@ -109,7 +109,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion:UInt64 = 1
+    static var RealmSchemaVersion:UInt64 = 137
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -151,7 +151,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         ModelData.shared = self
         
         // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
+        ModelData.RealmSchemaVersion = 137
         let initialConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { _, _ in }
@@ -720,9 +720,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 discoverable: libraryRealm.discoverable,
                 hidden: libraryRealm.hidden,
                 lastModified: libraryRealm.lastModified,
-                customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
-                    $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
-                }
+                customColumnInfos: {
+                    guard let data = libraryRealm.customColumnsData else { return [:] }
+                    return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
+                }()
             )
             
             calibreLibraries[calibreLibrary.id] = calibreLibrary
@@ -1117,7 +1118,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         libraryRealm.name = library.name
         libraryRealm.serverUUID = library.server.uuid.uuidString
         
-        libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
+        libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
         
         libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
