@@ -956,29 +956,6 @@ class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
 }
 
 //MARK: PDF
-@available(*, deprecated, renamed: "YabrPDFOptions")
-class PDFOptionsRealm: Object {
-    @objc dynamic var id: Int32 = 0
-    @objc dynamic var libraryName = ""
-    @objc dynamic var themeMode = PDFThemeMode.serpia.rawValue
-    @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
-    @objc dynamic var pageMode = PDFLayoutMode.Page.rawValue
-    @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
-    @objc dynamic var scrollDirection = PDFScrollDirection.Vertical.rawValue
-    @objc dynamic var hMarginAutoScaler = 5.0
-    @objc dynamic var vMarginAutoScaler = 5.0
-    @objc dynamic var hMarginDetectStrength = 2.0
-    @objc dynamic var vMarginDetectStrength = 2.0
-    @objc dynamic var marginOffset = 0.0
-    @objc dynamic var lastScale = 1.0
-    @objc dynamic var rememberInPagePosition = true
-    
-    override static func primaryKey() -> String? {
-        return "id"
-    }
-}
-
-
 extension PDFThemeMode: PersistableEnum {}
 extension PDFAutoScaler: PersistableEnum {}
 extension PDFLayoutMode: PersistableEnum {}
