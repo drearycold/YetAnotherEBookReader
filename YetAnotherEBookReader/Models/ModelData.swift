@@ -1209,7 +1209,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
         guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
-        try! realm.write {
+        try? realm.write {
             if let existing = serverRealm.dsreaderHelper {
                 existing.update(from: dsreaderHelper)
             } else {

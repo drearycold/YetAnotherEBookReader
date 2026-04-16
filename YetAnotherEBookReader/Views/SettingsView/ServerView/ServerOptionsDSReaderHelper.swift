@@ -247,7 +247,7 @@ struct ServerOptionsDSReaderHelper: View {
         configurationData = dsreaderHelperServer.configurationData
         configuration = dsreaderHelperServer.configuration
         
-        self.dsreaderHelperServer.update(from: dsreaderHelperServer)
+        self.dsreaderHelperServer = dsreaderHelperServer
         portStr = dsreaderHelperServer.port.description
     }
     

@@ -512,12 +512,12 @@
 		2A2C38D926C4AF9D007E2F3B /* Network */ = {
 			isa = PBXGroup;
 			children = (
+				E792C7E72F83FD640015E020 /* BookDownloadManager.swift */,
+				E792C7E42F83F5190015E020 /* CalibreActivityLogger.swift */,
 				2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */,
 				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */,
 				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
-				E792C7E42F83F5190015E020 /* CalibreActivityLogger.swift */,
-				E792C7E72F83FD640015E020 /* BookDownloadManager.swift */,
 			);
 			path = Network;
 			sourceTree = "<group>";
@@ -702,21 +702,21 @@
 		2AC3EC5325BE7486004A6633 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				E7804CCA29C021BC0066BD43 /* CalibreBrowser */,
 				E730405B28EBDAB50013BA01 /* BookAnnotation.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 				2ABB913E261EC359004AA7C0 /* CalibreData.swift */,
 				E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */,
 				2ABB9142261ED7E5004AA7C0 /* Constants.swift */,
+				E792C7F02F84A48B0015E020 /* DatabaseService.swift */,
+				E792C7ED2F849A2B0015E020 /* FontsManager.swift */,
 				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
 				2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */,
-				2ACE265826A921230037FCB4 /* RealmModel.swift */,
-				2ACE265426A920E10037FCB4 /* YabrData.swift */,
-				E792C7E12F83F1EE0015E020 /* YabrAppInfo.swift */,
 				E792C7EA2F84990E0015E020 /* ReadingSessionManager.swift */,
-				E792C7ED2F849A2B0015E020 /* FontsManager.swift */,
-				E792C7F02F84A48B0015E020 /* DatabaseService.swift */,
+				2ACE265826A921230037FCB4 /* RealmModel.swift */,
+				E792C7E12F83F1EE0015E020 /* YabrAppInfo.swift */,
+				2ACE265426A920E10037FCB4 /* YabrData.swift */,
+				E7804CCA29C021BC0066BD43 /* CalibreBrowser */,
 			);
 			path = Models;
 			sourceTree = "<group>";

@@ -1367,11 +1367,13 @@ extension BookHighlightRealm {
 }
 
 extension BookBookmarkRealm {
-    static let dateFormatter = ISO8601DateFormatter()
+    static let dateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        return formatter
+    }()
     
     func toCalibreBookAnnotationBookmarkEntry() -> CalibreBookAnnotationBookmarkEntry {
-        BookBookmarkRealm.dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-        
         return CalibreBookAnnotationBookmarkEntry(
             type: "bookmark",
             timestamp: BookBookmarkRealm.dateFormatter.string(from: date),
