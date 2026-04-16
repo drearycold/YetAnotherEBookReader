@@ -16,9 +16,9 @@ import KingfisherSwiftUI
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
     
-    @ObservedResults(CalibreUnifiedCategoryObject.self, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
+    @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
     

@@ -19,7 +19,7 @@ struct BookDetailView: View {
     
     @ObservedRealmObject var book: CalibreBookRealm
     
-    @ObservedResults(BookDeviceReadingPositionRealm.self) var readingPositions
+    @ObservedResults(BookDeviceReadingPositionRealm.self, configuration: ModelData.shared?.realmConf) var readingPositions
     
     var viewMode: Mode
     
@@ -106,7 +106,8 @@ struct BookDetailView: View {
                     bookFormatViewContent(book: book, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
+                    let countPage = book.library.pluginCountPagesWithDefault
+                    if countPage.isEnabled {
                         countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     }
@@ -122,7 +123,8 @@ struct BookDetailView: View {
                         bookFormatViewContent(book: book, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        if let countPage = book.library.pluginCountPagesWithDefault, countPage.isEnabled() {
+                        let countPage = book.library.pluginCountPagesWithDefault
+                        if countPage.isEnabled {
                             countPagesCorner(book: book, countPage: countPage, isCompat: isCompat)
                                 .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         }
@@ -294,9 +296,9 @@ struct BookDetailView: View {
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
-                    if let pluginGoodreadsSync = book.library.pluginGoodreadsSyncWithDefault,
-                       pluginGoodreadsSync.isEnabled(), pluginGoodreadsSync.tagsColumnName.count > 0,
-                       let shelves = book.userMetadatas[pluginGoodreadsSync.tagsColumnName] as? [String],
+                    let pluginGoodreadsSync = book.library.pluginGoodreadsSyncWithDefault
+                    if pluginGoodreadsSync.isEnabled, pluginGoodreadsSync.tagsColumnName.count > 0,
+                       let shelves = book.userMetadatas[pluginGoodreadsSync.tagsColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? [String],
                        shelves.count > 0 {
                         Text(shelves.joined(separator: ", "))
                     } else {
@@ -461,7 +463,7 @@ struct BookDetailView: View {
     }
     
     @ViewBuilder
-    private func countPagesCorner(book: CalibreBook, countPage: CalibreLibraryCountPages, isCompat: Bool) -> some View {
+    private func countPagesCorner(book: CalibreBook, countPage: CalibreCountPagesPrefs.LibraryConfig, isCompat: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Count Pages Info Corner")
             HStack {

@@ -13,7 +13,7 @@ struct ServerOptionsDSReaderHelper: View {
     @Environment(\.openURL) var openURL
 
     @Binding var server: CalibreServer
-    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(id: "", port: 0)
+    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
     
     @State private var portStr = ""
     @State private var configurationData: Data? = nil
@@ -25,7 +25,6 @@ struct ServerOptionsDSReaderHelper: View {
     
     @State private var configAlertItem: AlertItem?
 
-    @State private var readingPositionDetails = false
     @State private var dictionaryViewerDetails = false
     @State private var countPagesDetails = false
     @State private var goodreadsSyncDetails = false
@@ -238,7 +237,7 @@ struct ServerOptionsDSReaderHelper: View {
     
     private func setStates() {
         let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(id: server.id, port: 0)
+            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
             if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }
@@ -336,26 +335,9 @@ struct ServerOptionsDSReaderHelper: View {
         dsreaderHelperServer.configuration = configuration
         dsreaderHelperServer.configurationData = configurationData
         
-        modelData.updateServerDSReaderHelper(dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
+        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
         
         helperStatus = nil
-    }
-    
-    @ViewBuilder
-    private func readingPositionDetailsUser(library_entry: (key: String, value: CalibreReadingPositionPrefs.ReadingPositionLibraryConfig)) -> some View {
-        if library_entry.value.readingPositionColumns.isEmpty {
-            Text("None Exists")
-        } else {
-            ForEach (
-                library_entry.value.readingPositionColumns.map { (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } , id: \.key
-            ) { user_entry in
-                HStack {
-                    Text("User: \(user_entry.key)")
-                    Spacer()
-                    Text("Column \(user_entry.value.label)")
-                }
-            }
-        }
     }
     
     @ViewBuilder
@@ -412,26 +394,6 @@ struct ServerOptionsDSReaderHelper: View {
 
                 }
                 
-                Group {
-                    Text("Enable Reading Position Syncing without DSReader Helper plugin").font(.title2)
-                        .padding([.top], 4)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("If you remain wary of our plugin, reading position syncing can still work without it.")
-                        
-                        Text("Please add a custom column of type \"Long text, like comments\" on calibre server.")
-                        
-                        Text("If there are multiple users, it's better to add a unique column for each user.")
-                        
-                        Text("Defaults to #read_pos[_username].")
-                    }    .font(.callout)
-                    
-                    if server.username.isEmpty {
-                        Text("Also note that server defaults to read-only mode when user authentication is not required, so please allow un-authenticated connection to make changes (\"Advanced\" tab in \"Sharing over the net\")")
-                            .font(.caption)
-                    }
-                }
-                
             }
         }
     }
@@ -443,7 +405,7 @@ struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
 
     @State static private var server = CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
 
-    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(id: server.id, port: 1234)
+    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 1234)
     @State static private var updater = 0
     static var previews: some View {
         NavigationView {

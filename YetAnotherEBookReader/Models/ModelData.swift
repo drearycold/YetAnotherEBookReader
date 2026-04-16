@@ -109,7 +109,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion:UInt64 = 1
+    static var RealmSchemaVersion:UInt64 = 137
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -149,6 +149,15 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
 
     init(mock: Bool = false) {
         ModelData.shared = self
+        
+        // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
+        ModelData.RealmSchemaVersion = 137
+        let initialConf = Realm.Configuration(
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in }
+        )
+        Realm.Configuration.defaultConfiguration = initialConf
+        self.realmConf = initialConf
         
         kfImageCache.diskStorage.config.expiration = .days(28)
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
@@ -430,7 +439,41 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                     }
                     print("Migrated \(count) CalibreActivityLogEntry records.")
                 }
-                BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: .init(fileURLWithPath: "")).migrationBlock?(migration, oldSchemaVersion)
+                
+                if oldSchemaVersion < 134 {
+                    // Migrate CalibreServerDSReaderHelper into CalibreServerRealm
+                    var newServersMap = [String: MigrationObject]()
+                    migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldServer, newServer in
+                        guard let oldServer = oldServer, let newServer = newServer else { return }
+                        let primaryKey = oldServer["primaryKey"] as? String ?? ""
+                        newServersMap[primaryKey] = newServer
+                    }
+
+                    migration.enumerateObjects(ofType: "CalibreServerDSReaderHelperRealm") { oldHelper, _ in
+                        guard let oldHelper = oldHelper else { return }
+                        let serverId = oldHelper["id"] as? String ?? ""
+                        if let newServer = newServersMap[serverId] {
+                            var newHelperDict: [String: Any] = [
+                                "port": oldHelper["port"] ?? 0
+                            ]
+                            if let data = oldHelper["data"] {
+                                newHelperDict["configurationData"] = data
+                            }
+                            newServer["dsreaderHelper"] = newHelperDict
+                        }
+                    }
+                }
+                
+                if oldSchemaVersion < 135 {
+                    // Fix missing primary keys in CalibreLibraryRealm
+                    migration.enumerateObjects(ofType: CalibreLibraryRealm.className()) { oldObject, newObject in
+                        guard let oldObject = oldObject, let newObject = newObject else { return }
+                        let serverUUID = oldObject["serverUUID"] as? String ?? "-"
+                        let libraryName = oldObject["name"] as? String ?? "-"
+                        let primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)
+                        newObject["primaryKey"] = primaryKey
+                    }
+                }
             },
             shouldCompactOnLaunch: { fileSize, dataSize in
                 return dataSize * 2 < fileSize || (dataSize + 33554432) < fileSize
@@ -635,27 +678,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 discoverable: libraryRealm.discoverable,
                 hidden: libraryRealm.hidden,
                 lastModified: libraryRealm.lastModified,
-                customColumnInfos: libraryRealm.customColumns.reduce(into: [String: CalibreCustomColumnInfo]()) {
-                    $0[$1.label] = CalibreCustomColumnInfo(managedObject: $1)
-                },
-                pluginColumns: {
-                    var result = [String: CalibreLibraryPluginColumnInfo]()
-                    if let plugin = libraryRealm.pluginDSReaderHelper {
-                        result[CalibreLibrary.PLUGIN_DSREADER_HELPER] = CalibreLibraryDSReaderHelper(managedObject: plugin)
-                    }
-                    if let plugin = libraryRealm.pluginDictionaryViewer {
-                        result[CalibreLibrary.PLUGIN_DICTIONARY_VIEWER] = CalibreLibraryDictionaryViewer(managedObject: plugin)
-                    }
-                    if let plugin = libraryRealm.pluginReadingPosition {
-                        result[CalibreLibrary.PLUGIN_READING_POSITION] = CalibreLibraryReadingPosition(managedObject: plugin)
-                    }
-                    if let plugin = libraryRealm.pluginGoodreadsSync {
-                        result[CalibreLibrary.PLUGIN_GOODREADS_SYNC] = CalibreLibraryGoodreadsSync(managedObject: plugin)
-                    }
-                    if let plugin = libraryRealm.pluginCountPages {
-                        result[CalibreLibrary.PLUGIN_COUNT_PAGES] = CalibreLibraryCountPages(managedObject: plugin)
-                    }
-                    return result
+                customColumnInfos: {
+                    guard let data = libraryRealm.customColumnsData else { return [:] }
+                    return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
                 }()
             )
             
@@ -948,15 +973,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
     }
     
-    func updateLibraryPluginColumnInfo(libraryId: String, columnInfo: CalibreLibraryPluginColumnInfo) -> CalibreLibrary? {
-        guard calibreLibraries.contains(where: { $0.key == libraryId }) else { return nil }
-        calibreLibraries[libraryId]?.pluginColumns[columnInfo.getID()] = columnInfo
-        
-        guard let library = calibreLibraries[libraryId] else { return nil }
-        try? updateLibraryRealm(library: library, realm: self.realm)
-        return library
-    }
-    
     func getCustomDictViewer() -> (Bool, URL?) {
         return (UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED),
             UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
@@ -965,11 +981,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     func getCustomDictViewerNew(library: CalibreLibrary) -> (Bool, URL?) {
         var result: (Bool, URL?) = (false, nil)
-        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server),
-              let pluginDictionaryViewer = library.pluginDictionaryViewerWithDefault,
-              pluginDictionaryViewer.isEnabled() else { return result }
+        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server) else { return result }
+        let pluginDictionaryViewer = library.pluginDictionaryViewerWithDefault
+        guard pluginDictionaryViewer.isEnabled else { return result }
 
-        let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: CalibreLibraryGoodreadsSync())
+        let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
         guard let endpoint = connector.endpointDictLookup() else { return result }
         result.1 = endpoint.url
         result.0 = result.1 != nil
@@ -1060,25 +1076,8 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         libraryRealm.name = library.name
         libraryRealm.serverUUID = library.server.uuid.uuidString
         
-        libraryRealm.customColumns.append(objectsIn: library.customColumnInfos.values.map { $0.managedObject() })
+        libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
         
-        library.pluginColumns.forEach {
-            if let plugin = $0.value as? CalibreLibraryDSReaderHelper {
-                libraryRealm.pluginDSReaderHelper = plugin.managedObject()
-            }
-            if let plugin = $0.value as? CalibreLibraryReadingPosition {
-                libraryRealm.pluginReadingPosition = plugin.managedObject()
-            }
-            if let plugin = $0.value as? CalibreLibraryDictionaryViewer {
-                libraryRealm.pluginDictionaryViewer = plugin.managedObject()
-            }
-            if let plugin = $0.value as? CalibreLibraryGoodreadsSync {
-                libraryRealm.pluginGoodreadsSync = plugin.managedObject()
-            }
-            if let plugin = $0.value as? CalibreLibraryCountPages {
-                libraryRealm.pluginCountPages = plugin.managedObject()
-            }
-        }
         libraryRealm.autoUpdate = library.autoUpdate
         libraryRealm.discoverable = library.discoverable
         libraryRealm.hidden = library.hidden
@@ -1160,19 +1159,22 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         guard let realm = Thread.isMainThread ? self.realm : try? Realm(configuration: self.realmConf) else { return nil }
         
-        let objs = realm.objects(CalibreServerDSReaderHelperRealm.self).filter(
-            NSPredicate(format: "id = %@", server.id)
-        )
-        guard objs.count > 0 else { return nil }
-//        objs.forEach {
-//            print("\(#function) \($0)")
-//        }
-        return CalibreServerDSReaderHelper(managedObject: objs.first!)
+        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id),
+              let helper = serverRealm.dsreaderHelper else { return nil }
+        
+        let unmanaged = CalibreServerDSReaderHelper(port: helper.port)
+        unmanaged.configurationData = helper.configurationData
+        return unmanaged
     }
     
-    func updateServerDSReaderHelper(dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        try! realm.write {
-            realm.add(dsreaderHelper.managedObject(), update: .modified)
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
+        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
+        try? realm.write {
+            if let existing = serverRealm.dsreaderHelper {
+                existing.update(from: dsreaderHelper)
+            } else {
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: dsreaderHelper)
+            }
         }
     }
     
@@ -1214,16 +1216,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         }
     }
     
-    func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreLibraryDSReaderHelper, CalibreLibraryGoodreadsSync)? {
+    func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreDSReaderHelperPrefs.Options, CalibreGoodreadsSyncPrefs.PluginPrefs)? {
         // must have dsreader helper info and enabled by server
         guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server), dsreaderHelperServer.port > 0 else { return nil }
         guard let configuration = dsreaderHelperServer.configuration, let dsreader_helper_prefs = configuration.dsreader_helper_prefs, dsreader_helper_prefs.plugin_prefs.Options.goodreadsSyncEnabled else { return nil }
         
         // check if user disabled auto update
-        guard let dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault, dsreaderHelperLibrary.isEnabled() else { return nil }
+        let dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault
+        guard dsreaderHelperLibrary.isEnabled else { return nil }
         
         // check if profile name exists
-        guard let goodreadsSync = library.pluginGoodreadsSyncWithDefault, goodreadsSync.isEnabled() else { return nil }
+        let goodreadsSync = library.pluginGoodreadsSyncWithDefault
+        guard goodreadsSync.isEnabled else { return nil }
         guard let goodreads_sync_prefs = configuration.goodreads_sync_prefs, goodreads_sync_prefs.plugin_prefs.Users.contains(where: { $0.key == goodreadsSync.profileName }) else { return nil }
         
         return (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync)
@@ -1388,13 +1392,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         else {
             return
         }
-        
+
         defaultLog.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
         defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
-        
+
         refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
-        
+
         if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
            let library = calibreLibraries[readingBook.library.id],
            let goodreadsId = readingBook.identifiers["goodreads"],
@@ -1402,37 +1406,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-            
-            if goodreadsSync.isEnabled(), goodreadsSync.readingProgressColumnName.count > 1 {
+
+            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
                 calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
                     [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
                 ])
             }
         }
-        
-    }
-    
-    /// used for removing position entries
-    func updateReadingPosition(book: CalibreBook, alertDelegate: AlertDelegate) {
-        self.updateBook(book: book)
-        
-        guard let pluginReadingPosition = calibreLibraries[book.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled() else {
-            return
-        }
 
-        let ret = calibreServerService.updateBookReadingPosition(book: book, columnName: pluginReadingPosition.readingPositionCN, alertDelegate: alertDelegate) {
-            // empty
-        }
-        if ret != 0 {
-            updatingMetadataStatus = "Internal Error"
-            updatingMetadata = false
-            alertDelegate.alert(msg: updatingMetadataStatus)
-        }
     }
-    
-    
-    func goToPreviousBook() {
-        //MARK: FIXME
+
+
+    func goToPreviousBook() {        //MARK: FIXME
 //        if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
 //            currentBookId = filteredBookList[curIndex-1]
 //        }
@@ -1797,12 +1782,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 
             } receiveValue: { task in
                 if let config = task.config, config.dsreader_helper_prefs != nil {
-                    let dsreaderHelper = CalibreServerDSReaderHelper(id: task.id, port: task.port, configurationData: task.data, configuration: config)
+                    let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
+                    dsreaderHelper.configurationData = task.data
                     
-                    let obj = dsreaderHelper.managedObject()
-                    try? self.realm.write {
-                        self.realm.add(obj, update: .all)
-                    }
+                    self.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
                 }
             }.store(in: &calibreCancellables)
     }
@@ -1855,9 +1838,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             let library = result.request.library
             let serverUUID = library.server.uuid.uuidString
             
-            try? await Task.detached(priority: .userInitiated) {
-                try await self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
-            }.value
+            await withCheckedContinuation { continuation in
+                ModelData.SaveBooksMetadataRealmQueue.async {
+                    try? self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
+                    continuation.resume()
+                }
+            }
             
             result.categories.filter { $0.is_category }.forEach { category in
                 self.librarySearchManager.refreshLibraryCategory(library: library, category: category)

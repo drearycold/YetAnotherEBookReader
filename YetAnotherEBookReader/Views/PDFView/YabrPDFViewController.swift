@@ -12,7 +12,7 @@ import OSLog
 import SwiftUI
 
 @available(macCatalyst 14.0, *)
-class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
+class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, ObservableObject {
     let pdfView = YabrPDFView()
     let pdfViewAux = YabrPDFView()
     
@@ -45,7 +45,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
     
-    var pdfOptions = PDFOptions() {
+    @Published var pdfOptions = PDFOptions() {
         didSet {
             PDFPageWithBackground.fillColor = pdfOptions.fillColor
             
@@ -381,10 +381,13 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 image: UIImage(systemName: "doc.badge.gearshape"),
                 primaryAction: UIAction { (UIAction) in
                     //self.present(self.optionMenu, animated: true, completion: nil)
-                    let optionView = PDFOptionView(pdfViewController: Binding<YabrPDFViewController>(
-                        get: { return self },
-                        set: { _ in }
-                    ))
+                    let optionView = PDFOptionView(
+                        pdfViewController: Binding<YabrPDFViewController>(
+                            get: { return self },
+                            set: { _ in }
+                        ),
+                        pdfOptions: self.pdfOptions
+                    )
                     
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
                     optionViewController.preferredContentSize = CGSize(width:340, height:700)
@@ -787,7 +790,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         )
         
         let boundForVisibleContent = pageVisibleContentBounds[boundForVisibleContentKey]?.bounds ?? { () -> CGRect in
-            let bounds = getVisibleContentsBound(pdfPage: curPage)
+            let bounds = getVisibleContentsBound(pdfPage: curPage, readingDirection: pdfOptions.readingDirection, hMarginDetectStrength: pdfOptions.hMarginDetectStrength, vMarginDetectStrength: pdfOptions.vMarginDetectStrength, marginOffset: pdfOptions.marginOffset)
             pageVisibleContentBounds[boundForVisibleContentKey] = bounds
             return bounds.bounds
         }()
@@ -802,18 +805,23 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                 break
             }
         }
+        let readingDirection = pdfOptions.readingDirection
+        let hMarginDetectStrength = pdfOptions.hMarginDetectStrength
+        let vMarginDetectStrength = pdfOptions.vMarginDetectStrength
+        let marginOffset = pdfOptions.marginOffset
+        
         DispatchQueue.global(qos: .utility).async { [self] in
             let boundForVisibleContentKeyNext = PageVisibleContentKey(
                 pageNumber: curPageNum + 1,
-                readingDirection: pdfOptions.readingDirection,
-                hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-                vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+                readingDirection: readingDirection,
+                hMarginDetectStrength: hMarginDetectStrength,
+                vMarginDetectStrength: vMarginDetectStrength
             )
             let boundForVisibleContentKeyPrev = PageVisibleContentKey(
                 pageNumber: curPageNum - 1,
-                readingDirection: pdfOptions.readingDirection,
-                hMarginDetectStrength: pdfOptions.hMarginDetectStrength,
-                vMarginDetectStrength: pdfOptions.vMarginDetectStrength
+                readingDirection: readingDirection,
+                hMarginDetectStrength: hMarginDetectStrength,
+                vMarginDetectStrength: vMarginDetectStrength
             )
             var boundsNext: PageVisibleContentValue? = nil
             var boundsPrev: PageVisibleContentValue? = nil
@@ -830,12 +838,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             
             if pageVisibleContentBounds[boundForVisibleContentKeyNext] == nil,
                let prePage = pdfView.document?.page(at: boundForVisibleContentKeyNext.pageNumber - 1) {   //page(at:) is 0-based
-                boundsNext = getVisibleContentsBound(pdfPage: prePage)
+                boundsNext = getVisibleContentsBound(pdfPage: prePage, readingDirection: readingDirection, hMarginDetectStrength: hMarginDetectStrength, vMarginDetectStrength: vMarginDetectStrength, marginOffset: marginOffset)
             }
                         
             if pageVisibleContentBounds[boundForVisibleContentKeyPrev] == nil,
                let prePage = pdfView.document?.page(at: boundForVisibleContentKeyPrev.pageNumber - 1) {   //page(at:) is 0-based
-                boundsPrev = getVisibleContentsBound(pdfPage: prePage)
+                boundsPrev = getVisibleContentsBound(pdfPage: prePage, readingDirection: readingDirection, hMarginDetectStrength: hMarginDetectStrength, vMarginDetectStrength: vMarginDetectStrength, marginOffset: marginOffset)
             }
         }
         print("\(#function) pageVisibleContentBounds.count=\(pageVisibleContentBounds.count)")
@@ -1011,7 +1019,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         }
     }
     
-    func getVisibleContentsBound(pdfPage: PDFPage) -> PageVisibleContentValue {
+    func getVisibleContentsBound(pdfPage: PDFPage, readingDirection: PDFReadDirection, hMarginDetectStrength: Double, vMarginDetectStrength: Double, marginOffset: Double) -> PageVisibleContentValue {
         let boundsForMediaBox = pdfPage.bounds(for: .mediaBox)
         let boundsForCropBox = pdfPage.bounds(for: .cropBox)
         let sizeForThumbnailImage = getThumbnailImageSize(boundsForCropBox: boundsForCropBox)
@@ -1046,7 +1054,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
         if let provider = cgimage.dataProvider,
               let providerData = provider.data,
               let data = CFDataGetBytePtr(providerData) {
-            switch pdfOptions.readingDirection {
+            switch readingDirection {
             case .LtR_TtB:
                 top      = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1054,7 +1062,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .up,
                     data: data,
-                    ratio: boundsForMediaBox.width / boundsForCropBox.width
+                    ratio: boundsForMediaBox.width / boundsForCropBox.width,
+                    hMarginDetectStrength: hMarginDetectStrength
                 )
                 bottom   = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1062,7 +1071,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .down,
                     data: data,
-                    ratio: boundsForMediaBox.width / boundsForCropBox.width
+                    ratio: boundsForMediaBox.width / boundsForCropBox.width,
+                    hMarginDetectStrength: hMarginDetectStrength
                 )
                 leading  = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1070,7 +1080,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .right,
                     data: data,
-                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1),
+                    hMarginDetectStrength: vMarginDetectStrength
                 )
                 trailing = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1078,10 +1089,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .left,
                     data: data,
-                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1)
+                    ratio: 3 * imageMediaBox.size.height / Double(Int(imageMediaBox.size.height) - top.1 - bottom.1 + 1),
+                    hMarginDetectStrength: vMarginDetectStrength
                 )
-                leading.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.width)
-                trailing.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.width)
+                leading.0 += Int(marginOffset / 100.0 * imageMediaBox.size.width)
+                trailing.0 += Int(marginOffset / 100.0 * imageMediaBox.size.width)
             case .TtB_RtL:
                 leading  = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1089,7 +1101,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .right,
                     data: data,
-                    ratio: boundsForMediaBox.height / boundsForCropBox.height
+                    ratio: boundsForMediaBox.height / boundsForCropBox.height,
+                    hMarginDetectStrength: vMarginDetectStrength
                 )
                 trailing = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1097,7 +1110,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .left,
                     data: data,
-                    ratio: boundsForMediaBox.height / boundsForCropBox.height
+                    ratio: boundsForMediaBox.height / boundsForCropBox.height,
+                    hMarginDetectStrength: vMarginDetectStrength
                 )
                 top      = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1105,7 +1119,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .up,
                     data: data,
-                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1)
+                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1),
+                    hMarginDetectStrength: hMarginDetectStrength
                 )
                 bottom   = getBlankBorderWidth(
                     size: imageMediaBox.size,
@@ -1113,10 +1128,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
                     numberOfComponents: numberOfComponents,
                     orientation: .down,
                     data: data,
-                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1)
+                    ratio: 3 * imageMediaBox.size.width / Double(Int(imageMediaBox.size.width) - leading.1 - trailing.1 + 1),
+                    hMarginDetectStrength: hMarginDetectStrength
                 )
-                top.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.height)
-                bottom.0 += Int(pdfOptions.marginOffset / 100.0 * imageMediaBox.size.height)
+                top.0 += Int(marginOffset / 100.0 * imageMediaBox.size.height)
+                bottom.0 += Int(marginOffset / 100.0 * imageMediaBox.size.height)
                 break
             }
             
@@ -1166,7 +1182,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     /*
      from top to bottom
      */
-    func getBlankBorderWidth(size: CGSize, padding: Int, numberOfComponents: Int, orientation: CGImagePropertyOrientation, data: UnsafePointer<UInt8>, ratio: Double = 1.0) -> (Int, Int) {
+    func getBlankBorderWidth(size: CGSize, padding: Int, numberOfComponents: Int, orientation: CGImagePropertyOrientation, data: UnsafePointer<UInt8>, ratio: Double = 1.0, hMarginDetectStrength: Double) -> (Int, Int) {
         let lineNumMax = { () -> Int in
             switch(orientation) {
             case .up, .down, .upMirrored, .downMirrored:
@@ -1222,7 +1238,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
             }
             
             if nonWhiteDensity > 0,
-               nonWhiteDensity / Double(pixelNumMax) * ratio * 20.0 > pdfOptions.hMarginDetectStrength {
+               nonWhiteDensity / Double(pixelNumMax) * ratio * 20.0 > hMarginDetectStrength {
                 nonWhiteLines += 1
                 if nonWhiteLineFirst == 0 {
                     nonWhiteLineFirst = line
@@ -1315,30 +1331,44 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     func handleOptionsChange(pdfOptions: PDFOptions) {
         print(pdfOptions)
-        if self.pdfOptions != pdfOptions {
-            var needRedraw = false
-            if self.pdfOptions.themeMode != pdfOptions.themeMode {
-                needRedraw = true
-            }
-            self.pdfOptions = pdfOptions
-            if needRedraw {
-//                self.pdfView.layoutDocumentView()
-                //self.pdfView.invalidateIntrinsicContentSize()
-                let scaleFactor = self.pdfView.scaleFactor
-                self.pdfView.scaleFactor = 1.0
-                self.pdfView.scaleFactor = scaleFactor
-            }
-            if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
-                self.pageViewPositionHistory[pageNum]?.scaler = 0
-                switch pdfOptions.readingDirection {
-                case .LtR_TtB:
-                    self.pageViewPositionHistory[pageNum]?.point.x = .nan
-                case .TtB_RtL:
-                    self.pageViewPositionHistory[pageNum]?.point.y = .nan
+        
+        let oldOptions = PDFOptions(value: self.pdfOptions)
+        
+        if self.pdfOptions !== pdfOptions {
+            if let realm = self.pdfOptions.realm {
+                try? realm.write {
+                    self.pdfOptions.update(other: pdfOptions)
                 }
+            } else {
+                self.pdfOptions = pdfOptions
+                return
             }
-            handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
         }
+        
+        if oldOptions.pageMode != self.pdfOptions.pageMode || oldOptions.scrollDirection != self.pdfOptions.scrollDirection {
+            updatePageViewPositionHistory()
+        }
+        
+        // Trigger didSet for UI refresh (colors, etc.)
+        self.pdfOptions = self.pdfOptions
+        
+        if oldOptions.themeMode != self.pdfOptions.themeMode {
+//                self.pdfView.layoutDocumentView()
+            //self.pdfView.invalidateIntrinsicContentSize()
+            let scaleFactor = self.pdfView.scaleFactor
+            self.pdfView.scaleFactor = 1.0
+            self.pdfView.scaleFactor = scaleFactor
+        }
+        if let pageNum = pdfView.currentPage?.pageRef?.pageNumber {
+            self.pageViewPositionHistory[pageNum]?.scaler = 0
+            switch self.pdfOptions.readingDirection {
+            case .LtR_TtB:
+                self.pageViewPositionHistory[pageNum]?.point.x = .nan
+            case .TtB_RtL:
+                self.pageViewPositionHistory[pageNum]?.point.y = .nan
+            }
+        }
+        handlePageChange(notification: Notification(name: .PDFViewScaleChanged))
     }
     
     func handleAutoScalerChange(autoScaler: PDFAutoScaler, hMarginAutoScaler: Double, vMarginAutoScaler: Double) {
@@ -1347,7 +1377,16 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate {
     
     @objc func handleScaleChange(_ sender: Any?)
     {
-        pdfOptions.lastScale = pdfView.scaleFactor
+        let newScale = pdfView.scaleFactor
+        guard abs(pdfOptions.lastScale - newScale) > 0.0001 else { return }
+        
+        if let realm = pdfOptions.realm {
+            try? realm.write {
+                pdfOptions.lastScale = newScale
+            }
+        } else {
+            pdfOptions.lastScale = newScale
+        }
         print("handleScaleChange: \(pdfOptions.lastScale)")
     }
     

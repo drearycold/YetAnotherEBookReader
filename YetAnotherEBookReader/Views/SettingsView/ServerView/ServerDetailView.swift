@@ -139,68 +139,14 @@ struct ServerDetailView: View {
     
     @ViewBuilder
     private func libraryEntryDestination(library: CalibreLibrary) -> some View {
-        LibraryDetailView(
-            library: Binding<CalibreLibrary>(
-                get: {
-                    library
-                },
-                set: { newLibrary in
-                    modelData.calibreLibraries[library.id] = newLibrary
-                    try? modelData.updateLibraryRealm(library: newLibrary, realm: modelData.realm)
-                }
-            ),
-            discoverable: Binding<Bool>(get: {
-                library.discoverable
-            }, set: { newValue in
-                modelData.calibreLibraries[library.id]?.discoverable = newValue
-                if let library = modelData.calibreLibraries[library.id] {
-                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
-                    self.modelData.calibreUpdatedSubject.send(.library(library))
-                }
-            }),
-            autoUpdate: Binding<Bool>(get: {
-                library.autoUpdate
-            }, set: { newValue in
-                modelData.calibreLibraries[library.id]?.autoUpdate = newValue
-                if let library = modelData.calibreLibraries[library.id] {
-                    try? modelData.updateLibraryRealm(library: library, realm: modelData.realm)
-                }
-            }),
-            dsreaderHelperLibrary: Binding<CalibreLibraryDSReaderHelper>(
-                get: {
-                    library.pluginDSReaderHelperWithDefault ?? .init()
-                },
-                set: { dsreaderHelperLibrary in
-                    if modelData.calibreLibraries[library.id]?.pluginDSReaderHelperWithDefault != dsreaderHelperLibrary {
-                        var newValue = dsreaderHelperLibrary
-                        newValue._isOverride = true
-                        if let newLibrary = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue) {
-                            modelData.calibreLibraries[library.id] = newLibrary
-                        }
-                    }
-                }
-            ),
-            goodreadsSync: Binding<CalibreLibraryGoodreadsSync>(
-                get: {
-                    return library.pluginGoodreadsSyncWithDefault ?? .init()
-                },
-                set: { _ in }
-            ),
-            countPages: Binding<CalibreLibraryCountPages>(
-                get: {
-                    return library.pluginCountPagesWithDefault ?? .init()
-                },
-                set: { newCountPage in
-                    if library.pluginCountPagesWithDefault != newCountPage {
-                        var newValue = newCountPage
-                        newValue._isOverride = true
-                        if let newLibrary = modelData.updateLibraryPluginColumnInfo(libraryId: library.id, columnInfo: newValue) {
-                            modelData.calibreLibraries[library.id] = newLibrary
-                        }
-                    }
-                }
-            )
-        ).navigationTitle(library.name)
+        if let libraryRealm = modelData.realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) {
+            LibraryDetailView(
+                library: library,
+                libraryRealm: libraryRealm
+            ).navigationTitle(library.name)
+        } else {
+            Text("Library not found in database.")
+        }
     }
     
     @ViewBuilder
