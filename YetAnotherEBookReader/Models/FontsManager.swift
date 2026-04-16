@@ -12,6 +12,8 @@ import SwiftUI
 class FontsManager: ObservableObject {
     @Published var userFontInfos = [String: FontInfo]()
     
+    private static var registeredURLs = Set<URL>()
+    
     init() {
         reloadCustomFonts()
     }
@@ -36,6 +38,7 @@ class FontsManager: ObservableObject {
             do {
                 if FileManager.default.fileExists(atPath: fontDestFile.path) {
                     try FileManager.default.removeItem(at: fontDestFile)
+                    FontsManager.registeredURLs.remove(fontDestFile)
                 }
                 try FileManager.default.moveItem(atPath: url.path, toPath: fontDestFile.path)
                 fontDescriptorArrays.append(ctFontDescriptorArray)
@@ -54,7 +57,15 @@ class FontsManager: ObservableObject {
         let candidates = offsets.map { list[$0] }
         candidates.forEach { (fontId, fontInfo) in
             guard let fileURL = fontInfo.fileURL else { return }
+            
+            if let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(fileURL as CFURL) {
+                CTFontManagerUnregisterFontDescriptors(ctFontDescriptorArray, .process) { errors, done -> Bool in
+                    return true
+                }
+            }
+            
             try? FileManager.default.removeItem(atPath: fileURL.path)
+            FontsManager.registeredURLs.remove(fileURL)
         }
     }
     
@@ -65,35 +76,38 @@ class FontsManager: ObservableObject {
             self.userFontInfos.removeAll()
         }
     }
-}
-
-func loadUserFonts() -> [String: CTFontDescriptor]? {
-    guard let documentDirectory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-    else { return nil }
     
-    let fontsDirectory = documentDirectory.appendingPathComponent("Fonts",  isDirectory: true)
-    guard let _ = try? FileManager.default.createDirectory(atPath: fontsDirectory.path, withIntermediateDirectories: true, attributes: nil),
-          let fontsEnumerator = FileManager.default.enumerator(atPath: fontsDirectory.path) else { return nil }
-    
-    var userFontDescriptors = [String: CTFontDescriptor]()
-    while let file = fontsEnumerator.nextObject() as? String {
-        print("FONTDIR \(file)")
-        let fileURL = fontsDirectory.appendingPathComponent(file)
+    private func loadUserFonts() -> [String: CTFontDescriptor]? {
+        guard let documentDirectory = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
+        else { return nil }
         
-        if let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(fileURL as CFURL) {
-            CTFontManagerRegisterFontDescriptors(ctFontDescriptorArray, .process, true) { errors, done -> Bool in
-                return true
-            }
+        let fontsDirectory = documentDirectory.appendingPathComponent("Fonts",  isDirectory: true)
+        guard let _ = try? FileManager.default.createDirectory(atPath: fontsDirectory.path, withIntermediateDirectories: true, attributes: nil),
+              let fontsEnumerator = FileManager.default.enumerator(atPath: fontsDirectory.path) else { return nil }
+        
+        var userFontDescriptors = [String: CTFontDescriptor]()
+        while let file = fontsEnumerator.nextObject() as? String {
+            print("FONTDIR \(file)")
+            let fileURL = fontsDirectory.appendingPathComponent(file)
             
-            let count = CFArrayGetCount(ctFontDescriptorArray)
-            for i in 0..<count {
-                let valuePointer = CFArrayGetValueAtIndex(ctFontDescriptorArray, CFIndex(i))
-                let ctFontDescriptor = unsafeBitCast(valuePointer, to: CTFontDescriptor.self)
-                let ctFontName = unsafeBitCast(CTFontDescriptorCopyAttribute(ctFontDescriptor, kCTFontNameAttribute), to: CFString.self)
-                print("CTFONT \(ctFontName) \(fileURL)")
-                userFontDescriptors[ctFontName as String] = ctFontDescriptor
+            if let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(fileURL as CFURL) {
+                if !FontsManager.registeredURLs.contains(fileURL) {
+                    CTFontManagerRegisterFontDescriptors(ctFontDescriptorArray, .process, true) { errors, done -> Bool in
+                        return true
+                    }
+                    FontsManager.registeredURLs.insert(fileURL)
+                }
+                
+                let count = CFArrayGetCount(ctFontDescriptorArray)
+                for i in 0..<count {
+                    let valuePointer = CFArrayGetValueAtIndex(ctFontDescriptorArray, CFIndex(i))
+                    let ctFontDescriptor = unsafeBitCast(valuePointer, to: CTFontDescriptor.self)
+                    let ctFontName = unsafeBitCast(CTFontDescriptorCopyAttribute(ctFontDescriptor, kCTFontNameAttribute), to: CFString.self)
+                    print("CTFONT \(ctFontName) \(fileURL)")
+                    userFontDescriptors[ctFontName as String] = ctFontDescriptor
+                }
             }
         }
+        return userFontDescriptors
     }
-    return userFontDescriptors
 }
