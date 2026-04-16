@@ -441,46 +441,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
                 }
                 
                 if oldSchemaVersion < 134 {
-                    // Migrate plugins in CalibreLibraryRealm
-                    migration.enumerateObjects(ofType: CalibreLibraryRealm.className()) { oldObject, newObject in
-                        let pluginProps = [
-                            ("pluginDSReaderHelper", "CalibreLibraryDSReaderHelper"),
-                            ("pluginReadingPosition", "CalibreLibraryReadingPosition"),
-                            ("pluginDictionaryViewer", "CalibreLibraryDictionaryViewer"),
-                            ("pluginGoodreadsSync", "CalibreLibraryGoodreadsSync"),
-                            ("pluginCountPages", "CalibreLibraryCountPages")
-                        ]
-                        
-                        for (propName, className) in pluginProps {
-                            if let oldPlugin = oldObject?[propName] as? DynamicObject {
-                                var newPluginDict: [String: Any] = [
-                                    "_isEnabled": oldPlugin["isEnabled"] ?? false,
-                                    "_isDefault": oldPlugin["isDefault"] ?? false,
-                                    "_isOverride": oldPlugin["isOverride"] ?? false
-                                ]
-                                
-                                // Specific mappings
-                                if className == "CalibreLibraryGoodreadsSync" {
-                                    ["profileName", "tagsColumnName", "ratingColumnName", "dateReadColumnName", "reviewColumnName", "readingProgressColumnName"].forEach { key in
-                                        newPluginDict[key] = oldPlugin[key] ?? (key == "profileName" ? "" : "#")
-                                    }
-                                } else if className == "CalibreLibraryCountPages" {
-                                    ["pageCountCN", "wordCountCN", "fleschReadingEaseCN", "fleschKincaidGradeCN", "gunningFogIndexCN"].forEach { key in
-                                        newPluginDict[key] = oldPlugin[key] ?? "#"
-                                    }
-                                } else if className == "CalibreLibraryReadingPosition" || className == "CalibreLibraryDictionaryViewer" {
-                                    newPluginDict["readingPositionCN"] = oldPlugin["readingPositionCN"] ?? "#"
-                                } else if className == "CalibreLibraryDSReaderHelper" {
-                                    newPluginDict["port"] = oldPlugin["port"] ?? 0
-                                    newPluginDict["autoUpdateGoodreadsProgress"] = oldPlugin["autoUpdateGoodreadsProgress"] ?? false
-                                    newPluginDict["autoUpdateGoodreadsBookShelf"] = oldPlugin["autoUpdateGoodreadsBookShelf"] ?? false
-                                }
-                                
-                                newObject?[propName] = newPluginDict
-                            }
-                        }
-                    }
-                    
                     // Migrate CalibreServerDSReaderHelper into CalibreServerRealm
                     var newServersMap = [String: MigrationObject]()
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldServer, newServer in
