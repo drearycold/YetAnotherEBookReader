@@ -6,11 +6,12 @@
 //
 
 import SwiftUI
+import RealmSwift
 
 struct PDFOptionView: View {
     @Binding var pdfViewController: YabrPDFViewController
     
-    @State private var pdfOptions = PDFOptions()
+    @ObservedRealmObject var pdfOptions: PDFOptions
     
     var body: some View {
         ScrollView {
@@ -115,14 +116,23 @@ struct PDFOptionView: View {
                 }
             }
             .padding(10)
-            .onAppear() {
-                self.pdfOptions = self.pdfViewController.pdfOptions
-            }
-            .onChange(of: pdfOptions) {_ in
-                self.pdfViewController.updatePageViewPositionHistory()
-                self.pdfViewController.handleOptionsChange(pdfOptions: self.pdfOptions)
-            }
+            .onChange(of: pdfOptions.themeMode) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.selectedAutoScaler) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.pageMode) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.readingDirection) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.scrollDirection) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.hMarginAutoScaler) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.vMarginAutoScaler) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.hMarginDetectStrength) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.vMarginDetectStrength) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.marginOffset) {_ in handleOptionsChange() }
+            .onChange(of: pdfOptions.rememberInPagePosition) {_ in handleOptionsChange() }
         }
+    }
+    
+    private func handleOptionsChange() {
+        self.pdfViewController.updatePageViewPositionHistory()
+        self.pdfViewController.handleOptionsChange(pdfOptions: self.pdfOptions)
     }
 }
 
@@ -130,6 +140,6 @@ struct PDFOptionView_Previews: PreviewProvider {
     @State static var pdfViewController = YabrPDFViewController()
     
     static var previews: some View {
-        PDFOptionView(pdfViewController: $pdfViewController).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
+        PDFOptionView(pdfViewController: $pdfViewController, pdfOptions: PDFOptions()).previewDevice(PreviewDevice(rawValue: "iPhone 7"))
     }
 }

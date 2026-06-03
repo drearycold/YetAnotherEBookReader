@@ -16,40 +16,22 @@ public protocol Persistable {
 }
 
 class CalibreServerRealm: Object {
-    @objc dynamic var primaryKey: String?   //uuidString
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-    @objc dynamic var name: String?
+    @Persisted var name: String?
+    @Persisted var baseUrl: String?
+    @Persisted var hasPublicUrl = false
+    @Persisted var publicUrl: String?
     
-    @objc dynamic var baseUrl: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-    @objc dynamic var hasPublicUrl = false
-    
-    @objc dynamic var publicUrl: String?
-    
-    @objc dynamic var hasAuth = false
-    
-    @objc dynamic var username: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    @objc dynamic var password: String?
-    
-    @objc dynamic var defaultLibrary: String?
-    
-    @objc dynamic var removed = false
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
-    func updatePrimaryKey() {
-//        primaryKey = "\(username ?? "-")@\(baseUrl ?? "-")"
-    }
+    @Persisted var hasAuth = false
+    @Persisted var username: String?
+    @Persisted var password: String?
+
+    @Persisted var defaultLibrary: String?
+
+    @Persisted var removed = false
+
+    @Persisted var dsreaderHelper: CalibreServerDSReaderHelper?
 }
 
 extension CalibreServer: Persistable {
@@ -90,136 +72,99 @@ extension CalibreServer {
 }
 
 class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
-    @objc dynamic var primaryKey: String?
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-    @objc dynamic var key: String? {
+    @Persisted var key: String?
+    @Persisted var name: String? {
         didSet {
             updatePrimaryKey()
         }
     }
-    @objc dynamic var name: String? {
+    @Persisted var serverUUID: String? {
         didSet {
             updatePrimaryKey()
         }
-    }
-    
-    @objc dynamic var serverUUID: String? {
-        didSet {
-            updatePrimaryKey()
-        }
-    }
-    
-//    @objc dynamic var serverUrl: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-//    @objc dynamic var serverUsername: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-    
-    override static func primaryKey() -> String? {
-        return "primaryKey"
     }
     
     func updatePrimaryKey() {
-//        primaryKey = "\(serverUsername ?? "-")@\(serverUrl ?? "-") - \(name ?? "-")"
         primaryKey = CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID ?? "-", libraryName: name ?? "-")
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String) -> String {
         return [libraryName, "@", serverUUID].joined()
     }
-    var customColumns = List<CalibreCustomColumnRealm>()
-    @objc dynamic var pluginDSReaderHelper:     CalibreLibraryDSReaderHelperRealm?
-    @objc dynamic var pluginReadingPosition:    CalibreLibraryReadingPositionRealm?
-    @objc dynamic var pluginDictionaryViewer:   CalibreLibraryDictionaryViewerRealm?
-
-    @objc dynamic var pluginGoodreadsSync:      CalibreLibraryGoodreadsSyncRealm?
-    @objc dynamic var pluginCountPages:         CalibreLibraryCountPageRealm?
     
-    @objc dynamic var autoUpdate = true
-    @objc dynamic var discoverable = true
-    @objc dynamic var hidden = false
-    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
+    @Persisted var customColumnsData: Data?
+    
+    @Persisted var autoUpdate = true
+    @Persisted var discoverable = true
+    @Persisted var hidden = false
+    @Persisted var lastModified = Date(timeIntervalSince1970: 0)
 }
 
 class CalibreBookRealm: Object, ObjectKeyIdentifiable {
-    @objc dynamic var primaryKey: String?
+    @Persisted(primaryKey: true) var primaryKey: String?
     
-//    @objc dynamic var serverUrl: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
-//    @objc dynamic var serverUsername: String? {
-//        didSet {
-//            updatePrimaryKey()
-//        }
-//    }
+    @Persisted var serverUUID: String?
     
-    @objc dynamic var serverUUID: String?
+    @Persisted(indexed: true) var libraryName: String?
     
-    @objc dynamic var libraryName: String?
-    
-    @objc dynamic var idInLib: Int32 = 0 {
+    @Persisted(indexed: true) var idInLib: Int32 = 0 {
         didSet {
             updatePrimaryKey()
         }
     }
-    @objc dynamic var title = ""
-    @objc dynamic var authorFirst: String?
-    @objc dynamic var authorSecond: String?
-    @objc dynamic var authorThird: String?
-    let authorsMore = List<String>()
-    @objc dynamic var comments = ""
-    @objc dynamic var publisher = ""
-    @objc dynamic var series = ""
-    @objc dynamic var seriesIndex = 0.0
-    @objc dynamic var rating = 0
-    @objc dynamic var size = 0
-    @objc dynamic var pubDate = Date(timeIntervalSince1970: 0)
-    @objc dynamic var timestamp = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastModified = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastSynced = Date(timeIntervalSince1970: 0)
-    @objc dynamic var lastUpdated = Date(timeIntervalSince1970: 0)  //local only
-    @objc dynamic var lastProgress = 0.0
+    @Persisted(indexed: true) var title = ""
+    @Persisted(indexed: true) var authorFirst: String?
+    @Persisted var authorSecond: String?
+    @Persisted var authorThird: String?
+    @Persisted var authorsMore = List<String>()
+    @Persisted var comments = ""
+    @Persisted var publisher = ""
+    @Persisted(indexed: true) var series = ""
+    @Persisted var seriesIndex = 0.0
+    @Persisted var rating = 0
+    @Persisted var size = 0
+    @Persisted(indexed: true) var pubDate = Date(timeIntervalSince1970: 0)
+    @Persisted var timestamp = Date(timeIntervalSince1970: 0)
+    @Persisted var lastModified = Date(timeIntervalSince1970: 0)
+    @Persisted var lastSynced = Date(timeIntervalSince1970: 0)
+    @Persisted var lastUpdated = Date(timeIntervalSince1970: 0)  //local only
+    @Persisted var lastProgress = 0.0
     
-    @objc dynamic var tagFirst: String?
-    @objc dynamic var tagSecond: String?
-    @objc dynamic var tagThird: String?
-    let tagsMore = List<String>()
-    @objc dynamic var formatsData: NSData?
-    @objc dynamic var readPosData: NSData?
-    @objc dynamic var identifiersData: NSData?
-    @objc dynamic var userMetaData: NSData?
+    @Persisted(indexed: true) var tagFirst: String?
+    @Persisted var tagSecond: String?
+    @Persisted var tagThird: String?
+    @Persisted var tagsMore = List<String>()
+    @Persisted var formatsData: Data?
+    @Persisted var readPosData: Data?
+    @Persisted var identifiersData: Data?
+    @Persisted var userMetaData: Data?
     
-    @objc dynamic var inShelf = false
+    @Persisted(indexed: true) var inShelf = false
     
     func formats() -> [String: FormatInfo] {
-        guard let formatsData = formatsData as Data? else { return [:] }
+        guard let formatsData = formatsData else { return [:] }
         return (try? JSONDecoder().decode([String:FormatInfo].self, from: formatsData)) ?? [:]
         //return (try? JSONSerialization.jsonObject(with: formatsData as Data, options: []) as? [String: String]) ?? [:]
     }
     
     func identifiers() -> [String: String] {
-        guard let identifiersData = identifiersData as Data? else { return [:] }
+        guard let identifiersData = identifiersData else { return [:] }
         return (try? JSONDecoder().decode([String:String].self, from: identifiersData)) ?? [:]
 //        let identifiers = try! JSONSerialization.jsonObject(with: identifiersData! as Data, options: []) as! [String: String]
 //        return identifiers
     }
     
     func userMetadatas() -> [String: Any] {
-        guard let userMetaData = userMetaData as Data? else { return [:] }
+        guard let userMetaData = userMetaData else { return [:] }
         return (try? JSONSerialization.jsonObject(with: userMetaData, options: []) as? [String:Any]) ?? [:]
     }
     
     func readPos(library: CalibreLibrary) -> BookAnnotation {
         let readPos = BookAnnotation(id: idInLib, library: library)
         
-        guard let readPosData = readPosData as? Data,
+        guard let readPosData = readPosData,
               let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
               let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary
         else {
@@ -269,20 +214,12 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
         return readPos
     }
     
-    override static func primaryKey() -> String? {
-        return "primaryKey"
-    }
-    
     func updatePrimaryKey() {
         primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: idInLib.description)
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
         return [id, "^", libraryName, "@", serverUUID].joined()
-    }
-    
-    override static func indexedProperties() -> [String] {
-        return ["serverUrl", "serverUsername", "libraryName", "idInLib", "title", "inShelf", "series", "authorFirst", "tagFirst", "pubDate"]
     }
     
     var ratingDescription: String {
@@ -422,12 +359,12 @@ extension CalibreBook: Persistable {
         bookRealm.inShelf = self.inShelf
         
         let encoder = JSONEncoder()
-        bookRealm.formatsData = try? encoder.encode(self.formats) as NSData
+        bookRealm.formatsData = try? encoder.encode(self.formats)
         
         //bookRealm.identifiersData = try JSONSerialization.data(withJSONObject: book.identifiers, options: []) as NSData
-        bookRealm.identifiersData = try? encoder.encode(self.identifiers) as NSData
+        bookRealm.identifiersData = try? encoder.encode(self.identifiers)
         
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: []) as NSData
+        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: [])
         
 //        let deviceMapSerialize = self.readPos.getCopy().compactMapValues { (value) -> Any? in
 //            try? JSONSerialization.jsonObject(with: encoder.encode(value))
@@ -436,203 +373,6 @@ extension CalibreBook: Persistable {
         bookRealm.readPosData = nil
         
         return bookRealm
-    }
-}
-
-class CalibreCustomColumnRealm: Object {
-    @objc dynamic var label = ""
-    @objc dynamic var name = ""
-    @objc dynamic var datatype = ""
-    @objc dynamic var editable = false
-    
-    @objc dynamic var normalized = false
-    @objc dynamic var num = 0
-    @objc dynamic var isMultiple = false
-    
-    @objc dynamic var multipleSepsCacheToList: String?
-    @objc dynamic var multipleSepsUiToList: String?
-    @objc dynamic var multipleSepsListToUi: String?
-
-    @objc dynamic var displayDescription = ""
-    
-    //type text
-    @objc dynamic var displayIsNames = false
-    
-    //tyoe composite
-    @objc dynamic var displayCompositeTemplate: String?
-    @objc dynamic var displayCompositeSort: String?
-    @objc dynamic var displayUseDecorations = 0
-    @objc dynamic var displayMakeCategory = false
-    @objc dynamic var displayContainsHtml = false
-    
-    //type int, float
-    @objc dynamic var displayNumberFormat: String?
-    
-    //type comments
-    @objc dynamic var displayHeadingPosition: String?
-    @objc dynamic var displayInterpretAs: String?
-    
-    //type rating
-    @objc dynamic var displayAllowHalfStars = false
-    
-    override static func primaryKey() -> String? {
-        return "label"
-    }
-}
-
-extension CalibreCustomColumnInfo: Persistable {
-    public init(managedObject: CalibreCustomColumnRealm) {
-        label = managedObject.label
-        name = managedObject.name
-        datatype = managedObject.datatype
-        editable = managedObject.editable
-        normalized = managedObject.normalized
-        num = managedObject.num
-        isMultiple = managedObject.isMultiple
-        multipleSeps = [:]
-        display = CalibreCustomColumnDisplayInfo(description: "", isNames: nil, compositeTemplate: nil, compositeSort: nil, useDecorations: nil, makeCategory: nil, containsHtml: nil, numberFormat: nil, headingPosition: nil, interpretAs: nil, allowHalfStars: nil)
-    }
-    
-    public func managedObject() -> CalibreCustomColumnRealm {
-        let obj = CalibreCustomColumnRealm()
-        obj.label = label
-        obj.name = name
-        obj.datatype = datatype
-        obj.editable = editable
-        obj.normalized = normalized
-        obj.num = num
-        obj.isMultiple = isMultiple
-        
-        return obj
-    }
-}
-
-class CalibreLibraryGoodreadsSyncRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-    
-    @objc dynamic var profileName: String?
-    @objc dynamic var tagsColumnName: String?
-    @objc dynamic var ratingColumnName: String?
-    @objc dynamic var dateReadColumnName: String?
-    @objc dynamic var reviewColumnName: String?
-    @objc dynamic var readingProgressColumnName: String?
-}
-
-extension CalibreLibraryGoodreadsSync: Persistable {
-    public init(managedObject: CalibreLibraryGoodreadsSyncRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        profileName = managedObject.profileName ?? profileName
-        tagsColumnName = managedObject.tagsColumnName ?? tagsColumnName
-        ratingColumnName = managedObject.ratingColumnName ?? ratingColumnName
-        dateReadColumnName = managedObject.dateReadColumnName ?? dateReadColumnName
-        reviewColumnName = managedObject.reviewColumnName ?? reviewColumnName
-        readingProgressColumnName = managedObject.readingProgressColumnName ?? readingProgressColumnName
-    }
-    
-    public func managedObject() -> CalibreLibraryGoodreadsSyncRealm {
-        let obj = CalibreLibraryGoodreadsSyncRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.profileName = profileName
-        obj.tagsColumnName = tagsColumnName
-        obj.ratingColumnName = ratingColumnName
-        obj.dateReadColumnName = dateReadColumnName
-        obj.reviewColumnName = reviewColumnName
-        obj.readingProgressColumnName = readingProgressColumnName
-        return obj
-    }
-}
-
-class CalibreLibraryCountPageRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var pageCountCN: String?
-    @objc dynamic var wordCountCN: String?
-    @objc dynamic var fleschReadingEaseCN: String?
-    @objc dynamic var fleschKincaidGradeCN: String?
-    @objc dynamic var gunningFogIndexCN: String?
-}
-
-extension CalibreLibraryCountPages: Persistable {
-    public init(managedObject: CalibreLibraryCountPageRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        pageCountCN = managedObject.pageCountCN ?? pageCountCN
-        wordCountCN = managedObject.wordCountCN ?? wordCountCN
-        fleschReadingEaseCN = managedObject.fleschReadingEaseCN ?? fleschReadingEaseCN
-        fleschKincaidGradeCN = managedObject.fleschKincaidGradeCN ?? fleschKincaidGradeCN
-        gunningFogIndexCN = managedObject.gunningFogIndexCN ?? gunningFogIndexCN
-    }
-    
-    public func managedObject() -> CalibreLibraryCountPageRealm {
-        let obj = CalibreLibraryCountPageRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.pageCountCN = pageCountCN
-        obj.wordCountCN = wordCountCN
-        obj.fleschReadingEaseCN = fleschReadingEaseCN
-        obj.fleschKincaidGradeCN = fleschKincaidGradeCN
-        obj.gunningFogIndexCN = gunningFogIndexCN
-        return obj
-    }
-}
-
-class CalibreLibraryReadingPositionRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var readingPositionCN: String?
-}
-
-extension CalibreLibraryReadingPosition: Persistable {
-    public init(managedObject: CalibreLibraryReadingPositionRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-        readingPositionCN = managedObject.readingPositionCN ?? readingPositionCN
-    }
-    
-    public func managedObject() -> CalibreLibraryReadingPositionRealm {
-        let obj = CalibreLibraryReadingPositionRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.readingPositionCN = readingPositionCN
-        return obj
-    }
-}
-
-class CalibreLibraryDictionaryViewerRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var readingPositionCN: String?
-}
-
-extension CalibreLibraryDictionaryViewer: Persistable {
-    public init(managedObject: CalibreLibraryDictionaryViewerRealm) {
-        _isEnabled = managedObject.isEnabled
-        _isDefault = managedObject.isDefault
-        _isOverride = managedObject.isOverride
-    }
-    
-    public func managedObject() -> CalibreLibraryDictionaryViewerRealm {
-        let obj = CalibreLibraryDictionaryViewerRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        return obj
     }
 }
 
@@ -1121,65 +861,18 @@ class BookHighlightRealm: Object {
     // MARK: PDF Specific
     @objc open dynamic var ranges: String?
     
-    override static func primaryKey()-> String? {
-        return "highlightId"
+    var contentEncoded: String? {
+        content.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
     }
-}
-
-extension BookHighlight: Persistable {
-    init(managedObject: BookHighlightRealm) {
-        removed = managedObject.removed
-        
-        bookId = managedObject.bookId
-        highlightId = managedObject.highlightId
-        readerName = managedObject.readerName
-        
-        page = managedObject.page
-        startOffset = managedObject.startOffset
-        endOffset = managedObject.endOffset
-        ranges = managedObject.ranges
-        
-        date = managedObject.date
-        type = managedObject.type
-        note = managedObject.note
-        
-        tocFamilyTitles = managedObject.tocFamilyTitles.map { $0 }
-        content = managedObject.content
-        contentPost = managedObject.contentPost
-        contentPre = managedObject.contentPre
-        
-        cfiStart = managedObject.cfiStart
-        cfiEnd = managedObject.cfiEnd
-        spineName = managedObject.spineName
+    var contentPreEncoded: String? {
+        contentPre.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
+    }
+    var contentPostEncoded: String? {
+        contentPost.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed)
     }
     
-    func managedObject() -> BookHighlightRealm {
-        let managedObject = BookHighlightRealm()
-        managedObject.removed = removed
-        
-        managedObject.bookId = bookId
-        managedObject.highlightId = highlightId
-        managedObject.readerName = readerName
-        
-        managedObject.page = page
-        managedObject.startOffset = startOffset
-        managedObject.endOffset = endOffset
-        managedObject.ranges = ranges
-        
-        managedObject.date = date
-        managedObject.type = type
-        managedObject.note = note
-        
-        managedObject.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
-        managedObject.content = content
-        managedObject.contentPost = contentPost
-        managedObject.contentPre = contentPre
-        
-        managedObject.cfiStart = cfiStart
-        managedObject.cfiEnd = cfiEnd
-        managedObject.spineName = spineName
-        
-        return managedObject
+    override static func primaryKey()-> String? {
+        return "highlightId"
     }
 }
 
@@ -1213,69 +906,38 @@ extension FolioReaderHighlightRealm {
     }
 }
 
-class CalibreServerDSReaderHelperRealm: Object {
-    @objc dynamic var id: String?
-    @objc dynamic var port: Int = 0
-    @objc dynamic var data: Data?
+class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
+    @Persisted var port: Int = 0
+    @Persisted var configurationData: Data?
     
-    override static func primaryKey() -> String? {
-        return "id"
+    convenience init(port: Int) {
+        self.init()
+        self.port = port
     }
-}
-
-extension CalibreServerDSReaderHelper: Persistable {
-    public init(managedObject: CalibreServerDSReaderHelperRealm) {
-        self.id = managedObject.id ?? ""
-        self.port = managedObject.port
-        self.configurationData = managedObject.data
-        if let data = self.configurationData {
-            self.configuration = try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+    
+    var configuration: CalibreDSReaderHelperConfiguration? {
+        get {
+            guard let data = configurationData else { return nil }
+            return try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        }
+        set {
+            if let newValue = newValue {
+                configurationData = try? JSONEncoder().encode(newValue)
+            } else {
+                configurationData = nil
+            }
         }
     }
-    
-    public func managedObject() -> CalibreServerDSReaderHelperRealm {
-        let obj = CalibreServerDSReaderHelperRealm()
-        obj.id = self.id
-        obj.port = self.port
-        obj.data = self.configurationData
-        
-        return obj
-    }
-}
 
-class CalibreLibraryDSReaderHelperRealm: Object {
-    @objc dynamic var isEnabled = false
-    @objc dynamic var isDefault = false
-    @objc dynamic var isOverride = false
-
-    @objc dynamic var port = Int()
-    
-    @objc dynamic var autoUpdateGoodreadsProgress = false
-    @objc dynamic var autoUpdateGoodreadsBookShelf = false
-}
-
-extension CalibreLibraryDSReaderHelper: Persistable {
-    public init(managedObject: CalibreLibraryDSReaderHelperRealm) {
-        self._isEnabled = managedObject.isEnabled
-        self._isDefault = managedObject.isDefault
-        self._isOverride = managedObject.isOverride
-        self.autoUpdateGoodreadsProgress = managedObject.autoUpdateGoodreadsProgress
-        self.autoUpdateGoodreadsBookShelf = managedObject.autoUpdateGoodreadsBookShelf
-    }
-    
-    public func managedObject() -> CalibreLibraryDSReaderHelperRealm {
-        let obj = CalibreLibraryDSReaderHelperRealm()
-        obj.isEnabled = isEnabled()
-        obj.isDefault = isDefault()
-        obj.isOverride = isOverride()
-        obj.autoUpdateGoodreadsProgress = self.autoUpdateGoodreadsProgress
-        obj.autoUpdateGoodreadsBookShelf = self.autoUpdateGoodreadsBookShelf
-        
-        return obj
+    func update(from other: CalibreServerDSReaderHelper) {
+        self.port = other.port
+        self.configurationData = other.configurationData
     }
 }
 
 class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
+    static let PDFBookmarkPosType = "yabrpdf"
+    
     @objc dynamic var _id: ObjectId = .generate()
     @objc dynamic var bookId: String = .init()
     @objc dynamic var page: Int = .zero
@@ -1293,73 +955,18 @@ class BookBookmarkRealm: Object, ObjectKeyIdentifiable {
     }
 }
 
-extension BookBookmark: Persistable {
-    public init(managedObject: BookBookmarkRealm) {
-        self.bookId = managedObject.bookId
-        self.page = managedObject.page
-        
-        self.pos_type = managedObject.pos_type
-        self.pos = managedObject.pos
-        
-        self.title = managedObject.title
-        self.date = managedObject.date
-        
-        self.removed = managedObject.removed
-    }
-    
-    public func managedObject() -> BookBookmarkRealm {
-        let obj = BookBookmarkRealm()
-        obj.bookId = self.bookId
-        obj.page = self.page
-        
-        obj.pos_type = self.pos_type
-        obj.pos = self.pos
-        
-        obj.title = self.title
-        obj.date = self.date
-        
-        obj.removed = self.removed
-        
-        return obj
-    }
-}
-
-
 //MARK: PDF
-@available(*, deprecated, renamed: "YabrPDFOptionsRealm")
-class PDFOptionsRealm: Object {
-    @objc dynamic var id: Int32 = 0
-    @objc dynamic var libraryName = ""
-    @objc dynamic var themeMode = PDFThemeMode.serpia.rawValue
-    @objc dynamic var selectedAutoScaler = PDFAutoScaler.Width.rawValue
-    @objc dynamic var pageMode = PDFLayoutMode.Page.rawValue
-    @objc dynamic var readingDirection = PDFReadDirection.LtR_TtB.rawValue
-    @objc dynamic var scrollDirection = PDFScrollDirection.Vertical.rawValue
-    @objc dynamic var hMarginAutoScaler = 5.0
-    @objc dynamic var vMarginAutoScaler = 5.0
-    @objc dynamic var hMarginDetectStrength = 2.0
-    @objc dynamic var vMarginDetectStrength = 2.0
-    @objc dynamic var marginOffset = 0.0
-    @objc dynamic var lastScale = 1.0
-    @objc dynamic var rememberInPagePosition = true
-    
-    override static func primaryKey() -> String? {
-        return "id"
-    }
-}
-
-
 extension PDFThemeMode: PersistableEnum {}
 extension PDFAutoScaler: PersistableEnum {}
 extension PDFLayoutMode: PersistableEnum {}
 extension PDFReadDirection: PersistableEnum {}
 extension PDFScrollDirection: PersistableEnum {}
 
-class YabrPDFOptionsRealm: Object, ObjectKeyIdentifiable {
+class PDFOptions: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
     @Persisted var bookId: Int32 = 0
-    @Persisted var libraryName: String
+    @Persisted var libraryName: String = ""
     
     @Persisted var themeMode = PDFThemeMode.serpia
     @Persisted var selectedAutoScaler = PDFAutoScaler.Width
@@ -1374,60 +981,45 @@ class YabrPDFOptionsRealm: Object, ObjectKeyIdentifiable {
     @Persisted var marginOffset = 0.0
     @Persisted var lastScale = 1.0
     @Persisted var rememberInPagePosition = true
-}
+    
+    var isDark: Bool {
+        themeMode == .dark
+    }
 
-extension PDFOptions: Persistable {
-    public init(managedObject: YabrPDFOptionsRealm) {
-        self.id = managedObject.bookId
-        self.libraryName = managedObject.libraryName
-        self.themeMode = managedObject.themeMode
-        self.selectedAutoScaler = managedObject.selectedAutoScaler
-        self.pageMode = managedObject.pageMode
-        self.readingDirection = managedObject.readingDirection
-        self.scrollDirection = managedObject.scrollDirection
-        self.hMarginAutoScaler = managedObject.hMarginAutoScaler
-        self.vMarginAutoScaler = managedObject.vMarginAutoScaler
-        self.hMarginDetectStrength = managedObject.hMarginDetectStrength
-        self.vMarginDetectStrength = managedObject.vMarginDetectStrength
-        self.marginOffset = managedObject.marginOffset
-        self.lastScale = managedObject.lastScale
-        self.rememberInPagePosition = managedObject.rememberInPagePosition
+    func isDark<T>(_ f: T, _ l: T) -> T{
+        isDark ? f : l
+    }
+
+    var fillColor: CGColor {
+        switch (themeMode) {
+        case .none:
+            return .init(gray: 0.0, alpha: 0.0)
+        case .serpia:   //#FBF0D9
+            return CGColor(red: 0.98046875, green: 0.9375, blue: 0.84765625, alpha: 1.0)
+        case .forest:   //#BAD5C1
+            return CGColor(
+                red: CGFloat(Int("BA", radix: 16) ?? 255) / 255.0,
+                green: CGFloat(Int("D5", radix: 16) ?? 255) / 255.0,
+                blue: CGFloat(Int("C1", radix: 16) ?? 255) / 255.0,
+                alpha: 1.0)
+        case .dark:
+            return .init(gray: 0.0, alpha: 1.0)
+        }
     }
     
-    public func managedObject() -> YabrPDFOptionsRealm {
-        let obj = YabrPDFOptionsRealm()
-        
-        obj.bookId = self.id
-        obj.libraryName = self.libraryName
-        obj.themeMode = self.themeMode
-        obj.selectedAutoScaler = self.selectedAutoScaler
-        obj.pageMode = self.pageMode
-        obj.readingDirection = self.readingDirection
-        obj.scrollDirection = self.scrollDirection
-        obj.hMarginAutoScaler = self.hMarginAutoScaler
-        obj.vMarginAutoScaler = self.vMarginAutoScaler
-        obj.hMarginDetectStrength = self.hMarginDetectStrength
-        obj.vMarginDetectStrength = self.vMarginDetectStrength
-        obj.marginOffset = self.marginOffset
-        obj.lastScale = self.lastScale
-        obj.rememberInPagePosition = self.rememberInPagePosition
-        
-        return obj
-    }
-    
-    public func update(obj: YabrPDFOptionsRealm) {
-        obj.themeMode = self.themeMode
-        obj.selectedAutoScaler = self.selectedAutoScaler
-        obj.pageMode = self.pageMode
-        obj.readingDirection = self.readingDirection
-        obj.scrollDirection = self.scrollDirection
-        obj.hMarginAutoScaler = self.hMarginAutoScaler
-        obj.vMarginAutoScaler = self.vMarginAutoScaler
-        obj.hMarginDetectStrength = self.hMarginDetectStrength
-        obj.vMarginDetectStrength = self.vMarginDetectStrength
-        obj.marginOffset = self.marginOffset
-        obj.lastScale = self.lastScale
-        obj.rememberInPagePosition = self.rememberInPagePosition
+    public func update(other: PDFOptions) {
+        self.themeMode = other.themeMode
+        self.selectedAutoScaler = other.selectedAutoScaler
+        self.pageMode = other.pageMode
+        self.readingDirection = other.readingDirection
+        self.scrollDirection = other.scrollDirection
+        self.hMarginAutoScaler = other.hMarginAutoScaler
+        self.vMarginAutoScaler = other.vMarginAutoScaler
+        self.hMarginDetectStrength = other.hMarginDetectStrength
+        self.vMarginDetectStrength = other.vMarginDetectStrength
+        self.marginOffset = other.marginOffset
+        self.lastScale = other.lastScale
+        self.rememberInPagePosition = other.rememberInPagePosition
     }
 }
 
@@ -1739,6 +1331,57 @@ extension ReadiumPreferenceRealm {
         case .always?: self.spread = 2
         default: self.spread = 0
         }
+    }
+}
+
+extension BookHighlightRealm {
+    func toCalibreBookAnnotationHighlightEntry() -> CalibreBookAnnotationHighlightEntry? {
+        guard let uuid = uuidFolioToCalibre(highlightId),
+              let readerType = ReaderType(rawValue: readerName)
+        else { return nil }
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        switch readerType {
+        case .YabrEPUB, .YabrPDF:
+            return CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: date),
+                uuid: uuid,
+                removed: removed,
+                ranges: ranges,
+                startCfi: cfiStart,
+                endCfi: cfiEnd,
+                highlightedText: content,
+                style: ["kind":"color", "type":"builtin", "which": BookHighlightStyle.classForStyleCalibre(type)],
+                spineName: spineName,
+                spineIndex: page - 1,
+                tocFamilyTitles: tocFamilyTitles.map { $0 },
+                notes: note
+            )
+        default:
+            return nil
+        }
+    }
+}
+
+extension BookBookmarkRealm {
+    static let dateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        return formatter
+    }()
+    
+    func toCalibreBookAnnotationBookmarkEntry() -> CalibreBookAnnotationBookmarkEntry {
+        return CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: BookBookmarkRealm.dateFormatter.string(from: date),
+            pos_type: pos_type,
+            pos: pos,
+            title: title,
+            removed: removed
+        )
     }
 }
 

@@ -13,33 +13,6 @@ extension BookAnnotation {
         "\(library.key) - \(id)"
     }
     
-    static func getBookPreferenceIndividualConfig(bookFileURL: URL) -> Realm.Configuration {
-        return Realm.Configuration(
-            fileURL: bookFileURL.deletingPathExtension().appendingPathExtension("db"),
-            schemaVersion: ModelData.RealmSchemaVersion) { migration, oldSchemaVersion in
-                if oldSchemaVersion < 109 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionRealm.className()) { oldObject, newObject in
-                        if let oldObject = oldObject,
-                           let deviceId = oldObject["id"] as? String {
-                            newObject?["deviceId"] = deviceId
-                        }
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-                
-                if oldSchemaVersion < 113 {
-                    migration.enumerateObjects(ofType: BookDeviceReadingPositionHistoryRealm.className()) { oldObject, newObject in
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-                if oldSchemaVersion < 114 {
-                    migration.enumerateObjects(ofType: BookBookmarkRealm.className()) { oldObject, newObject in
-                        newObject?["_id"] = ObjectId.generate()
-                    }
-                }
-            }
-    }
-    
     static func getBookPreferenceServerConfig(_ server: CalibreServer) -> Realm.Configuration {
         let applicationSupportURL = try! FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         
@@ -64,6 +37,44 @@ extension BookAnnotation {
                         newObject?["offsetFirstPage"] = oldObject?["offsetFirstPage"] as? Bool
                     }
                 }
+                
+                if oldSchemaVersion < 134 {
+                    migration.enumerateObjects(ofType: PDFOptions.className()) { oldObject, newObject in
+                        newObject?["_id"] = ObjectId.generate()
+                    }
+                    
+                    // Legacy YabrPDFOptionsRealm migration (if any data exists in this realm)
+                    var existingKeys = Set<String>()
+                    migration.enumerateObjects(ofType: PDFOptions.className()) { oldObject, _ in
+                        if let oldObject = oldObject,
+                           let bookId = oldObject["bookId"] as? Int32,
+                           let libraryName = oldObject["libraryName"] as? String {
+                            existingKeys.insert("\(libraryName)_\(bookId)")
+                        }
+                    }
+
+                    migration.enumerateObjects(ofType: "YabrPDFOptionsRealm") { oldObject, _ in
+                        guard let oldObject = oldObject else { return }
+                        let bookId = oldObject["bookId"] as? Int32 ?? 0
+                        let libraryName = oldObject["libraryName"] as? String ?? ""
+                        let key = "\(libraryName)_\(bookId)"
+                        
+                        if !existingKeys.contains(key) {
+                            let newObj = migration.create(PDFOptions.className())
+                            newObj["_id"] = ObjectId.generate()
+                            newObj["bookId"] = bookId
+                            newObj["libraryName"] = libraryName
+                            
+                            // Map all other properties
+                            for key in ["themeMode", "selectedAutoScaler", "pageMode", "readingDirection", "scrollDirection", 
+                                        "hMarginAutoScaler", "vMarginAutoScaler", "hMarginDetectStrength", "vMarginDetectStrength", 
+                                        "marginOffset", "lastScale", "rememberInPagePosition"] {
+                                newObj[key] = oldObject[key]
+                            }
+                            existingKeys.insert(key)
+                        }
+                    }
+                }
             },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,
@@ -71,7 +82,7 @@ extension BookAnnotation {
                 FolioReaderPreferenceRealm.self,
                 BookHighlightRealm.self,
                 BookBookmarkRealm.self,
-                YabrPDFOptionsRealm.self,
+                PDFOptions.self,
                 ReadiumPreferenceRealm.self
             ]
         )

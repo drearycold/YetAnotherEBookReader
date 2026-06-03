@@ -17,6 +17,7 @@ struct ActivityList: View {
 
     @ObservedResults(
         CalibreActivityLogEntry.self,
+        configuration: ModelData.shared?.realmConf,
         sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
     ) var activities
 
@@ -38,6 +39,7 @@ struct ActivityList: View {
         
         _activities = ObservedResults(
             CalibreActivityLogEntry.self,
+            configuration: ModelData.shared?.realmConf,
             filter: predicate,
             sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
         )
@@ -61,6 +63,7 @@ struct ActivityList: View {
         
         _activities = ObservedResults(
             CalibreActivityLogEntry.self,
+            configuration: ModelData.shared?.realmConf,
             filter: predicate,
             sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
         )

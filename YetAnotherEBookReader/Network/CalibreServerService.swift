@@ -467,68 +467,8 @@ final class CalibreServerService {
                 }
             }
             
-            //Parse Reading Position
-            if let pluginReadingPosition = self.calibreLibraries[oldbook.library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
-               let readPosString = book.userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
-               let readPosData = Data(base64Encoded: readPosString) {
-                if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
-                   let deviceMapDict = readPosDictNew["deviceMap"] {
-                    
-                    deviceMapDict.forEach { key, value in
-                        let deviceName = key// as! String
-                        
-                        if let oldPos = book.readPos.getPosition(deviceName) {
-                            guard deviceName != self.deviceName else { return }    //trust local record
-                            guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
-                        }
-                        
-                        var deviceReadingPosition = value
-                        deviceReadingPosition.id = deviceName
-                        
-                        book.readPos.updatePosition(deviceReadingPosition)
-                        
-                        self.defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
-                    }
-                    
-                } else if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPositionLegacy]].self, from: readPosData),
-                          let deviceMapDictNew = readPosDictNew["deviceMap"],
-                          let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-                          let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
-                    
-                    deviceMapDictNew.forEach { key, value in
-                        let deviceName = key// as! String
-                        
-                        if let oldPos = book.readPos.getPosition(deviceName) {
-                            guard deviceName != self.deviceName else { return }    //trust local record
-                            guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
-                        }
-                        
-                        var deviceReadingPosition = BookDeviceReadingPosition(id: value.id, readerName: value.readerName, maxPage: value.maxPage, lastReadPage: value.lastReadPage, lastReadChapter: value.lastReadChapter, lastChapterProgress: value.lastChapterProgress, lastProgress: value.lastProgress, furthestReadPage: value.furthestReadPage, furthestReadChapter: value.furthestReadChapter, lastPosition: value.lastPosition, cfi: value.cfi, epoch: value.epoch, structuralStyle: value.structuralStyle, structuralRootPageNumber: value.structuralRootPageNumber, positionTrackingStyle: value.positionTrackingStyle, lastReadBook: value.lastReadBook, lastBundleProgress: value.lastBundleProgress)
-                        
-                        deviceReadingPosition.id = deviceName
-                        
-                        if let deviceReadingPositionDict = deviceMapDict[deviceName] as? [String: Any] {
-                            if let cfi = deviceReadingPositionDict["cfi"] as? String {
-                                deviceReadingPosition.cfi = cfi
-                            }
-                            deviceReadingPosition.epoch = deviceReadingPositionDict["epoch"] as? Double ?? .zero
-
-                            deviceReadingPosition.structuralStyle = deviceReadingPositionDict["structuralStyle"] as? Int ?? .zero
-                            deviceReadingPosition.structuralRootPageNumber = deviceReadingPositionDict["structuralRootPageNumber"] as? Int ?? .zero
-                            deviceReadingPosition.positionTrackingStyle = deviceReadingPositionDict["positionTrackingStyle"] as? Int ?? .zero
-                            deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
-                            deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
-                        }
-                        
-                        book.readPos.updatePosition(deviceReadingPosition)
-                        
-                        self.defaultLog.info("book.readPos.getDevices().count \(book.readPos.getDevices().count)")
-                    }
-                }
-            }
-
             return book
-        } catch {
+            } catch {
             print("\(#function) error=\(error)")
             return nil
         }
@@ -586,13 +526,13 @@ final class CalibreServerService {
             
             $0[$1.key.uppercased()] = formatInfo
         }
-        bookRealm.formatsData = try? JSONEncoder().encode(formats) as NSData?
+        bookRealm.formatsData = try? JSONEncoder().encode(formats)
         
         bookRealm.size = 0   //parse later
         
         bookRealm.rating = Int(entry.rating * 2)
         
-        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers) as NSData
+        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers)
         bookRealm.comments = entry.comments ?? ""
         
         var userMetadatas = bookRealm.userMetadatas()
@@ -605,66 +545,8 @@ final class CalibreServerService {
                 $0[label] = value
             }
         }
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: []) as NSData
-        let readPos = bookRealm.readPos(library: library)
-        //Parse Reading Position
-        if let pluginReadingPosition = self.calibreLibraries[library.id]?.pluginReadingPositionWithDefault, pluginReadingPosition.isEnabled(),
-           let readPosString = userMetadatas[pluginReadingPosition.readingPositionCN.trimmingCharacters(in: CharacterSet(["#"]))] as? String,
-           let readPosData = Data(base64Encoded: readPosString) {
-            
-            if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPosition]].self, from: readPosData),
-               let deviceMapDict = readPosDictNew["deviceMap"] {
-                
-                deviceMapDict.forEach { key, value in
-                    let deviceName = key// as! String
-                    
-                    if let oldPos = readPos.getPosition(deviceName) {
-                        guard deviceName != self.deviceName else { return }    //trust local record
-                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
-                    }
-                    
-                    var deviceReadingPosition = value
-                    deviceReadingPosition.id = deviceName
-                    
-                    readPos.updatePosition(deviceReadingPosition)
-                }
-                
-                
-            } else if let readPosDictNew = try? decoder.decode([String:[String:BookDeviceReadingPositionLegacy]].self, from: readPosData),
-                      let deviceMapDictNew = readPosDictNew["deviceMap"],
-                      let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
-                      let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary {
-                
-                deviceMapDictNew.forEach { key, value in
-                    let deviceName = key// as! String
-                    
-                    if let oldPos = readPos.getPosition(deviceName) {
-                        guard deviceName != self.deviceName else { return }    //trust local record
-                        guard oldPos.epoch < value.epoch else { return }            //server record may be compromised
-                    }
-                    
-                    var deviceReadingPosition = BookDeviceReadingPosition(id: value.id, readerName: value.readerName, maxPage: value.maxPage, lastReadPage: value.lastReadPage, lastReadChapter: value.lastReadChapter, lastChapterProgress: value.lastChapterProgress, lastProgress: value.lastProgress, furthestReadPage: value.furthestReadPage, furthestReadChapter: value.furthestReadChapter, lastPosition: value.lastPosition, cfi: value.cfi, epoch: value.epoch, structuralStyle: value.structuralStyle, structuralRootPageNumber: value.structuralRootPageNumber, positionTrackingStyle: value.positionTrackingStyle, lastReadBook: value.lastReadBook, lastBundleProgress: value.lastBundleProgress)
-                    
-                    deviceReadingPosition.id = deviceName
-                    
-                    if let deviceReadingPositionDict = deviceMapDict[deviceName] as? [String: Any] {
-                        if let cfi = deviceReadingPositionDict["cfi"] as? String {
-                            deviceReadingPosition.cfi = cfi
-                        }
-                        deviceReadingPosition.epoch = deviceReadingPositionDict["epoch"] as? Double ?? .zero
-                        
-                        deviceReadingPosition.structuralStyle = deviceReadingPositionDict["structuralStyle"] as? Int ?? .zero
-                        deviceReadingPosition.structuralRootPageNumber = deviceReadingPositionDict["structuralRootPageNumber"] as? Int ?? .zero
-                        deviceReadingPosition.positionTrackingStyle = deviceReadingPositionDict["positionTrackingStyle"] as? Int ?? .zero
-                        deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
-                        deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
-                    }
-                    
-                    readPos.updatePosition(deviceReadingPosition)
-                }
-            }
-            
-        }
+        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: [])
+        _ = bookRealm.readPos(library: library)
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
@@ -764,148 +646,6 @@ final class CalibreServerService {
                 await self?.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Finished")
             }
         }
-        
-        updatingMetadataTask.resume()
-        
-        return 0
-    }
-    
-    @available(*, deprecated, message: "replaced by book-set-last-read-position")
-    func updateBookReadingPosition(book: CalibreBook, columnName: String, alertDelegate: AlertDelegate?, success: (() -> Void)?) -> Int {
-        guard var endpointURLComponent = URLComponents(string: book.library.server.serverUrl) else {
-            return -1
-        }
-        
-        endpointURLComponent.path.append("/cdb/cmd/set_metadata/0")
-        endpointURLComponent.queryItems = [
-            URLQueryItem(name: "library_id", value: book.library.key)
-        ]
-        guard let endpointUrl = endpointURLComponent.url else {
-            return -1
-        }
-        
-        var deviceMapSerialize = [String: Any]()
-        
-        book.readPos.getCopy().forEach { key, value in
-            guard let jsonObject = try? JSONSerialization.jsonObject(with: JSONEncoder().encode(value)) else {
-                return
-            }
-            deviceMapSerialize[key] = jsonObject
-        }
-        
-        guard deviceMapSerialize.count == book.readPos.getCopy().count else {
-            return -1
-        }
-        
-        guard let readPosData = try? JSONSerialization.data(withJSONObject: ["deviceMap": deviceMapSerialize], options: []).base64EncodedString() else { return -1 }
-        
-        let json:[Any] = ["fields", book.id, [[columnName, readPosData]]]
-        
-        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
-            return -1
-        }
-        self.defaultLog.warning("JSON: \(String(data: data, encoding: .utf8)!)")
-        
-        var request = URLRequest(url: endpointUrl)
-        request.httpMethod = "POST"
-        request.httpBody = data
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-        
-        let startDatetime = Date()
-        Task { [weak self] in
-            await self?.logger.logStartCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
-        }
-        
-        let updatingMetadataTask = self.urlSession(server: book.library.server).dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-            var updatingMetadataStatus = "Unknown Error"
-            var newBook = book
-            
-            defer {
-                Task { [weak self] in
-                    await self?.logger.logFinishCalibreActivity(type: "Update Reading Position", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: updatingMetadataStatus)
-                }
-
-                DispatchQueue.main.async {
-                    self.updatingMetadataStatus = updatingMetadataStatus
-                    self.updatingMetadata = false
-                    
-                    if updatingMetadataStatus == "Success" {
-                        self.updateBook(book: newBook)
-                        success?()
-                    } else {
-                        alertDelegate?.alert(msg: updatingMetadataStatus)
-                    }
-                }
-            }
-            if let error = error {
-                self.defaultLog.warning("error: \(error.localizedDescription)")
-                updatingMetadataStatus = error.localizedDescription
-                return
-            }
-            var dataAsString = ""
-            if let data = data, let s = String(data: data, encoding: .utf8) {
-                dataAsString = s
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                self.defaultLog.warning("not httpResponse: \(response.debugDescription)")
-                updatingMetadataStatus = dataAsString + response.debugDescription
-                return
-            }
-            if !(200...299).contains(httpResponse.statusCode) {
-                self.defaultLog.warning("statusCode not 2xx: \(httpResponse.debugDescription)")
-                updatingMetadataStatus =
-                    httpResponse.statusCode.description
-                    + " " + HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
-                    + " " + dataAsString
-                    + " " + httpResponse.debugDescription
-                return
-            }
-            
-            guard let mimeType = httpResponse.mimeType, mimeType == "application/json",
-                  let data = data else {
-                updatingMetadataStatus = dataAsString + httpResponse.debugDescription
-                return
-            }
-            
-            guard let root = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary else {
-                updatingMetadataStatus = dataAsString + httpResponse.debugDescription
-                return
-            }
-            
-            guard let result = root["result"] as? NSDictionary, let resultv = result["v"] as? NSDictionary else {
-                updatingMetadataStatus = dataAsString + httpResponse.debugDescription
-                return
-            }
-
-            print("updateCurrentPosition result=\(result)")
-            
-            guard let lastModifiedDict = resultv["last_modified"] as? NSDictionary,
-                  var lastModifiedV = lastModifiedDict["v"] as? String
-            else {
-                updatingMetadataStatus = "Unrecognized server reponse"
-                return
-            }
-            
-            print("last_modified \(lastModifiedV)")
-            if let idxMilli = lastModifiedV.firstIndex(of: "."), let idxTZ = lastModifiedV.firstIndex(of: "+"), idxMilli < idxTZ {
-                lastModifiedV = lastModifiedV.replacingCharacters(in: idxMilli..<idxTZ, with: "")
-            }
-            print("last_modified_new \(lastModifiedV)")
-            
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime
-            guard let date = dateFormatter.date(from: lastModifiedV) else {
-                updatingMetadataStatus = "Unrecognized server reponse"
-                return
-            }
-            
-            newBook.lastModified = date
-            updatingMetadataStatus = "Success"
-        }
-        
-        self.updatingMetadata = true
         
         updatingMetadataTask.resume()
         

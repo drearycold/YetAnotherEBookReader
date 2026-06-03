@@ -12,12 +12,13 @@ import KingfisherSwiftUI
 
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var downloadManager: BookDownloadManager
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
 
     @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
     
-    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
 
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
@@ -351,7 +352,7 @@ struct LibraryInfoBookListView: View {
                         .opacity(0.8)
                 }
                 
-                if let download = modelData.downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                if let download = downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
                     ZStack {
                         Rectangle()
                             .frame(width: 64, height: 64, alignment: .center)

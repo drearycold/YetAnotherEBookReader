@@ -15,9 +15,9 @@ struct LibraryInfoCategoryItemsView: View {
     
     @ObservedRealmObject var unifiedCategory: CalibreUnifiedCategoryObject
     
-    @ObservedResults(CalibreUnifiedSearchObject.self) var unifiedSearches
+    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
     
-    @ObservedResults(CalibreLibraryCategoryObject.self, sortDescriptor: .init(keyPath: "libraryId")) var libraryCategories
+    @ObservedResults(CalibreLibraryCategoryObject.self, configuration: ModelData.shared?.realmConf, sortDescriptor: .init(keyPath: "libraryId")) var libraryCategories
 
     var body: some View {
         VStack {
@@ -160,7 +160,7 @@ struct LibraryInfoCategoryItemsView: View {
 }
 
 struct LibraryInfoCategoryItemsView_Previews: PreviewProvider {
-    @ObservedResults(CalibreUnifiedCategoryObject.self, sortDescriptor: .init(keyPath: "categoryName")) static var unifiedCategories
+    @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, sortDescriptor: .init(keyPath: "categoryName")) static var unifiedCategories
     
     static var previews: some View {
         if let unifiedCategoryObject = unifiedCategories.first {

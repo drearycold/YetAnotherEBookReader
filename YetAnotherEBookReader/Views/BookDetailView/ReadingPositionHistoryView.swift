@@ -17,7 +17,7 @@ struct ReadingPositionHistoryView: View {
     
     @Binding var presenting: Bool
     
-    @ObservedResults(BookDeviceReadingPositionRealm.self, where: { !$0.bookId.ends(with: " - History") }) var readingPositions
+    @ObservedResults(BookDeviceReadingPositionRealm.self, configuration: ModelData.shared?.realmConf, where: { !$0.bookId.ends(with: " - History") }) var readingPositions
 
     let library: CalibreLibrary?
     let bookId: Int32?

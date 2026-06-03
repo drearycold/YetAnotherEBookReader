@@ -20,7 +20,6 @@ extension EpubFolioReaderContainer {
                   let profileRealmConfig = modelData?.realmConf
                   else { return FolioReaderDummyPreferenceProvider(folioReader) }
             
-//            let realmConfig = BookAnnotation.getBookPreferenceIndividualConfig(bookFileURL: bookFileURL)
             let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
             let preferenceProvider = FolioReaderRealmPreferenceProvider(folioReader, realmConfig: realmConfig, profileRealmConfig: profileRealmConfig)
             self.folioReaderPreferenceProvider = preferenceProvider
@@ -414,7 +413,7 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
             completion?(nil)
         }
         
-        book.readPos.highlight(added: highlight.toBookHighlight())
+        book.readPos.highlight(added: highlight.toBookHighlightRealm())
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
@@ -444,7 +443,7 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
     }
 }
 
-fileprivate extension BookHighlight {
+fileprivate extension BookHighlightRealm {
     func toFolioReaderHighlight() -> FolioReaderHighlight? {
         guard readerName.isEmpty || readerName == ReaderType.YabrEPUB.rawValue
         else { return nil }
@@ -477,26 +476,25 @@ fileprivate extension BookHighlight {
 }
 
 fileprivate extension FolioReaderHighlight {
-    func toBookHighlight() -> BookHighlight {
-        BookHighlight(
-            bookId: bookId,
-            highlightId: highlightId,
-            readerName: ReaderType.YabrEPUB.rawValue,
-            page: page,
-            startOffset: startOffset,
-            endOffset: endOffset,
-            date: date,
-            type: type,
-            note: noteForHighlight,
-            tocFamilyTitles: tocFamilyTitles,
-            content: content,
-            contentPost: contentPost,
-            contentPre: contentPre,
-            cfiStart: cfiStart,
-            cfiEnd: cfiEnd,
-            spineName: spineName,
-            ranges: nil
-        )
+    func toBookHighlightRealm() -> BookHighlightRealm {
+        let highlight = BookHighlightRealm()
+        highlight.bookId = bookId
+        highlight.highlightId = highlightId
+        highlight.readerName = ReaderType.YabrEPUB.rawValue
+        highlight.page = page
+        highlight.startOffset = startOffset
+        highlight.endOffset = endOffset
+        highlight.date = date
+        highlight.type = type
+        highlight.note = noteForHighlight
+        highlight.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+        highlight.content = content ?? ""
+        highlight.contentPost = contentPost ?? ""
+        highlight.contentPre = contentPre ?? ""
+        highlight.cfiStart = cfiStart
+        highlight.cfiEnd = cfiEnd
+        highlight.spineName = spineName
+        return highlight
     }
 }
 
@@ -767,7 +765,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     
 }
 
-fileprivate extension BookBookmark {
+fileprivate extension BookBookmarkRealm {
     func toFolioReaderBookmark() -> FolioReaderBookmark {
         let bookmark = FolioReaderBookmark()
         bookmark.bookId = self.bookId
@@ -784,20 +782,20 @@ fileprivate extension BookBookmark {
 }
 
 fileprivate extension FolioReaderBookmark {
-    func toBookBookmark() -> BookBookmark? {
+    func toBookBookmarkRealm() -> BookBookmarkRealm? {
         guard let pos_type = self.pos_type,
               let pos = self.pos
         else { return nil }
         
-        let bookmark = BookBookmark(
-            bookId: self.bookId,
-            page: self.page,
-            pos_type: pos_type,
-            pos: pos,
-            title: self.title,
-            date: self.date,
-            removed: false
-        )
+        let bookmark = BookBookmarkRealm()
+        bookmark.bookId = self.bookId
+        bookmark.page = self.page
+        bookmark.pos_type = pos_type
+        bookmark.pos = pos
+        bookmark.title = self.title
+        bookmark.date = self.date
+        bookmark.removed = false
+        
         return bookmark
     }
 }
@@ -817,7 +815,7 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
             completion?(error as NSError?)
         }
         
-        guard let bookBookmark = bookmark.toBookBookmark() else {
+        guard let bookBookmark = bookmark.toBookBookmarkRealm() else {
             error = FolioReaderBookmarkError.emptyError("")
             return
         }

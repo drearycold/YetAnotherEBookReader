@@ -177,7 +177,7 @@ class ReadingSessionManager: ObservableObject {
             // These are currently dataTask based with internal resume()
             _ = connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
 
-            if goodreadsSync.isEnabled(), goodreadsSync.readingProgressColumnName.count > 1 {
+            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
                 modelData.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
                     [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
                 ])

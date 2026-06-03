@@ -20,24 +20,26 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     var refText: String?
     
-    let prefObj: YabrPDFOptionsRealm
+    let prefObj: PDFOptions
     
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
         self.readerInfo = readerInfo
         
-        if let prefObj = book.readPos.realm?
-            .objects(YabrPDFOptionsRealm.self)
-            .where({ $0.bookId == book.id && $0.libraryName == book.library.name })
-            .first {
+        let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
+        let realm = try! Realm(configuration: realmConfig)
+        
+        if let prefObj = realm.objects(PDFOptions.self).where({ $0.bookId == book.id && $0.libraryName == book.library.name }).first {
             self.prefObj = prefObj
         } else {
-            self.prefObj = YabrPDFOptionsRealm()
-            self.prefObj.bookId = book.id
-            self.prefObj.libraryName = book.library.name
-            try? book.readPos.realm?.write {
-                book.readPos.realm?.add(self.prefObj)
+            let newObj = PDFOptions()
+            newObj.bookId = book.id
+            newObj.libraryName = book.library.name
+            
+            try? realm.write {
+                realm.add(newObj)
             }
+            self.prefObj = newObj
         }
     }
     
@@ -98,13 +100,16 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
-        return PDFOptions(managedObject: prefObj)
+        return prefObj
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        try? prefObj.realm?.write({
-            options.update(obj: prefObj)
-        })
+        let updateBlock = { self.prefObj.update(other: options) }
+        if let realm = prefObj.realm {
+            try? realm.write(updateBlock)
+        } else {
+            updateBlock()
+        }
         
         updateDictViewerStyle(options: options)
     }
@@ -118,14 +123,14 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmarkRealm(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
         book.readPos.bookmarks(added: bookBookmark)
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmarkRealm(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
         book.readPos.bookmarks(removed: bookBookmark.pos)
@@ -140,14 +145,14 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlightRealm(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
         else { return }
         
         book.readPos.highlight(added: bookHighlight)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlightRealm(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
         else { return }
         
         book.readPos.highlight(removedId: bookHighlight.highlightId)
@@ -182,17 +187,16 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
 }
 
-extension BookBookmark {
-    static let PDFBookmarkPosType = "yabrpdf"
-    
-    init?(bookId: String, pdfBookmark: PDFBookmark) {
+extension BookBookmarkRealm {
+    convenience init?(bookId: String, pdfBookmark: PDFBookmark) {
         guard let posData = try? JSONEncoder().encode(pdfBookmark.pos),
               let pos = String(data: posData, encoding: .utf8)
         else { return nil }
         
+        self.init()
         self.bookId = bookId
         self.page = pdfBookmark.pos.page
-        self.pos_type = BookBookmark.PDFBookmarkPosType
+        self.pos_type = BookBookmarkRealm.PDFBookmarkPosType
         self.pos = pos
         
         self.title = pdfBookmark.title
@@ -202,7 +206,7 @@ extension BookBookmark {
     }
     
     func toPDFBookmark() -> PDFBookmark? {
-        guard self.pos_type == BookBookmark.PDFBookmarkPosType else { return nil }
+        guard self.pos_type == BookBookmarkRealm.PDFBookmarkPosType else { return nil }
         guard let posData = self.pos.data(using: .utf8),
               let pos = try? JSONDecoder().decode(PDFBookmark.Location.self, from: posData)
         else { return nil }
@@ -211,12 +215,13 @@ extension BookBookmark {
     }
 }
 
-extension BookHighlight {
-    init?(bookId: String, pdfHighlight: PDFHighlight) {
+extension BookHighlightRealm {
+    convenience init?(bookId: String, pdfHighlight: PDFHighlight) {
         guard let posData = try? JSONEncoder().encode(pdfHighlight.pos),
               let pos = String(data: posData, encoding: .utf8)
         else { return nil }
         
+        self.init()
         self.bookId = bookId
         self.readerName = ReaderType.YabrPDF.rawValue
         self.highlightId = pdfHighlight.uuid.uuidString
@@ -230,7 +235,7 @@ extension BookHighlight {
         self.type = pdfHighlight.type
         self.note = pdfHighlight.note
         
-        self.tocFamilyTitles = []
+        self.tocFamilyTitles.removeAll()
         self.content = pdfHighlight.content
         self.contentPre = ""
         self.contentPost = ""
