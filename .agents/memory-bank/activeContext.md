@@ -1,21 +1,21 @@
 # Active Context
 
 ## Current Focus
-The primary development focus is to use the Readium engine to optimize the loading performance of PDF bookmarks. 
+The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactoring Plan. We are systematically decoupling massive SwiftUI views from the `ModelData` "God Object" and introducing dedicated ViewModels to handle business logic and state.
 
 ## Recent Changes & Decisions
 - **Development Environment Migration:** Transitioning the project to an agent-first development workflow using the Google Antigravity CLI.
+- **Architectural Shift (MVVM):** Decided to transition from a single monolithic `@EnvironmentObject var modelData` to modular `@StateObject` ViewModels for complex views.
 - **Context Guardrails:** Established the `.agents/memory-bank` directory to provide strict architectural guidelines, preventing subagents from hallucinating or deviating from the Swift Package Manager / SwiftUI architecture.
 - **MCP Integration:** Moved Xcode toolchain configurations to `.agents/mcp_config.json` to allow the Antigravity CLI to autonomously interact with `xcodebuild` and the iOS Simulator.
 
 ## Active Tasks
-1. Analyze the current PDF bookmark parsing and loading mechanisms within the `YetAnotherEBookReader/Readium/` integration and associated PDF model files (`Models/BookAnnotation.swift`, `YabrPDFModel.swift`).
-2. Identify performance bottlenecks occurring during the rendering of large PDF bookmark trees via the Readium 3.8 SDK.
-3. Implement performance optimizations (e.g., lazy loading, background threading via `DispatchQueue` or Combine) without blocking the main UI thread.
-4. Compile the project in the terminal using the command: `xcodebuild build -scheme YetAnotherEBookReader -destination 'platform=iOS Simulator,name=iPhone 15 Pro,OS=latest'` to verify build integrity.
-5. Verify the performance improvements in the iOS Simulator.
+1. Expand `BookDetailViewModel.swift` to handle all data fetching (metadata, manifest) and UI state variables currently trapped in `BookDetailView.swift`.
+2. Break down the massive `BookDetailView.swift` (800+ lines) into smaller, manageable subcomponents (e.g., `BookCoverView`, `BookMetadataSection`).
+3. Replace direct `ModelData` network calls inside `BookDetailView` with unidirectional data flow via `BookDetailViewModel`.
+4. Compile the project in the terminal using `xcodebuild` to ensure the SwiftUI refactoring doesn't break the build.
+5. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
-- All UI state changes must be routed through the existing `ModelData` implementation using Combine.
-
+- **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.

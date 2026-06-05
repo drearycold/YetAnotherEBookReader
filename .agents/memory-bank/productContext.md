@@ -10,9 +10,8 @@ YetAnotherEBookReader (publicly known as D.S.Reader) is a versatile, high-perfor
 
 ## Architecture & Tech Stack
 - **UI Frameworks:** SwiftUI (iOS 15+) and UIKit.
-- **State Management:** Centralized via `@StateObject` `ModelData` (`Models/ModelData.swift`), which manages application state, database initialization, and server connectivity. All app-wide state is accessed using `@EnvironmentObject var modelData: ModelData`.
+- **State Management (Migrating to MVVM):** Historically centralized via `@StateObject` `ModelData` (`Models/ModelData.swift`), the project is currently migrating to a modular MVVM architecture. Massive views are being decoupled from `ModelData` in favor of dedicated ViewModels (e.g., `BookDetailViewModel`).
 - **Persistence:** RealmSwift is strictly used for storing metadata, highlights, shelves, and reading progress.
 - **Networking & Assets:** `CalibreServerService` handles API interactions with Calibre servers. GCDWebServer serves local book assets to web-based reader views, while Kingfisher handles efficient image caching. 
 - **Concurrency:** Asynchronous operations extensively use Combine and `DispatchQueue` for non-blocking I/O and server requests.
 - **Dependency Management:** Pure Swift Package Manager (SPM) only; the project deliberately avoids CocoaPods or Xcode Workspaces.
-
