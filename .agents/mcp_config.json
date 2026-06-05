@@ -1,0 +1,7 @@
+{
+	"mcpServers": {
+		"xcode": {
+			"command": "/Applications/Xcode.app/Contents/Developer/usr/bin/mcpbridge"
+		}
+	}
+}
