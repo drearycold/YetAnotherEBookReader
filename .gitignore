@@ -91,6 +91,4 @@ iOSInjectionProject/
 
 .DS_Store
 
-git_diff.txt
-.gemini/
 gha-creds-*.json
