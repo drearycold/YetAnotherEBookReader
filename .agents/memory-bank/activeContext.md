@@ -14,9 +14,12 @@ The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactori
 [COMPLETED] 2. Break down the massive `BookDetailView.swift` (800+ lines) into smaller, manageable subcomponents (`BookDetailSubviews.swift`).
 [COMPLETED] 3. Replace direct `ModelData` network calls inside `BookDetailView` with unidirectional data flow via `BookDetailViewModel`.
 [COMPLETED] 4. Compile the project in the terminal using `xcodebuild` to ensure the SwiftUI refactoring doesn't break the build and unit tests pass.
+[COMPLETED] 5. Successfully decoupled `ModelData` from all `BookDetailView` subviews (`BookCoverView`, `BookMetadataSection`, `BookConnectivitySection`, `BookFormatList`, `BookProgressSection`) by passing state through `BookDetailViewModel`. Unit test regressions have been resolved.
 
-[NEXT] 5. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
-[NEXT] 6. Decouple `CalibreServerService` and `BookDownloadManager` from `ModelData`.
+[COMPLETED] 6. Decoupled `BookDownloadManager` from `BookDetailView` and `BookDetailSubviews` by mapping `activeDownloads` into `BookDetailViewModel` using Combine. Tests pass.
+
+[NEXT] 6. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
+[NEXT] 7. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
 - **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.

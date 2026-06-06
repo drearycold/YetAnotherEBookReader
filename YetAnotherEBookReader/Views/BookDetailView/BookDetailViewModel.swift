@@ -18,6 +18,7 @@ class BookDetailViewModel: ObservableObject {
     private weak var modelData: ModelData?
     var book: CalibreBookRealm?
     private var fetchTask: Task<Void, Never>?
+    @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var readerInfo: ReaderInfo? {
         return modelData?.readerInfo
     }
@@ -46,6 +47,10 @@ class BookDetailViewModel: ObservableObject {
         
         self.modelData = modelData
         self.book = book
+        
+        if let downloadManager = self.modelData?.downloadManager {
+            downloadManager.$activeDownloads.assign(to: &$activeDownloads)
+        }
         
         if self.listVM == nil {
             self.listVM = ReadingPositionListViewModel(

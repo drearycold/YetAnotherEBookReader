@@ -3,7 +3,6 @@ import KingfisherSwiftUI
 import RealmSwift
 
 struct BookCoverView: View {
-    @EnvironmentObject var downloadManager: BookDownloadManager
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
     var lastUpdated: Date
@@ -20,13 +19,13 @@ struct BookCoverView: View {
                 .resizable()
                 .scaledToFit()
             Button(action: {
-                guard downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
+                guard viewModel.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
                 viewModel.readBook(book: book)
                 if book.inShelf {
                     presentingReadingSheet = true
                 }
             }) {
-                if downloadManager.activeDownloads.filter({ $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) }).isEmpty == false ||
+                if viewModel.activeDownloads.filter({ $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) }).isEmpty == false ||
                     book.formats.filter({ $0.value.selected == true && $0.value.cached == false }).isEmpty == false {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .gray))
@@ -333,7 +332,6 @@ struct BookConnectivitySection: View {
 }
 
 struct BookFormatList: View {
-    @EnvironmentObject var downloadManager: BookDownloadManager
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
     var lastUpdated: Date
@@ -361,7 +359,7 @@ struct BookFormatList: View {
                                 .font(.subheadline)
                                 .frame(minWidth: 48, alignment: .leading)
                             cacheFormatButton(book: book, format: format, formatInfo: formatInfo)
-                                .disabled(downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).count > 0)
+                                .disabled(viewModel.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).count > 0)
                             
                             clearFormatButton(book: book, format: format, formatInfo: formatInfo)
                                 .disabled(!formatInfo.cached)
@@ -371,7 +369,7 @@ struct BookFormatList: View {
                         }
                         HStack {
                             Text(ByteCountFormatter.string(fromByteCount: Int64(formatInfo.serverSize), countStyle: .file))
-                            if let download = downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                            if let download = viewModel.activeDownloads.filter( { $1.book.id == book.id && $1.format == format && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
                                 ProgressView(value: download.progress)
                                     .progressViewStyle(LinearProgressViewStyle())
                                     .frame(maxWidth: 160)

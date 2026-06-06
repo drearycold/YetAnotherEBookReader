@@ -14,7 +14,6 @@ import KingfisherSwiftUI
 
 struct BookDetailView: View {
     @EnvironmentObject var modelData: ModelData
-    @EnvironmentObject var downloadManager: BookDownloadManager
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.openURL) var openURL
     
@@ -160,7 +159,7 @@ struct BookDetailView: View {
             Button(action: {
                 _viewModel.downloadOrClearCache(book: book)
             }) {
-                if let download = downloadManager.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
+                if let download = _viewModel.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else if book.inShelf {
