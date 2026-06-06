@@ -12,12 +12,6 @@ struct ReadingPositionDetailView: View {
     
     @State private var overrideToggle = false
     
-    @State private var presentingReadSheet = false {
-        willSet { if newValue { _VM.modelData.presentingStack.append($presentingReadSheet) } }
-        didSet { if oldValue { _ = _VM.modelData.presentingStack.popLast() } }
-    }
-    @State private var alertItem: AlertItem?
-
     init(viewModel: ReadingPositionDetailViewModel) {
         self._VM = viewModel
     }
@@ -87,8 +81,7 @@ struct ReadingPositionDetailView: View {
                 HStack {
                     Picker("Reader", selection: $_VM.selectedFormatReader) {
                         ForEach(ReaderType.allCases) { type in
-                            if let types = _VM.modelData.formatReaderMap[_VM.selectedFormat],
-                               types.contains(type) {
+                            if _VM.availableReaders.contains(type) {
                                 Text(type.rawValue).tag(type)
                             }
                         }
@@ -98,67 +91,29 @@ struct ReadingPositionDetailView: View {
             }
             
             Button(action: {
-                guard let formatInfo = _VM.listModel.book.formats[_VM.selectedFormat.rawValue],
-                      formatInfo.cached else {
-                    alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(_VM.selectedFormat.rawValue) first")
-                    return
-                }
-                readAction(book: _VM.listModel.book, format: _VM.selectedFormat, formatInfo: formatInfo, reader: _VM.selectedFormatReader)
+                _VM.readSelectedFormat()
             }) {
                 HStack {
                     Spacer()
                     Text("Continue Reading")
                     Spacer()
                 }
-            }.disabled(_VM.listModel.book.formats[_VM.selectedFormat.rawValue]?.cached != true)
+            }.disabled(!_VM.isSelectedFormatCached)
         }
         .navigationTitle(
             Text("\(_VM.position.id) with \(_VM.position.readerName)")
         )
-        .fullScreenCover(isPresented: $presentingReadSheet) {
-            if let book = _VM.modelData.readingBook, let readerInfo = _VM.modelData.readerInfo {
+        .fullScreenCover(isPresented: $_VM.presentingReadSheet) {
+            if let book = _VM.readingBook, let readerInfo = _VM.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
                     .environmentObject(_VM.modelData)
             } else {
                 Text("Nil Book")
             }
         }
-        
-    }
-    
-    func readAction(book: CalibreBook, format: Format, formatInfo: FormatInfo, reader: ReaderType) {
-        guard let bookFileUrl = getSavedUrl(book: book, format: format)
-        else {
-            alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
-            return
+        .alert(item: $_VM.alertItem) { item in
+            Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
-        
-       _VM.modelData.prepareBookReading(
-            url: bookFileUrl,
-            format: format,
-            readerType: reader,
-            position: _VM.position
-        )
-    
-        presentingReadSheet = true
-    }
-
-    func updatePosition() {
-        _VM.modelData.updateCurrentPosition(alertDelegate: self)
-        
-        if let book = _VM.modelData.readingBook {
-            _VM.listModel.book = book
-            _VM.listModel.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
-            if let position = book.readPos.getPosition(_VM.position.id) {
-                _VM.position = position
-            }
-        }
-    }
-}
-
-extension ReadingPositionDetailView : AlertDelegate {
-    func alert(alertItem: AlertItem) {
-        self.alertItem = alertItem
     }
 }
 

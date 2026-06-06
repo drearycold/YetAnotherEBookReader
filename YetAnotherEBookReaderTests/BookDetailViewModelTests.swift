@@ -141,3 +141,54 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(mockModelData.presentingStack.count, 0)
     }
 }
+
+class ReadingPositionViewModelTests: XCTestCase {
+    var mockModelData: ModelData!
+    var listViewModel: ReadingPositionListViewModel!
+    var mockBook: CalibreBook!
+    
+    override func setUpWithError() throws {
+        mockModelData = ModelData(mock: true)
+        
+        let library = CalibreLibrary(server: CalibreServer(uuid: UUID(), name: "MockServer", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "lib1", name: "Mock Library")
+        mockBook = CalibreBook(id: 123, library: library)
+        mockBook.title = "Test Book"
+        
+        listViewModel = ReadingPositionListViewModel(modelData: mockModelData, book: mockBook, positions: [])
+    }
+    
+    override func tearDownWithError() throws {
+        listViewModel = nil
+        mockBook = nil
+        mockModelData = nil
+    }
+    
+    func testDetailViewModelInitialization() throws {
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+        let detailVM = ReadingPositionDetailViewModel(modelData: mockModelData, listModel: listViewModel, position: position)
+        
+        XCTAssertEqual(detailVM.position.id, "device-1")
+        XCTAssertEqual(detailVM.selectedFormatReader, .YabrEPUB)
+        XCTAssertEqual(detailVM.selectedFormat, .EPUB)
+    }
+    
+    func testDetailViewModelPresentingSheet() throws {
+        let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
+        let detailVM = ReadingPositionDetailViewModel(modelData: mockModelData, listModel: listViewModel, position: position)
+        
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        detailVM.presentingReadSheet = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        detailVM.presentingReadSheet = false
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+    }
+    
+    func testHistoryViewModelLoadData() throws {
+        let historyVM = ReadingPositionHistoryViewModel(modelData: mockModelData, library: mockBook.library, bookId: mockBook.id)
+        XCTAssertEqual(historyVM.maxMinutes, 0)
+        
+        historyVM.loadData()
+        
+        XCTAssertNotNil(historyVM.readingStatistics)
+    }
+}
