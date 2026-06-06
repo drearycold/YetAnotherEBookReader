@@ -100,4 +100,44 @@ class BookDetailViewModelTests: XCTestCase {
         let result = viewModel.convert(bookRealm: mockBookRealm)
         XCTAssertNil(result, "Should return nil if library is not queryable in mock model data")
     }
+
+    func testPresentationSheetProperties() throws {
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        
+        viewModel.presentingReadingSheet = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        viewModel.presentingReadingSheet = false
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        
+        viewModel.presentingPreviewSheet = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        viewModel.presentingPreviewSheet = false
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        
+        viewModel.activityListViewPresenting = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        viewModel.activityListViewPresenting = false
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        
+        viewModel.readingPositionHistoryViewPresenting = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        viewModel.readingPositionHistoryViewPresenting = false
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+    }
+
+    func testPresentationSheetPropertiesBindingInteractions() throws {
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        
+        viewModel.presentingReadingSheet = true
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        
+        let binding = mockModelData.presentingStack.last
+        XCTAssertNotNil(binding)
+        XCTAssertTrue(binding?.wrappedValue ?? false)
+        
+        // Dismiss via binding (e.g. SwiftUI sheet dismissal)
+        binding?.wrappedValue = false
+        XCTAssertFalse(viewModel.presentingReadingSheet)
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+    }
 }

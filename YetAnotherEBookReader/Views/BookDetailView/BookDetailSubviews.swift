@@ -7,7 +7,6 @@ struct BookCoverView: View {
     var book: CalibreBook
     var lastUpdated: Date
     
-    @Binding var presentingReadingSheet: Bool
     @Binding var alertItem: AlertItem?
 
     var body: some View {
@@ -22,7 +21,7 @@ struct BookCoverView: View {
                 guard viewModel.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
                 viewModel.readBook(book: book)
                 if book.inShelf {
-                    presentingReadingSheet = true
+                    viewModel.presentingReadingSheet = true
                 }
             }) {
                 if viewModel.activeDownloads.filter({ $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) }).isEmpty == false ||
@@ -44,7 +43,7 @@ struct BookCoverView: View {
                 }
             }
             .opacity(0.8)
-            .fullScreenCover(isPresented: $presentingReadingSheet) {
+            .fullScreenCover(isPresented: $viewModel.presentingReadingSheet) {
                 if let readerInfo = viewModel.readerInfo {
                     YabrEBookReader(
                         book: book,
@@ -64,7 +63,6 @@ struct BookMetadataSection: View {
     var lastUpdated: Date
     var isCompat: Bool
     
-    @Binding var readingPositionHistoryViewPresenting: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -153,7 +151,7 @@ struct BookMetadataSection: View {
                     Text(book.lastModifiedByLocale)
                 }
                 
-                BookProgressSection(viewModel: viewModel, book: book, lastUpdated: lastUpdated, isCompat: isCompat, readingPositionHistoryViewPresenting: $readingPositionHistoryViewPresenting)
+                BookProgressSection(viewModel: viewModel, book: book, lastUpdated: lastUpdated, isCompat: isCompat)
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
@@ -200,8 +198,6 @@ struct BookProgressSection: View {
     var book: CalibreBook
     var lastUpdated: Date
     var isCompat: Bool
-    
-    @Binding var readingPositionHistoryViewPresenting: Bool
 
     var body: some View {
         HStack {
@@ -212,7 +208,7 @@ struct BookProgressSection: View {
             
             Button(action:{
                 viewModel.prepareReadingPositionHistory(book: book)
-                readingPositionHistoryViewPresenting = true
+                viewModel.readingPositionHistoryViewPresenting = true
             }) {
                 if let readDateGR = book.readDateGRByLocale {
                     Image(systemName: "arrow.down.to.line")
@@ -238,15 +234,15 @@ struct BookProgressSection: View {
                     Text("No Reading History")
                 }
             }.disabled(book.readPos.isEmpty)
-        }.sheet(isPresented: $readingPositionHistoryViewPresenting, onDismiss: {
-            readingPositionHistoryViewPresenting = false
+        }.sheet(isPresented: $viewModel.readingPositionHistoryViewPresenting, onDismiss: {
+            viewModel.readingPositionHistoryViewPresenting = false
         }, content: {
             NavigationView {
-                ReadingPositionHistoryView(presenting: $readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
+                ReadingPositionHistoryView(presenting: $viewModel.readingPositionHistoryViewPresenting, library: book.library, bookId: book.id)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction, content: {
                             Button(action: {
-                                readingPositionHistoryViewPresenting = false
+                                viewModel.readingPositionHistoryViewPresenting = false
                             }) {
                                 Image(systemName: "xmark")
                             }
@@ -263,7 +259,6 @@ struct BookConnectivitySection: View {
     var lastUpdated: Date
     var isCompat: Bool
     
-    @Binding var activityListViewPresenting: Bool
     @Binding var alertItem: AlertItem?
 
     var body: some View {
@@ -303,14 +298,14 @@ struct BookConnectivitySection: View {
             HStack {
                 metadataIcon(systemName: "scroll")
                 Button(action: {
-                    activityListViewPresenting = true
+                    viewModel.activityListViewPresenting = true
                 }) {
                     Text("Activity Logs")
-                }.sheet(isPresented: $activityListViewPresenting, onDismiss: {
+                }.sheet(isPresented: $viewModel.activityListViewPresenting, onDismiss: {
                 }, content: {
                     NavigationView {
                         if let modelData = viewModel.sharedModelData {
-                            ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
+                            ActivityList(presenting: $viewModel.activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
                                 .environmentObject(modelData)
                                 .environmentObject(modelData.downloadManager)
                                 .environmentObject(modelData.sessionManager)
@@ -336,8 +331,6 @@ struct BookFormatList: View {
     var book: CalibreBook
     var lastUpdated: Date
     var isCompat: Bool
-    
-    @Binding var presentingPreviewSheet: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -432,7 +425,7 @@ struct BookFormatList: View {
     private func previewFormatButton(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> some View {
         Button(action: {
             if viewModel.previewAction(book: book, format: format, formatInfo: formatInfo) {
-                presentingPreviewSheet = true
+                viewModel.presentingPreviewSheet = true
             }
         }) {
             Image(systemName: "doc.text.magnifyingglass")
@@ -440,7 +433,7 @@ struct BookFormatList: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 24, height: 24)
         }
-        .sheet(isPresented: $presentingPreviewSheet, onDismiss: {
+        .sheet(isPresented: $viewModel.presentingPreviewSheet, onDismiss: {
             viewModel.handlePreviewDismiss(book: book)
         }) {
             BookPreviewView(viewModel: viewModel.previewViewModel)

@@ -28,26 +28,6 @@ struct BookDetailView: View {
     var defaultLog = Logger()
     
 
-    @State private var presentingReadingSheet = false {
-        willSet { if newValue { _viewModel.pushPresenting($presentingReadingSheet) } }
-        didSet { if oldValue { _viewModel.popPresenting() } }
-    }
-    
-    @State private var presentingPreviewSheet = false {
-        willSet { if newValue { _viewModel.pushPresenting($presentingPreviewSheet) } }
-        didSet { if oldValue { _viewModel.popPresenting() } }
-    }
-    
-    @State private var activityListViewPresenting = false {
-        willSet { if newValue { _viewModel.pushPresenting($activityListViewPresenting) } }
-        didSet { if oldValue { _viewModel.popPresenting() } }
-    }
-
-    @State private var readingPositionHistoryViewPresenting = false {
-        willSet { if newValue { _viewModel.pushPresenting($readingPositionHistoryViewPresenting) } }
-        didSet { if oldValue { _viewModel.popPresenting() } }
-    }
-    
     @StateObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
@@ -86,15 +66,15 @@ struct BookDetailView: View {
             
             if isCompat {
                 VStack(alignment: .center, spacing: 16) {
-                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, presentingReadingSheet: $presentingReadingSheet, alertItem: $_viewModel.alertItem)
+                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $_viewModel.alertItem)
                     
-                    BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, readingPositionHistoryViewPresenting: $readingPositionHistoryViewPresenting)
+                    BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
+                    BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $_viewModel.alertItem)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, presentingPreviewSheet: $presentingPreviewSheet)
+                    BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
                     let countPage = book.library.pluginCountPagesWithDefault
@@ -105,16 +85,16 @@ struct BookDetailView: View {
                 }
             } else {
                 HStack(alignment: .top, spacing: 32) {
-                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, presentingReadingSheet: $presentingReadingSheet, alertItem: $_viewModel.alertItem)
+                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $_viewModel.alertItem)
                     
                     VStack(alignment: .leading, spacing: 16) {
-                        BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, readingPositionHistoryViewPresenting: $readingPositionHistoryViewPresenting)
+                        BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
+                        BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $_viewModel.alertItem)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, presentingPreviewSheet: $presentingPreviewSheet)
+                        BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
                         let countPage = book.library.pluginCountPagesWithDefault
@@ -172,7 +152,7 @@ struct BookDetailView: View {
         
         ToolbarItem(placement: .confirmationAction) {
             Button(action: {
-                readingPositionHistoryViewPresenting = true
+                _viewModel.readingPositionHistoryViewPresenting = true
             }) {
                 Image(systemName: "clock")
                     .resizable()

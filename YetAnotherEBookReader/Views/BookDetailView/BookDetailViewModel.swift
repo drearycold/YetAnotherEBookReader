@@ -15,6 +15,58 @@ class BookDetailViewModel: ObservableObject {
     
     @Published var alertItem: AlertItem?
     
+    @Published var presentingReadingSheet = false {
+        willSet {
+            if newValue {
+                let binding = Binding<Bool>(
+                    get: { [weak self] in self?.presentingReadingSheet ?? false },
+                    set: { [weak self] in self?.presentingReadingSheet = $0 }
+                )
+                pushPresenting(binding)
+            }
+        }
+        didSet { if oldValue { popPresenting() } }
+    }
+    
+    @Published var presentingPreviewSheet = false {
+        willSet {
+            if newValue {
+                let binding = Binding<Bool>(
+                    get: { [weak self] in self?.presentingPreviewSheet ?? false },
+                    set: { [weak self] in self?.presentingPreviewSheet = $0 }
+                )
+                pushPresenting(binding)
+            }
+        }
+        didSet { if oldValue { popPresenting() } }
+    }
+    
+    @Published var activityListViewPresenting = false {
+        willSet {
+            if newValue {
+                let binding = Binding<Bool>(
+                    get: { [weak self] in self?.activityListViewPresenting ?? false },
+                    set: { [weak self] in self?.activityListViewPresenting = $0 }
+                )
+                pushPresenting(binding)
+            }
+        }
+        didSet { if oldValue { popPresenting() } }
+    }
+
+    @Published var readingPositionHistoryViewPresenting = false {
+        willSet {
+            if newValue {
+                let binding = Binding<Bool>(
+                    get: { [weak self] in self?.readingPositionHistoryViewPresenting ?? false },
+                    set: { [weak self] in self?.readingPositionHistoryViewPresenting = $0 }
+                )
+                pushPresenting(binding)
+            }
+        }
+        didSet { if oldValue { popPresenting() } }
+    }
+    
     private weak var modelData: ModelData?
     var book: CalibreBookRealm?
     private var fetchTask: Task<Void, Never>?
