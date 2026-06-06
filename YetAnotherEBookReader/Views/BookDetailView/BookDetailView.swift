@@ -34,7 +34,7 @@ struct BookDetailView: View {
         
         ScrollView {
             Text(book.title)
-            if let calibreBook = _viewModel.convert(bookRealm: book) {
+            if let calibreBook = modelData.convert(bookRealm: book) {
                 viewContent(book: calibreBook, isCompat: sizeClass == .compact)
                     .onAppear() {
                         _viewModel.setup(modelData: modelData, book: book, calibreBook: calibreBook)
