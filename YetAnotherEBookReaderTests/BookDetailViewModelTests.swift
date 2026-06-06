@@ -192,3 +192,20 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertNotNil(historyVM.readingStatistics)
     }
 }
+
+class ActivityListViewModelTests: XCTestCase {
+    var mockModelData: ModelData!
+    
+    override func setUpWithError() throws {
+        mockModelData = ModelData(mock: true)
+    }
+    
+    override func tearDownWithError() throws {
+        mockModelData = nil
+    }
+    
+    func testInitialization() throws {
+        let viewModel = ActivityListViewModel(modelData: mockModelData)
+        XCTAssertEqual(viewModel.activities.count, 0)
+    }
+}

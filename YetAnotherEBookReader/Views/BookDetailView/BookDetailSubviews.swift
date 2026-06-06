@@ -305,12 +305,10 @@ struct BookConnectivitySection: View {
                 }, content: {
                     NavigationView {
                         if let modelData = viewModel.sharedModelData {
-                            ActivityList(presenting: $viewModel.activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
-                                .environmentObject(modelData)
-                                .environmentObject(modelData.downloadManager)
-                                .environmentObject(modelData.sessionManager)
-                                .environmentObject(modelData.fontsManager)
-                                .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
+                            ActivityList(
+                                viewModel: ActivityListViewModel(modelData: modelData, libraryId: book.library.id, bookId: book.id),
+                                presenting: $viewModel.activityListViewPresenting
+                            )
                         }
                     }
                 })

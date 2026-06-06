@@ -67,7 +67,13 @@ extension CalibreServer: Persistable {
 
 extension CalibreServer {
     var realmPerf: Realm {
-        try! Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(self))
+        let key = "realmPerf-\(self.uuid.uuidString)"
+        if let cachedRealm = Thread.current.threadDictionary[key] as? Realm {
+            return cachedRealm
+        }
+        let realm = try! Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(self))
+        Thread.current.threadDictionary[key] = realm
+        return realm
     }
 }
 

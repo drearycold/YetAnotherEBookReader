@@ -4,74 +4,27 @@
 //
 //  Created by 京太郎 on 2021/11/1.
 //
+
 import SwiftUI
-import RealmSwift
 
 struct ActivityList: View {
-    @EnvironmentObject var modelData: ModelData
+    @ObservedObject var viewModel: ActivityListViewModel
 
     @Binding var presenting: Bool
 
-    var libraryId: String? = nil
-    var bookId: Int32? = nil
-
-    @ObservedResults(
-        CalibreActivityLogEntry.self,
-        configuration: ModelData.shared?.realmConf,
-        sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
-    ) var activities
-
-    init(presenting: Bool? = nil, libraryId: String? = nil, bookId: Int32? = nil) {
-        self._presenting = Binding<Bool>(get: { presenting ?? false }, set: { _ in })
-        self.libraryId = libraryId
-        self.bookId = bookId
-        
-        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
-        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
-        
-        if let libraryId = libraryId {
-            if let bookId = bookId {
-                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
-            } else {
-                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
-            }
-        }
-        
-        _activities = ObservedResults(
-            CalibreActivityLogEntry.self,
-            configuration: ModelData.shared?.realmConf,
-            filter: predicate,
-            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
-        )
-    }
-    
-    init(presenting: Binding<Bool>, libraryId: String? = nil, bookId: Int32? = nil) {
+    init(viewModel: ActivityListViewModel, presenting: Binding<Bool>) {
+        self.viewModel = viewModel
         self._presenting = presenting
-        self.libraryId = libraryId
-        self.bookId = bookId
-        
-        let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
-        var predicate = NSPredicate(format: "startDatetime >= %@", cutoff as NSDate)
-        
-        if let libraryId = libraryId {
-            if let bookId = bookId {
-                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d", cutoff as NSDate, libraryId, bookId)
-            } else {
-                predicate = NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", cutoff as NSDate, libraryId)
-            }
-        }
-        
-        _activities = ObservedResults(
-            CalibreActivityLogEntry.self,
-            configuration: ModelData.shared?.realmConf,
-            filter: predicate,
-            sortDescriptor: SortDescriptor(keyPath: "startDatetime", ascending: false)
-        )
+    }
+
+    init(viewModel: ActivityListViewModel, presenting: Bool? = nil) {
+        self.viewModel = viewModel
+        self._presenting = Binding<Bool>(get: { presenting ?? false }, set: { _ in })
     }
 
     var body: some View {
         List {
-            ForEach(activities, id: \.self) { obj in
+            ForEach(viewModel.activities, id: \.self) { obj in
                 NavigationLink(destination: ActivityDetailView(obj: obj), label: {
                     row(obj: obj)
                 })
@@ -95,77 +48,61 @@ struct ActivityList: View {
     }
     
     @ViewBuilder
-    private func row(obj: CalibreActivityLogEntry) -> some View {
+    private func row(obj: ActivityLogUIEntry) -> some View {
         VStack {
             HStack {
-                if let libraryId = obj.libraryId,
-                   let library = modelData.calibreLibraries[libraryId] {
-                    if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
-                        Text(book.title)
-                    } else {
-                        Text(library.name)
-                    }
-                } else {
-                    Text("No Entity")
-                }
+                Text(obj.bookTitle.isEmpty ? obj.libraryName : obj.bookTitle)
                 Spacer()
-                
             }
             HStack {
-                Text(obj.type ?? "Unknown Type")
+                Text(obj.type)
                 Spacer()
-                Text(obj.errMsg ?? "Unknown Error")
+                Text(obj.errMsg)
             }.font(.caption)
             HStack {
-                Text(obj.startDateByLocale ?? "Start Unknown")
+                Text(obj.startDateString)
                 Spacer()
                 Text("->")
                 Spacer()
-                Text(obj.finishDateByLocale ?? "Finish Unknown")
+                Text(obj.finishDateString)
             }.font(.caption)
         }
     }
 }
 
 struct ActivityDetailView: View {
-    @EnvironmentObject var modelData: ModelData
-    var obj: CalibreActivityLogEntry
+    var obj: ActivityLogUIEntry
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                if let libraryId = obj.libraryId,
-                   let library = modelData.calibreLibraries[libraryId] {
-                    if let book = modelData.queryBookRealm(book: CalibreBook(id: obj.bookId, library: library), realm: modelData.realm) {
-                        Text("Book Title:").frame(minWidth: 100, alignment: .leading)
-                        Text(book.title)
-                    } else {
-                        Text("Library Name:").frame(minWidth: 100, alignment: .leading)
-                        Text(library.name)
-                    }
+                if !obj.bookTitle.isEmpty {
+                    Text("Book Title:").frame(minWidth: 100, alignment: .leading)
+                    Text(obj.bookTitle)
                 } else {
-                    Text("No Entity")
+                    Text("Library Name:").frame(minWidth: 100, alignment: .leading)
+                    Text(obj.libraryName)
                 }
                 Spacer()
             }.font(.title2)
             HStack {
                 Text("Task:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.type ?? "Unknown").navigationTitle(obj.type ?? "")
+                Text(obj.type).navigationTitle(obj.type)
                 Spacer()
             }.font(.title3)
             HStack {
                 Text("Start time:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.startDateByLocaleLong ?? "Unknown")
+                Text(obj.startDateLongString)
             }
             
             HStack {
                 Text("Finish time:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.finishDateByLocaleLong ?? "Unknown")
+                Text(obj.finishDateLongString)
             }
             
             HStack {
                 Text("Result:").frame(minWidth: 100, alignment: .leading)
-                Text(obj.errMsg ?? "Unknown")
+                Text(obj.errMsg)
             }
             
             Divider().padding(EdgeInsets(top: 16, leading: 0, bottom: 8, trailing: 0))
@@ -174,15 +111,15 @@ struct ActivityDetailView: View {
                 Text("More Infos")
                 HStack {
                     Text("URL:").frame(minWidth: 64, alignment: .leading)
-                    Text(obj.endpoingURL ?? "Unknown")
+                    Text(obj.endpointURL)
                 }
                 HStack {
                     Text("Method:").frame(minWidth: 64, alignment: .leading)
-                    Text(obj.httpMethod ?? "GET")
+                    Text(obj.httpMethod)
                 }
                 HStack(alignment: .top) {
                     Text("Body:").frame(minWidth: 64, alignment: .leading)
-                    if let httpBody = obj.httpBody, let httpBodyString = String(data: httpBody, encoding: .utf8) {
+                    if let httpBodyString = obj.httpBodyString {
                         Text(httpBodyString)
                     } else {
                         Text("(Empty Body)")
@@ -202,9 +139,11 @@ struct ActivityList_Previews: PreviewProvider {
     @State static private var presenting = false
     static var previews: some View {
         NavigationView {
-            ActivityList(presenting: $presenting)
+            ActivityList(
+                viewModel: ActivityListViewModel(modelData: modelData),
+                presenting: $presenting
+            )
         }
         .navigationViewStyle(StackNavigationViewStyle())
-        .environmentObject(modelData)
     }
 }

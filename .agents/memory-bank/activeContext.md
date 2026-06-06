@@ -20,10 +20,12 @@ The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactori
 - [x] 8. Migrated presentation state variables (`presentingReadingSheet`, `presentingPreviewSheet`, `activityListViewPresenting`, `readingPositionHistoryViewPresenting`) from `BookDetailView` to `BookDetailViewModel`, utilizing custom Binding wrappers in property observers.
 - [x] 9. Decoupled `BookDetailView` entirely from `@EnvironmentObject var modelData`, utilizing dependency injection of `ModelData.shared` inside the ViewModel.
 - [x] 10. Enforced MVVM architecture on Reading Position views (`ReadingPositionHistoryView` and `ReadingPositionDetailView`), decoupling them from `ModelData` and Realm queries via `ReadingPositionHistoryViewModel` and `ReadingPositionDetailViewModel`.
+- [x] 11. Enforced MVVM architecture on Activity Log views (`ActivityList` and `ActivityDetailView`), extracting Realm queries and resolution logic to `ActivityListViewModel` and exposing plain `ActivityLogUIEntry` structures.
+- [x] 12. Fixed the `recent-shelf-updater` background thread Realm concurrency crash by caching `realmPerf` via thread-local storage (`Thread.current.threadDictionary`).
 
 ## Next Steps
-- [ ] 11. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
-- [ ] 12. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+- [ ] 13. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
+- [ ] 14. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
