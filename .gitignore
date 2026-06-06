@@ -92,3 +92,6 @@ iOSInjectionProject/
 .DS_Store
 
 gha-creds-*.json
+
+.agents/skills
+.agents/skills_library

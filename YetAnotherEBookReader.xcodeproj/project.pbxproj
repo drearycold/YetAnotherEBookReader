@@ -165,6 +165,9 @@
 		E70A25CE2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70A25CC2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift */; };
 		E70A25D02F7D1A69004F006E /* YabrReaderNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */; };
 		E70A25D12F7D1A69004F006E /* YabrReaderNavigationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */; };
+		E71F34862FD3AED3007AB0B1 /* BookDetailViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34852FD3AED3007AB0B1 /* BookDetailViewModelTests.swift */; };
+		E71F34882FD3B23D007AB0B1 /* BookDetailSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34872FD3B23D007AB0B1 /* BookDetailSubviews.swift */; };
+		E71F34892FD3B23D007AB0B1 /* BookDetailSubviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34872FD3B23D007AB0B1 /* BookDetailSubviews.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E730405C28EBDAB50013BA01 /* BookAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405B28EBDAB50013BA01 /* BookAnnotation.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
@@ -350,6 +353,8 @@
 		E70A25C92F7BDC8D004F006E /* YabrReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderSettingsView.swift; sourceTree = "<group>"; };
 		E70A25CC2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationViewModel.swift; sourceTree = "<group>"; };
 		E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationView.swift; sourceTree = "<group>"; };
+		E71F34852FD3AED3007AB0B1 /* BookDetailViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailViewModelTests.swift; sourceTree = "<group>"; };
+		E71F34872FD3B23D007AB0B1 /* BookDetailSubviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDetailSubviews.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E730405B28EBDAB50013BA01 /* BookAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookAnnotation.swift; sourceTree = "<group>"; };
 		E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBrowser.swift; sourceTree = "<group>"; };
@@ -686,6 +691,7 @@
 			children = (
 				2AC3EC3225BDBC11004A6633 /* YetAnotherEBookReaderTests.swift */,
 				2AC3EC3425BDBC11004A6633 /* Info.plist */,
+				E71F34852FD3AED3007AB0B1 /* BookDetailViewModelTests.swift */,
 			);
 			path = YetAnotherEBookReaderTests;
 			sourceTree = "<group>";
@@ -725,6 +731,7 @@
 			isa = PBXGroup;
 			children = (
 				2A270B24272F7E07006552A3 /* ActivityList.swift */,
+				E71F34872FD3B23D007AB0B1 /* BookDetailSubviews.swift */,
 				E7804CCD29D138980066BD43 /* BookDetailView.swift */,
 				2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */,
 				2AA07E9226DB4ADD008CE451 /* BookPreviewView.swift */,
@@ -984,6 +991,7 @@
 				2A78A6322717D96000A81E53 /* BookImportPicker.swift in Sources */,
 				2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */,
 				2A0EBA86267893740080BF5B /* Downloader.swift in Sources */,
+				E71F34882FD3B23D007AB0B1 /* BookDetailSubviews.swift in Sources */,
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				E792C7E22F83F1EE0015E020 /* YabrAppInfo.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
@@ -1081,6 +1089,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E71F34862FD3AED3007AB0B1 /* BookDetailViewModelTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1111,6 +1120,7 @@
 				E732E3F02A3F03350075D1AC /* LibraryInfoCategoryItemsView.swift in Sources */,
 				E732E3F12A3F03350075D1AC /* LibraryInfoBookListInfoView.swift in Sources */,
 				E732E3F22A3F03350075D1AC /* LibraryInfoViewModel.swift in Sources */,
+				E71F34892FD3B23D007AB0B1 /* BookDetailSubviews.swift in Sources */,
 				E732E3F32A3F03350075D1AC /* ReaderOptionsReaderHelpView.swift in Sources */,
 				E792C7E32F83F1EE0015E020 /* YabrAppInfo.swift in Sources */,
 				E732E3F42A3F03350075D1AC /* ReaderOptionsFontHelpView.swift in Sources */,
@@ -1272,7 +1282,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1328,7 +1338,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
@@ -1513,7 +1523,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				INFOPLIST_FILE = YetAnotherEBookReaderTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -1535,7 +1545,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = L8WKJ3U7UT;
 				INFOPLIST_FILE = YetAnotherEBookReaderTests/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

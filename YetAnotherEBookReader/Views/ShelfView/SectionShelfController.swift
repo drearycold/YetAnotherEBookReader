@@ -511,7 +511,9 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             return
         }
         
-        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF).environmentObject(modelData)
+        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
+            .environmentObject(modelData)
+            .environmentObject(modelData.downloadManager)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )
@@ -541,7 +543,9 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             return
         }
         
-        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF).environmentObject(modelData)
+        let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
+            .environmentObject(modelData)
+            .environmentObject(modelData.downloadManager)
         let detailView = UIHostingController(
             rootView: bookDetailView
         )

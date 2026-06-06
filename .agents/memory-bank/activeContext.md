@@ -10,12 +10,13 @@ The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactori
 - **MCP Integration:** Moved Xcode toolchain configurations to `.agents/mcp_config.json` to allow the Antigravity CLI to autonomously interact with `xcodebuild` and the iOS Simulator.
 
 ## Active Tasks
-1. Expand `BookDetailViewModel.swift` to handle all data fetching (metadata, manifest) and UI state variables currently trapped in `BookDetailView.swift`.
-2. Break down the massive `BookDetailView.swift` (800+ lines) into smaller, manageable subcomponents (e.g., `BookCoverView`, `BookMetadataSection`).
-3. Replace direct `ModelData` network calls inside `BookDetailView` with unidirectional data flow via `BookDetailViewModel`.
-4. Compile the project in the terminal using `xcodebuild` to ensure the SwiftUI refactoring doesn't break the build.
-5. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
+[COMPLETED] 1. Expand `BookDetailViewModel.swift` to handle all data fetching (metadata, manifest) and UI state variables currently trapped in `BookDetailView.swift`.
+[COMPLETED] 2. Break down the massive `BookDetailView.swift` (800+ lines) into smaller, manageable subcomponents (`BookDetailSubviews.swift`).
+[COMPLETED] 3. Replace direct `ModelData` network calls inside `BookDetailView` with unidirectional data flow via `BookDetailViewModel`.
+[COMPLETED] 4. Compile the project in the terminal using `xcodebuild` to ensure the SwiftUI refactoring doesn't break the build and unit tests pass.
 
+[NEXT] 5. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
+[NEXT] 6. Decouple `CalibreServerService` and `BookDownloadManager` from `ModelData`.
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
 - **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.

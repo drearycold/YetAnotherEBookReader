@@ -1306,9 +1306,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
             return
         }
         
-        book.formats.filter { $1.cached }.forEach {
-            guard let format = Format(rawValue: $0.key) else { return }
-            clearCache(book: book,  format: format)
+        let cachedFormats = book.formats.filter { $1.cached }
+        for (key, _) in cachedFormats {
+            guard let format = Format(rawValue: key) else { continue }
+            guard let currentBook = booksInShelf[inShelfId] else { continue }
+            clearCache(book: currentBook, format: format)
         }
     }
     
@@ -1360,6 +1362,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         newBook.formats[format.rawValue]?.cacheSize = 0
         newBook.formats[format.rawValue]?.cached = false
         newBook.formats[format.rawValue]?.selected = nil
+        newBook.lastUpdated = .init()
 
         updateBook(book: newBook)
         
