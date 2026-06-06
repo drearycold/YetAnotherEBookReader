@@ -92,7 +92,7 @@ struct BookDetailView: View {
                     BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, readingPositionHistoryViewPresenting: $readingPositionHistoryViewPresenting)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    BookConnectivitySection(book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
+                    BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
                     BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, presentingPreviewSheet: $presentingPreviewSheet)
@@ -112,7 +112,7 @@ struct BookDetailView: View {
                         BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, readingPositionHistoryViewPresenting: $readingPositionHistoryViewPresenting)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        BookConnectivitySection(book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
+                        BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, activityListViewPresenting: $activityListViewPresenting, alertItem: $_viewModel.alertItem)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
                         BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, presentingPreviewSheet: $presentingPreviewSheet)

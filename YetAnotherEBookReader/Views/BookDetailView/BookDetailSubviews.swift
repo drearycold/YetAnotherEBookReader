@@ -3,7 +3,6 @@ import KingfisherSwiftUI
 import RealmSwift
 
 struct BookCoverView: View {
-    @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
@@ -47,10 +46,12 @@ struct BookCoverView: View {
             }
             .opacity(0.8)
             .fullScreenCover(isPresented: $presentingReadingSheet) {
-                YabrEBookReader(
-                    book: book,
-                    readerInfo: modelData.prepareBookReading(book: book)
-                )
+                if let readerInfo = viewModel.readerInfo {
+                    YabrEBookReader(
+                        book: book,
+                        readerInfo: readerInfo
+                    )
+                }
             }
         }
         .frame(width: 300, height: 400)
@@ -59,7 +60,6 @@ struct BookCoverView: View {
 
 struct BookMetadataSection: View {
     @Environment(\.openURL) var openURL
-    @EnvironmentObject var modelData: ModelData
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
     var lastUpdated: Date
@@ -197,7 +197,6 @@ struct BookMetadataSection: View {
 }
 
 struct BookProgressSection: View {
-    @EnvironmentObject var modelData: ModelData
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
     var lastUpdated: Date
@@ -228,7 +227,7 @@ struct BookProgressSection: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 20, height: 20)
                     Text("\(readProgressGR)%")
-                } else if let position = book.readPos.getPosition(modelData.deviceName) ?? book.readPos.getDevices().first {
+                } else if let position = book.readPos.getPosition(viewModel.deviceName) ?? book.readPos.getDevices().first {
                     Image(systemName: "book.circle")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -260,7 +259,7 @@ struct BookProgressSection: View {
 }
 
 struct BookConnectivitySection: View {
-    @EnvironmentObject var modelData: ModelData
+    @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
     var lastUpdated: Date
     var isCompat: Bool
@@ -270,22 +269,22 @@ struct BookConnectivitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if modelData.updatingMetadataStatus == "Success" {
+            if viewModel.updatingMetadataStatus == "Success" {
                 HStack {
                     metadataIcon(systemName: "checkmark.shield")
                     Text("In Sync with Server")
                 }
-            } else if modelData.updatingMetadataStatus == "Local File" {
+            } else if viewModel.updatingMetadataStatus == "Local File" {
                 HStack {
                     metadataIcon(systemName: "doc")
                     Text("Local File")
                 }
-            } else if modelData.updatingMetadataStatus == "Deleted" {
+            } else if viewModel.updatingMetadataStatus == "Deleted" {
                 HStack {
                     metadataIcon(systemName: "xmark.shield")
                     Text("Been Deleted on Server")
                 }
-            } else if modelData.updatingMetadataStatus == "Updating" {
+            } else if viewModel.updatingMetadataStatus == "Updating" {
                 HStack {
                     metadataIcon(systemName: "arrow.clockwise")
                     Text("Syncing with Server")
@@ -293,7 +292,7 @@ struct BookConnectivitySection: View {
             } else {
                 VStack(alignment: .trailing, spacing: 4) {
                     Button(action:{
-                        alertItem = AlertItem(id: "Sync Error", msg: modelData.updatingMetadataStatus)
+                        alertItem = AlertItem(id: "Sync Error", msg: viewModel.updatingMetadataStatus)
                     }) {
                         HStack {
                             metadataIcon(systemName: "exclamationmark.shield")
@@ -311,12 +310,14 @@ struct BookConnectivitySection: View {
                 }.sheet(isPresented: $activityListViewPresenting, onDismiss: {
                 }, content: {
                     NavigationView {
-                        ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
-                            .environmentObject(modelData)
-                            .environmentObject(modelData.downloadManager)
-                            .environmentObject(modelData.sessionManager)
-                            .environmentObject(modelData.fontsManager)
-                            .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
+                        if let modelData = viewModel.sharedModelData {
+                            ActivityList(presenting: $activityListViewPresenting, libraryId: book.library.id, bookId: book.id)
+                                .environmentObject(modelData)
+                                .environmentObject(modelData.downloadManager)
+                                .environmentObject(modelData.sessionManager)
+                                .environmentObject(modelData.fontsManager)
+                                .environment(\.realmConfiguration, modelData.realmConf ?? Realm.Configuration.defaultConfiguration)
+                        }
                     }
                 })
             }
@@ -332,7 +333,6 @@ struct BookConnectivitySection: View {
 }
 
 struct BookFormatList: View {
-    @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     @ObservedObject var viewModel: BookDetailViewModel
     var book: CalibreBook
@@ -378,16 +378,16 @@ struct BookFormatList: View {
                                 
                                 Button(action: {
                                     if download.isDownloading {
-                                        modelData.pauseDownloadFormat(book: book, format: format)
+                                        viewModel.pauseDownload(book: book, format: format)
                                     } else {
-                                        modelData.resumeDownloadFormat(book: book, format: format)
+                                        viewModel.resumeDownload(book: book, format: format)
                                     }
                                 }) {
                                     Image(systemName: download.isDownloading ? "pause" : "play")
                                 }
                                 
                                 Button(action:{
-                                    modelData.cancelDownloadFormat(book: book, format: format)
+                                    viewModel.cancelDownload(book: book, format: format)
                                 }) {
                                     Image(systemName: "xmark")
                                         .foregroundColor(.red)
@@ -443,7 +443,7 @@ struct BookFormatList: View {
                 .frame(width: 24, height: 24)
         }
         .sheet(isPresented: $presentingPreviewSheet, onDismiss: {
-            modelData.readerInfo = modelData.prepareBookReading(book: book)
+            viewModel.handlePreviewDismiss(book: book)
         }) {
             BookPreviewView(viewModel: viewModel.previewViewModel)
         }

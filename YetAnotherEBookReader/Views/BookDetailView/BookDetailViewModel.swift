@@ -18,6 +18,21 @@ class BookDetailViewModel: ObservableObject {
     private weak var modelData: ModelData?
     var book: CalibreBookRealm?
     private var fetchTask: Task<Void, Never>?
+    var readerInfo: ReaderInfo? {
+        return modelData?.readerInfo
+    }
+    
+    var deviceName: String {
+        return modelData?.deviceName ?? ""
+    }
+    
+    var updatingMetadataStatus: String {
+        return modelData?.updatingMetadataStatus ?? ""
+    }
+    
+    var sharedModelData: ModelData? {
+        return modelData
+    }
     
     init() {
         print("BookDetailViewModel INIT")
@@ -28,6 +43,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func setup(modelData: ModelData, book: CalibreBookRealm, calibreBook: CalibreBook) {
+        
         self.modelData = modelData
         self.book = book
         
@@ -104,6 +120,18 @@ class BookDetailViewModel: ObservableObject {
         }
     }
     
+    func pauseDownload(book: CalibreBook, format: Format) {
+        modelData?.pauseDownloadFormat(book: book, format: format)
+    }
+    
+    func resumeDownload(book: CalibreBook, format: Format) {
+        modelData?.resumeDownloadFormat(book: book, format: format)
+    }
+    
+    func cancelDownload(book: CalibreBook, format: Format) {
+        modelData?.cancelDownloadFormat(book: book, format: format)
+    }
+    
     func clearFormat(book: CalibreBook, format: Format) {
         modelData?.clearCache(book: book, format: format)
     }
@@ -166,14 +194,22 @@ class BookDetailViewModel: ObservableObject {
             previewViewModel.toc = String(data: json, encoding: .utf8) ?? "String Decoding Failure"
             #endif
             
-            if let jobStatus = root["job_status"] as? String, jobStatus == "waiting" || jobStatus == "running" {
+            if let jobStatus = root["job_status"] as? String, jobStatus == "waiting" {
                 previewViewModel.toc = "Generating TOC, Please try again later"
             }
             return
         }
         
-        guard let childrenNode = tocNode["children"] as? NSArray else {
-            return
+        previewViewModel.toc = parseTOCNode(node: tocNode, level: 0)
+    }
+    
+    func handlePreviewDismiss(book: CalibreBook) {
+        modelData?.readerInfo = modelData?.prepareBookReading(book: book)
+    }
+
+    func parseTOCNode(node: NSDictionary, level: Int) -> String {
+        guard let childrenNode = node["children"] as? NSArray else {
+            return ""
         }
         
         let tocString = childrenNode.compactMap { childNode -> String? in
@@ -183,6 +219,6 @@ class BookDetailViewModel: ObservableObject {
             return title
         }.joined(separator: "\n") + "\n"
         
-        previewViewModel.toc = tocString
+        return tocString
     }
 }
