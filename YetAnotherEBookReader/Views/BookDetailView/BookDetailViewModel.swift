@@ -212,6 +212,22 @@ class BookDetailViewModel: ObservableObject {
         modelData?.readerInfo = modelData?.prepareBookReading(book: book)
     }
 
+    func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
+        return modelData?.convert(bookRealm: bookRealm)
+    }
+
+    var updatingMetadata: Bool {
+        return modelData?.updatingMetadata ?? false
+    }
+
+    func pushPresenting(_ binding: Binding<Bool>) {
+        modelData?.presentingStack.append(binding)
+    }
+
+    func popPresenting() {
+        _ = modelData?.presentingStack.popLast()
+    }
+
     func parseTOCNode(node: NSDictionary, level: Int) -> String {
         guard let childrenNode = node["children"] as? NSArray else {
             return ""

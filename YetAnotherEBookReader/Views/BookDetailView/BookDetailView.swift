@@ -29,23 +29,23 @@ struct BookDetailView: View {
     
 
     @State private var presentingReadingSheet = false {
-        willSet { if newValue { modelData.presentingStack.append($presentingReadingSheet) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+        willSet { if newValue { _viewModel.pushPresenting($presentingReadingSheet) } }
+        didSet { if oldValue { _viewModel.popPresenting() } }
     }
     
     @State private var presentingPreviewSheet = false {
-        willSet { if newValue { modelData.presentingStack.append($presentingPreviewSheet) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+        willSet { if newValue { _viewModel.pushPresenting($presentingPreviewSheet) } }
+        didSet { if oldValue { _viewModel.popPresenting() } }
     }
     
     @State private var activityListViewPresenting = false {
-        willSet { if newValue { modelData.presentingStack.append($activityListViewPresenting) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+        willSet { if newValue { _viewModel.pushPresenting($activityListViewPresenting) } }
+        didSet { if oldValue { _viewModel.popPresenting() } }
     }
 
     @State private var readingPositionHistoryViewPresenting = false {
-        willSet { if newValue { modelData.presentingStack.append($readingPositionHistoryViewPresenting) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+        willSet { if newValue { _viewModel.pushPresenting($readingPositionHistoryViewPresenting) } }
+        didSet { if oldValue { _viewModel.popPresenting() } }
     }
     
     @StateObject private var _viewModel = BookDetailViewModel()
@@ -54,7 +54,7 @@ struct BookDetailView: View {
         
         ScrollView {
             Text(book.title)
-            if let calibreBook = modelData.convert(bookRealm: book) {
+            if let calibreBook = _viewModel.convert(bookRealm: book) {
                 viewContent(book: calibreBook, isCompat: sizeClass == .compact)
                     .onAppear() {
                         _viewModel.setup(modelData: modelData, book: book, calibreBook: calibreBook)
@@ -147,7 +147,7 @@ struct BookDetailView: View {
             Button(action: {
                 _viewModel.refresh(book: book)
             }) {
-                if modelData.updatingMetadata {
+                if _viewModel.updatingMetadata {
                     Image(systemName: "xmark")
                 } else {
                     Image(systemName: "arrow.triangle.2.circlepath")

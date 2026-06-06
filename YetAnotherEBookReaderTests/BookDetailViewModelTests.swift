@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 @testable import YetAnotherEBookReader
 
 class BookDetailViewModelTests: XCTestCase {
@@ -72,5 +73,31 @@ class BookDetailViewModelTests: XCTestCase {
         #else
         XCTAssertEqual(viewModel.previewViewModel.toc, "Without TOC", "Should fallback to Without TOC for invalid JSON")
         #endif
+    }
+
+    func testUpdatingMetadata() throws {
+        XCTAssertFalse(viewModel.updatingMetadata)
+        mockModelData.updatingMetadata = true
+        XCTAssertTrue(viewModel.updatingMetadata)
+    }
+
+    func testPushAndPopPresenting() throws {
+        var presenting = false
+        let binding = Binding<Bool>(
+            get: { presenting },
+            set: { presenting = $0 }
+        )
+        
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+        viewModel.pushPresenting(binding)
+        XCTAssertEqual(mockModelData.presentingStack.count, 1)
+        
+        viewModel.popPresenting()
+        XCTAssertEqual(mockModelData.presentingStack.count, 0)
+    }
+
+    func testConvertBookRealm() throws {
+        let result = viewModel.convert(bookRealm: mockBookRealm)
+        XCTAssertNil(result, "Should return nil if library is not queryable in mock model data")
     }
 }
