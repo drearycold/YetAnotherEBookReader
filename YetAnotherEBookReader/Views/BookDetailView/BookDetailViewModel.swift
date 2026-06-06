@@ -87,7 +87,8 @@ class BookDetailViewModel: ObservableObject {
         return modelData
     }
     
-    init() {
+    init(modelData: ModelData? = ModelData.shared) {
+        self.modelData = modelData
         print("BookDetailViewModel INIT")
     }
     
@@ -95,14 +96,15 @@ class BookDetailViewModel: ObservableObject {
         fetchTask?.cancel()
     }
     
-    func setup(modelData: ModelData, book: CalibreBookRealm, calibreBook: CalibreBook) {
-        
-        self.modelData = modelData
+    func setup(book: CalibreBookRealm, calibreBook: CalibreBook) {
         self.book = book
         
-        if let downloadManager = self.modelData?.downloadManager {
-            downloadManager.$activeDownloads.assign(to: &$activeDownloads)
+        guard let modelData = self.modelData else {
+            print("Warning: BookDetailViewModel setup called before modelData was set")
+            return
         }
+        
+        modelData.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
         
         if self.listVM == nil {
             self.listVM = ReadingPositionListViewModel(

@@ -11,7 +11,7 @@ class BookDetailViewModelTests: XCTestCase {
     
     override func setUpWithError() throws {
         mockModelData = ModelData(mock: true)
-        viewModel = BookDetailViewModel()
+        viewModel = BookDetailViewModel(modelData: mockModelData)
         
         mockBookRealm = CalibreBookRealm()
         mockBookRealm.serverUUID = "mock-uuid"
@@ -23,7 +23,7 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook = CalibreBook(id: 123, library: library)
         mockCalibreBook.title = "Test Book"
         
-        viewModel.setup(modelData: mockModelData, book: mockBookRealm, calibreBook: mockCalibreBook)
+        viewModel.setup(book: mockBookRealm, calibreBook: mockCalibreBook)
     }
 
     override func tearDownWithError() throws {

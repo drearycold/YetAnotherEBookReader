@@ -18,10 +18,12 @@ The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactori
 - [x] 6. Decoupled `BookDownloadManager` from `BookDetailView` and `BookDetailSubviews` by mapping `activeDownloads` into `BookDetailViewModel` using Combine.
 - [x] 7. Decoupled `ModelData` from `BookDetailView`'s state presentation stack, book conversion, and metadata status, proxying them through `BookDetailViewModel`. Unit tests added and verified.
 - [x] 8. Migrated presentation state variables (`presentingReadingSheet`, `presentingPreviewSheet`, `activityListViewPresenting`, `readingPositionHistoryViewPresenting`) from `BookDetailView` to `BookDetailViewModel`, utilizing custom Binding wrappers in property observers.
+- [x] 9. Decoupled `BookDetailView` entirely from `@EnvironmentObject var modelData`, utilizing dependency injection of `ModelData.shared` inside the ViewModel.
 
 ## Next Steps
-- [ ] 9. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
-- [ ] 10. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+- [ ] 10. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
+- [ ] 11. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

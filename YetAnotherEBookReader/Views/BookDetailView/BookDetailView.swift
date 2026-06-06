@@ -13,7 +13,6 @@ import RealmSwift
 import KingfisherSwiftUI
 
 struct BookDetailView: View {
-    @EnvironmentObject var modelData: ModelData
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.openURL) var openURL
     
@@ -34,10 +33,10 @@ struct BookDetailView: View {
         
         ScrollView {
             Text(book.title)
-            if let calibreBook = modelData.convert(bookRealm: book) {
+            if let calibreBook = _viewModel.convert(bookRealm: book) {
                 viewContent(book: calibreBook, isCompat: sizeClass == .compact)
                     .onAppear() {
-                        _viewModel.setup(modelData: modelData, book: book, calibreBook: calibreBook)
+                        _viewModel.setup(book: book, calibreBook: calibreBook)
                         _viewModel.fetchMetadata(book: calibreBook)
                     }
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
