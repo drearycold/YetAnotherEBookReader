@@ -1,9 +1,12 @@
 # Active Context
 
 ## Current Focus
-The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactoring Plan. We are systematically decoupling massive SwiftUI views from the `ModelData` "God Object" and introducing dedicated ViewModels to handle business logic and state.
+The primary focus is the Modernization of the Unified Search Subsystem (`CalibreUnifiedSearchObject`). We are transitioning from Realm-based persistent objects to in-memory Value Types and introducing a clean Repository pattern for search cache management. We have completed Phase 1: Value Types & Repository Layer, Phase 2: In-Memory K-Way Merge, and Phase 3: Service Layer Migration.
 
 ## Recent Changes & Decisions
+- **Unified Search Modernization (Phase 1):** Introduced immutable domain value types (`UnifiedSearchResult`, `MergeOffset`, `LibrarySearchStatus`, `SearchError`) and decoupled the database via `SearchCacheRepository` and its concrete implementation `RealmSearchCacheStore`.
+- **Unified Search Modernization (Phase 2):** Implemented in-memory K-way merging using Apple's `swift-collections` `Heap`.
+- **Unified Search Modernization (Phase 3):** Introduced `UnifiedSearchManager` and `ActiveSearch` to orchestrate searches and merging in memory, and refactored `CalibreBrowser.swift` to delegate merging to `UnifiedSearchManager`.
 - **Development Environment Migration:** Transitioning the project to an agent-first development workflow using the Google Antigravity CLI.
 - **Architectural Shift (MVVM):** Transitioning from a single monolithic `@EnvironmentObject var modelData` to modular `@StateObject` ViewModels for complex views.
 - **Context Guardrails:** Established the `.agents/memory-bank` directory to provide strict architectural guidelines, preventing subagents from hallucinating or deviating from the Swift Package Manager / SwiftUI architecture.
@@ -22,11 +25,17 @@ The primary development focus is executing Phase 1 of the SwiftUI MVVM Refactori
 - [x] 10. Enforced MVVM architecture on Reading Position views (`ReadingPositionHistoryView` and `ReadingPositionDetailView`), decoupling them from `ModelData` and Realm queries via `ReadingPositionHistoryViewModel` and `ReadingPositionDetailViewModel`.
 - [x] 11. Enforced MVVM architecture on Activity Log views (`ActivityList` and `ActivityDetailView`), extracting Realm queries and resolution logic to `ActivityListViewModel` and exposing plain `ActivityLogUIEntry` structures.
 - [x] 12. Fixed the `recent-shelf-updater` background thread Realm concurrency crash by caching `realmPerf` via thread-local storage (`Thread.current.threadDictionary`).
+- [x] 13. Completed Unified Search modernization Phase 1: Created `UnifiedSearchModels.swift`, `SearchCacheRepository.swift`, and `RealmSearchCacheStore.swift`, and successfully integrated them into Xcode project and verified build.
+- [x] 14. Completed Unified Search modernization Phase 2: Created `UnifiedSearchMergeService` and heap-based iterators.
+- [x] 15. Completed Unified Search modernization Phase 3: Created `UnifiedSearchManager` and integrated it with `CalibreBrowser` to perform backend merging in memory. Resolved the background thread Realm notification registration crash in `RealmSearchCacheStore` by utilizing a Combine `Deferred` publisher on the main queue and mapping managed entities to thread-safe value structs. Fixed the infinite loop feedback cycles by adding equality check guards on limitNumber changes and caching the last processed library source search results to prevent redundant merge operations when Realm updates book metadata. Resolved the main thread deadlock by replacing the synchronous `cacheRealmQueue.sync` call in `getMergedBookIndex` with a lightweight, non-blocking `NSRecursiveLock` to protect the runtime dictionaries. Fixed the limit expansion issue by forcing a Realm database refresh on the background queue before reading the updated limit value.
+- [x] 16. Resolved the empty libraryIds limit expansion issue in Unified Search (where "All Books" view had empty libraryIds, resulting in 0 merged books and a totalNumber of 0, which blocked limit expansion) by resolving empty libraryIds to all active calibre libraries in UnifiedSearchManager and UnifiedSearchMergeService. Added unit test verification.
+- [x] 17. Resolved the Realm write transaction deadlock between main thread limit expansion and background merge updates by converting UnifiedSearchManager mutators (`setLimit`, `expandLimit`, `resetSearch`, `updateLibraryStatus`) to run asynchronously on its serial queue, preventing the blocking of `cacheRealmQueue`. Added asynchronous unit test synchronization.
 
 ## Next Steps
-- [ ] 13. Apply similar MVVM componentization to other large views (e.g., `LibraryInfoBookListView`).
-- [ ] 14. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+- [ ] 18. Execute Phase 4 of Unified Search modernization: Migrating the UI and ViewModels (e.g. `LibraryInfoBookListView`) to use the new `UnifiedSearchManager` and removing legacy Realm objects.
+- [ ] 19. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
 - **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.
+
