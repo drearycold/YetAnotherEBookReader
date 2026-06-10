@@ -1,12 +1,13 @@
 # Active Context
 
 ## Current Focus
-The primary focus is the Modernization of the Unified Search Subsystem (`CalibreUnifiedSearchObject`). We are transitioning from Realm-based persistent objects to in-memory Value Types and introducing a clean Repository pattern for search cache management. We have completed Phase 1: Value Types & Repository Layer, Phase 2: In-Memory K-Way Merge, and Phase 3: Service Layer Migration.
+The primary focus is the Modernization of the Unified Search Subsystem (`CalibreUnifiedSearchObject`). We are transitioning from Realm-based persistent objects to in-memory Value Types and introducing a clean Repository pattern for search cache management. We have completed Phase 1: Value Types & Repository Layer, Phase 2: In-Memory K-Way Merge, Phase 3: Service Layer Migration, and Phase 4: UI Consumer Migration.
 
 ## Recent Changes & Decisions
 - **Unified Search Modernization (Phase 1):** Introduced immutable domain value types (`UnifiedSearchResult`, `MergeOffset`, `LibrarySearchStatus`, `SearchError`) and decoupled the database via `SearchCacheRepository` and its concrete implementation `RealmSearchCacheStore`.
 - **Unified Search Modernization (Phase 2):** Implemented in-memory K-way merging using Apple's `swift-collections` `Heap`.
 - **Unified Search Modernization (Phase 3):** Introduced `UnifiedSearchManager` and `ActiveSearch` to orchestrate searches and merging in memory, and refactored `CalibreBrowser.swift` to delegate merging to `UnifiedSearchManager`.
+- **Unified Search Modernization (Phase 4):** Refactored UI layer (Views and ViewModels) to consume `UnifiedSearchResult` via Combine, removing tight coupling to Realm objects like `CalibreUnifiedSearchObject`. Removed the $O(N)$ lookup `getMergedBookIndex()` logic in favor of straightforward array iteration.
 - **Development Environment Migration:** Transitioning the project to an agent-first development workflow using the Google Antigravity CLI.
 - **Architectural Shift (MVVM):** Transitioning from a single monolithic `@EnvironmentObject var modelData` to modular `@StateObject` ViewModels for complex views.
 - **Context Guardrails:** Established the `.agents/memory-bank` directory to provide strict architectural guidelines, preventing subagents from hallucinating or deviating from the Swift Package Manager / SwiftUI architecture.
@@ -31,9 +32,9 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 16. Resolved the empty libraryIds limit expansion issue in Unified Search (where "All Books" view had empty libraryIds, resulting in 0 merged books and a totalNumber of 0, which blocked limit expansion) by resolving empty libraryIds to all active calibre libraries in UnifiedSearchManager and UnifiedSearchMergeService. Added unit test verification.
 - [x] 17. Resolved the Realm write transaction deadlock between main thread limit expansion and background merge updates by converting UnifiedSearchManager mutators (`setLimit`, `expandLimit`, `resetSearch`, `updateLibraryStatus`) to run asynchronously on its serial queue, preventing the blocking of `cacheRealmQueue`. Added asynchronous unit test synchronization.
 
-## Next Steps
-- [ ] 18. Execute Phase 4 of Unified Search modernization: Migrating the UI and ViewModels (e.g. `LibraryInfoBookListView`) to use the new `UnifiedSearchManager` and removing legacy Realm objects.
-- [ ] 19. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+- [x] 18. Executed Phase 4 of Unified Search modernization: Migrated the UI and ViewModels (e.g., `LibraryInfoBookListView`, `ShelfDataManager`, `LibraryInfoViewModel`) to use the new `UnifiedSearchManager` and removed legacy Realm bindings. Validated through Xcode build.
+- [ ] 19. Execute Phase 5 of Unified Search modernization: Cleanup, final testing, and deletion of `CalibreUnifiedSearchObject` from the Realm Schema.
+- [ ] 20. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

@@ -16,8 +16,6 @@ import KingfisherSwiftUI
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
-    
     @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
@@ -142,12 +140,8 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-//            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
-//                let unifiedSearch = unifiedSearches.where({
-//                $0._id == objectId
-//            }).first {
-            if let unifiedSearch = viewModel.unifiedSearchObject {
-                LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
+            if viewModel.unifiedSearchResult != nil {
+                LibraryInfoBookListView()
                     .environmentObject(viewModel)
             } else {
                 Text("Preparing Book List")
@@ -166,17 +160,7 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
-            viewModel.filterCriteriaLibraries,
-            viewModel.currentLibrarySearchCriteria,
-            unifiedSearches
-        )
-        
-        if cacheObj.realm == nil {
-            $unifiedSearches.append(cacheObj)
-        }
-        
-        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
+        viewModel.startSearch(modelData: modelData)
     }
     
     func resetSearchCriteria() {

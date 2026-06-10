@@ -26,7 +26,7 @@ class YabrShelfDataModel: ObservableObject {
         
         var inShelfBookIds: Set<String> = []
         
-        var unifiedSearchObject: CalibreUnifiedSearchObject?
+        var unifiedSearchResult: UnifiedSearchResult?
         
         var cancellables: Set<AnyCancellable> = []
         
@@ -172,40 +172,22 @@ class YabrShelfDataModel: ObservableObject {
 //                return
 //            }
             
-            let unifiedSearchObject = searchManager.retrieveUnifiedSearchObject(
-                [],
-                .init(
+            let key = SearchCriteriaMergedKey(
+                libraryIds: [],
+                criteria: SearchCriteria(
                     searchString: "",
                     sortCriteria: .init(),
                     filterCriteriaCategory: ["Authors" : Set([categoryName])]
-                ),
-                realmOnQueue.objects(CalibreUnifiedSearchObject.self)
+                )
             )
             
-            if unifiedSearchObject.realm == nil {
-                try! realmOnQueue.write {
-                    realmOnQueue.add(unifiedSearchObject)
-                }
-            }
-            
-            category.unifiedSearchObject = unifiedSearchObject
-            
-            unifiedSearchObject.books.changesetPublisher
-                .subscribe(on: self.dispatchQueue)
-                .map { changeset -> ShelfModelSection in
-                    switch changeset {
-                    case .initial(_), .error(_):
-                        print("unifiedSearchObject changeset \(category.type.rawValue) \(category.category) initial \(unifiedSearchObject.books.count)")
-                        break
-                    case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                        print("unifiedSearchObject changeset \(category.type.rawValue) \(category.category) update \(unifiedSearchObject.books.count)")
-                        break
-                    }
-                    
-                    return self.buildShelfModelSection(category: category)
-                }
+            searchManager.unifiedSearchManager.publisher(for: key)
                 .receive(on: DispatchQueue.main)
-                .sink { discoverShelfSection in
+                .sink { [weak self, weak category] result in
+                    guard let self = self, let category = category else { return }
+                    category.unifiedSearchResult = result
+                    
+                    let discoverShelfSection = self.buildShelfModelSection(category: category)
                     if discoverShelfSection.sectionShelf.count > 1 {
                         self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
                         self.discoverShelfSubject.send(self.discoverShelf)
@@ -249,7 +231,7 @@ class YabrShelfDataModel: ObservableObject {
             }
             
             category.cancellables.removeAll()
-            category.unifiedSearchObject = nil
+            category.unifiedSearchResult = nil
             
             let discoverShelfSection = self.buildShelfModelSection(category: category)
             DispatchQueue.main.async {
@@ -264,24 +246,15 @@ class YabrShelfDataModel: ObservableObject {
     func buildShelfModelSection(category: CategoryObject) -> ShelfModelSection {
         let sectionName = "\(category.type.rawValue): \(category.category)"
         
-        let sectionShelf: [ShelfModel] = category.unifiedSearchObject?.books.map {
-            var coverSource = ""
-            if let serverUUID = $0.serverUUID,
-               let server = self.modelData.calibreServers[serverUUID],
-               let serverUrl = service.getServerUrlByReachability(server: server) ?? URL(string: server.serverUrl),
-               let libraryName = $0.libraryName,
-               let library = self.modelData.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)] {
-                
-                var coverRelativeURLComponent = URLComponents()
-                coverRelativeURLComponent.path = "get/thumb/\($0.idInLib)/\(library.key)"
-                coverRelativeURLComponent.queryItems = [
-                    .init(name: "sz", value: "300x400"),
-                    .init(name: "username", value: server.username)
-                ]
-                
-                coverSource = coverRelativeURLComponent.url(relativeTo: serverUrl)?.absoluteString ?? ""
-            }
-            return ShelfModel(bookCoverSource: coverSource, bookId: $0.primaryKey!, bookTitle: $0.title, bookProgress: 0, bookStatus: .READY, sectionId: sectionName)
+        let sectionShelf: [ShelfModel] = category.unifiedSearchResult?.books.map {
+            ShelfModel(
+                bookCoverSource: $0.coverURL?.absoluteString ?? "",
+                bookId: $0.id.description,
+                bookTitle: $0.title,
+                bookProgress: 0,
+                bookStatus: .READY,
+                sectionId: sectionName
+            )
         } ?? []
         
         return .init(sectionName: sectionName, sectionId: sectionName, sectionShelf: sectionShelf)
@@ -289,11 +262,22 @@ class YabrShelfDataModel: ObservableObject {
     
     func refresh() {
         dispatchQueue.async {
-            self.categories.compactMap {
-                $0.unifiedSearchObject
-            }.forEach(
-                self.searchManager.refreshUnifiedSearchResult(mergedObj:)
-            )
+            self.categories.forEach { category in
+                let key = SearchCriteriaMergedKey(
+                    libraryIds: [],
+                    criteria: SearchCriteria(
+                        searchString: "",
+                        sortCriteria: .init(),
+                        filterCriteriaCategory: ["Authors" : Set([category.category])]
+                    )
+                )
+                self.searchManager.unifiedSearchManager.resetSearch(for: key)
+                self.searchManager.refreshSearchResults(
+                    libraryIds: key.libraryIds,
+                    searchCriteria: key.criteria,
+                    force: true
+                )
+            }
         }
     }
 }

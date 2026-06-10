@@ -13,65 +13,59 @@ struct LibraryInfoBookListInfoView: View {
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
 
-    @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
-    
     @Binding var presenting: Bool
     
     var body: some View {
         NavigationView {
             List {
-                ForEach(
-                    unifiedSearchObject.unifiedOffsets
-                        .sorted(by: { $0.key < $1.key })
-                        .map({ unifiedOffset in
-                            (
-                                unifiedOffset,
-                                modelData.calibreLibraries[unifiedOffset.key]
-                            )
-                        }), id: \.0.key) { searchResult in
-                            if let unifiedOffset = searchResult.0.value,
-                               let sourceObjOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
-                               let sourceObj = sourceObjOpt,
-                               let library = searchResult.1 {
-                            Section {
-                                HStack {
-                                    Text("Books")
-                                    Spacer()
-                                    Text("\(sourceObj.totalNumber)")
+                if let result = viewModel.unifiedSearchResult {
+                    ForEach(
+                        result.unifiedOffsets
+                            .sorted(by: { $0.key < $1.key })
+                            .map({ unifiedOffset in
+                                (
+                                    unifiedOffset,
+                                    modelData.calibreLibraries[unifiedOffset.key]
+                                )
+                            }), id: \.0.key) { searchResult in
+                                if let library = searchResult.1 {
+                                    let unifiedOffset = searchResult.0.value
+                                    Section {
+                                        HStack {
+                                            Text("Offset")
+                                            Spacer()
+                                            Text("\(unifiedOffset.offset)")
+                                        }
+                                        #if DEBUG
+                                        HStack {
+                                            Text(unifiedOffset.searchObjectSource)
+                                        }
+                                        HStack {
+                                            Text(unifiedOffset.generation.description)
+                                            Spacer()
+                                            Text(library.lastModified.description)
+                                        }
+                                        HStack {
+                                            Text(unifiedOffset.offset.description)
+                                            Text("/")
+                                            Text(unifiedOffset.beenConsumed.description)
+                                            Text("/")
+                                            Text(unifiedOffset.beenCutOff.description)
+                                        }
+                                        #endif
+                                    } header: {
+                                        HStack {
+                                            Text(library.name)
+                                            Spacer()
+                                            Text(library.server.name)
+                                        }
+                                    }
+                                } else {
+                                    Text("Error \(searchResult.0.key)")
                                 }
-                                #if DEBUG
-                                HStack {
-                                    Text(unifiedOffset.searchObjectSource)
-                                }
-                                HStack {
-                                    Text(sourceObj.generation.description)
-                                    Spacer()
-                                    Text(library.lastModified.description)
-                                }
-                                HStack {
-                                    Text(unifiedOffset.offset.description)
-                                    Text("/")
-                                    Text(unifiedOffset.beenConsumed.description)
-                                    Text("/")
-                                    Text(unifiedOffset.beenCutOff.description)
-
-                                    Spacer()
-
-                                    Text(sourceObj.books.count.description)
-                                    Text("/")
-                                    Text(sourceObj.bookIds.count.description)
-                                }
-                                #endif
-                            } header: {
-                                HStack {
-                                    Text(library.name)
-                                    Spacer()
-                                    Text(library.server.name)
-                                }
-                            }
-                        } else {
-                            Text("Error \(searchResult.0.key)")
-                        }
+                    }
+                } else {
+                    Text("No Search Result")
                 }
             }
             .navigationTitle("Libraries")
