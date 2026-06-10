@@ -734,6 +734,7 @@
 			isa = PBXGroup;
 			children = (
 				2A270B24272F7E07006552A3 /* ActivityList.swift */,
+				E71F348A2FD416AA007AB0B1 /* ActivityListViewModel.swift */,
 				E71F34872FD3B23D007AB0B1 /* BookDetailSubviews.swift */,
 				E7804CCD29D138980066BD43 /* BookDetailView.swift */,
 				2AA07E9026D73239008CE451 /* BookDetailViewModel.swift */,
@@ -742,7 +743,6 @@
 				2AD38F8626D637B70053D01D /* ReadingPositionDetailView.swift */,
 				2A264A4027311E8200C4CEFA /* ReadingPositionHistoryView.swift */,
 				2AD38F8826D639EE0053D01D /* ReadingPositionViewModel.swift */,
-				E71F348A2FD416AA007AB0B1 /* ActivityListViewModel.swift */,
 			);
 			path = BookDetailView;
 			sourceTree = "<group>";
