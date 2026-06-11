@@ -124,9 +124,10 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             "offset": 0,
             "num": 1,
             "sort": "title",
-            "base_url": "",
+            "base_url": "/ajax/search/lib1",
+            "query": "",
             "library_id": "lib1",
-            "book_ids": [123],
+            "book_ids": [1],
             "vl": ""
         }
         """
@@ -134,28 +135,93 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         // Mock metadata response JSON
         let metadataJSON = """
         {
-            "123": {
-                "title": "Integration Test Book",
-                "authors": ["Test Author"],
-                "timestamp": "2026-06-11T02:00:00Z",
-                "pubdate": "2026-06-11T02:00:00Z",
-                "last_modified": "2026-06-11T02:00:00Z",
-                "uuid": "test-book-uuid-123",
-                "formats": [],
-                "format_metadata": {},
-                "user_metadata": {},
-                "tags": [],
-                "author_sort": "Test Author",
-                "title_sort": "Integration Test Book",
-                "thumbnail": "",
-                "user_categories": {},
-                "cover": "",
-                "application_id": 123,
-                "author_sort_map": {},
+            "1": {
+                "thumbnail": "/get/thumb/1/lib1",
+                "series": null,
+                "languages": ["eng"],
+                "title_sort": "Quick Start Guide",
                 "identifiers": {},
-                "languages": ["en"],
+                "user_categories": {},
+                "pages": 0,
+                "authors": ["John Schember"],
+                "link_maps": {},
+                "cover": "/get/cover/1/lib1",
+                "author_sort": "Schember, John",
+                "title": "Quick Start Guide",
+                "publisher": null,
+                "author_sort_map": {"John Schember": "Schember, John"},
+                "tags": [],
+                "user_metadata": {
+                    "#pages": {
+                        "table": "custom_column_1",
+                        "column": "value",
+                        "datatype": "int",
+                        "is_multiple": null,
+                        "kind": "field",
+                        "name": "Pages",
+                        "search_terms": ["#pages"],
+                        "label": "pages",
+                        "colnum": 1,
+                        "display": {"number_format": null, "description": ""},
+                        "is_custom": true,
+                        "is_category": false,
+                        "link_column": "value",
+                        "category_sort": "value",
+                        "is_csp": false,
+                        "is_editable": true,
+                        "rec_index": 23,
+                        "#value#": 13,
+                        "#extra#": null,
+                        "is_multiple2": {}
+                    },
+                    "#words": {
+                        "table": "custom_column_2",
+                        "column": "value",
+                        "datatype": "int",
+                        "is_multiple": null,
+                        "kind": "field",
+                        "name": "Words",
+                        "search_terms": ["#words"],
+                        "label": "words",
+                        "colnum": 2,
+                        "display": {"number_format": null, "description": ""},
+                        "is_custom": true,
+                        "is_category": false,
+                        "link_column": "value",
+                        "category_sort": "value",
+                        "is_csp": false,
+                        "is_editable": true,
+                        "rec_index": 24,
+                        "#value#": 5111,
+                        "#extra#": null,
+                        "is_multiple2": {}
+                    }
+                },
+                "uuid": "0458f36e-0e8d-4a7c-9d10-2a7131c7e4af",
+                "last_modified": "2023-07-25T03:11:04+00:00",
+                "series_index": null,
+                "pubdate": "2023-07-21T07:43:05+00:00",
+                "application_id": 1,
                 "rating": 0.0,
-                "category_urls": {}
+                "comments": "calibre Quick Start Guide",
+                "timestamp": "2023-07-21T07:43:05+00:00",
+                "format_metadata": {
+                    "epub": {
+                        "path": "/Users/peterlee/Calibre Library/John Schember/Quick Start Guide (1)/Quick Start Guide - John Schember.epub",
+                        "size": 55532,
+                        "mtime": "2023-07-21T07:43:05.274319+00:00"
+                    }
+                },
+                "formats": ["epub"],
+                "main_format": {"epub": "/get/epub/1/lib1"},
+                "other_formats": {},
+                "category_urls": {
+                    "series": {},
+                    "languages": {},
+                    "authors": {"John Schember": "/ajax/books_in/617574686f7273/31/lib1"},
+                    "publisher": {},
+                    "tags": {}
+                }
             }
         }
         """
@@ -218,8 +284,8 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         
         XCTAssertNotNil(finalResult)
         XCTAssertEqual(finalResult?.books.count, 1)
-        XCTAssertEqual(finalResult?.books.first?.title, "Integration Test Book")
-        XCTAssertEqual(finalResult?.books.first?.authors.first, "Test Author")
+        XCTAssertEqual(finalResult?.books.first?.title, "Quick Start Guide")
+        XCTAssertEqual(finalResult?.books.first?.authors.first, "John Schember")
     }
 }
 
