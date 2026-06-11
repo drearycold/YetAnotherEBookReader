@@ -46,7 +46,9 @@ class UnifiedSearchViewModel: ObservableObject {
     }
     
     init(searchService: UnifiedSearchService? = nil, modelData: ModelData? = nil) {
-        let resolvedModelData = modelData ?? ModelData.shared!
+        guard let resolvedModelData = modelData ?? ModelData.shared else {
+            fatalError("ModelData.shared must be initialized before creating UnifiedSearchViewModel")
+        }
         self.modelData = resolvedModelData
         self.searchService = searchService ?? resolvedModelData.librarySearchManager.unifiedSearchService
     }

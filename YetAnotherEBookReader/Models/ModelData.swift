@@ -21,12 +21,30 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         return calibreLibraries
     }
     
-    @Published var deviceName = UIDevice.current.name
+    @Published var deviceName = UIDevice.current.name {
+        didSet {
+            if logger != nil {
+                calibreServerService.updateDeviceName(deviceName)
+            }
+        }
+    }
     
     @Published var calibreServers = [String: CalibreServer]()
-    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
+    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
+        didSet {
+            if logger != nil {
+                calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
+            }
+        }
+    }
     
-    @Published var calibreLibraries = [String: CalibreLibrary]()
+    @Published var calibreLibraries = [String: CalibreLibrary]() {
+        didSet {
+            if logger != nil {
+                calibreServerService.updateCalibreLibraries(calibreLibraries)
+            }
+        }
+    }
     @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
     
     @Published var activeTab = 0

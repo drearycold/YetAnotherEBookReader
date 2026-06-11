@@ -86,7 +86,7 @@ struct UnifiedSearchResult: Equatable, Sendable {
 }
 
 protocol LibraryProvider {
-    func getLibraries() -> [String: CalibreLibrary]
-    func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool?
-    func isServerReachable(server: CalibreServer) -> Bool
+    @MainActor func getLibraries() -> [String: CalibreLibrary]
+    @MainActor func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool?
+    @MainActor func isServerReachable(server: CalibreServer) -> Bool
 }

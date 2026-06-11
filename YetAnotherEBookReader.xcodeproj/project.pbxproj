@@ -182,8 +182,6 @@
 		E71F34AC2FD90701007AB0B1 /* UnifiedSearchMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34AB2FD90701007AB0B1 /* UnifiedSearchMergeService.swift */; };
 		E71F34AD2FD90701007AB0B1 /* UnifiedSearchMergeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34AB2FD90701007AB0B1 /* UnifiedSearchMergeService.swift */; };
 		E71F34AF2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34AE2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift */; };
-		E71F34B22FD91904007AB0B1 /* ActiveSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B12FD91904007AB0B1 /* ActiveSearch.swift */; };
-		E71F34B32FD91904007AB0B1 /* ActiveSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B12FD91904007AB0B1 /* ActiveSearch.swift */; };
 		E71F34B82FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B72FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift */; };
 		E71F34BA2FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34B92FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift */; };
 		E71F34BC2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34BB2FDA926F007AB0B1 /* LibrarySearchService.swift */; };
@@ -386,7 +384,6 @@
 		E71F34A82FD906F9007AB0B1 /* MergeHead.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergeHead.swift; sourceTree = "<group>"; };
 		E71F34AB2FD90701007AB0B1 /* UnifiedSearchMergeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchMergeService.swift; sourceTree = "<group>"; };
 		E71F34AE2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchMergeServiceTests.swift; sourceTree = "<group>"; };
-		E71F34B12FD91904007AB0B1 /* ActiveSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveSearch.swift; sourceTree = "<group>"; };
 		E71F34B72FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchServiceTests.swift; sourceTree = "<group>"; };
 		E71F34B92FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnifiedSearchIntegrationTests.swift; sourceTree = "<group>"; };
 		E71F34BB2FDA926F007AB0B1 /* LibrarySearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibrarySearchService.swift; sourceTree = "<group>"; };
@@ -828,7 +825,6 @@
 		E71F34B02FD918FD007AB0B1 /* UnifiedSearch */ = {
 			isa = PBXGroup;
 			children = (
-				E71F34B12FD91904007AB0B1 /* ActiveSearch.swift */,
 			);
 			path = UnifiedSearch;
 			sourceTree = "<group>";
@@ -1108,7 +1104,6 @@
 				2ABB9157261F1A47004AA7C0 /* MainView.swift in Sources */,
 				E792C7EE2F849A2B0015E020 /* FontsManager.swift in Sources */,
 				E7C777A928ED4A3F00939D63 /* YabrPDFHighlightListCell.swift in Sources */,
-				E71F34B32FD91904007AB0B1 /* ActiveSearch.swift in Sources */,
 				E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */,
 				2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */,
 				E7C777A128ED495900939D63 /* YabrPDFChapterList.swift in Sources */,
@@ -1250,7 +1245,6 @@
 				6E7B80E628FBA7AD008B075C /* YabrPDFView.swift in Sources */,
 				6E7B80E728FBA7AD008B075C /* YabrPDFThumbnailViewController.swift in Sources */,
 				6E7B80E828FBA7AD008B075C /* YabrEBookReaderNavigationController.swift in Sources */,
-				E71F34B22FD91904007AB0B1 /* ActiveSearch.swift in Sources */,
 				E792C7EF2F849A2B0015E020 /* FontsManager.swift in Sources */,
 				6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,

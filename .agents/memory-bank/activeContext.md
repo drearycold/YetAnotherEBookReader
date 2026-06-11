@@ -39,6 +39,7 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 22. Implemented comprehensive test coverage for the Unified Search subsystem, including unit tests for criteria isolation, pagination, sorting stability, and end-to-end integration tests using MockURLProtocol.
 - [x] 23. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 - [x] 24. Resolved Realm collection insertion exception (`RLMThrowCollectionException`) in `RealmSearchCacheStore.saveLibrarySourceResult` by creating/updating objects via `realm.create(_:value:update:)` with the `.modified` update policy. Resolved the testing deadlock under Swift Concurrency by aligning the Hashable contract of `CalibreServer` / `CalibreServerURLSessionKey` and migrating `UnifiedSearchServiceTests` to non-blocking `await fulfillment(of:timeout:)` expectations.
+- [x] 25. Resolved all Code Review findings on commit `649cbc55`. Eliminated `DispatchQueue.main.sync` deadlocks in `CalibreServerService` and `UnifiedSearchService` via thread-safe configuration caching and async methods. Cleaned up debug print statements, dead variables, safely unwrapped `ModelData.shared`, deleted the orphaned `ActiveSearch.swift`, and verified that all 31 unit tests pass.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

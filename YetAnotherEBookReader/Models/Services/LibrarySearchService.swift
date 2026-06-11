@@ -121,7 +121,6 @@ actor LibrarySearchService {
             currentBooks = []
         }
         
-        let dbService = DatabaseService.shared
         // We need to resolve what we already have in local Realm
         for bookId in currentBookIds[currentBooks.count...] {
             if let realmBook = try? getRealm().object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)) {
@@ -134,17 +133,14 @@ actor LibrarySearchService {
         
         try Task.checkCancellation()
         
-        print("[DEBUG_SEARCH] toFetchIDs: \(toFetchIDs)")
         if !toFetchIDs.isEmpty {
             let metadataTask = service.buildBooksMetadataTask(
                 library: library,
                 books: toFetchIDs.map { CalibreBook(id: $0, library: library) },
                 getAnnotations: false
             )
-            print("[DEBUG_SEARCH] metadataTask: \(String(describing: metadataTask)), metadataUrl: \(String(describing: metadataTask?.metadataUrl))")
             if let metadataTask = metadataTask {
                 let completedTask = await service.getBooksMetadata(task: metadataTask)
-                print("[DEBUG_SEARCH] completedTask booksMetadataEntry count: \(completedTask.booksMetadataEntry?.count ?? -1)")
                 
                 try Task.checkCancellation()
                 

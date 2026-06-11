@@ -334,50 +334,32 @@ actor UnifiedSearchService {
         emitUpdate(for: key)
     }
     
-    private func getTargetLibraryIds(for key: SearchCriteriaMergedKey) -> Set<String> {
+    private func getTargetLibraryIds(for key: SearchCriteriaMergedKey) async -> Set<String> {
         if !key.libraryIds.isEmpty {
             return key.libraryIds
         }
-        let calibreLibraries = libraryProvider.getLibraries()
+        let calibreLibraries = await getLibraries()
         let activeLibraryIds = calibreLibraries.filter { !$0.value.hidden && !$0.value.server.removed }.map { $0.key }
         return Set(activeLibraryIds)
     }
     
     // MARK: - LibraryProvider Thread-safe Wrappers
     
-    private func getLibraries() -> [String: CalibreLibrary] {
-        if Thread.isMainThread {
-            return self.libraryProvider.getLibraries()
-        } else {
-            return DispatchQueue.main.sync {
-                self.libraryProvider.getLibraries()
-            }
-        }
+    private func getLibraries() async -> [String: CalibreLibrary] {
+        await self.libraryProvider.getLibraries()
     }
     
-    private func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
+    private func isServerReachable(server: CalibreServer, isPublic: Bool) async -> Bool? {
         if let provider = isServerReachableProvider {
             return provider(server, isPublic)
         }
-        if Thread.isMainThread {
-            return self.libraryProvider.isServerReachable(server: server, isPublic: isPublic)
-        } else {
-            return DispatchQueue.main.sync {
-                self.libraryProvider.isServerReachable(server: server, isPublic: isPublic)
-            }
-        }
+        return await self.libraryProvider.isServerReachable(server: server, isPublic: isPublic)
     }
     
-    private func isServerReachable(server: CalibreServer) -> Bool {
+    private func isServerReachable(server: CalibreServer) async -> Bool {
         if let provider = isServerReachableNoPublicProvider {
             return provider(server)
         }
-        if Thread.isMainThread {
-            return self.libraryProvider.isServerReachable(server: server)
-        } else {
-            return DispatchQueue.main.sync {
-                self.libraryProvider.isServerReachable(server: server)
-            }
-        }
+        return await self.libraryProvider.isServerReachable(server: server)
     }
 }

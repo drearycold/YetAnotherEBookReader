@@ -10,6 +10,7 @@ import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+@MainActor
 class UnifiedSearchServiceTests: XCTestCase {
     
     var repository: MockSearchCacheRepository!
@@ -42,11 +43,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             mockLibrary2.id: mockLibrary2
         ]
         
-        serverService = CalibreServerService(
-            logger: logger,
-            config: modelData,
-            database: DatabaseService.shared
-        )
+        serverService = modelData.calibreServerService
         let librarySearch = LibrarySearchService(service: serverService, repository: repository)
         manager = UnifiedSearchService(
             mergeService: UnifiedSearchMergeService(),
@@ -742,6 +739,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
     }
 }
 
+@MainActor
 class MockLibraryProvider: LibraryProvider {
     var libraries: [String: CalibreLibrary] = [:]
     
