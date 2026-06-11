@@ -232,4 +232,75 @@ class UnifiedSearchMergeServiceTests: XCTestCase {
         XCTAssertEqual(merged.books[0].library.key, "lib1", "Stable sorting should fall back to libraryId alphabetically (lib1 < lib2)")
         XCTAssertEqual(merged.books[1].library.key, "lib2")
     }
+    
+    func testMergeWithDifferingPagination() throws {
+        let bookA = createMockBook(id: 1, title: "Apple", library: mockLibrary1)
+        let bookC = createMockBook(id: 2, title: "Cherry", library: mockLibrary1)
+        let bookB = createMockBook(id: 3, title: "Banana", library: mockLibrary2)
+        let bookD = createMockBook(id: 4, title: "Date", library: mockLibrary2)
+        
+        let libraryResults: [String: LibrarySourceSearchResult] = [
+            "lib1": LibrarySourceSearchResult(generation: Date(), totalNumber: 100, bookIds: [1, 2], books: [bookA, bookC]),
+            "lib2": LibrarySourceSearchResult(generation: Date(), totalNumber: 2, bookIds: [3, 4], books: [bookB, bookD])
+        ]
+        
+        let currentResult = UnifiedSearchResult(
+            search: "test",
+            sortBy: .Title,
+            sortAsc: true,
+            libraryIds: ["lib1", "lib2"],
+            unifiedOffsets: [
+                "lib1": MergeOffset(offset: 0),
+                "lib2": MergeOffset(offset: 0)
+            ],
+            totalNumber: 0,
+            limitNumber: 3, // Limit to 3 books
+            books: []
+        )
+        
+        let merged = mergeService.merge(libraryResults: libraryResults, currentResult: currentResult)
+        
+        XCTAssertEqual(merged.books.count, 3)
+        XCTAssertEqual(merged.books[0].title, "Apple")
+        XCTAssertEqual(merged.books[1].title, "Banana")
+        XCTAssertEqual(merged.books[2].title, "Cherry")
+        
+        // Check offsets
+        XCTAssertEqual(merged.unifiedOffsets["lib1"]?.offset, 2)
+        XCTAssertEqual(merged.unifiedOffsets["lib2"]?.offset, 1)
+        
+        // lib1 has total 100, only 2 consumed, so not fully consumed but we reached end of local list -> cut off
+        XCTAssertTrue(merged.unifiedOffsets["lib1"]?.beenCutOff ?? false)
+        XCTAssertFalse(merged.unifiedOffsets["lib1"]?.beenConsumed ?? true)
+        
+        // lib2 has total 2, offset 1 is not end of local list (which is 2), so not cut off yet, not consumed
+        XCTAssertFalse(merged.unifiedOffsets["lib2"]?.beenCutOff ?? true)
+        XCTAssertFalse(merged.unifiedOffsets["lib2"]?.beenConsumed ?? true)
+    }
+    
+    func testMergeWithDuplicateBooks() throws {
+        // Test stable sorting by other attributes, e.g. seriesIndex
+        let book1 = createMockBook(id: 1, title: "A Book", library: mockLibrary1, seriesIndex: 1.0)
+        let book2 = createMockBook(id: 2, title: "A Book", library: mockLibrary1, seriesIndex: 2.0)
+        
+        let libraryResults: [String: LibrarySourceSearchResult] = [
+            "lib1": LibrarySourceSearchResult(generation: Date(), totalNumber: 2, bookIds: [1, 2], books: [book1, book2])
+        ]
+        
+        let currentResult = UnifiedSearchResult(
+            search: "test",
+            sortBy: .Title,
+            sortAsc: true,
+            libraryIds: ["lib1"],
+            unifiedOffsets: ["lib1": MergeOffset(offset: 0)],
+            totalNumber: 0,
+            limitNumber: 10,
+            books: []
+        )
+        
+        let merged = mergeService.merge(libraryResults: libraryResults, currentResult: currentResult)
+        XCTAssertEqual(merged.books.count, 2)
+        XCTAssertEqual(merged.books[0].seriesIndex, 1.0)
+        XCTAssertEqual(merged.books[1].seriesIndex, 2.0)
+    }
 }
