@@ -71,15 +71,7 @@ protocol SearchCacheRepository {
         result: LibrarySourceSearchResult
     ) throws
     
-    func fetchUnifiedSearchResult(
-        libraryIds: Set<String>,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) throws -> UnifiedSearchResult?
-    
-    func saveUnifiedSearchResult(_ result: UnifiedSearchResult) throws
+
     
     func libraryCachedResultPublisher(
         libraryId: String,
@@ -89,11 +81,4 @@ protocol SearchCacheRepository {
         filters: [String: Set<String>]
     ) -> AnyPublisher<LibraryCachedResult, Error>
     
-    func unifiedSearchResultPublisher(
-        libraryIds: Set<String>,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) -> AnyPublisher<UnifiedSearchResult, Error>
 }

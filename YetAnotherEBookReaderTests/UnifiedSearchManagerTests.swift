@@ -306,8 +306,23 @@ class UnifiedSearchManagerTests: XCTestCase {
 
 // Concrete Mock Repository for testing
 class MockSearchCacheRepository: SearchCacheRepository {
-    var cachedLibraryResults: [String: LibraryCachedResult] = [:]
-    var cachedUnifiedResults: [String: UnifiedSearchResult] = [:]
+    private let lock = NSRecursiveLock()
+    
+    private var _cachedLibraryResults: [String: LibraryCachedResult] = [:]
+    var cachedLibraryResults: [String: LibraryCachedResult] {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return _cachedLibraryResults
+        }
+        set {
+            lock.lock()
+            defer { lock.unlock() }
+            _cachedLibraryResults = newValue
+        }
+    }
+    
+
     
     private var librarySubjects: [String: CurrentValueSubject<LibraryCachedResult, Error>] = [:]
     
@@ -318,7 +333,9 @@ class MockSearchCacheRepository: SearchCacheRepository {
         sortAsc: Bool,
         filters: [String: Set<String>]
     ) throws -> LibraryCachedResult? {
-        return cachedLibraryResults[libraryId]
+        lock.lock()
+        defer { lock.unlock() }
+        return _cachedLibraryResults[libraryId]
     }
     
     func saveLibrarySourceResult(
@@ -330,7 +347,8 @@ class MockSearchCacheRepository: SearchCacheRepository {
         sourceUrl: String,
         result: LibrarySourceSearchResult
     ) throws {
-        var cached = cachedLibraryResults[libraryId] ?? LibraryCachedResult(
+        lock.lock()
+        var cached = _cachedLibraryResults[libraryId] ?? LibraryCachedResult(
             libraryId: libraryId,
             search: search,
             sortBy: sortBy,
@@ -339,28 +357,17 @@ class MockSearchCacheRepository: SearchCacheRepository {
             sources: [:]
         )
         cached.sources[sourceUrl] = result
-        cachedLibraryResults[libraryId] = cached
+        _cachedLibraryResults[libraryId] = cached
         
-        if let subject = librarySubjects[libraryId] {
+        let subject = librarySubjects[libraryId]
+        lock.unlock()
+        
+        if let subject = subject {
             subject.send(cached)
         }
     }
     
-    func fetchUnifiedSearchResult(
-        libraryIds: Set<String>,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) throws -> UnifiedSearchResult? {
-        let key = "\(libraryIds.sorted().joined(separator: ","))-\(search)-\(sortBy.rawValue)-\(sortAsc)"
-        return cachedUnifiedResults[key]
-    }
-    
-    func saveUnifiedSearchResult(_ result: UnifiedSearchResult) throws {
-        let key = "\(result.libraryIds.sorted().joined(separator: ","))-\(result.search)-\(result.sortBy.rawValue)-\(result.sortAsc)"
-        cachedUnifiedResults[key] = result
-    }
+
     
     func libraryCachedResultPublisher(
         libraryId: String,
@@ -369,10 +376,12 @@ class MockSearchCacheRepository: SearchCacheRepository {
         sortAsc: Bool,
         filters: [String: Set<String>]
     ) -> AnyPublisher<LibraryCachedResult, Error> {
+        lock.lock()
+        defer { lock.unlock() }
         if let subject = librarySubjects[libraryId] {
             return subject.eraseToAnyPublisher()
         }
-        let initial = cachedLibraryResults[libraryId] ?? LibraryCachedResult(
+        let initial = _cachedLibraryResults[libraryId] ?? LibraryCachedResult(
             libraryId: libraryId,
             search: search,
             sortBy: sortBy,
@@ -385,21 +394,5 @@ class MockSearchCacheRepository: SearchCacheRepository {
         return subject.eraseToAnyPublisher()
     }
     
-    func unifiedSearchResultPublisher(
-        libraryIds: Set<String>,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) -> AnyPublisher<UnifiedSearchResult, Error> {
-        let key = "\(libraryIds.sorted().joined(separator: ","))-\(search)-\(sortBy.rawValue)-\(sortAsc)"
-        let initial = cachedUnifiedResults[key] ?? UnifiedSearchResult(
-            search: search,
-            sortBy: sortBy,
-            sortAsc: sortAsc,
-            filters: filters,
-            libraryIds: libraryIds
-        )
-        return Just(initial).setFailureType(to: Error.self).eraseToAnyPublisher()
-    }
+
 }

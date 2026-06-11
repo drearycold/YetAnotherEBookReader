@@ -59,28 +59,17 @@ class UnifiedSearchManager {
                 isNew = false
             } else {
                 // Try to load cached unified search result, or initialize an empty one
-                var initialResult: UnifiedSearchResult
-                if let cached = try? repository.fetchUnifiedSearchResult(
-                    libraryIds: key.libraryIds,
+                let initialResult = UnifiedSearchResult(
                     search: key.criteria.searchString,
                     sortBy: key.criteria.sortCriteria.by,
                     sortAsc: key.criteria.sortCriteria.ascending,
-                    filters: key.criteria.filterCriteriaCategory
-                ) {
-                    initialResult = cached
-                } else {
-                    initialResult = UnifiedSearchResult(
-                        search: key.criteria.searchString,
-                        sortBy: key.criteria.sortCriteria.by,
-                        sortAsc: key.criteria.sortCriteria.ascending,
-                        filters: key.criteria.filterCriteriaCategory,
-                        libraryIds: key.libraryIds,
-                        unifiedOffsets: [:],
-                        totalNumber: 0,
-                        limitNumber: 100,
-                        books: []
-                    )
-                }
+                    filters: key.criteria.filterCriteriaCategory,
+                    libraryIds: key.libraryIds,
+                    unifiedOffsets: [:],
+                    totalNumber: 0,
+                    limitNumber: 100,
+                    books: []
+                )
                 
                 let newSubject = CurrentValueSubject<UnifiedSearchResult, Never>(initialResult)
                 resultSubjects[key] = newSubject
@@ -264,9 +253,7 @@ class UnifiedSearchManager {
         activeSearch.currentResult = mergedResult
         activeSearches[key] = activeSearch
         
-        // Save back to repository cache for persistence
-        try? repository.saveUnifiedSearchResult(mergedResult)
-        
+
         // Emit updated result
         if let subject = resultSubjects[key] {
             subject.send(mergedResult)
@@ -283,7 +270,7 @@ class UnifiedSearchManager {
         if library == nil,
            isServerReachableProvider != nil,
            isServerReachableNoPublicProvider != nil {
-            guard let bestEntry = sources.first else { return nil }
+            guard let bestEntry = sources.sorted(by: { $0.key < $1.key }).first else { return nil }
             return (key: bestEntry.key, result: bestEntry.value)
         }
         
@@ -314,7 +301,12 @@ class UnifiedSearchManager {
             return false
         }
         
-        guard let bestEntry = filtered.sorted(by: { $0.value.books.count > $1.value.books.count }).first else {
+        guard let bestEntry = filtered.sorted(by: {
+            if $0.value.books.count != $1.value.books.count {
+                return $0.value.books.count > $1.value.books.count
+            }
+            return $0.key < $1.key
+        }).first else {
             return nil
         }
         

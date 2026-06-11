@@ -109,7 +109,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion:UInt64 = 137
+    static var RealmSchemaVersion:UInt64 = 138
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -151,7 +151,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         ModelData.shared = self
         
         // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = 137
+        ModelData.RealmSchemaVersion = 138
         let initialConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { _, _ in }
@@ -266,6 +266,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         realmConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 138 {
+                    migration.deleteData(forType: "CalibreUnifiedSearchObject")
+                    migration.deleteData(forType: "CalibreUnifiedOffsets")
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")

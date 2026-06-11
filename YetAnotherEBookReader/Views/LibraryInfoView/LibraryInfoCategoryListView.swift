@@ -13,8 +13,7 @@ struct LibraryInfoCategoryListView: View {
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
 
-    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
-    
+
     @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, sortDescriptor: .init(keyPath: "categoryName")) var unifiedCategories
     
     @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" }, sortDescriptor: .init(keyPath: "categoryName")) var unifiedCategoriesKeys
