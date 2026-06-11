@@ -17,6 +17,7 @@ class UnifiedSearchMergeService {
     /// - Returns: An updated `UnifiedSearchResult` with newly merged books and updated offsets.
     func merge(
         libraryResults: [String: LibrarySourceSearchResult],
+        librarySources: [String: String] = [:],
         currentResult: UnifiedSearchResult
     ) -> UnifiedSearchResult {
         var updatedResult = currentResult
@@ -35,7 +36,8 @@ class UnifiedSearchMergeService {
         
         for libraryId in targetLibraryIds {
             // Initialize offsets for all target libraries
-            updatedResult.unifiedOffsets[libraryId] = MergeOffset(beenCutOff: false, beenConsumed: false, offset: 0)
+            let source = librarySources[libraryId] ?? ""
+            updatedResult.unifiedOffsets[libraryId] = MergeOffset(beenCutOff: false, beenConsumed: false, offset: 0, searchObjectSource: source)
             
             guard let libraryResult = libraryResults[libraryId],
                   !libraryResult.books.isEmpty else {

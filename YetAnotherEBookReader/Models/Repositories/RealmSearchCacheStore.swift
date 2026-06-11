@@ -9,7 +9,7 @@ import Foundation
 import RealmSwift
 import Combine
 
-class RealmSearchCacheStore: SearchCacheRepository {
+final class RealmSearchCacheStore: SearchCacheRepository, @unchecked Sendable {
     private let config: Realm.Configuration
     private let modelData: ModelData
     
@@ -106,7 +106,10 @@ class RealmSearchCacheStore: SearchCacheRepository {
             sObj.bookIds.append(objectsIn: result.bookIds)
             
             sObj.books.removeAll()
-            let bookRealms = result.books.map { $0.managedObject() }
+            let bookRealms = result.books.map { book -> CalibreBookRealm in
+                let bookRealm = book.managedObject()
+                return realm.create(CalibreBookRealm.self, value: bookRealm, update: .modified)
+            }
             sObj.books.append(objectsIn: bookRealms)
         }
     }

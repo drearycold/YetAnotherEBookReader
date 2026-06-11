@@ -12,6 +12,7 @@ struct LibraryInfoCategoryItemsView: View {
     @EnvironmentObject var modelData: ModelData
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     
     @ObservedRealmObject var unifiedCategory: CalibreUnifiedCategoryObject
     
@@ -119,9 +120,9 @@ struct LibraryInfoCategoryItemsView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if viewModel.unifiedSearchResult != nil {
+            if unifiedSearchViewModel.unifiedSearchResult != nil {
                 LibraryInfoBookListView()
-                    .environmentObject(viewModel)
+                    .environmentObject(unifiedSearchViewModel)
             } else {
                 Text("Preparing Book List")
             }
@@ -135,7 +136,12 @@ struct LibraryInfoCategoryItemsView: View {
     }
     
     func resetToFirstPage() {
-        viewModel.startSearch(modelData: modelData)
+        unifiedSearchViewModel.searchString = viewModel.searchString
+        unifiedSearchViewModel.sortCriteria = viewModel.sortCriteria
+        unifiedSearchViewModel.filterCriteriaCategory = viewModel.filterCriteriaCategory
+        unifiedSearchViewModel.filterCriteriaLibraries = viewModel.filterCriteriaLibraries
+        
+        unifiedSearchViewModel.startSearch()
     }
 }
 

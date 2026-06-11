@@ -181,7 +181,7 @@ class YabrShelfDataModel: ObservableObject {
                 )
             )
             
-            searchManager.unifiedSearchManager.publisher(for: key)
+            searchManager.unifiedSearchService.publisher(for: key)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self, weak category] result in
                     guard let self = self, let category = category else { return }
@@ -271,12 +271,9 @@ class YabrShelfDataModel: ObservableObject {
                         filterCriteriaCategory: ["Authors" : Set([category.category])]
                     )
                 )
-                self.searchManager.unifiedSearchManager.resetSearch(for: key)
-                self.searchManager.refreshSearchResults(
-                    libraryIds: key.libraryIds,
-                    searchCriteria: key.criteria,
-                    force: true
-                )
+                Task {
+                    await self.searchManager.unifiedSearchService.resetSearch(for: key, force: true)
+                }
             }
         }
     }

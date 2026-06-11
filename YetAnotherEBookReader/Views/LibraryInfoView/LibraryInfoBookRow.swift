@@ -14,7 +14,7 @@ struct LibraryInfoBookRow: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     
-    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
     let book: CalibreBook
     let index: Int

@@ -14,7 +14,7 @@ struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     
-    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
 
 
@@ -239,8 +239,7 @@ struct LibraryInfoBookListView: View {
             }
             
             Button {
-                let key = viewModel.currentLibrarySearchResultKey
-                modelData.librarySearchManager.unifiedSearchManager.resetSearch(for: key, force: true)
+                viewModel.resetSearch(force: true)
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
@@ -552,8 +551,7 @@ struct LibraryInfoBookListView: View {
                 if result.unifiedOffsets[libraryId] == nil {
                     return partialResult + 1
                 }
-                if let activeSearch = modelData.librarySearchManager.unifiedSearchManager.getActiveSearch(for: viewModel.currentLibrarySearchResultKey),
-                   activeSearch.libraryStatuses[libraryId]?.loading == true {
+                if result.libraryStatuses[libraryId]?.loading == true {
                     return partialResult + 1
                 }
                 return partialResult
@@ -606,7 +604,7 @@ struct LibraryInfoBookListView: View {
     }
     
     func resetToFirstPage() {
-        viewModel.startSearch(modelData: modelData)
+        viewModel.startSearch()
     }
     
     @ViewBuilder
@@ -625,7 +623,7 @@ struct LibraryInfoBookListView: View {
                     }
                     
                     Button {
-                        modelData.librarySearchManager.unifiedSearchManager.resetSearch(for: viewModel.currentLibrarySearchResultKey)
+                        viewModel.resetSearch(force: false)
                     } label: {
                         Text("Reset")
                     }
@@ -644,11 +642,7 @@ struct LibraryInfoBookListView: View {
                     Text("Required: \(libraryId)")
                     if let unifiedOffset = result.unifiedOffsets[libraryId] {
                         HStack {
-                            if let activeSearch = modelData.librarySearchManager.unifiedSearchManager.getActiveSearch(for: viewModel.currentLibrarySearchResultKey) {
-                                Text("Loading: \(activeSearch.libraryStatuses[libraryId]?.loading == true ? 1 : 0)")
-                            } else {
-                                Text("!!!Mising Search Runtime!!!")
-                            }
+                            Text("Loading: \(result.libraryStatuses[libraryId]?.loading == true ? 1 : 0)")
                             Text("offset: \(unifiedOffset.offset)")
                         }
                     } else {

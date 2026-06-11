@@ -11,7 +11,7 @@ import RealmSwift
 struct LibraryInfoBookListInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
     @Binding var presenting: Bool
     
@@ -79,8 +79,7 @@ struct LibraryInfoBookListInfoView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        let key = viewModel.currentLibrarySearchResultKey
-                        modelData.librarySearchManager.unifiedSearchManager.resetSearch(for: key, force: true)
+                        viewModel.resetSearch(force: true)
                         
                         presenting = false
                     } label: {

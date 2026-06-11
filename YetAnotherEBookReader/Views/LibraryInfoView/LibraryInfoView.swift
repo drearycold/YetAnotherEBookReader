@@ -19,6 +19,7 @@ struct LibraryInfoView: View {
     @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
+    @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
     
 //    @State private var categoriesSelected : String? = nil
 //    @State private var categoryItemSelected: String? = nil
@@ -65,6 +66,7 @@ struct LibraryInfoView: View {
             .padding(4)
             .navigationTitle(Text("Library Browser"))
             .environmentObject(viewModel)
+            .environmentObject(unifiedSearchViewModel)
         }   //NavigationView
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
@@ -140,9 +142,9 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-            if viewModel.unifiedSearchResult != nil {
+            if unifiedSearchViewModel.unifiedSearchResult != nil {
                 LibraryInfoBookListView()
-                    .environmentObject(viewModel)
+                    .environmentObject(unifiedSearchViewModel)
             } else {
                 Text("Preparing Book List")
             }
@@ -160,7 +162,12 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        viewModel.startSearch(modelData: modelData)
+        unifiedSearchViewModel.searchString = viewModel.searchString
+        unifiedSearchViewModel.sortCriteria = viewModel.sortCriteria
+        unifiedSearchViewModel.filterCriteriaCategory = viewModel.filterCriteriaCategory
+        unifiedSearchViewModel.filterCriteriaLibraries = viewModel.filterCriteriaLibraries
+        
+        unifiedSearchViewModel.startSearch()
     }
     
     func resetSearchCriteria() {

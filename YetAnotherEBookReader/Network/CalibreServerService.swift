@@ -48,13 +48,31 @@ final class CalibreServerService {
         set { config?.librarySyncStatus = newValue }
     }
     var deviceName: String {
-        config?.deviceName ?? ""
+        if Thread.isMainThread {
+            return config?.deviceName ?? ""
+        } else {
+            return DispatchQueue.main.sync {
+                self.config?.deviceName ?? ""
+            }
+        }
     }
     var calibreLibraries: [String: CalibreLibrary] {
-        config?.calibreLibraries ?? [:]
+        if Thread.isMainThread {
+            return config?.calibreLibraries ?? [:]
+        } else {
+            return DispatchQueue.main.sync {
+                self.config?.calibreLibraries ?? [:]
+            }
+        }
     }
     var calibreServerInfoStaging: [String: CalibreServerInfo] {
-        config?.calibreServerInfoStaging ?? [:]
+        if Thread.isMainThread {
+            return config?.calibreServerInfoStaging ?? [:]
+        } else {
+            return DispatchQueue.main.sync {
+                self.config?.calibreServerInfoStaging ?? [:]
+            }
+        }
     }
     
     // Mapping methods
@@ -675,13 +693,10 @@ final class CalibreServerService {
     
     func getServerUrlByReachability(server: CalibreServer) -> URL? {
         let serverInfos = self.calibreServerInfoStaging.filter { $1.reachable && $1.server.id == server.id }.sorted { !$0.value.isPublic && $1.value.isPublic }
-        guard let serverInfo = serverInfos.first else { return nil }
-        
-        if serverInfo.value.isPublic {
-            return URL(string: server.publicUrl)
-        } else {
-            return URL(string: server.baseUrl)
+        guard let serverInfo = serverInfos.first else {
+            return nil
         }
+        return serverInfo.value.isPublic ? URL(string: server.publicUrl) : URL(string: server.baseUrl)
     }
     
     // MARK: - Async Methods
@@ -1250,7 +1265,7 @@ struct CalibreServerURLSessionKey: Hashable, Equatable {
     let qos: DispatchQoS.QoSClass
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(server.uuid)
+        hasher.combine(server)
         hasher.combine(timeout)
         hasher.combine(qos)
     }

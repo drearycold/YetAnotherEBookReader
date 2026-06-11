@@ -26,7 +26,8 @@ struct CalibreServer: Hashable, Identifiable {
     }
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(self.uuid)
+        hasher.combine(self.baseUrl)
+        hasher.combine(self.username)
     }
     
     var isLocal: Bool {

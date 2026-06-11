@@ -7,13 +7,13 @@
 
 import Foundation
 
-enum SearchError: Error, Equatable {
+enum SearchError: Error, Equatable, Sendable {
     case network(String)
     case database(String)
     case unknown(String)
 }
 
-struct LibrarySearchStatus: Equatable {
+struct LibrarySearchStatus: Equatable, Sendable {
     var loading: Bool
     var error: SearchError?
     
@@ -23,7 +23,7 @@ struct LibrarySearchStatus: Equatable {
     }
 }
 
-struct MergeOffset: Codable, Equatable {
+struct MergeOffset: Codable, Equatable, Sendable {
     var beenCutOff: Bool
     var beenConsumed: Bool
     var cutOffOffset: Int
@@ -48,7 +48,7 @@ struct MergeOffset: Codable, Equatable {
     }
 }
 
-struct UnifiedSearchResult: Equatable {
+struct UnifiedSearchResult: Equatable, Sendable {
     var search: String
     var sortBy: SortCriteria
     var sortAsc: Bool
@@ -58,6 +58,7 @@ struct UnifiedSearchResult: Equatable {
     var totalNumber: Int
     var limitNumber: Int
     var books: [CalibreBook]
+    var libraryStatuses: [String: LibrarySearchStatus]
     
     init(
         search: String = "",
@@ -68,7 +69,8 @@ struct UnifiedSearchResult: Equatable {
         unifiedOffsets: [String: MergeOffset] = [:],
         totalNumber: Int = 0,
         limitNumber: Int = 100,
-        books: [CalibreBook] = []
+        books: [CalibreBook] = [],
+        libraryStatuses: [String: LibrarySearchStatus] = [:]
     ) {
         self.search = search
         self.sortBy = sortBy
@@ -79,5 +81,12 @@ struct UnifiedSearchResult: Equatable {
         self.totalNumber = totalNumber
         self.limitNumber = limitNumber
         self.books = books
+        self.libraryStatuses = libraryStatuses
     }
+}
+
+protocol LibraryProvider {
+    func getLibraries() -> [String: CalibreLibrary]
+    func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool?
+    func isServerReachable(server: CalibreServer) -> Bool
 }

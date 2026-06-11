@@ -173,7 +173,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     
 
     private let searchRuntimeLock = NSRecursiveLock()
-    private(set) var unifiedSearchManager: UnifiedSearchManager!
+    private(set) var unifiedSearchService: UnifiedSearchService!
     
     private var cacheCategoryLibraryObjects: [CalibreLibraryCategoryKey: CalibreLibraryCategoryObject] = [:]
     private var cacheCategoryUnifiedObjects: [CalibreUnifiedCategoryKey: CalibreUnifiedCategoryObject] = [:]
@@ -210,11 +210,12 @@ class CalibreLibrarySearchManager: ObservableObject {
         self.cacheRealmConf = modelData.realmConf
         
         let cacheRepository = RealmSearchCacheStore(config: modelData.realmConf, modelData: modelData)
-        self.unifiedSearchManager = UnifiedSearchManager(repository: cacheRepository, libraryProvider: modelData)
-        
-        self.unifiedSearchManager.searchTriggerHandler = { [weak self] libraryIds, criteria, force, limit in
-            self?.refreshSearchResults(libraryIds: libraryIds, searchCriteria: criteria, force: force, limit: limit)
-        }
+        let librarySearch = LibrarySearchService(service: service, repository: cacheRepository)
+        self.unifiedSearchService = UnifiedSearchService(
+            repository: cacheRepository,
+            librarySearchService: librarySearch,
+            libraryProvider: modelData
+        )
         
         /*
         var cacheRealmConf = Realm.Configuration()

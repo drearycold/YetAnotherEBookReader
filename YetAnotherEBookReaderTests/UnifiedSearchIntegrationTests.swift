@@ -266,7 +266,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         
         debugLog("subscribing to publisher")
         // Observe search manager publisher
-        searchManager.unifiedSearchManager.publisher(for: key)
+        searchManager.unifiedSearchService.publisher(for: key)
             .sink { result in
                 debugLog("publisher emitted result with \(result.books.count) books")
                 if result.books.count > 0 {

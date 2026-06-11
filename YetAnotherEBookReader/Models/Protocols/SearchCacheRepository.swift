@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-struct LibrarySourceSearchResult: Equatable {
+struct LibrarySourceSearchResult: Equatable, Sendable {
     var generation: Date
     var totalNumber: Int
     var bookIds: [Int32]
@@ -27,7 +27,7 @@ struct LibrarySourceSearchResult: Equatable {
     }
 }
 
-struct LibraryCachedResult: Equatable {
+struct LibraryCachedResult: Equatable, Sendable {
     var libraryId: String
     var search: String
     var sortBy: SortCriteria
@@ -52,7 +52,7 @@ struct LibraryCachedResult: Equatable {
     }
 }
 
-protocol SearchCacheRepository {
+protocol SearchCacheRepository: Sendable {
     func fetchLibraryCachedResult(
         libraryId: String,
         search: String,

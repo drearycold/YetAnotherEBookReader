@@ -86,13 +86,6 @@ extension LibraryInfoView {
             )
         }
         
-        @Published private(set) var unifiedSearchResult: UnifiedSearchResult?
-        @Published var isSearchLoading: Bool = false
-        
-        var unifiedSearchUpdateCancellable: AnyCancellable?
-        
-        var isExpandingUnifiedSearchLimit: Bool = false
-        
         //category filters
         @Published var categoriesSelected: String? = nil
         @Published var categoryItemSelected: String? = nil
@@ -107,32 +100,6 @@ extension LibraryInfoView {
         @Published private(set) var unifiedCategoryObject: CalibreUnifiedCategoryObject?
         
         var unifiedCategoryUpdateCancellable: AnyCancellable?
-        
-        func expandSearchUnifiedBookLimit() {
-            guard let result = unifiedSearchResult, result.limitNumber < result.totalNumber else { return }
-            guard !isExpandingUnifiedSearchLimit else { return }
-            isExpandingUnifiedSearchLimit = true
-            ModelData.shared?.librarySearchManager.unifiedSearchManager.expandLimit(for: currentLibrarySearchResultKey)
-        }
-        
-        func startSearch(modelData: ModelData) {
-            unifiedSearchUpdateCancellable?.cancel()
-            unifiedSearchUpdateCancellable = nil
-            
-            let key = currentLibrarySearchResultKey
-            unifiedSearchUpdateCancellable = modelData.librarySearchManager.unifiedSearchManager.publisher(for: key)
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] result in
-                    self?.isExpandingUnifiedSearchLimit = false
-                    self?.unifiedSearchResult = result
-                    
-                    if let activeSearch = modelData.librarySearchManager.unifiedSearchManager.getActiveSearch(for: key) {
-                        self?.isSearchLoading = activeSearch.libraryStatuses.values.contains { $0.loading }
-                    } else {
-                        self?.isSearchLoading = false
-                    }
-                }
-        }
         
         func setUnifiedCategoryObject(_ modelData: ModelData, _ unifiedCategoryObject: CalibreUnifiedCategoryObject?) {
             unifiedCategoryUpdateCancellable?.cancel()
