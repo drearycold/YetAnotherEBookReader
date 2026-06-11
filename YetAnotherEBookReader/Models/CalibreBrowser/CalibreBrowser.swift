@@ -207,6 +207,10 @@ class CalibreLibrarySearchManager: ObservableObject {
         let cacheRepository = RealmSearchCacheStore(config: modelData.realmConf, modelData: modelData)
         self.unifiedSearchManager = UnifiedSearchManager(repository: cacheRepository)
         
+        self.unifiedSearchManager.searchTriggerHandler = { [weak self] libraryIds, criteria, force in
+            self?.refreshSearchResults(libraryIds: libraryIds, searchCriteria: criteria, force: force)
+        }
+        
         /*
         var cacheRealmConf = Realm.Configuration()
         cacheRealmConf.schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
@@ -1202,19 +1206,25 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func refreshSearchResults(libraryIds: Set<String>, searchCriteria: SearchCriteria, force: Bool = false) {
         cacheRealmQueue.async { [self] in
-            cacheSearchLibraryObjects
-                .filter({ key, value in
-                    key.criteria == searchCriteria
-                })
-                .filter({ key, value in
-                    libraryIds.isEmpty || libraryIds.contains(key.libraryId)
-                })
-                .filter({ key, value in
-                    guard let library = self.modelData.calibreLibraries[key.libraryId],
-                          let object = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: value)
-                    else {
-                        return false
+            let targets: Set<String>
+            if libraryIds.isEmpty {
+                targets = self.modelData.calibreLibraries.values.reduce(into: Set<String>()) { partialResult, library in
+                    if library.hidden == false, library.server.removed == false {
+                        partialResult.insert(library.id)
                     }
+                }
+            } else {
+                targets = libraryIds
+            }
+            
+            for libraryId in targets {
+                let searchKey = LibrarySearchKey(libraryId: libraryId, criteria: searchCriteria)
+                
+                guard let library = self.modelData.calibreLibraries[libraryId] else { continue }
+                
+                let needsSearch: Bool
+                if let cacheObjId = self.cacheSearchLibraryObjects[searchKey],
+                   let object = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId) {
                     
                     if force {
                         try! cacheRealm.write {
@@ -1224,7 +1234,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                         }
                     }
                     
-                    return !object.sources.allSatisfy { entry in
+                    needsSearch = !object.sources.allSatisfy { entry in
                         guard let sourceObj = entry.value,
                               sourceObj.generation >= library.lastModified
                         else {
@@ -1232,10 +1242,14 @@ class CalibreLibrarySearchManager: ObservableObject {
                         }
                         return true
                     }
-                })
-                .forEach({ key, value in
-                    self.searchRefreshSubject.send(key)
-                })
+                } else {
+                    needsSearch = true
+                }
+                
+                if needsSearch {
+                    self.searchRefreshSubject.send(searchKey)
+                }
+            }
         }
     }
     

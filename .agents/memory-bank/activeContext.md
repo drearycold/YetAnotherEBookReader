@@ -35,7 +35,8 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 18. Executed Phase 4 of Unified Search modernization: Migrated the UI and ViewModels (e.g., `LibraryInfoBookListView`, `ShelfDataManager`, `LibraryInfoViewModel`) to use the new `UnifiedSearchManager` and removed legacy Realm bindings. Validated through Xcode build.
 - [x] 19. Resolved the unit test race condition crash in `MockSearchCacheRepository` using `NSRecursiveLock` and solved the infinite loop in `UnifiedSearchManager` by making `selectActiveSource` sorting deterministic, partially updating `CalibreBookRealm` objects to preserve reading progress, and deduplicating duplicate `CalibreUnifiedSearchObject` and `CalibreLibrarySearchObject` records in Realm on startup.
 - [x] 20. Execute Phase 5 of Unified Search modernization: Cleanup, final testing, and deletion of `CalibreUnifiedSearchObject` from the Realm Schema.
-- [ ] 21. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
+- [x] 21. Resolved the issue where changing search criteria (or clicking the manual refresh button) did not trigger search/network actions, by wiring `searchTriggerHandler` and updating `refreshSearchResults` to dynamically initialize and check cache for new search keys.
+- [ ] 22. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

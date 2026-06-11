@@ -39,6 +39,9 @@ class UnifiedSearchManager {
     var isServerReachableProvider: ((CalibreServer, Bool) -> Bool?)?
     var isServerReachableNoPublicProvider: ((CalibreServer) -> Bool)?
     
+    // Callback to trigger a library search in the network coordinator (CalibreLibrarySearchManager)
+    var searchTriggerHandler: ((Set<String>, SearchCriteria, Bool) -> Void)?
+    
     init(
         mergeService: UnifiedSearchMergeService = UnifiedSearchMergeService(),
         repository: SearchCacheRepository
@@ -97,6 +100,12 @@ class UnifiedSearchManager {
                 guard let self = self else { return }
                 self.setupLibrarySubscriptions(for: key)
             }
+        }
+        
+        // Always trigger search cache check / refresh when requesting a publisher
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.searchTriggerHandler?(key.libraryIds, key.criteria, false)
         }
         
         return subject!.eraseToAnyPublisher()
