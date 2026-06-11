@@ -8,10 +8,17 @@
 import Foundation
 import Combine
 
+protocol LibraryProvider {
+    func getLibraries() -> [String: CalibreLibrary]
+    func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool?
+    func isServerReachable(server: CalibreServer) -> Bool
+}
+
 class UnifiedSearchManager {
     
     private let mergeService: UnifiedSearchMergeService
     private let repository: SearchCacheRepository
+    private let libraryProvider: LibraryProvider
     
     // In-memory active searches
     private var activeSearches: [SearchCriteriaMergedKey: ActiveSearch] = [:]
@@ -28,9 +35,7 @@ class UnifiedSearchManager {
         if !key.libraryIds.isEmpty {
             return key.libraryIds
         }
-        guard let calibreLibraries = ModelData.shared?.calibreLibraries else {
-            return []
-        }
+        let calibreLibraries = libraryProvider.getLibraries()
         let activeLibraryIds = calibreLibraries.filter { !$0.value.hidden && !$0.value.server.removed }.map { $0.key }
         return Set(activeLibraryIds)
     }
@@ -44,10 +49,12 @@ class UnifiedSearchManager {
     
     init(
         mergeService: UnifiedSearchMergeService = UnifiedSearchMergeService(),
-        repository: SearchCacheRepository
+        repository: SearchCacheRepository,
+        libraryProvider: LibraryProvider
     ) {
         self.mergeService = mergeService
         self.repository = repository
+        self.libraryProvider = libraryProvider
     }
     
     /// Returns a publisher for the unified search result corresponding to the given key.
@@ -107,8 +114,11 @@ class UnifiedSearchManager {
             guard let self = self else { return }
             self.searchTriggerHandler?(key.libraryIds, key.criteria, false, 100)
         }
+        guard let finalSubject = subject else {
+            fatalError("Failed to resolve subject")
+        }
         
-        return subject!.eraseToAnyPublisher()
+        return finalSubject.eraseToAnyPublisher()
     }
     
     func getActiveSearch(for key: SearchCriteriaMergedKey) -> ActiveSearch? {
@@ -167,22 +177,29 @@ class UnifiedSearchManager {
         }
     }
     
-    /// Manually updates a library's loading and error status.
-    func updateLibraryStatus(
-        key: SearchCriteriaMergedKey,
-        libraryId: String,
-        loading: Bool,
-        error: SearchError?
-    ) {
+    /// Updates the loading status or error for a specific library in an active search.
+    func updateLibraryStatus(key: SearchCriteriaMergedKey, libraryId: String, loading: Bool, error: SearchError? = nil) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            guard var activeSearch = self.activeSearches[key] else { return }
-            activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(loading: loading, error: error)
-            self.activeSearches[key] = activeSearch
-            
-            if let subject = self.resultSubjects[key] {
-                subject.send(activeSearch.currentResult)
-            }
+            self._updateLibraryStatus(key: key, libraryId: libraryId, loading: loading, error: error)
+        }
+    }
+    
+    private func _updateLibraryStatus(key: SearchCriteriaMergedKey, libraryId: String, loading: Bool, error: SearchError? = nil) {
+        guard var activeSearch = activeSearches[key] else { return }
+        
+        var status = activeSearch.libraryStatuses[libraryId] ?? LibrarySearchStatus(loading: loading, error: error)
+        status.loading = loading
+        if let error = error {
+            status.error = error
+        }
+        
+        activeSearch.libraryStatuses[libraryId] = status
+        activeSearches[key] = activeSearch
+        
+        // Notify subscribers of the status change
+        if let subject = resultSubjects[key] {
+            subject.send(activeSearch.currentResult)
         }
     }
     
@@ -199,11 +216,13 @@ class UnifiedSearchManager {
                 filters: key.criteria.filterCriteriaCategory
             )
             .receive(on: queue)
-            .sink { completion in
+            .sink { [weak self] completion in
+                guard let self = self else { return }
                 if case .failure(let error) = completion {
-                    self.updateLibraryStatus(key: key, libraryId: libraryId, loading: false, error: SearchError.database(error.localizedDescription))
+                    self._updateLibraryStatus(key: key, libraryId: libraryId, loading: false, error: SearchError.database(error.localizedDescription))
                 }
-            } receiveValue: { cachedResult in
+            } receiveValue: { [weak self] cachedResult in
+                guard let self = self else { return }
                 self.handleLibraryCachedResultUpdate(key: key, libraryId: libraryId, cachedResult: cachedResult)
             }
             .store(in: &subscriptionSet)
@@ -280,8 +299,8 @@ class UnifiedSearchManager {
         for libraryId: String,
         sources: [String: LibrarySourceSearchResult]
     ) -> (key: String, result: LibrarySourceSearchResult)? {
-        let modelData = ModelData.shared
-        let library = modelData?.calibreLibraries[libraryId]
+        let libraries = libraryProvider.getLibraries()
+        let library = libraries[libraryId]
         
         if library == nil,
            isServerReachableProvider != nil,
@@ -290,15 +309,15 @@ class UnifiedSearchManager {
             return (key: bestEntry.key, result: bestEntry.value)
         }
         
-        guard let modelData = modelData, let library = library else {
+        guard let library = library else {
             return nil
         }
         
         let reachabilityCheck: (CalibreServer, Bool) -> Bool? = isServerReachableProvider ?? { server, isPublic in
-            modelData.isServerReachable(server: server, isPublic: isPublic)
+            self.libraryProvider.isServerReachable(server: server, isPublic: isPublic)
         }
         let reachabilityNoPublicCheck: (CalibreServer) -> Bool = isServerReachableNoPublicProvider ?? { server in
-            modelData.isServerReachable(server: server)
+            self.libraryProvider.isServerReachable(server: server)
         }
         
         let filtered = sources.filter { entry in

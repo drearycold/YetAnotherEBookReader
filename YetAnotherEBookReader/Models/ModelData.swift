@@ -14,8 +14,12 @@ import Kingfisher
 import ShelfView
 import CryptoSwift
 
-final class ModelData: ObservableObject, CalibreServerConfigProvider {
+final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryProvider {
     static var shared: ModelData?
+    
+    func getLibraries() -> [String: CalibreLibrary] {
+        return calibreLibraries
+    }
     
     @Published var deviceName = UIDevice.current.name
     

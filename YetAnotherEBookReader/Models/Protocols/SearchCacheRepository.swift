@@ -70,9 +70,6 @@ protocol SearchCacheRepository {
         sourceUrl: String,
         result: LibrarySourceSearchResult
     ) throws
-    
-
-    
     func libraryCachedResultPublisher(
         libraryId: String,
         search: String,

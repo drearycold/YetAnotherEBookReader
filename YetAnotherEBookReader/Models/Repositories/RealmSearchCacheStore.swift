@@ -112,11 +112,6 @@ class RealmSearchCacheStore: SearchCacheRepository {
     }
     
 
-    
-    private func block_sortAsc(_ val: Bool) -> Bool {
-        return val
-    }
-    
     func libraryCachedResultPublisher(
         libraryId: String,
         search: String,

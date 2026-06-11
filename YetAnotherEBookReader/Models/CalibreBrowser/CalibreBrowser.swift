@@ -210,7 +210,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         self.cacheRealmConf = modelData.realmConf
         
         let cacheRepository = RealmSearchCacheStore(config: modelData.realmConf, modelData: modelData)
-        self.unifiedSearchManager = UnifiedSearchManager(repository: cacheRepository)
+        self.unifiedSearchManager = UnifiedSearchManager(repository: cacheRepository, libraryProvider: modelData)
         
         self.unifiedSearchManager.searchTriggerHandler = { [weak self] libraryIds, criteria, force, limit in
             self?.refreshSearchResults(libraryIds: libraryIds, searchCriteria: criteria, force: force, limit: limit)
