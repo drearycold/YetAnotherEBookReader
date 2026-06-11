@@ -239,11 +239,8 @@ struct LibraryInfoBookListView: View {
             }
             
             Button {
-                modelData.librarySearchManager.refreshSearchResults(
-                    libraryIds: viewModel.filterCriteriaLibraries,
-                    searchCriteria: viewModel.currentLibrarySearchCriteria,
-                    force: true
-                )
+                let key = viewModel.currentLibrarySearchResultKey
+                modelData.librarySearchManager.unifiedSearchManager.resetSearch(for: key, force: true)
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }

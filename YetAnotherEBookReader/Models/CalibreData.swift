@@ -850,9 +850,28 @@ struct CalibreLibrarySearchTask: Identifiable {
 }
 
 struct CalibreBookFormatMetadataEntry: Codable {
-    var path: String = ""
+    var path: String?
     var size: UInt64 = 0
     var mtime: String = ""
+    
+    enum CodingKeys: String, CodingKey {
+        case path
+        case size
+        case mtime
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decodeIfPresent(String.self, forKey: .path)
+        size = try container.decodeIfPresent(UInt64.self, forKey: .size) ?? 0
+        mtime = try container.decodeIfPresent(String.self, forKey: .mtime) ?? ""
+    }
+    
+    init(path: String? = nil, size: UInt64 = 0, mtime: String = "") {
+        self.path = path
+        self.size = size
+        self.mtime = mtime
+    }
 }
 
 struct CalibreBookUserMetadataEntry: Codable {

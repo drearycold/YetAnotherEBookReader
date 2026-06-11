@@ -79,7 +79,8 @@ struct LibraryInfoBookListInfoView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        modelData.librarySearchManager.refreshSearchResults(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria)
+                        let key = viewModel.currentLibrarySearchResultKey
+                        modelData.librarySearchManager.unifiedSearchManager.resetSearch(for: key, force: true)
                         
                         presenting = false
                     } label: {

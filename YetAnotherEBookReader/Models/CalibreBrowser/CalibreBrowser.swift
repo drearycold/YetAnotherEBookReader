@@ -183,7 +183,12 @@ class CalibreLibrarySearchManager: ObservableObject {
     let cacheRealmQueue = DispatchQueue(label: "search-cache-realm-queue", qos: .userInitiated)
     private let cacheWorkerQueue = DispatchQueue(label: "search-cache-worker-queue", qos: .utility, attributes: [.concurrent])
     
-    private let searchRefreshSubject = PassthroughSubject<LibrarySearchKey, Never>()
+    struct SearchRefreshRequest {
+        let searchKey: LibrarySearchKey
+        let force: Bool
+        let limit: Int
+    }
+    private let searchRefreshSubject = PassthroughSubject<SearchRefreshRequest, Never>()
     private let searchRequestSubject = PassthroughSubject<CalibreLibrarySearchTask, Never>()
     private let metadataRequestSubject = PassthroughSubject<CalibreBooksMetadataRequest, Never>()
     
@@ -207,8 +212,8 @@ class CalibreLibrarySearchManager: ObservableObject {
         let cacheRepository = RealmSearchCacheStore(config: modelData.realmConf, modelData: modelData)
         self.unifiedSearchManager = UnifiedSearchManager(repository: cacheRepository)
         
-        self.unifiedSearchManager.searchTriggerHandler = { [weak self] libraryIds, criteria, force in
-            self?.refreshSearchResults(libraryIds: libraryIds, searchCriteria: criteria, force: force)
+        self.unifiedSearchManager.searchTriggerHandler = { [weak self] libraryIds, criteria, force, limit in
+            self?.refreshSearchResults(libraryIds: libraryIds, searchCriteria: criteria, force: force, limit: limit)
         }
         
         /*
@@ -597,43 +602,60 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func registerSearchRefreshReceiver() {
         searchRefreshSubject.receive(on: cacheRealmQueue)
-            .map { [self] searchKey -> (LibrarySearchKey, CalibreLibrarySearchObject) in
+            .map { [self] request -> (SearchRefreshRequest, CalibreLibrarySearchObject) in
+                let searchKey = request.searchKey
                 if let cacheObjId = cacheSearchLibraryObjects[searchKey],
                    let cacheObj = cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId){
-                    return (searchKey, cacheObj)
+                    return (request, cacheObj)
                 } else {
-                    return (searchKey, initCacheSearchObject(searchKey: searchKey))
+                    return (request, initCacheSearchObject(searchKey: searchKey))
                 }
             }
-            .map { [self] searchKey, cacheObj -> LibrarySearchKey in
+            .map { [self] request, cacheObj -> SearchRefreshRequest in
+                let searchKey = request.searchKey
                 guard let library = modelData.calibreLibraries[cacheObj.libraryId]
                 else {
-                    return searchKey
+                    return request
                 }
                 
-                 try! cacheRealm.write {
-                    cacheObj.sources.forEach {
-                        guard let sourceObj = $0.value
-                        else {
-                            return
-                        }
+                var parameters = [String: (generation: Date, num: Int, offset: Int)]()
+                var needsFetch = false
+                
+                try! cacheRealm.write {
+                    let serverUrls = [
+                        library.server.baseUrl,
+                        library.server.hasPublicUrl ? library.server.publicUrl : nil,
+                        (library.autoUpdate || library.server.isLocal) ? "file:///realm" : nil
+                    ].compactMap { $0 }
+                    
+                    serverUrls.forEach { urlStr in
+                        guard let url = URL(string: urlStr) else { return }
+                        let serverKey = url.absoluteString.replacingOccurrences(of: ".", with: "_")
+                        let sourceObj = self.getOrCreateLibrarySearchValueObject(librarySearchKey: searchKey, cacheObj: cacheObj, serverUrl: serverKey)
                         
-                        sourceObj.books.removeAll()
-                        sourceObj.bookIds.removeAll()
-                        sourceObj.generation = Date.distantPast
+                        if request.force || sourceObj.generation < library.lastModified {
+                            sourceObj.books.removeAll()
+                            sourceObj.bookIds.removeAll()
+                            sourceObj.generation = Date.distantPast
+                            parameters[serverKey] = (generation: library.lastModified, num: request.limit, offset: 0)
+                            needsFetch = true
+                        } else if sourceObj.bookIds.count < request.limit && sourceObj.bookIds.count < sourceObj.totalNumber {
+                            parameters[serverKey] = (generation: sourceObj.generation, num: request.limit - sourceObj.bookIds.count, offset: sourceObj.bookIds.count)
+                            needsFetch = true
+                        }
                     }
                 }
                 
-                let searchTasks = service.buildLibrarySearchTasks(library: library, searchCriteria: searchKey.criteria, parameters: [:])
-                searchTasks.forEach { task in
-                    searchRequestSubject.send(task)
+                if needsFetch {
+                    let searchTasks = service.buildLibrarySearchTasks(library: library, searchCriteria: searchKey.criteria, parameters: parameters)
+                    searchTasks.forEach { task in
+                        searchRequestSubject.send(task)
+                    }
                 }
                 
-                return searchKey
+                return request
             }
-            .sink { searchKey in
-                
-            }
+            .sink { _ in }
             .store(in: &cancellables)
     }
     
@@ -721,6 +743,16 @@ class CalibreLibrarySearchManager: ObservableObject {
                     } else {
                         //task.generation < cacheObj.generation
                         //discard result
+                    }
+                    
+                    if sourceObj.books.count < sourceObj.bookIds.count {
+                        self.metadataRequestSubject.send(
+                            .init(
+                                library: task.library,
+                                books: sourceObj.bookIds[sourceObj.books.count ..< sourceObj.bookIds.count].map { $0 },
+                                getAnnotations: false
+                            )
+                        )
                     }
                 }
                 return task
@@ -1200,11 +1232,11 @@ class CalibreLibrarySearchManager: ObservableObject {
     
     func refreshSearchResults() {
         cacheSearchLibraryObjects.keys.forEach {
-            self.searchRefreshSubject.send($0)
+            self.searchRefreshSubject.send(.init(searchKey: $0, force: false, limit: 100))
         }
     }
     
-    func refreshSearchResults(libraryIds: Set<String>, searchCriteria: SearchCriteria, force: Bool = false) {
+    func refreshSearchResults(libraryIds: Set<String>, searchCriteria: SearchCriteria, force: Bool = false, limit: Int = 100) {
         cacheRealmQueue.async { [self] in
             let targets: Set<String>
             if libraryIds.isEmpty {
@@ -1235,9 +1267,11 @@ class CalibreLibrarySearchManager: ObservableObject {
                     }
                     
                     needsSearch = !object.sources.allSatisfy { entry in
-                        guard let sourceObj = entry.value,
-                              sourceObj.generation >= library.lastModified
-                        else {
+                        guard let sourceObj = entry.value else { return false }
+                        if sourceObj.generation < library.lastModified {
+                            return false
+                        }
+                        if sourceObj.bookIds.count < limit && sourceObj.bookIds.count < sourceObj.totalNumber {
                             return false
                         }
                         return true
@@ -1247,7 +1281,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
                 
                 if needsSearch {
-                    self.searchRefreshSubject.send(searchKey)
+                    self.searchRefreshSubject.send(.init(searchKey: searchKey, force: force, limit: limit))
                 }
             }
         }

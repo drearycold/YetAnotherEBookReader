@@ -40,7 +40,7 @@ class UnifiedSearchManager {
     var isServerReachableNoPublicProvider: ((CalibreServer) -> Bool)?
     
     // Callback to trigger a library search in the network coordinator (CalibreLibrarySearchManager)
-    var searchTriggerHandler: ((Set<String>, SearchCriteria, Bool) -> Void)?
+    var searchTriggerHandler: ((Set<String>, SearchCriteria, Bool, Int) -> Void)?
     
     init(
         mergeService: UnifiedSearchMergeService = UnifiedSearchMergeService(),
@@ -105,7 +105,7 @@ class UnifiedSearchManager {
         // Always trigger search cache check / refresh when requesting a publisher
         queue.async { [weak self] in
             guard let self = self else { return }
-            self.searchTriggerHandler?(key.libraryIds, key.criteria, false)
+            self.searchTriggerHandler?(key.libraryIds, key.criteria, false, 100)
         }
         
         return subject!.eraseToAnyPublisher()
@@ -123,8 +123,10 @@ class UnifiedSearchManager {
             guard let self = self else { return }
             guard var activeSearch = self.activeSearches[key] else { return }
             activeSearch.currentResult.limitNumber += increment
+            let newLimit = activeSearch.currentResult.limitNumber
             self.activeSearches[key] = activeSearch
             
+            self.searchTriggerHandler?(key.libraryIds, key.criteria, false, newLimit)
             self.triggerMerge(for: key)
         }
     }
@@ -136,14 +138,16 @@ class UnifiedSearchManager {
             guard var activeSearch = self.activeSearches[key] else { return }
             guard activeSearch.currentResult.limitNumber != limit else { return }
             activeSearch.currentResult.limitNumber = limit
+            let newLimit = limit
             self.activeSearches[key] = activeSearch
             
+            self.searchTriggerHandler?(key.libraryIds, key.criteria, false, newLimit)
             self.triggerMerge(for: key)
         }
     }
     
-    /// Resets the merged list for a search key.
-    func resetSearch(for key: SearchCriteriaMergedKey) {
+    /// Resets the merged list for a search key, optionally forcing a network refresh.
+    func resetSearch(for key: SearchCriteriaMergedKey, force: Bool = false) {
         queue.async { [weak self] in
             guard let self = self else { return }
             guard var activeSearch = self.activeSearches[key] else { return }
@@ -158,6 +162,7 @@ class UnifiedSearchManager {
             }
             self.activeSearches[key] = activeSearch
             
+            self.searchTriggerHandler?(key.libraryIds, key.criteria, force, 100)
             self.triggerMerge(for: key)
         }
     }
@@ -248,8 +253,10 @@ class UnifiedSearchManager {
                 sortBy: key.criteria.sortCriteria.by,
                 sortAsc: key.criteria.sortCriteria.ascending,
                 filters: key.criteria.filterCriteriaCategory
-            ), let activeSource = selectActiveSource(for: libraryId, sources: cached.sources) {
-                libraryResults[libraryId] = activeSource.result
+            ) {
+                if let activeSource = selectActiveSource(for: libraryId, sources: cached.sources) {
+                    libraryResults[libraryId] = activeSource.result
+                }
             }
         }
         

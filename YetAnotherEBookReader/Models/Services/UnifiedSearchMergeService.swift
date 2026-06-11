@@ -21,33 +21,31 @@ class UnifiedSearchMergeService {
     ) -> UnifiedSearchResult {
         var updatedResult = currentResult
         
-        // Initialize Heap. Apple's Collections.Heap is double-ended, supporting min/max extraction.
+        // Always reset the merged books and offsets to rebuild from scratch.
+        // This ensures sorting correctness when new paginated data arrives asynchronously.
+        updatedResult.books.removeAll()
+        updatedResult.unifiedOffsets.removeAll()
+        
         var heap = Heap<MergeHead>()
         
-        // Resolve empty libraryIds to all libraries present in libraryResults
         var targetLibraryIds = updatedResult.libraryIds
         if targetLibraryIds.isEmpty {
             targetLibraryIds = Set(libraryResults.keys)
         }
         
-        // Populate Heap with the head element of each library
         for libraryId in targetLibraryIds {
-            let offsetEntry = updatedResult.unifiedOffsets[libraryId] ?? MergeOffset()
-            
-            // If the library is already fully consumed or cut off, skip it
-            if offsetEntry.beenConsumed || offsetEntry.beenCutOff {
-                continue
-            }
+            // Initialize offsets for all target libraries
+            updatedResult.unifiedOffsets[libraryId] = MergeOffset(beenCutOff: false, beenConsumed: false, offset: 0)
             
             guard let libraryResult = libraryResults[libraryId],
-                  offsetEntry.offset < libraryResult.books.count else {
+                  !libraryResult.books.isEmpty else {
                 continue
             }
             
             let head = MergeHead(
                 libraryId: libraryId,
                 books: libraryResult.books,
-                offset: offsetEntry.offset,
+                offset: 0,
                 sortBy: updatedResult.sortBy
             )
             heap.insert(head)
@@ -55,13 +53,11 @@ class UnifiedSearchMergeService {
         
         while updatedResult.books.count < updatedResult.limitNumber {
             guard var head = updatedResult.sortAsc ? heap.popMin() : heap.popMax() else {
-                break // Heap is empty, no more elements to merge
+                break
             }
             
-            // Append the book
             updatedResult.books.append(head.currentBook)
             
-            // Update the offset in unifiedOffsets
             var offsetEntry = updatedResult.unifiedOffsets[head.libraryId] ?? MergeOffset()
             offsetEntry.offset += 1
             
@@ -69,15 +65,18 @@ class UnifiedSearchMergeService {
             let totalCountForLibrary = libraryResult?.totalNumber ?? 0
             let loadedCountForLibrary = libraryResult?.books.count ?? 0
             
-            // Determine if consumed or cut off
             if offsetEntry.offset >= loadedCountForLibrary {
                 if loadedCountForLibrary < totalCountForLibrary {
                     offsetEntry.beenCutOff = true
+                    updatedResult.unifiedOffsets[head.libraryId] = offsetEntry
+                    // Stop merging immediately if we hit the boundary of a partially loaded library.
+                    // Continuing would pull elements from other libraries that might actually sort AFTER
+                    // the unloaded elements of this library, causing a UI snap when data arrives.
+                    break
                 } else {
                     offsetEntry.beenConsumed = true
                 }
             } else {
-                // We still have local elements loaded in the books array
                 if head.advance() {
                     heap.insert(head)
                 }
@@ -86,7 +85,6 @@ class UnifiedSearchMergeService {
             updatedResult.unifiedOffsets[head.libraryId] = offsetEntry
         }
         
-        // Re-calculate the totalNumber across all libraries
         updatedResult.totalNumber = libraryResults.values.reduce(0) { $0 + $1.totalNumber }
         
         return updatedResult

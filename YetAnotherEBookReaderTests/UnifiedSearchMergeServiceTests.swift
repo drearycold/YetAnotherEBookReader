@@ -159,11 +159,13 @@ class UnifiedSearchMergeServiceTests: XCTestCase {
         
         let merged = mergeService.merge(libraryResults: libraryResults, currentResult: currentResult)
         
-        XCTAssertEqual(merged.books.count, 2)
+        // The merge should stop after lib1 hits its cache boundary, to prevent out-of-order merging of lib2.
+        XCTAssertEqual(merged.books.count, 1)
         XCTAssertTrue(merged.unifiedOffsets["lib1"]?.beenCutOff ?? false, "lib1 should be cut off since local data is exhausted but server has more")
         XCTAssertFalse(merged.unifiedOffsets["lib1"]?.beenConsumed ?? true)
         
-        XCTAssertTrue(merged.unifiedOffsets["lib2"]?.beenConsumed ?? false, "lib2 should be consumed since local data is exhausted and server has no more")
+        // lib2 hasn't been merged yet because lib1's pending data blocked the merge
+        XCTAssertFalse(merged.unifiedOffsets["lib2"]?.beenConsumed ?? true, "lib2 shouldn't be consumed yet because the merge halted to wait for lib1's network request")
         XCTAssertFalse(merged.unifiedOffsets["lib2"]?.beenCutOff ?? true)
     }
     

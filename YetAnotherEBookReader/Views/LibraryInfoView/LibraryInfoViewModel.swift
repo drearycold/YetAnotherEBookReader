@@ -91,6 +91,8 @@ extension LibraryInfoView {
         
         var unifiedSearchUpdateCancellable: AnyCancellable?
         
+        var isExpandingUnifiedSearchLimit: Bool = false
+        
         //category filters
         @Published var categoriesSelected: String? = nil
         @Published var categoryItemSelected: String? = nil
@@ -108,6 +110,8 @@ extension LibraryInfoView {
         
         func expandSearchUnifiedBookLimit() {
             guard let result = unifiedSearchResult, result.limitNumber < result.totalNumber else { return }
+            guard !isExpandingUnifiedSearchLimit else { return }
+            isExpandingUnifiedSearchLimit = true
             ModelData.shared?.librarySearchManager.unifiedSearchManager.expandLimit(for: currentLibrarySearchResultKey)
         }
         
@@ -119,6 +123,7 @@ extension LibraryInfoView {
             unifiedSearchUpdateCancellable = modelData.librarySearchManager.unifiedSearchManager.publisher(for: key)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] result in
+                    self?.isExpandingUnifiedSearchLimit = false
                     self?.unifiedSearchResult = result
                     
                     if let activeSearch = modelData.librarySearchManager.unifiedSearchManager.getActiveSearch(for: key) {
