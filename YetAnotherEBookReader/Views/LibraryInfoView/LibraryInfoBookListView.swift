@@ -6,8 +6,6 @@
 //
 
 import SwiftUI
-import RealmSwift
-//import struct Kingfisher.KFImage
 import KingfisherSwiftUI
 
 struct LibraryInfoBookListView: View {

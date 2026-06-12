@@ -97,33 +97,28 @@ extension LibraryInfoView {
         
         @Published var categoryFilterString: String = ""
         
-        @Published private(set) var unifiedCategoryObject: CalibreUnifiedCategoryObject?
+        @Published var availableCategories: [CategoryCacheSummary] = []
         
-        var unifiedCategoryUpdateCancellable: AnyCancellable?
+        private var databaseObserver: AnyCancellable?
         
-        func setUnifiedCategoryObject(_ modelData: ModelData, _ unifiedCategoryObject: CalibreUnifiedCategoryObject?) {
-            unifiedCategoryUpdateCancellable?.cancel()
-            unifiedCategoryUpdateCancellable = nil
-            
-            self.unifiedCategoryObject = unifiedCategoryObject
-            
-            guard let unifiedCategoryObject = unifiedCategoryObject
-            else {
-                return
+        func fetchAvailableCategories() {
+            guard let modelData = ModelData.shared else { return }
+            let repository = modelData.librarySearchManager.categoryCacheRepository
+            if let summaries = try? repository?.fetchCategorySummaries() {
+                self.availableCategories = summaries
             }
+        }
+        
+        func setupDatabaseObserver() {
+            guard let modelData = ModelData.shared, databaseObserver == nil else { return }
             
-            self.unifiedCategoryUpdateCancellable =  modelData.realm.objects(CalibreLibraryCategoryObject.self)
-                .where {
-                    $0.categoryName == unifiedCategoryObject.categoryName
-                }
+            fetchAvailableCategories()
+            
+            databaseObserver = modelData.realm.objects(CalibreLibraryCategoryObject.self)
                 .changesetPublisher(keyPaths: ["items"])
-                .sink { changes in
-                    switch changes {
-                    case .initial(_), .error(_):
-                        break
-                    case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                        modelData.librarySearchManager.refreshUnifiedCategoryResult(unifiedCategoryObject.key)
-                    }
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    self?.fetchAvailableCategories()
                 }
         }
     }

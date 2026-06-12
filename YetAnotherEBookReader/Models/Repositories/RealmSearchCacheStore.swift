@@ -9,7 +9,7 @@ import Foundation
 import RealmSwift
 import Combine
 
-final class RealmSearchCacheStore: SearchCacheRepository, @unchecked Sendable {
+final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
     private let config: Realm.Configuration
     private let modelData: ModelData
     
@@ -209,4 +209,113 @@ final class RealmSearchCacheStore: SearchCacheRepository, @unchecked Sendable {
         )
     }
     
+    func fetchLibraryCategoryResult(
+        libraryId: String,
+        categoryName: String
+    ) throws -> LibraryCategoryResult? {
+        let realm = try getRealm()
+        
+        guard let obj = realm.objects(CalibreLibraryCategoryObject.self)
+            .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
+            .first
+        else { return nil }
+        
+        let items = obj.items.map { itemObj in
+            LibraryCategoryItem(
+                name: itemObj.name,
+                averageRating: itemObj.averageRating,
+                count: itemObj.count,
+                url: itemObj.url
+            )
+        }
+        
+        return LibraryCategoryResult(
+            libraryId: obj.libraryId,
+            categoryName: obj.categoryName,
+            items: Array(items),
+            generation: obj.generation,
+            totalNumber: obj.totalNumber
+        )
+    }
+    
+    func saveLibraryCategoryResult(
+        libraryId: String,
+        categoryName: String,
+        result: LibraryCategoryResult
+    ) throws {
+        let realm = try getRealm()
+        
+        try realm.write {
+            var cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
+                .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
+                .first
+                
+            if cacheObj == nil {
+                let newObj = CalibreLibraryCategoryObject()
+                newObj.libraryId = libraryId
+                newObj.categoryName = categoryName
+                realm.add(newObj)
+                cacheObj = newObj
+            }
+            
+            guard let obj = cacheObj else { return }
+            obj.generation = result.generation
+            obj.totalNumber = result.totalNumber
+            
+            obj.items.removeAll()
+            
+            for item in result.items {
+                let itemObj = realm.objects(CalibreLibraryCategoryItemObject.self)
+                    .filter("url == %@", item.url)
+                    .first ?? CalibreLibraryCategoryItemObject()
+                
+                if itemObj.realm == nil {
+                    itemObj.name = item.name
+                    itemObj.averageRating = item.averageRating
+                    itemObj.count = item.count
+                    itemObj.url = item.url
+                    realm.add(itemObj)
+                } else {
+                    if itemObj.name != item.name { itemObj.name = item.name }
+                    if itemObj.averageRating != item.averageRating { itemObj.averageRating = item.averageRating }
+                    if itemObj.count != item.count { itemObj.count = item.count }
+                }
+                obj.items.append(itemObj)
+            }
+        }
+    }
+    
+    func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
+        let realm = try getRealm()
+        let objects = realm.objects(CalibreLibraryCategoryObject.self)
+        
+        var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
+        for obj in objects {
+            let name = obj.categoryName
+            let current = summariesByName[name] ?? (0, 0)
+            summariesByName[name] = (
+                current.itemsCount + obj.items.count,
+                current.totalNumber + obj.totalNumber
+            )
+        }
+        
+        return summariesByName.map { name, stats in
+            CategoryCacheSummary(
+                categoryName: name,
+                itemsCount: stats.itemsCount,
+                totalNumber: stats.totalNumber
+            )
+        }.sorted { $0.categoryName < $1.categoryName }
+    }
+    
+    func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
+        let realm = try getRealm()
+        try realm.write {
+            if let cacheObj = realm.objects(CalibreLibraryCategoryObject.self)
+                .filter("libraryId == %@ AND categoryName == %@", libraryId, categoryName)
+                .first {
+                cacheObj.generation = .distantPast
+            }
+        }
+    }
 }

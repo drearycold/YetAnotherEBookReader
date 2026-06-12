@@ -1820,8 +1820,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             return
         }
         
-        guard request.library.hidden == false,
-              request.autoUpdateOnly == false || request.library.autoUpdate else {
+        guard request.library.hidden == false else {
             return
         }
         
@@ -1838,78 +1837,114 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         var result = await calibreServerService.getCustomColumns(request: request)
         result = await calibreServerService.getLibraryCategories(resultPrev: result)
         
-        var filter = ""
-        if request.incremental,
-           let libraryRealm = realm.object(
-            ofType: CalibreLibraryRealm.self,
-            forPrimaryKey: CalibreLibraryRealm.PrimaryKey(
-                serverUUID: result.request.library.server.uuid.uuidString,
-                libraryName: result.request.library.name)
-           ) {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
-            formatter.timeZone = .current
-            let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
-            filter = "last_modified:\">=\(lastModifiedStr)\""
-        }
+        let shouldSyncBooks = request.autoUpdateOnly == false || request.library.autoUpdate
         
-        result = await calibreServerService.syncLibrary(resultPrev: result, filter: filter)
-        
-        self.librarySyncStatus[libraryId]?.isError = result.isError
-        
-        if result.isError == false {
-            let library = result.request.library
-            let serverUUID = library.server.uuid.uuidString
-            
-            await withCheckedContinuation { continuation in
-                ModelData.SaveBooksMetadataRealmQueue.async {
-                    try? self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
-                    continuation.resume()
-                }
+        if shouldSyncBooks {
+            var filter = ""
+            if request.incremental,
+               let libraryRealm = realm.object(
+                ofType: CalibreLibraryRealm.self,
+                forPrimaryKey: CalibreLibraryRealm.PrimaryKey(
+                    serverUUID: result.request.library.server.uuid.uuidString,
+                    libraryName: result.request.library.name)
+               ) {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
+                formatter.timeZone = .current
+                let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
+                filter = "last_modified:\">=\(lastModifiedStr)\""
             }
             
-            result.categories.filter { $0.is_category }.forEach { category in
-                self.librarySearchManager.refreshLibraryCategory(library: library, category: category)
-            }
+            result = await calibreServerService.syncLibrary(resultPrev: result, filter: filter)
             
-            let dateFormatter = ISO8601DateFormatter()
-            let dateFormatter2 = ISO8601DateFormatter()
-            dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+            self.librarySyncStatus[libraryId]?.isError = result.isError
             
-            var progress = 0
-            let total = result.list.book_ids.count
-            for chunk in result.list.book_ids.chunks(size: 1024) {
-                let preMsg = "\(progress) / \(total)"
-                let list = chunk.compactMap { id -> [String: Any]? in
-                    let idStr = id.description
-                    guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
-                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return nil }
-                    return [
-                        "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: idStr),
-                        "serverUUID": serverUUID,
-                        "libraryName": library.name,
-                        "lastModified": lastModified,
-                        "idInLib": id
-                    ]
-                }
-                progress += chunk.count
-                let postMsg = "\(progress) / \(total)"
-                await saveBookMetadata(metadata: .init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
+            if result.isError == false {
+                let library = result.request.library
+                let serverUUID = library.server.uuid.uuidString
                 
-                if let lastMod = list.last?["lastModified"] as? Date {
-                    result.lastModified = lastMod
+                await withCheckedContinuation { continuation in
+                    ModelData.SaveBooksMetadataRealmQueue.async {
+                        try? self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
+                        continuation.resume()
+                    }
+                }
+                
+                result.categories.filter { $0.is_category }.forEach { category in
+                    Task {
+                        do {
+                            _ = try await self.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                        } catch {
+                            self.defaultLog.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
+                let dateFormatter = ISO8601DateFormatter()
+                let dateFormatter2 = ISO8601DateFormatter()
+                dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+                
+                var progress = 0
+                let total = result.list.book_ids.count
+                for chunk in result.list.book_ids.chunks(size: 1024) {
+                    let preMsg = "\(progress) / \(total)"
+                    let list = chunk.compactMap { id -> [String: Any]? in
+                        let idStr = id.description
+                        guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
+                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return nil }
+                        return [
+                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: idStr),
+                            "serverUUID": serverUUID,
+                            "libraryName": library.name,
+                            "lastModified": lastModified,
+                            "idInLib": id
+                        ]
+                    }
+                    progress += chunk.count
+                    let postMsg = "\(progress) / \(total)"
+                    await saveBookMetadata(metadata: .init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
+                    
+                    if let lastMod = list.last?["lastModified"] as? Date {
+                        result.lastModified = lastMod
+                    }
+                }
+                
+                if result.request.incremental == false {
+                    await saveBookMetadata(metadata: .init(library: library, action: .updateDeleted(result.list.data.last_modified), preMsg: "", postMsg: ""))
+                }
+                
+                await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
+                
+                if isServerReachable(server: library.server) {
+                    self.calibreUpdatedSubject.send(.server(library.server))
+                    self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
+        } else {
+            let isError = !result.errmsg.isEmpty
+            self.librarySyncStatus[libraryId]?.isError = isError
+            self.librarySyncStatus[libraryId]?.isSync = false
             
-            if result.request.incremental == false {
-                await saveBookMetadata(metadata: .init(library: library, action: .updateDeleted(result.list.data.last_modified), preMsg: "", postMsg: ""))
-            }
-            
-            await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
-            
-            if isServerReachable(server: library.server) {
-                self.calibreUpdatedSubject.send(.server(library.server))
-                self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+            if !isError {
+                let library = result.request.library
+                
+                result.categories.filter { $0.is_category }.forEach { category in
+                    Task {
+                        do {
+                            _ = try await self.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                        } catch {
+                            self.defaultLog.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
+                        }
+                    }
+                }
+                
+                self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
+                
+                if isServerReachable(server: library.server) {
+                    self.calibreUpdatedSubject.send(.server(library.server))
+                }
+            } else {
+                self.librarySyncStatus[libraryId]?.msg = result.errmsg
             }
         }
     }

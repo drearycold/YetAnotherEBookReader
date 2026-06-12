@@ -44,8 +44,13 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 27. Decoupled `libraryStatuses` from `UnifiedSearchResult` by updating `UnifiedSearchService` to stream `SearchUpdate` value types and `UnifiedSearchViewModel` to publish statuses separately.
 - [x] 28. Refactored search criteria and UI preferences to `LibraryInfoView.ViewModel`, removing criteria properties from `UnifiedSearchViewModel` and passing `SearchCriteriaMergedKey` to `startSearch(key:)` explicitly.
 - [x] 29. Fixed the Combine bridge task leak in `publisher(for:)` by wrapping the subscription block inside `Deferred`.
+- [x] 30. Bypassed the autoUpdate check in category fetching inside `ModelData.syncLibrary(request:)` to ensure calibre library categories are synced and populated on startup/probes even when autoUpdate ("Available when Offline") is disabled.
+- [x] 31. Decoupled `LibraryInfoCategoryListView` and `LibraryInfoView` completely from `RealmSwift` by introducing `CategoryCacheSummary` value types and querying summaries via `CategoryCacheRepository` reactively inside the `LibraryInfoView.ViewModel`.
+- [x] 32. Decoupled `LibraryInfoCategoryItemsView` completely from `RealmSwift` by implementing cache invalidation in the repository layer and exposing `forceRefreshCategory` in the `UnifiedCategoryViewModel`.
+
+## Active Tasks
+- [x] Decouple category views completely from RealmSwift.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
 - **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.
-
