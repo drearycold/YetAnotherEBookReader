@@ -40,6 +40,7 @@ struct SettingsView: View {
             }) {
                 NavigationLink(
                     destination: AddModServerView(
+                        viewModel: ServerViewModel(modelData: modelData, server: nil),
                         server: Binding<CalibreServer>(
                             get: {
                                 .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")

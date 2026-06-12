@@ -6,45 +6,38 @@
 //
 
 import SwiftUI
-import RealmSwift
 
 struct LibraryDetailView: View {
-    @EnvironmentObject var modelData: ModelData
+    @StateObject private var viewModel: LibraryViewModel
 
-    @ObservedResults(CalibreBookRealm.self, configuration: ModelData.shared?.realmConf) var books
-    
-    var library: CalibreLibrary
-    @ObservedRealmObject var libraryRealm: CalibreLibraryRealm
+    init(modelData: ModelData, library: CalibreLibrary) {
+        _viewModel = StateObject(wrappedValue: LibraryViewModel(modelData: modelData, library: library))
+    }
 
-    @State private var activityListViewPresenting = false
-    @State private var updater = 0
-
-    @State private var isStoreActive = false
-    
     var body: some View {
         Form {
             Section(header: Text("Browsable")) {
-                Toggle("Include in Discover", isOn: $libraryRealm.discoverable)
+                Toggle("Include in Discover", isOn: $viewModel.discoverable)
                 
-                Toggle("Available when Offline", isOn: $libraryRealm.autoUpdate)
+                Toggle("Available when Offline", isOn: $viewModel.autoUpdate)
             }
             
             Section(header: Text("Troubleshooting")) {
                 NavigationLink(
-                    destination: ActivityList(viewModel: ActivityListViewModel(modelData: modelData, libraryId: library.id, bookId: nil), presenting: Binding<Bool>(get: { false }, set:{_ in }))
+                    destination: ActivityList(viewModel: ActivityListViewModel(modelData: viewModel.modelData, libraryId: viewModel.library.id, bookId: nil), presenting: Binding<Bool>(get: { false }, set:{_ in }))
                 ) {
                     Text("Activity Logs")
                 }
-                if let err = modelData.librarySyncStatus[library.id]?.err, err.isEmpty == false {
+                if viewModel.errCount > 0 {
                     NavigationLink {
                         List {
-                            ForEach(err.map { $0 }.sorted(), id: \.self) { bookId in
+                            ForEach(viewModel.failedBookIds, id: \.self) { bookId in
                                 HStack {
                                     Text(bookId.description)
                                     
-                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)) {
+                                    if let title = viewModel.failedBookTitles[bookId] {
                                         Spacer()
-                                        Text(obj.title)
+                                        Text(title)
                                     }
                                 }
                             }
@@ -53,16 +46,16 @@ struct LibraryDetailView: View {
                         Text("Book IDs Failed to Sync")
                     }
                 }
-                if let del = modelData.librarySyncStatus[library.id]?.del, del.isEmpty == false {
+                if viewModel.delCount > 0 {
                     NavigationLink {
                         List {
-                            ForEach(del.map { $0 }.sorted(), id: \.self) { bookId in
+                            ForEach(viewModel.deletedBookIds, id: \.self) { bookId in
                                 HStack {
                                     Text(bookId.description)
                                     
-                                    if let obj = modelData.getBookRealm(forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: library.server.uuid.uuidString, libraryName: library.name, id: bookId.description)) {
+                                    if let title = viewModel.deletedBookTitles[bookId] {
                                         Spacer()
-                                        Text(obj.title)
+                                        Text(title)
                                     }
                                 }
                             }
@@ -76,34 +69,27 @@ struct LibraryDetailView: View {
             #if DEBUG
             Section {
                 Button("Reset Books") {
-                    try! modelData.realm.write {
-                        modelData.realm.objects(CalibreBookRealm.self).forEach {
-                            $0.lastModified = .init(timeIntervalSince1970: 0)
-                            $0.lastSynced = .init(timeIntervalSince1970: 0)
-                            $0.title = "__RESET__"
-                        }
-                    }
+                    viewModel.resetBooks()
                 }
             } header: {
                 Text("OP")
             }
             
             Section {
-                Text("isSync: \((modelData.librarySyncStatus[library.id]?.isSync ?? false) ? "true" : "false")")
-                Text("isUpd: \((modelData.librarySyncStatus[library.id]?.isUpd ?? false) ? "true" : "false")")
-                Text("isError: \((modelData.librarySyncStatus[library.id]?.isError ?? false) ? "true" : "false")")
-                Text("MSG: \(modelData.librarySyncStatus[library.id]?.msg ?? "nil")")
-                Text("CNT: \(modelData.librarySyncStatus[library.id]?.cnt ?? -1)")
-                Text("UPD: \(modelData.librarySyncStatus[library.id]?.upd.count ?? -1)")
-                Text("DEL: \(modelData.librarySyncStatus[library.id]?.del.count ?? -1)")
-                Text("ERR: \(modelData.librarySyncStatus[library.id]?.err.count ?? -1)")
+                Text("isSync: \(viewModel.isSync ? "true" : "false")")
+                Text("isUpd: \(viewModel.isUpd ? "true" : "false")")
+                Text("isError: \(viewModel.isError ? "true" : "false")")
+                Text("MSG: \(viewModel.msg)")
+                Text("CNT: \(viewModel.cnt)")
+                Text("UPD: \(viewModel.updCount)")
+                Text("DEL: \(viewModel.delCount)")
+                Text("ERR: \(viewModel.errCount)")
             } header: {
                 Text("DEBUG")
             }
             #endif
         }
     }
-
 }
 
 struct LibraryDetailView_Previews: PreviewProvider {
@@ -111,17 +97,12 @@ struct LibraryDetailView_Previews: PreviewProvider {
 
     @State static private var library = modelData.calibreLibraries.values.first ?? .init(server: .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default"), key: "Default", name: "Default")
 
-    @State static private var discoverable = false
-    @State static private var autoUpdate = false
-    
     static var previews: some View {
-        let libraryRealm = modelData.realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) ?? CalibreLibraryRealm()
         return NavigationView {
             LibraryDetailView(
-                library: library,
-                libraryRealm: libraryRealm
+                modelData: modelData,
+                library: library
             )
-            .environmentObject(modelData)
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }
