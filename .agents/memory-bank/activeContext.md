@@ -40,6 +40,10 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 23. Decouple `CalibreServerService` and remaining `ModelData` dependencies.
 - [x] 24. Resolved Realm collection insertion exception (`RLMThrowCollectionException`) in `RealmSearchCacheStore.saveLibrarySourceResult` by creating/updating objects via `realm.create(_:value:update:)` with the `.modified` update policy. Resolved the testing deadlock under Swift Concurrency by aligning the Hashable contract of `CalibreServer` / `CalibreServerURLSessionKey` and migrating `UnifiedSearchServiceTests` to non-blocking `await fulfillment(of:timeout:)` expectations.
 - [x] 25. Resolved all Code Review findings on commit `649cbc55`. Eliminated `DispatchQueue.main.sync` deadlocks in `CalibreServerService` and `UnifiedSearchService` via thread-safe configuration caching and async methods. Cleaned up debug print statements, dead variables, safely unwrapped `ModelData.shared`, deleted the orphaned `ActiveSearch.swift`, and verified that all 31 unit tests pass.
+- [x] 26. Resolved the fatal nil-unwrap crash in `testEmptyLibraryIdsMergingAndExpansion` (Task 232) by removing redundant `ModelData` initialization and overrides in tests, since the mock library provider handles library lists.
+- [x] 27. Decoupled `libraryStatuses` from `UnifiedSearchResult` by updating `UnifiedSearchService` to stream `SearchUpdate` value types and `UnifiedSearchViewModel` to publish statuses separately.
+- [x] 28. Refactored search criteria and UI preferences to `LibraryInfoView.ViewModel`, removing criteria properties from `UnifiedSearchViewModel` and passing `SearchCriteriaMergedKey` to `startSearch(key:)` explicitly.
+- [x] 29. Fixed the Combine bridge task leak in `publisher(for:)` by wrapping the subscription block inside `Deferred`.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

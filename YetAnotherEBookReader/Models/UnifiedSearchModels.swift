@@ -58,7 +58,6 @@ struct UnifiedSearchResult: Equatable, Sendable {
     var totalNumber: Int
     var limitNumber: Int
     var books: [CalibreBook]
-    var libraryStatuses: [String: LibrarySearchStatus]
     
     init(
         search: String = "",
@@ -69,8 +68,7 @@ struct UnifiedSearchResult: Equatable, Sendable {
         unifiedOffsets: [String: MergeOffset] = [:],
         totalNumber: Int = 0,
         limitNumber: Int = 100,
-        books: [CalibreBook] = [],
-        libraryStatuses: [String: LibrarySearchStatus] = [:]
+        books: [CalibreBook] = []
     ) {
         self.search = search
         self.sortBy = sortBy
@@ -81,8 +79,12 @@ struct UnifiedSearchResult: Equatable, Sendable {
         self.totalNumber = totalNumber
         self.limitNumber = limitNumber
         self.books = books
-        self.libraryStatuses = libraryStatuses
     }
+}
+
+struct SearchUpdate: Equatable, Sendable {
+    let result: UnifiedSearchResult
+    let statuses: [String: LibrarySearchStatus]
 }
 
 protocol LibraryProvider {

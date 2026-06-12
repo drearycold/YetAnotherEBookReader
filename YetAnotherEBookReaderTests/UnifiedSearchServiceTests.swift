@@ -401,14 +401,6 @@ class UnifiedSearchServiceTests: XCTestCase {
     }
     
     func testEmptyLibraryIdsMergingAndExpansion() async throws {
-        // Setup ModelData.shared
-        let modelData = ModelData()
-        modelData.calibreLibraries = [
-            mockLibrary1.id: mockLibrary1,
-            mockLibrary2.id: mockLibrary2
-        ]
-        ModelData.shared = modelData
-        
         let criteria = SearchCriteria(
             searchString: "test",
             sortCriteria: LibrarySearchSort(by: .Title, ascending: true),

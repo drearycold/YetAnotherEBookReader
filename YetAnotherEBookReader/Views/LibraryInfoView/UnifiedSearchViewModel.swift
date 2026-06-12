@@ -11,39 +11,15 @@ import Combine
 
 @MainActor
 class UnifiedSearchViewModel: ObservableObject {
-    @Published var searchString = ""
-    @Published var sortCriteria = LibrarySearchSort(by: .Modified, ascending: false)
-    @Published var filterCriteriaCategory = [String: Set<String>]()
-    @Published var filterCriteriaLibraries = Set<String>()
-    
-    @Published var sectionedBy: LibraryInfoView.GroupKey?
-    @Published var categoriesSelected: String? = nil
-    @Published var categoryItemSelected: String? = nil
-    
     @Published private(set) var unifiedSearchResult: UnifiedSearchResult?
+    @Published private(set) var libraryStatuses = [String: LibrarySearchStatus]()
     @Published private(set) var isSearchLoading = false
     
     private let searchService: UnifiedSearchService
     private let modelData: ModelData
     private var searchTask: Task<Void, Never>?
     
-    var currentLibrarySearchResultKey: SearchCriteriaMergedKey {
-        let activeLibraries = filterCriteriaLibraries.isEmpty ? modelData.calibreLibraries.reduce(into: Set<String>(), { partialResult, entry in
-            if entry.value.hidden == false,
-               entry.value.server.removed == false {
-                partialResult.insert(entry.key)
-            }
-        }) : filterCriteriaLibraries
-        
-        return .init(
-            libraryIds: activeLibraries,
-            criteria: .init(
-                searchString: self.searchString,
-                sortCriteria: self.sortCriteria,
-                filterCriteriaCategory: self.filterCriteriaCategory
-            )
-        )
-    }
+    private var currentSearchKey: SearchCriteriaMergedKey?
     
     init(searchService: UnifiedSearchService? = nil, modelData: ModelData? = nil) {
         guard let resolvedModelData = modelData ?? ModelData.shared else {
@@ -53,18 +29,18 @@ class UnifiedSearchViewModel: ObservableObject {
         self.searchService = searchService ?? resolvedModelData.librarySearchManager.unifiedSearchService
     }
     
-    func startSearch() {
+    func startSearch(key: SearchCriteriaMergedKey) {
         searchTask?.cancel()
+        currentSearchKey = key
         isSearchLoading = true
-        
-        let key = currentLibrarySearchResultKey
         
         searchTask = Task {
             let stream = await searchService.search(key: key)
-            for await result in stream {
+            for await update in stream {
                 guard !Task.isCancelled else { break }
-                self.unifiedSearchResult = result
-                self.isSearchLoading = result.libraryStatuses.values.contains { $0.loading }
+                self.unifiedSearchResult = update.result
+                self.libraryStatuses = update.statuses
+                self.isSearchLoading = update.statuses.values.contains { $0.loading }
             }
             if !Task.isCancelled {
                 self.isSearchLoading = false
@@ -73,8 +49,7 @@ class UnifiedSearchViewModel: ObservableObject {
     }
     
     func expandSearchUnifiedBookLimit() {
-        guard let result = unifiedSearchResult, result.limitNumber < result.totalNumber else { return }
-        let key = currentLibrarySearchResultKey
+        guard let result = unifiedSearchResult, result.limitNumber < result.totalNumber, let key = currentSearchKey else { return }
         
         Task {
             await searchService.expandLimit(for: key)
@@ -82,7 +57,7 @@ class UnifiedSearchViewModel: ObservableObject {
     }
     
     func resetSearch(force: Bool) {
-        let key = currentLibrarySearchResultKey
+        guard let key = currentSearchKey else { return }
         Task {
             await searchService.resetSearch(for: key, force: force)
         }

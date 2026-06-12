@@ -162,12 +162,7 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        unifiedSearchViewModel.searchString = viewModel.searchString
-        unifiedSearchViewModel.sortCriteria = viewModel.sortCriteria
-        unifiedSearchViewModel.filterCriteriaCategory = viewModel.filterCriteriaCategory
-        unifiedSearchViewModel.filterCriteriaLibraries = viewModel.filterCriteriaLibraries
-        
-        unifiedSearchViewModel.startSearch()
+        unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
     }
     
     func resetSearchCriteria() {

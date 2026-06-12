@@ -13,6 +13,7 @@ import KingfisherSwiftUI
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
+    @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
@@ -56,7 +57,7 @@ struct LibraryInfoBookListView: View {
         ZStack {
             TextField("Search Title & Authors", text: $searchString)
                 .onAppear {
-                    searchString = viewModel.searchString
+                    searchString = libraryInfoViewModel.searchString
                 }
                 .onSubmit {
                     searchStringChanged(searchString: searchString)
@@ -82,14 +83,14 @@ struct LibraryInfoBookListView: View {
                 }.disabled(searchString.isEmpty)
                 
                 Menu {
-                    ForEach(viewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
+                    ForEach(libraryInfoViewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
                         ForEach(categoryFilter.value.filter({
-                            categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
+                            categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
                         }).sorted(), id: \.self) { categoryFilterValue in
                             Button {
-                                if viewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
-                                    if viewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
-                                        viewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
+                                if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
+                                    if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
+                                        libraryInfoViewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
                                     }
                                     searchStringChanged(searchString: self.searchString)
                                 }
@@ -106,9 +107,9 @@ struct LibraryInfoBookListView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .foregroundColor(
-                            viewModel.filterCriteriaCategory.filter({ categoryFilter in
+                            libraryInfoViewModel.filterCriteriaCategory.filter({ categoryFilter in
                                 categoryFilter.value.filter({
-                                    categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
+                                    categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
                                 }).isEmpty == false
                             }).isEmpty ? .gray : .accentColor
                         )
@@ -137,7 +138,7 @@ struct LibraryInfoBookListView: View {
                 if books.isEmpty {
                     Text(getLibraryLoadingCount() > 0 ? "Loading books..." : "Found no books.")
                 } else {
-                    if let groupString = viewModel.sectionedBy?.groupString {
+                    if let groupString = libraryInfoViewModel.sectionedBy?.groupString {
                         let grouped = Dictionary(grouping: Array(books.enumerated()), by: { groupString($0.element) })
                         let sortedKeys = grouped.keys.compactMap { $0 }.sorted()
                         ForEach(sortedKeys, id: \.self) { key in
@@ -149,7 +150,7 @@ struct LibraryInfoBookListView: View {
                                 Text(key)
                             }
                         }
-                    } else if let groupRating = viewModel.sectionedBy?.groupRating {
+                    } else if let groupRating = libraryInfoViewModel.sectionedBy?.groupRating {
                         let grouped = Dictionary(grouping: Array(books.enumerated()), by: { groupRating($0.element) })
                         let sortedKeys = grouped.keys.sorted(by: >)
                         ForEach(sortedKeys, id: \.self) { key in
@@ -274,17 +275,17 @@ struct LibraryInfoBookListView: View {
         Menu {
             ForEach(SortCriteria.allCases, id: \.self) { sort in
                 Button(action: {
-                    if viewModel.sortCriteria.by == sort {
-                        viewModel.sortCriteria.ascending.toggle()
+                    if libraryInfoViewModel.sortCriteria.by == sort {
+                        libraryInfoViewModel.sortCriteria.ascending.toggle()
                     } else {
-                        viewModel.sortCriteria.by = sort
-                        viewModel.sortCriteria.ascending = sort == .Title ? true : false
+                        libraryInfoViewModel.sortCriteria.by = sort
+                        libraryInfoViewModel.sortCriteria.ascending = sort == .Title ? true : false
                     }
                     resetToFirstPage()
                 }) {
                     HStack {
-                        if viewModel.sortCriteria.by == sort {
-                            if viewModel.sortCriteria.ascending {
+                        if libraryInfoViewModel.sortCriteria.by == sort {
+                            if libraryInfoViewModel.sortCriteria.ascending {
                                 Image(systemName: "arrow.down")
                             } else {
                                 Image(systemName: "arrow.up")
@@ -307,13 +308,13 @@ struct LibraryInfoBookListView: View {
                 
                 ForEach(LibraryInfoView.GroupKey.allCases) { key in
                     Button {
-                        if viewModel.sectionedBy != key {
-                            viewModel.sectionedBy = key
+                        if libraryInfoViewModel.sectionedBy != key {
+                            libraryInfoViewModel.sectionedBy = key
                         } else {
-                            viewModel.sectionedBy = nil
+                            libraryInfoViewModel.sectionedBy = nil
                         }
                     } label: {
-                        Text((viewModel.sectionedBy == key ? "✓ " : "  ") + key.description)
+                        Text((libraryInfoViewModel.sectionedBy == key ? "✓ " : "  ") + key.description)
                     }
                 }
             } else {
@@ -474,7 +475,7 @@ struct LibraryInfoBookListView: View {
     @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         if let authors = book.authors.filter({
-            viewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
+            libraryInfoViewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
         }) as [String]?, authors.isEmpty == false {
             Menu("More by Author ...") {
                 ForEach(authors, id: \.self) { author in
@@ -488,7 +489,7 @@ struct LibraryInfoBookListView: View {
         }
         
         if let tags = book.tags.filter({
-            viewModel.filterCriteriaCategory["Tags"]?.contains($0) != true
+            libraryInfoViewModel.filterCriteriaCategory["Tags"]?.contains($0) != true
         }) as [String]?, tags.isEmpty == false {
             Menu("More of Tags ...") {
                 ForEach(tags, id: \.self) { tag in
@@ -502,10 +503,10 @@ struct LibraryInfoBookListView: View {
         }
         
         if book.series.isEmpty == false,
-           viewModel.filterCriteriaCategory["Series"]?.contains(book.series) != true {
+           libraryInfoViewModel.filterCriteriaCategory["Series"]?.contains(book.series) != true {
             Button {
-                viewModel.sortCriteria.by = .SeriesIndex
-                viewModel.sortCriteria.ascending = true
+                libraryInfoViewModel.sortCriteria.by = .SeriesIndex
+                libraryInfoViewModel.sortCriteria.ascending = true
                 updateFilterCategory(key: "Series", value: book.series)
             } label: {
                 Text("More in Series: \(book.series)")
@@ -551,7 +552,7 @@ struct LibraryInfoBookListView: View {
                 if result.unifiedOffsets[libraryId] == nil {
                     return partialResult + 1
                 }
-                if result.libraryStatuses[libraryId]?.loading == true {
+                if viewModel.libraryStatuses[libraryId]?.loading == true {
                     return partialResult + 1
                 }
                 return partialResult
@@ -589,22 +590,22 @@ struct LibraryInfoBookListView: View {
     
     func searchStringChanged(searchString: String) {
         self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
-        viewModel.searchString = self.searchString
+        libraryInfoViewModel.searchString = self.searchString
         
         resetToFirstPage()
     }
     
     func updateFilterCategory(key: String, value: String) {
-        if viewModel.filterCriteriaCategory[key] == nil {
-            viewModel.filterCriteriaCategory[key] = .init()
+        if libraryInfoViewModel.filterCriteriaCategory[key] == nil {
+            libraryInfoViewModel.filterCriteriaCategory[key] = .init()
         }
-        viewModel.filterCriteriaCategory[key]?.insert(value)
+        libraryInfoViewModel.filterCriteriaCategory[key]?.insert(value)
         
         resetToFirstPage()
     }
     
     func resetToFirstPage() {
-        viewModel.startSearch()
+        viewModel.startSearch(key: libraryInfoViewModel.currentLibrarySearchResultKey)
     }
     
     @ViewBuilder
@@ -642,7 +643,7 @@ struct LibraryInfoBookListView: View {
                     Text("Required: \(libraryId)")
                     if let unifiedOffset = result.unifiedOffsets[libraryId] {
                         HStack {
-                            Text("Loading: \(result.libraryStatuses[libraryId]?.loading == true ? 1 : 0)")
+                            Text("Loading: \(viewModel.libraryStatuses[libraryId]?.loading == true ? 1 : 0)")
                             Text("offset: \(unifiedOffset.offset)")
                         }
                     } else {

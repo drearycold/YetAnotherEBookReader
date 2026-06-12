@@ -17,8 +17,8 @@ actor UnifiedSearchService {
     // In-memory active searches
     private var activeSearches: [SearchCriteriaMergedKey: ActiveSearch] = [:]
     
-    // Continuations to yield results
-    private var resultContinuations: [SearchCriteriaMergedKey: [UUID: AsyncStream<UnifiedSearchResult>.Continuation]] = [:]
+    // Continuations to yield updates
+    private var resultContinuations: [SearchCriteriaMergedKey: [UUID: AsyncStream<SearchUpdate>.Continuation]] = [:]
     
     // Active search tasks
     private var searchTasks: [SearchCriteriaMergedKey: Task<Void, Never>] = [:]
@@ -54,36 +54,38 @@ actor UnifiedSearchService {
     }
     
     nonisolated func publisher(for key: SearchCriteriaMergedKey) -> AnyPublisher<UnifiedSearchResult, Never> {
-        let subject = PassthroughSubject<UnifiedSearchResult, Never>()
-        let task = Task {
-            let stream = await self.search(key: key)
-            for await result in stream {
-                guard !Task.isCancelled else { break }
-                subject.send(result)
+        Deferred {
+            let subject = PassthroughSubject<UnifiedSearchResult, Never>()
+            let task = Task {
+                let stream = await self.search(key: key)
+                for await update in stream {
+                    guard !Task.isCancelled else { break }
+                    subject.send(update.result)
+                }
             }
+            
+            let initialResult = UnifiedSearchResult(
+                search: key.criteria.searchString,
+                sortBy: key.criteria.sortCriteria.by,
+                sortAsc: key.criteria.sortCriteria.ascending,
+                filters: key.criteria.filterCriteriaCategory,
+                libraryIds: key.libraryIds,
+                unifiedOffsets: [:],
+                totalNumber: 0,
+                limitNumber: 100,
+                books: []
+            )
+            
+            return subject
+                .prepend(initialResult)
+                .handleEvents(receiveCancel: {
+                    task.cancel()
+                })
         }
-        
-        let initialResult = UnifiedSearchResult(
-            search: key.criteria.searchString,
-            sortBy: key.criteria.sortCriteria.by,
-            sortAsc: key.criteria.sortCriteria.ascending,
-            filters: key.criteria.filterCriteriaCategory,
-            libraryIds: key.libraryIds,
-            unifiedOffsets: [:],
-            totalNumber: 0,
-            limitNumber: 100,
-            books: []
-        )
-        
-        return subject
-            .prepend(initialResult)
-            .handleEvents(receiveCancel: {
-                task.cancel()
-            })
-            .eraseToAnyPublisher()
+        .eraseToAnyPublisher()
     }
     
-    func search(key: SearchCriteriaMergedKey, force: Bool = false) -> AsyncStream<UnifiedSearchResult> {
+    func search(key: SearchCriteriaMergedKey, force: Bool = false) -> AsyncStream<SearchUpdate> {
         let id = UUID()
         return AsyncStream { continuation in
             let continuationWrapper = continuation
@@ -149,7 +151,7 @@ actor UnifiedSearchService {
     private func addContinuation(
         key: SearchCriteriaMergedKey,
         id: UUID,
-        continuation: AsyncStream<UnifiedSearchResult>.Continuation
+        continuation: AsyncStream<SearchUpdate>.Continuation
     ) {
         var list = resultContinuations[key] ?? [:]
         list[id] = continuation
@@ -170,15 +172,11 @@ actor UnifiedSearchService {
     
     private func emitUpdate(for key: SearchCriteriaMergedKey) {
         guard let activeSearch = activeSearches[key] else { return }
-        var result = activeSearch.currentResult
-        result.libraryStatuses = activeSearch.libraryStatuses
-        
-        // Update active search record with current statuses too
-        activeSearches[key]?.currentResult = result
+        let update = SearchUpdate(result: activeSearch.currentResult, statuses: activeSearch.libraryStatuses)
         
         guard let continuations = resultContinuations[key] else { return }
         for continuation in continuations.values {
-            continuation.yield(result)
+            continuation.yield(update)
         }
     }
     
