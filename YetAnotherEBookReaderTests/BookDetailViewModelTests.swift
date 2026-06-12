@@ -13,17 +13,26 @@ class BookDetailViewModelTests: XCTestCase {
         mockModelData = ModelData(mock: true)
         viewModel = BookDetailViewModel(modelData: mockModelData)
         
+        guard let library = mockModelData.calibreLibraries.first?.value else {
+            XCTFail("No mock library found in mockModelData")
+            return
+        }
+        
         mockBookRealm = CalibreBookRealm()
-        mockBookRealm.serverUUID = "mock-uuid"
-        mockBookRealm.libraryName = "Mock Library"
+        mockBookRealm.serverUUID = library.server.uuid.uuidString
+        mockBookRealm.libraryName = library.name
         mockBookRealm.idInLib = 123
         mockBookRealm.title = "Test Book"
+        mockBookRealm.updatePrimaryKey()
         
-        let library = CalibreLibrary(server: CalibreServer(uuid: UUID(), name: "MockServer", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "lib1", name: "Mock Library")
         mockCalibreBook = CalibreBook(id: 123, library: library)
         mockCalibreBook.title = "Test Book"
         
-        viewModel.setup(book: mockBookRealm, calibreBook: mockCalibreBook)
+        try! mockModelData.realm.write {
+            mockModelData.realm.add(mockBookRealm, update: .modified)
+        }
+        
+        viewModel.setup(bookId: mockBookRealm.primaryKey!)
     }
 
     override func tearDownWithError() throws {
@@ -97,7 +106,14 @@ class BookDetailViewModelTests: XCTestCase {
     }
 
     func testConvertBookRealm() throws {
-        let result = viewModel.convert(bookRealm: mockBookRealm)
+        let nonQueryableBook = CalibreBookRealm()
+        nonQueryableBook.serverUUID = "non-existent-uuid"
+        nonQueryableBook.libraryName = "Non Existent Library"
+        nonQueryableBook.idInLib = 999
+        nonQueryableBook.title = "Non Queryable Book"
+        nonQueryableBook.updatePrimaryKey()
+        
+        let result = viewModel.convert(bookRealm: nonQueryableBook)
         XCTAssertNil(result, "Should return nil if library is not queryable in mock model data")
     }
 

@@ -191,7 +191,7 @@ struct LibraryInfoBookListView: View {
         Group {
             if let bookRealm = modelData.getBookRealm(forPrimaryKey: book.inShelfId) {
                 NavigationLink (
-                    destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
+                    destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
                     tag: book.inShelfId,
                     selection: $modelData.selectedBookId
                 ) {

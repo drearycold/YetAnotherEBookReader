@@ -300,13 +300,11 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         if book.library.server.isLocal {
             //same as options
             onBookOptionsClicked(shelfView, index: index, bookId: bookId, bookTitle: bookTitle, frame: inShelfView)
-        } else if let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId),
-                  let bookAnnoRealm = book.readPos.realm {
+        } else if let _ = modelData.getBookRealm(forPrimaryKey: bookId) {
             
-            let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
+            let bookDetailView = BookDetailView(bookId: bookId, viewMode: .SHELF)
                 .environmentObject(modelData)
                 .environmentObject(modelData.downloadManager)
-                .environment(\.realmConfiguration, bookAnnoRealm.configuration)
             
             let detailView = UIHostingController(
                 rootView: bookDetailView

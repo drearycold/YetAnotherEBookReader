@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Combine
-import RealmSwift
 
 struct ServerDetailView: View {
     @EnvironmentObject var modelData: ModelData

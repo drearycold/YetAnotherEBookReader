@@ -47,9 +47,11 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 30. Bypassed the autoUpdate check in category fetching inside `ModelData.syncLibrary(request:)` to ensure calibre library categories are synced and populated on startup/probes even when autoUpdate ("Available when Offline") is disabled.
 - [x] 31. Decoupled `LibraryInfoCategoryListView` and `LibraryInfoView` completely from `RealmSwift` by introducing `CategoryCacheSummary` value types and querying summaries via `CategoryCacheRepository` reactively inside the `LibraryInfoView.ViewModel`.
 - [x] 32. Decoupled `LibraryInfoCategoryItemsView` completely from `RealmSwift` by implementing cache invalidation in the repository layer and exposing `forceRefreshCategory` in the `UnifiedCategoryViewModel`.
+- [x] 33. Decoupled `BookDetailView` completely from `RealmSwift` by shifting Realm database queries and reactive observations to `BookDetailViewModel`.
 
 ## Active Tasks
 - [x] Decouple category views completely from RealmSwift.
+- [x] Decouple BookDetailView completely from RealmSwift.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
