@@ -143,6 +143,7 @@ struct LibraryInfoView: View {
             if unifiedSearchViewModel.unifiedSearchResult != nil {
                 LibraryInfoBookListView()
                     .environmentObject(unifiedSearchViewModel)
+                    .environmentObject(viewModel)
             } else {
                 Text("Preparing Book List")
             }
