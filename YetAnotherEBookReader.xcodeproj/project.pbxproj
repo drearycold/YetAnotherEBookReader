@@ -579,9 +579,9 @@
 			isa = PBXGroup;
 			children = (
 				2A47581A27BE250600642AD1 /* AddModServerView.swift */,
+				2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */,
 				2A47581627B9EF8400642AD1 /* ServerDetailView.swift */,
 				2AE26432274B8D4B00DC5806 /* ServerOptionsDSReaderHelper.swift */,
-				2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */,
 			);
 			path = ServerView;
 			sourceTree = "<group>";
