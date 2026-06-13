@@ -508,6 +508,7 @@ class CalibreBookManager: ObservableObject {
     
     // MARK: - Remote Data & Sync
     
+    @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
         modelData?.librarySyncStatus[request.library.id]?.isUpd = true
         
