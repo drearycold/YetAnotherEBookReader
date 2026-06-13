@@ -56,9 +56,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     //for LibraryInfoView
-    @Published var defaultFormat = Format.PDF
-    var formatReaderMap = [Format: [ReaderType]]()
-    var formatList = [Format]()
+    var defaultFormat: Format {
+        get { sessionManager.defaultFormat }
+        set { sessionManager.defaultFormat = newValue }
+    }
+    var formatReaderMap: [Format: [ReaderType]] {
+        get { sessionManager.formatReaderMap }
+        set { sessionManager.formatReaderMap = newValue }
+    }
+    var formatList: [Format] {
+        get { sessionManager.formatList }
+        set { sessionManager.formatList = newValue }
+    }
     
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
     
@@ -94,7 +103,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     var calibreCancellables = Set<AnyCancellable>()
     
     @Published var downloadManager = BookDownloadManager()
-    @Published var sessionManager = ReadingSessionManager()
+    lazy var sessionManager = ReadingSessionManager(modelData: self)
 
     var readingBookInShelfId: String? {
         get { bookManager.readingBookInShelfId }
@@ -200,21 +209,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
         
-        switch UIDevice.current.userInterfaceIdiom {
-            case .phone:
-                defaultFormat = Format.EPUB
-            case .pad:
-                defaultFormat = Format.PDF
-            default:
-                defaultFormat = Format.EPUB
-        }
-        
-        formatReaderMap[Format.EPUB] = [ReaderType.YabrEPUB, ReaderType.ReadiumEPUB]
-        formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
-        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
-
         downloadManager.modelData = self
-        sessionManager.setup(modelData: self)
         
         fontsManager.reloadCustomFonts()
         
@@ -240,6 +235,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             .store(in: &calibreCancellables)
         
         bookManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
+        
+        sessionManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &calibreCancellables)
@@ -656,37 +656,24 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func getPreferredFormat() -> Format {
-        return Format(rawValue: UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT) ?? "" ) ?? defaultFormat
+        sessionManager.getPreferredFormat()
     }
     
     func getPreferredFormat(for book: CalibreBook) -> Format? {
-        let selectedFormats = book.formats.filter { $0.value.selected == true }
-        if selectedFormats.count == 1,
-           let firstFormatRaw = selectedFormats.first?.key,
-           let firstFormat = Format(rawValue: firstFormatRaw) {
-            return firstFormat
-        }
-        if book.formats[getPreferredFormat().rawValue] != nil {
-            return getPreferredFormat()
-        } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
-            return format
-        }
-        return nil
+        sessionManager.getPreferredFormat(for: book)
     }
     
     func updatePreferredFormat(for format: Format) {
-        UserDefaults.standard.setValue(format.rawValue, forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT)
+        sessionManager.updatePreferredFormat(for: format)
     }
     
     // user preferred -> default -> unsupported
     func getPreferredReader(for format: Format) -> ReaderType {
-        return ReaderType(
-            rawValue: UserDefaults.standard.string(forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)") ?? ""
-        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED
+        sessionManager.getPreferredReader(for: format)
     }
     
     func updatePreferredReader(for format: Format, with reader: ReaderType) {
-        UserDefaults.standard.setValue(reader.rawValue, forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)")
+        sessionManager.updatePreferredReader(for: format, with: reader)
     }
     
             func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
@@ -789,34 +776,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
-        guard let readingBook = self.readingBook,
-              let updatedReadingPosition = readingBook.readPos.getDevices().first,
-              let readerInfo = self.readerInfo
-        else {
-            return
-        }
-
-        defaultLog.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
-        defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
-        defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
-
-        refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
-
-        if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
-           let library = calibreLibraries[readingBook.library.id],
-           let goodreadsId = readingBook.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
-           dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
-            let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-            connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-
-            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
-                calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
-                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                ])
-            }
-        }
-
+        sessionManager.updateCurrentPosition(alertDelegate: alertDelegate)
     }
 
 
@@ -829,28 +789,15 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
-        if book.formats.contains(where: { $0.key == defaultFormat.rawValue }) {
-            return (defaultFormat, formatReaderMap[defaultFormat]!.first!)
-        } else {
-            return book.formats.keys.compactMap {
-                Format(rawValue: $0)
-            }
-            .reversed()
-            .reduce((Format.UNKNOWN, ReaderType.UNSUPPORTED)) {
-                ($1, formatReaderMap[$1]!.first!)
-            }
-        }
+        sessionManager.defaultReaderForDefaultFormat(book: book)
     }
     
     func formatOfReader(readerName: String) -> Format? {
-        let formats = formatReaderMap.filter {
-            $0.value.contains(where: { reader in reader.rawValue == readerName } )
-        }
-        return formats.first?.key
+        sessionManager.formatOfReader(readerName: readerName)
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        bookManager.prepareBookReading(book: book)
+        sessionManager.prepareBookReading(book: book)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
@@ -1019,7 +966,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
-        return BookDeviceReadingPositionHistory.getReadingStatistics(list: list, limitDays: limitDays)
+        sessionManager.getReadingStatistics(list: list, limitDays: limitDays)
     }
     
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {

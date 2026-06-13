@@ -4,6 +4,7 @@
 The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), and P0-1d (`CalibreBookManager`) to modularize the application state and decouple network/management operations. All 41 unit and UI tests are passing successfully.
 
 ## Recent Changes & Decisions
+- **ReadingPositionService Extraction (Milestone P0-1e):** Successfully migrated format preferences (`defaultFormat`, `formatReaderMap`, `formatList`), reader preference logic, manual progress syncing (`updateCurrentPosition`), and reading session helper methods from `ModelData` into `ReadingSessionManager`. Replaced `@Published var sessionManager` with a `lazy var` and established thread-safe change notification forwarding via Combine.
 - **ModelData Main Thread Notification Forwarding:** Integrated `.receive(on: DispatchQueue.main)` on manager `objectWillChange` subscriptions in `ModelData.init` to ensure all SwiftUI state-propagation updates originating from nested managers are delivered on the main thread, eliminating runtime background thread update warnings.
 - **Realm Thread-Safety Resolution (CalibreBookManager):** Resolved the fatal Realm thread verification crash by replacing direct main-thread `databaseService.realm` references with a thread-safe `getRealm()` helper, ensuring background thread queries dynamically initialize thread-safe Realm instances. Annotated `getBooksMetadata(request:)` with `@MainActor` to ensure UI state updates are published on the main thread.
 - **CalibreBookManager Extraction (Milestone P0-1d):** Extracted book-related properties (`booksInShelf`, `booksAnnotation`, `selectedBookId`, `bookModelSection`, etc.) and their management/CRUD methods out of `ModelData` into a dedicated `CalibreBookManager`. Forwarded `bookManager.objectWillChange` to `ModelData` and maintained computed property delegates for legacy compatibility.
@@ -70,6 +71,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] Refactor ServerView components to MVVM.
 - [x] Fix libraryRowBuilder sync status UI representation.
 - [x] Refactor ReaderOptionsView to MVVM and register project files.
+- [x] Extract ReadingPositionService (Milestone P0-1e) into ReadingSessionManager.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

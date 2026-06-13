@@ -9,8 +9,14 @@ import Foundation
 import Combine
 import SwiftUI
 import RealmSwift
+import OSLog
 
 class ReadingSessionManager: ObservableObject {
+    @Published var defaultFormat = Format.PDF
+    var formatReaderMap = [Format: [ReaderType]]()
+    var formatList = [Format]()
+    
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
     @Published var presentingEBookReaderFromShelf = false
     
     @Published var readingBookInShelfId: String? = nil {
@@ -46,6 +52,19 @@ class ReadingSessionManager: ObservableObject {
     
     init(modelData: ModelData? = nil) {
         self.modelData = modelData
+        
+        switch UIDevice.current.userInterfaceIdiom {
+            case .phone:
+                defaultFormat = Format.EPUB
+            case .pad:
+                defaultFormat = Format.PDF
+            default:
+                defaultFormat = Format.EPUB
+        }
+        
+        formatReaderMap[Format.EPUB] = [ReaderType.YabrEPUB, ReaderType.ReadiumEPUB]
+        formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
+        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
     }
     
     func setup(modelData: ModelData) {
@@ -183,5 +202,94 @@ class ReadingSessionManager: ObservableObject {
                 ])
             }
         }
+    }
+    
+    func updateCurrentPosition(alertDelegate: AlertDelegate?) {
+        guard let readingBook = self.readingBook,
+              let updatedReadingPosition = readingBook.readPos.getDevices().first,
+              let readerInfo = self.readerInfo
+        else {
+            return
+        }
+
+        logger.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
+        logger.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
+        logger.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
+
+        modelData?.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
+
+        if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
+           let library = modelData?.calibreLibraries[readingBook.library.id],
+           let goodreadsId = readingBook.identifiers["goodreads"],
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData?.shouldAutoUpdateGoodreads(library: library),
+           dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
+            let connector = DSReaderHelperConnector(calibreServerService: modelData!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+            connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+
+            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
+                modelData?.calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
+                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                ])
+            }
+        }
+    }
+
+    func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
+        if book.formats.contains(where: { $0.key == defaultFormat.rawValue }) {
+            return (defaultFormat, formatReaderMap[defaultFormat]!.first!)
+        } else {
+            return book.formats.keys.compactMap {
+                Format(rawValue: $0)
+            }
+            .reversed()
+            .reduce((Format.UNKNOWN, ReaderType.UNSUPPORTED)) {
+                ($1, formatReaderMap[$1]!.first!)
+            }
+        }
+    }
+
+    func formatOfReader(readerName: String) -> Format? {
+        let formats = formatReaderMap.filter {
+            $0.value.contains(where: { reader in reader.rawValue == readerName } )
+        }
+        return formats.first?.key
+    }
+
+    func getPreferredFormat() -> Format {
+        return Format(rawValue: UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT) ?? "" ) ?? defaultFormat
+    }
+
+    func getPreferredFormat(for book: CalibreBook) -> Format? {
+        let selectedFormats = book.formats.filter { $0.value.selected == true }
+        if selectedFormats.count == 1,
+           let firstFormatRaw = selectedFormats.first?.key,
+           let firstFormat = Format(rawValue: firstFormatRaw) {
+            return firstFormat
+        }
+        if book.formats[getPreferredFormat().rawValue] != nil {
+            return getPreferredFormat()
+        } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
+            return format
+        }
+        return nil
+    }
+
+    func updatePreferredFormat(for format: Format) {
+        UserDefaults.standard.setValue(format.rawValue, forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT)
+    }
+
+    // user preferred -> default -> unsupported
+    func getPreferredReader(for format: Format) -> ReaderType {
+        return ReaderType(
+            rawValue: UserDefaults.standard.string(forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)") ?? ""
+        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED
+    }
+
+    func updatePreferredReader(for format: Format, with reader: ReaderType) {
+        UserDefaults.standard.setValue(reader.rawValue, forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)")
+    }
+
+    func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
+        return BookDeviceReadingPositionHistory.getReadingStatistics(list: list, limitDays: limitDays)
     }
 }
