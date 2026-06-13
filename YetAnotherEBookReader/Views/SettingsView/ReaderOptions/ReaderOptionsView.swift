@@ -9,39 +9,32 @@ import SwiftUI
 import Combine
 
 struct ReaderOptionsView: View {
-    @EnvironmentObject var modelData: ModelData
-    @EnvironmentObject var fontsManager: FontsManager
+    @StateObject private var viewModel: ReaderOptionsViewModel
+    
+    init(modelData: ModelData? = nil, fontsManager: FontsManager? = nil) {
+        let resolvedModel = modelData ?? ModelData.shared ?? ModelData()
+        let resolvedFonts = fontsManager ?? resolvedModel.fontsManager
+        self._viewModel = StateObject(wrappedValue: ReaderOptionsViewModel(modelData: resolvedModel, fontsManager: resolvedFonts))
+    }
 
-    @State private var optionsHelpFormat = false
-    @State private var optionsHelpReader = false
-    @State private var optionsHelpFont = false
-    
-    @State private var fontsFolderPresenting = false
-    @State private var fontsFolderPicked = [URL]()
-    @State private var fontsDetailPresenting = false
-    @State private var fontsCount = 0
-    @State private var fontsImportNotice = ""
-    
-    @State private var dismissAllCancellable: AnyCancellable?
-    
     var body: some View {
         List {
             Section(header: HStack {
                 Text("Preferred Book Format")
                 Spacer()
                 Button(action:{
-                    optionsHelpFormat = true
+                    viewModel.optionsHelpFormat = true
                 }) {
                     Image(systemName: "questionmark.circle")
                 }
             }) {
-                Picker("PreferredFormat", selection: preferredReaderTypeBinding()) {
+                Picker("PreferredFormat", selection: viewModel.preferredFormatBinding) {
                     ForEach(Format.allCases.dropFirst(), id: \.self) { format in
                         Text(format.rawValue).tag(format)
                     }
                 }
                 .pickerStyle(SegmentedPickerStyle())
-                .popover(isPresented: $optionsHelpFormat) {
+                .popover(isPresented: $viewModel.optionsHelpFormat) {
                     ReaderOptionsFormatHelpView()
                         .frame(maxWidth: 600, minHeight: 420)
                 }
@@ -49,20 +42,20 @@ struct ReaderOptionsView: View {
             
             Section {
                 VStack {
-                    ForEach(Format.allCases.filter { (modelData.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
+                    ForEach(Format.allCases.filter { (viewModel.modelData.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
                         HStack {
                             Text(format.rawValue)
                                 .frame(minWidth: 64, alignment: .leading)
                                 .padding([.leading], 8)
-                            Picker("Prefered", selection: preferredReaderTypeBinding(for: format)) {
-                                ForEach(modelData.formatReaderMap[format]!, id: \.self) { reader in
+                            Picker("Prefered", selection: viewModel.preferredReaderBinding(for: format)) {
+                                ForEach(viewModel.modelData.formatReaderMap[format]!, id: \.self) { reader in
                                     Text(reader.rawValue).tag(reader)
                                 }
                             }.pickerStyle(SegmentedPickerStyle())
                         }
                     }
                 }
-                .popover(isPresented: $optionsHelpReader) {
+                .popover(isPresented: $viewModel.optionsHelpReader) {
                     ReaderOptionsHelpView()
                 }
             } header: {
@@ -70,7 +63,7 @@ struct ReaderOptionsView: View {
                     Text("Prefered Reader")
                     Spacer()
                     Button(action: {
-                        optionsHelpReader = true
+                        viewModel.optionsHelpReader = true
                     }) {
                         Image(systemName: "questionmark.circle")
                     }
@@ -82,40 +75,33 @@ struct ReaderOptionsView: View {
                 Text("Custom Fonts for \(ReaderType.YabrEPUB.rawValue)")
                 Spacer()
                 Button(action:{
-                    optionsHelpFont = true
+                    viewModel.optionsHelpFont = true
                 }) {
                     Image(systemName: "questionmark.circle")
                 }
             }, footer: HStack {
-                Text(fontsImportNotice).font(.caption)
+                Text(viewModel.fontsImportNotice).font(.caption)
             }) {
                 HStack {
                     Text("Loaded")
-                    Text("\(fontsManager.userFontInfos.count)")
+                    Text("\(viewModel.fontsManager.userFontInfos.count)")
                     Text("font(s)")
                     Spacer()
                     
                     Button(action:{
-                        fontsCount = fontsManager.userFontInfos.count
-                        fontsDetailPresenting = true
+                        viewModel.startViewDetails()
                     }) {
                         Text("View")
                     }
-                    .disabled(fontsManager.userFontInfos.isEmpty)
+                    .disabled(viewModel.fontsManager.userFontInfos.isEmpty)
                     .buttonStyle(.borderless)
-                    .sheet(isPresented: $fontsDetailPresenting, onDismiss: {
-                        fontsDetailPresenting = false
-                        let newCount = fontsManager.userFontInfos.count
-                        let deletedCount = fontsCount - newCount
-                        if deletedCount > 0 {
-                            fontsImportNotice = "Deleted \(deletedCount) font(s)"
-                        }
-                        fontsCount = newCount
+                    .sheet(isPresented: $viewModel.fontsDetailPresenting, onDismiss: {
+                        viewModel.handleDetailsDismiss()
                     }) {
                         NavigationView {
                             List {
                                 ForEach(
-                                    fontsManager.userFontInfos.sorted {
+                                    viewModel.fontsManager.userFontInfos.sorted {
                                             ( $0.value.displayName ?? $0.key) < ( $1.value.displayName ?? $1.key)
                                         } , id: \.key ) { (fontId, fontInfo) in
                                     NavigationLink(destination: FontPreviewBuilder(fontId: fontId, fontInfo: fontInfo)) {
@@ -128,71 +114,28 @@ struct ReaderOptionsView: View {
                                             }
                                         }
                                     }
-                                }.onDelete(perform: removeFontRows)
+                                }.onDelete(perform: viewModel.removeFontRows)
                             }.navigationTitle("Favorite Fonts")
                         }
                     }
                 }
-                .popover(isPresented: $optionsHelpFont, attachmentAnchor: .point(.bottom), content: {
+                .popover(isPresented: $viewModel.optionsHelpFont, attachmentAnchor: .point(.bottom), content: {
                     ReaderOptionsFontHelpView()
                         .frame(maxWidth: 600, minHeight: 240)
                 })
                 
                 Button(action:{
-                    fontsCount = fontsManager.userFontInfos.count
-                    fontsFolderPresenting = true
+                    viewModel.startImport()
                 }) {
                     Text("Import Fonts")
                 }
-                .sheet(isPresented: $fontsFolderPresenting, onDismiss: {
-                    fontsFolderPresenting = false
+                .sheet(isPresented: $viewModel.fontsFolderPresenting, onDismiss: {
+                    viewModel.fontsFolderPresenting = false
                 }) {
-                    FontImportPicker(fontURLs: $fontsFolderPicked)
-                }
-                .onChange(of: fontsFolderPicked) { tmpURLs in
-                    let urls = tmpURLs.filter { $0 != FontImportPicker.FakeURL }
-                    urls.forEach {
-                        print("documentPicker \($0.absoluteString)")
-                    }
-                    fontsImportNotice = ""
-                    guard let imported = fontsManager.importCustomFonts(urls: urls) else {
-                        fontsImportNotice = "Error occured during import"
-                        return
-                    }
-                    fontsManager.reloadCustomFonts()
-                    let newCount = fontsManager.userFontInfos.count
-                    let deletedCount = fontsCount + imported.count - newCount
-                    if imported.count > 0 {
-                        fontsImportNotice = "Successfully imported \(imported.count) font(s)"
-                    }
-                    if deletedCount > 0 {
-                        if fontsImportNotice.count > 0 {
-                            fontsImportNotice = "\(fontsImportNotice), and deleted \(deletedCount) font(s)"
-                        } else {
-                            fontsImportNotice = "Deleted \(deletedCount) font(s)"
-                        }
-                    }
-                    if urls.count - imported.count > 0 {
-                        if fontsImportNotice.count > 0 {
-                            fontsImportNotice = "\(fontsImportNotice), and failed \(urls.count - imported.count) font(s)"
-                        } else {
-                            fontsImportNotice = "Failed \(urls.count - imported.count) font(s)"
-                        }
-                    }
-                    fontsCount = newCount
+                    FontImportPicker(fontURLs: $viewModel.fontsFolderPicked)
                 }
             }
             
-        }
-        .onAppear() {
-            dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
-                fontsFolderPresenting = false
-                fontsDetailPresenting = false
-                optionsHelpFormat = false
-                optionsHelpReader = false
-                optionsHelpFont = false
-            }
         }
         .navigationTitle("Reader Options")
         .navigationBarTitleDisplayMode(.inline)
@@ -250,42 +193,13 @@ struct ReaderOptionsView: View {
             }.padding()
         }
     }
-    
-    private func preferredReaderTypeBinding(for format: Format) -> Binding<ReaderType> {
-        return .init(
-            get: {
-                modelData.getPreferredReader(for: format)
-            },
-            set: {
-                modelData.updatePreferredReader(for: format, with: $0)
-            })
-    }
-    
-    private func preferredReaderTypeBinding() -> Binding<Format>{
-        return .init(
-            get: {
-                return modelData.getPreferredFormat()
-            },
-            set: {
-                modelData.updatePreferredFormat(for: $0)
-            }
-        )
-    }
-    
-    
-    func removeFontRows(at offsets: IndexSet) {
-        fontsManager.removeCustomFonts(at: offsets)
-        fontsManager.reloadCustomFonts()
-    }
 }
 
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {
         let modelData = ModelData()
         NavigationView {
-            ReaderOptionsView()
-                .environmentObject(modelData)
-                .environmentObject(modelData.fontsManager)
+            ReaderOptionsView(modelData: modelData, fontsManager: modelData.fontsManager)
         }.navigationViewStyle(StackNavigationViewStyle())
     }
 }

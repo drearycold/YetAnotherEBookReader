@@ -51,12 +51,14 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 34. Fixed EnvironmentObject propagation crash in `LibraryInfoCategoryItemsView` and `LibraryInfoView` by explicitly injecting the `libraryInfoViewModel` environment object to `LibraryInfoBookListView`.
 - [x] 35. Refactored ServerView components (`AddModServerView`, `ServerDetailView`, `ServerOptionsDSReaderHelper`, `LibraryDetailView`) to MVVM using two view models (`ServerViewModel` and `LibraryViewModel`), completely decoupling `LibraryDetailView` from Realm.
 - [x] 36. Fixed `libraryRowBuilder` sync status UI in `ServerDetailView.swift` to display mutually exclusive status text instead of overlapping states.
+- [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
 
 ## Active Tasks
 - [x] Decouple category views completely from RealmSwift.
 - [x] Decouple BookDetailView completely from RealmSwift.
 - [x] Refactor ServerView components to MVVM.
 - [x] Fix libraryRowBuilder sync status UI representation.
+- [x] Refactor ReaderOptionsView to MVVM and register project files.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
