@@ -65,10 +65,17 @@ class CalibreBookManager: ObservableObject {
         self.databaseService = databaseService
     }
     
+    private func getRealm() -> Realm? {
+        if let conf = databaseService.realmConf {
+            return try? Realm(configuration: conf)
+        }
+        return databaseService.realm
+    }
+    
     // MARK: - Initialization & Realm Sync
     
     func populateBookShelf() {
-        guard let realm = databaseService.realm else { return }
+        guard let realm = getRealm() else { return }
         let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter(
             NSPredicate(format: "inShelf = true")
         )
@@ -130,15 +137,15 @@ class CalibreBookManager: ObservableObject {
     }
     
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        guard let realm = databaseService.realm else { return nil }
+        guard let realm = getRealm() else { return nil }
         return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
     }
     
     // MARK: - Realm CRUD
     
     func updateBook(book: CalibreBook) {
-        guard let realm = databaseService.realm else { return }
-        updateBookRealm(book: book, realm: (try? Realm(configuration: databaseService.realmConf)) ?? realm)
+        guard let realm = getRealm() else { return }
+        updateBookRealm(book: book, realm: realm)
         
         if readingBook?.inShelfId == book.inShelfId {
             readingBook = book
@@ -164,7 +171,7 @@ class CalibreBookManager: ObservableObject {
     }
     
     func removeFromRealm(for primaryKey: String) {
-        guard let realm = databaseService.realm,
+        guard let realm = getRealm(),
               let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) else { return }
         
         try? realm.write {
@@ -221,8 +228,8 @@ class CalibreBookManager: ObservableObject {
         guard var book = booksInShelf[inShelfId] else { return }
         book.inShelf = false
 
-        guard let realm = databaseService.realm else { return }
-        updateBookRealm(book: book, realm: (try? Realm(configuration: databaseService.realmConf)) ?? realm)
+        guard let realm = getRealm() else { return }
+        updateBookRealm(book: book, realm: realm)
         
         booksInShelf.removeValue(forKey: inShelfId)
         
@@ -433,7 +440,7 @@ class CalibreBookManager: ObservableObject {
             library: library
         )
         
-        guard let realm = databaseService.realm else { return nil }
+        guard let realm = getRealm() else { return nil }
         if let bookRealm = queryBookRealm(book: book, realm: realm) {
             book = convert(library: library, bookRealm: bookRealm)
         }
