@@ -170,29 +170,35 @@ struct ServerDetailView: View {
             
             Spacer()
             VStack(alignment: .trailing) {
-                if let cnt = modelData.librarySyncStatus[library.id]?.cnt {
-                    Text("\(cnt) books")
-                } else if let msg = modelData.librarySyncStatus[library.id]?.msg {
-                    Text("processing\n\(msg)")
-                } else if modelData.librarySyncStatus[library.id]?.isSync == true {
-                    Text("processing ...")
-                }
-                if modelData.librarySyncStatus[library.id]?.isError == true {
-                    Text(modelData.librarySyncStatus[library.id]?.msg ?? "Status Unknown")
-                } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt,
-                          let upd = modelData.librarySyncStatus[library.id]?.upd {
-                    if upd.count > 0, cnt > upd.count {
-                        if modelData.librarySyncStatus[library.id]?.isUpd == true {
-                            Text("Pulling book info, \(upd.count) to go")
+                if let status = modelData.librarySyncStatus[library.id] {
+                    if status.isSync {
+                        if let msg = status.msg {
+                            Text("processing\n\(msg)")
                         } else {
-                            Text("\(upd.count) entries not up to date")
+                            Text("processing ...")
                         }
-                    } else if let del = modelData.librarySyncStatus[library.id]?.del, del.count > 0 {
-                        Text("\(del.count) entries deleted from server")
-                            .foregroundColor(.red)
+                    } else if status.isError {
+                        Text(status.msg ?? "Status Unknown")
+                    } else {
+                        // Success state or finished syncing
+                        if let cnt = status.cnt {
+                            Text("\(cnt) books")
+                        } else if let msg = status.msg {
+                            Text(msg)
+                        }
+                        
+                        if status.isUpd && status.upd.count > 0 {
+                            Text("Pulling book info, \(status.upd.count) to go")
+                        } else if status.upd.count > 0 {
+                            Text("\(status.upd.count) entries not up to date")
+                        }
+                        
+                        if status.del.count > 0 {
+                            Text("\(status.del.count) entries deleted from server")
+                                .foregroundColor(.red)
+                        }
                     }
-                }
-                else if modelData.librarySyncStatus[library.id]?.isSync == false {
+                } else {
                     Text("Insufficient Info")
                 }
             }.font(.caption2)
