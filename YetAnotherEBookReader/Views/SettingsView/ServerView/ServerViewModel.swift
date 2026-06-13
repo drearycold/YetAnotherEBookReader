@@ -76,7 +76,7 @@ class ServerViewModel: ObservableObject {
     
     func setupBindings() {
         // Observe calibreLibraries to keep libraryList updated
-        modelData.$calibreLibraries
+        modelData.libraryManager.$calibreLibraries
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
