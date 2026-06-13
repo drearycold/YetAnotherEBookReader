@@ -1,9 +1,10 @@
 # Active Context
 
 ## Current Focus
-The primary focus is the Modernization of the EBook Reader Architecture. We are currently executing milestone P0-1a (extracting server-specific state and logic from `ModelData` into `CalibreServerManager`) to modularize the application state and decouple network/management operations.
+The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`) and P0-1b (`CalibreLibraryManager`) to modularize the application state and decouple network/management operations. All 41 unit and UI tests are passing successfully.
 
 ## Recent Changes & Decisions
+- **CalibreLibraryManager Extraction (Milestone P0-1b):** Extracted library-specific state (`calibreLibraries`, `calibreLibraryInfoStaging`, `librarySyncStatus`, `localLibrary`) and their management methods out of `ModelData` into a dedicated `CalibreLibraryManager`. Provided backward-compatible delegate properties and methods, and updated ViewModels (`LibraryViewModel`, `ServerViewModel`) to subscribe directly to `CalibreLibraryManager` properties.
 - **CalibreServerManager Extraction (Milestone P0-1a):** Extracted server-specific state (`calibreServers`, `calibreServerInfoStaging`, `documentServer`) and their management methods out of `ModelData` into a dedicated `CalibreServerManager`. Resolved a lazy loading dependency cycle by dynamically resolving `calibreServerService` via `modelData`.
 - **ModelData Forwarding Compatibility:** Re-added backward-compatible forwarding properties and methods to `ModelData` to ensure legacy Views, ViewModels, and Tests still compile without large diffs. All 41 tests are verified green.
 - **Cleanup of Duplicates:** Removed duplicate physical folders (`Managers 2`, `Managers 3`, `Managers 4`) from the workspace.
@@ -58,6 +59,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We are 
 
 ## Active Tasks
 - [x] Extract `CalibreServerManager` out of `ModelData` (Milestone P0-1a).
+- [x] Extract `CalibreLibraryManager` out of `ModelData` (Milestone P0-1b).
 - [x] Decouple category views completely from RealmSwift.
 - [x] Decouple BookDetailView completely from RealmSwift.
 - [x] Refactor ServerView components to MVVM.
