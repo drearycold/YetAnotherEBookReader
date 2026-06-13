@@ -1,9 +1,12 @@
 # Active Context
 
 ## Current Focus
-The primary focus is the Modernization of the Unified Search Subsystem (`CalibreUnifiedSearchObject`). We are transitioning from Realm-based persistent objects to in-memory Value Types and introducing a clean Repository pattern for search cache management. We have completed Phase 1: Value Types & Repository Layer, Phase 2: In-Memory K-Way Merge, Phase 3: Service Layer Migration, and Phase 4: UI Consumer Migration.
+The primary focus is the Modernization of the EBook Reader Architecture. We are currently executing milestone P0-1a (extracting server-specific state and logic from `ModelData` into `CalibreServerManager`) to modularize the application state and decouple network/management operations.
 
 ## Recent Changes & Decisions
+- **CalibreServerManager Extraction (Milestone P0-1a):** Extracted server-specific state (`calibreServers`, `calibreServerInfoStaging`, `documentServer`) and their management methods out of `ModelData` into a dedicated `CalibreServerManager`. Resolved a lazy loading dependency cycle by dynamically resolving `calibreServerService` via `modelData`.
+- **ModelData Forwarding Compatibility:** Re-added backward-compatible forwarding properties and methods to `ModelData` to ensure legacy Views, ViewModels, and Tests still compile without large diffs. All 41 tests are verified green.
+- **Cleanup of Duplicates:** Removed duplicate physical folders (`Managers 2`, `Managers 3`, `Managers 4`) from the workspace.
 - **Unified Search Modernization (Phase 1):** Introduced immutable domain value types (`UnifiedSearchResult`, `MergeOffset`, `LibrarySearchStatus`, `SearchError`) and decoupled the database via `SearchCacheRepository` and its concrete implementation `RealmSearchCacheStore`.
 - **Unified Search Modernization (Phase 2):** Implemented in-memory K-way merging using Apple's `swift-collections` `Heap`.
 - **Unified Search Modernization (Phase 3):** Introduced `UnifiedSearchManager` and `ActiveSearch` to orchestrate searches and merging in memory, and refactored `CalibreBrowser.swift` to delegate merging to `UnifiedSearchManager`.
@@ -54,6 +57,7 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
 
 ## Active Tasks
+- [x] Extract `CalibreServerManager` out of `ModelData` (Milestone P0-1a).
 - [x] Decouple category views completely from RealmSwift.
 - [x] Decouple BookDetailView completely from RealmSwift.
 - [x] Refactor ServerView components to MVVM.
