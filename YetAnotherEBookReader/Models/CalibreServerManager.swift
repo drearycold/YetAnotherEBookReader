@@ -9,8 +9,11 @@ import Foundation
 import Combine
 import RealmSwift
 import SwiftUI
+import OSLog
 
 class CalibreServerManager: ObservableObject {
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreServerManager")
+    
     weak var modelData: ModelData?
     let databaseService: DatabaseService
     
@@ -29,6 +32,26 @@ class CalibreServerManager: ObservableObject {
     
     // MARK: - Migrated Methods
     
+    private func configureCredentials(for urlString: String, server: CalibreServer) {
+        guard let url = URL(string: urlString), let host = url.host, let port = url.port else { return }
+        var authMethod = NSURLAuthenticationMethodDefault
+        if url.scheme == "http" {
+            authMethod = NSURLAuthenticationMethodHTTPDigest
+        }
+        if url.scheme == "https" {
+            authMethod = NSURLAuthenticationMethodHTTPBasic
+        }
+        let protectionSpace = URLProtectionSpace(host: host,
+                                                 port: port,
+                                                 protocol: url.scheme,
+                                                 realm: "calibre",
+                                                 authenticationMethod: authMethod)
+        let userCredential = URLCredential(user: server.username,
+                                           password: server.password,
+                                           persistence: .permanent)
+        URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
+    }
+
     func populateServers() {
         guard let realm = databaseService.realm else { return }
         let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
@@ -56,42 +79,8 @@ class CalibreServerManager: ObservableObject {
             calibreServers[calibreServer.id] = calibreServer
             
             if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
-                if let url = URL(string: calibreServer.baseUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
-                if let url = URL(string: calibreServer.publicUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
+                configureCredentials(for: calibreServer.baseUrl, server: calibreServer)
+                configureCredentials(for: calibreServer.publicUrl, server: calibreServer)
             }
         }
     }
@@ -104,7 +93,7 @@ class CalibreServerManager: ObservableObject {
                 }
                 modelData?.calibreLibraries[$0.id] = $0
             } catch {
-                
+                logger.error("Failed to update library realm: \(error.localizedDescription)")
             }
         }
         
@@ -112,7 +101,7 @@ class CalibreServerManager: ObservableObject {
             try updateServerRealm(server: server)
             calibreServers[server.id] = server
         } catch {
-            
+            logger.error("Failed to update server realm: \(error.localizedDescription)")
         }
     }
     
