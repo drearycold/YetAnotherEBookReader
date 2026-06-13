@@ -230,14 +230,17 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }.store(in: &calibreCancellables)
         
         serverManager.objectWillChange
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &calibreCancellables)
         
         libraryManager.objectWillChange
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &calibreCancellables)
         
         bookManager.objectWillChange
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &calibreCancellables)
         
