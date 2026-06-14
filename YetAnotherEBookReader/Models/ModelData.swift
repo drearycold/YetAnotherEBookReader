@@ -973,4 +973,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         bookManager.getBookRealm(forPrimaryKey: forPrimaryKey)
     }
     
+    func bookExists(forPrimaryKey: String) -> Bool {
+        bookManager.bookExists(forPrimaryKey: forPrimaryKey)
+    }
+}
+
+extension ModelData: LibraryResolver {
+    func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
+        return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+    }
 }

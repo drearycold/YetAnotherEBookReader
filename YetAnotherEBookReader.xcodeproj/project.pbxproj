@@ -216,6 +216,8 @@
 		E71F34EB2FDD1DD2007AB0B1 /* CalibreLibraryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */; };
 		E71F34ED2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
 		E71F34EE2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
+		E71F34F02FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
+		E71F34F12FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E730405C28EBDAB50013BA01 /* BookAnnotation.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405B28EBDAB50013BA01 /* BookAnnotation.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
@@ -429,6 +431,7 @@
 		E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerManager.swift; sourceTree = "<group>"; };
 		E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryManager.swift; sourceTree = "<group>"; };
 		E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBookManager.swift; sourceTree = "<group>"; };
+		E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRepository.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E730405B28EBDAB50013BA01 /* BookAnnotation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookAnnotation.swift; sourceTree = "<group>"; };
 		E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBrowser.swift; sourceTree = "<group>"; };
@@ -851,6 +854,7 @@
 			isa = PBXGroup;
 			children = (
 				E71F349D2FD8FDD0007AB0B1 /* RealmSearchCacheStore.swift */,
+				E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -1206,6 +1210,7 @@
 				2A47581927BA8C0200642AD1 /* LibraryDetailView.swift in Sources */,
 				E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */,
 				2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */,
+				E71F34F02FDE284F007AB0B1 /* BookRepository.swift in Sources */,
 				2A73B8F926DC8890004B001D /* BookPreference.swift in Sources */,
 				2ABB9133261DE894004AA7C0 /* SectionShelfUI.swift in Sources */,
 				2A21BCE527017F9400825BBB /* Providers.swift in Sources */,
@@ -1361,6 +1366,7 @@
 				2ADCD7F026F4B96200FBAE11 /* CalibreData.swift in Sources */,
 				2ADCD7F226F4B96200FBAE11 /* YabrPDFOptionView.swift in Sources */,
 				2ADCD7F426F4B96200FBAE11 /* MainView.swift in Sources */,
+				E71F34F12FDE284F007AB0B1 /* BookRepository.swift in Sources */,
 				2ADCD7F626F4B96200FBAE11 /* ModelData.swift in Sources */,
 				2ADCD7F826F4B96200FBAE11 /* BookPreviewViewModel.swift in Sources */,
 				2ADCD7FA26F4B96200FBAE11 /* MyFolioReaderCenterDelegate.swift in Sources */,

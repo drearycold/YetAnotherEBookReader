@@ -4,6 +4,7 @@
 The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), and P0-1d (`CalibreBookManager`) to modularize the application state and decouple network/management operations. All 41 unit and UI tests are passing successfully.
 
 ## Recent Changes & Decisions
+- **Introduce BookRepository (Milestone P0-3a):** Created `RealmBookRepository` and `BookRepositoryProtocol` to abstract Realm database operations for calibre books. Integrated the repository into `CalibreBookManager`, conforming `ModelData` to `LibraryResolver`. Refactored UI layer existence checks (`RecentShelfController`, `SectionShelfController`, `LibraryViewModel`, `LibraryInfoBookListView`) to use `bookExists(forPrimaryKey:)` or `getBook(for:)` to eliminate direct Realm object dependencies in the presentation layers.
 - **ReadingPositionService Extraction (Milestone P0-1e):** Successfully migrated format preferences (`defaultFormat`, `formatReaderMap`, `formatList`), reader preference logic, manual progress syncing (`updateCurrentPosition`), and reading session helper methods from `ModelData` into `ReadingSessionManager`. Replaced `@Published var sessionManager` with a `lazy var` and established thread-safe change notification forwarding via Combine.
 - **ModelData Main Thread Notification Forwarding:** Integrated `.receive(on: DispatchQueue.main)` on manager `objectWillChange` subscriptions in `ModelData.init` to ensure all SwiftUI state-propagation updates originating from nested managers are delivered on the main thread, eliminating runtime background thread update warnings.
 - **Realm Thread-Safety Resolution (CalibreBookManager):** Resolved the fatal Realm thread verification crash by replacing direct main-thread `databaseService.realm` references with a thread-safe `getRealm()` helper, ensuring background thread queries dynamically initialize thread-safe Realm instances. Annotated `getBooksMetadata(request:)` with `@MainActor` to ensure UI state updates are published on the main thread.
@@ -72,6 +73,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] Fix libraryRowBuilder sync status UI representation.
 - [x] Refactor ReaderOptionsView to MVVM and register project files.
 - [x] Extract ReadingPositionService (Milestone P0-1e) into ReadingSessionManager.
+- [x] Introduce BookRepository (Milestone P0-3a) to encapsulate book database operations and remove presentation layer Realm dependency.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

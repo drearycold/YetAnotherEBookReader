@@ -504,7 +504,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 //        becomeFirstResponder()
 //        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        guard let _ = modelData.getBookRealm(forPrimaryKey: bookId)
+        guard modelData.bookExists(forPrimaryKey: bookId)
         else {
             return
         }
@@ -536,7 +536,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
 //        becomeFirstResponder()
 //        UIMenuController.shared.showMenu(from: shelfView, rect: inShelfView)
         
-        guard let _ = modelData.getBookRealm(forPrimaryKey: bookId)
+        guard modelData.bookExists(forPrimaryKey: bookId)
         else {
             return
         }

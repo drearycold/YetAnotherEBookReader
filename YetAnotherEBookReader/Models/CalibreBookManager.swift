@@ -60,9 +60,20 @@ class CalibreBookManager: ObservableObject {
         set { modelData?.sessionManager.presentingEBookReaderFromShelf = newValue }
     }
     
-    init(modelData: ModelData, databaseService: DatabaseService) {
+    let bookRepository: BookRepositoryProtocol
+    
+    init(modelData: ModelData? = nil, databaseService: DatabaseService = .shared, bookRepository: BookRepositoryProtocol? = nil) {
         self.modelData = modelData
         self.databaseService = databaseService
+        
+        if let repo = bookRepository {
+            self.bookRepository = repo
+        } else {
+            guard let resolver = modelData ?? ModelData.shared else {
+                fatalError("LibraryResolver must be available if no repository is provided")
+            }
+            self.bookRepository = RealmBookRepository(databaseService: databaseService, libraryResolver: resolver)
+        }
     }
     
     private func getRealm() -> Realm? {
@@ -75,26 +86,15 @@ class CalibreBookManager: ObservableObject {
     // MARK: - Initialization & Realm Sync
     
     func populateBookShelf() {
-        guard let realm = getRealm() else { return }
-        let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "inShelf = true")
-        )
-        
-        booksInShelfRealm.forEach {
-            guard let serverUUIDString = $0.serverUUID,
-                  let server = modelData?.calibreServers[serverUUIDString],
-                  let libraryName = $0.libraryName,
-                  let library = modelData?.calibreLibraries[CalibreLibrary(server: server, key: "", name: libraryName).id]
-            else { return }
-            
-            var book = self.convert(library: library, bookRealm: $0)
-            
-            book.formats.forEach { formatRaw, formatInfo in
+        let books = bookRepository.getAllBooksInShelf()
+        books.forEach { book in
+            var updatedBook = book
+            updatedBook.formats.forEach { formatRaw, formatInfo in
                 guard let format = Format(rawValue: formatRaw) else {
                     return
                 }
                 var formatInfoNew = formatInfo
-                if let cacheInfo = getCacheInfo(book: book, format: format),
+                if let cacheInfo = getCacheInfo(book: updatedBook, format: format),
                    let modified = cacheInfo.1 {
                     formatInfoNew.cached = true
                     formatInfoNew.cacheSize = cacheInfo.0
@@ -106,13 +106,13 @@ class CalibreBookManager: ObservableObject {
                 }
                 
                 if formatInfoNew.cached != formatInfo.cached {
-                    book.formats[formatRaw] = formatInfoNew
-                    self.updateBook(book: book)
+                    updatedBook.formats[formatRaw] = formatInfoNew
+                    self.updateBook(book: updatedBook)
                 }
             }
             
-            self.booksInShelf[book.inShelfId] = book
-            print("booksInShelfRealm \(book.inShelfId)")
+            self.booksInShelf[updatedBook.inShelfId] = updatedBook
+            print("booksInShelfRealm \(updatedBook.inShelfId)")
         }
     }
     
@@ -137,15 +137,13 @@ class CalibreBookManager: ObservableObject {
     }
     
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        guard let realm = getRealm() else { return nil }
-        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
+        return bookRepository.getBookRealm(id: forPrimaryKey)
     }
     
     // MARK: - Realm CRUD
     
     func updateBook(book: CalibreBook) {
-        guard let realm = getRealm() else { return }
-        updateBookRealm(book: book, realm: realm)
+        bookRepository.saveBook(book)
         
         if readingBook?.inShelfId == book.inShelfId {
             readingBook = book
@@ -156,27 +154,21 @@ class CalibreBookManager: ObservableObject {
     }
     
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
-        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
+        let key = CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description)
+        return bookRepository.getBookRealm(id: key)
     }
     
     func updateBookRealm(book: CalibreBook, realm: Realm) {
-        let bookRealm = book.managedObject()
-        try? realm.write {
-            realm.add(bookRealm, update: .modified)
-        }
+        bookRepository.saveBook(book)
     }
     
     func removeFromRealm(book: CalibreBook) {
-        removeFromRealm(for: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
+        let key = CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description)
+        removeFromRealm(for: key)
     }
     
     func removeFromRealm(for primaryKey: String) {
-        guard let realm = getRealm(),
-              let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) else { return }
-        
-        try? realm.write {
-            realm.delete(object)
-        }
+        bookRepository.deleteBook(id: primaryKey)
     }
     
     // MARK: - Shelf Management
@@ -666,11 +658,11 @@ class CalibreBookManager: ObservableObject {
     }
     
     func getBook(for primaryKey: String) -> CalibreBook? {
-        var bookLocal: CalibreBook? = nil
-        if let obj = getBookRealm(forPrimaryKey: primaryKey) {
-            bookLocal = convert(bookRealm: obj)
-        }
-        return bookLocal
+        return bookRepository.getBook(id: primaryKey)
+    }
+    
+    func bookExists(forPrimaryKey: String) -> Bool {
+        return bookRepository.bookExists(id: forPrimaryKey)
     }
     
     func removeDeleteBooksFromServer(server: CalibreServer) {
