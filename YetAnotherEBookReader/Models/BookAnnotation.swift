@@ -213,150 +213,82 @@ extension BookAnnotation {
 
 //MARK: Bookmark
 extension BookAnnotation {
-    func bookmarks(excludeRemoved: Bool = true) -> [BookBookmarkRealm] {
-        guard let realm = realm else { return [] }
-
-        var results = realm.objects(BookBookmarkRealm.self)
-            .where { $0.bookId == bookPrefId }
-        if excludeRemoved {
-            results = results.filter(NSPredicate(format: "removed == false"))
-        }
-        
-        return Array(results)
+    private var annotationRepository: AnnotationRepositoryProtocol {
+        RealmAnnotationRepository()
     }
     
-    func bookmarks(andPage page: NSNumber?) -> [BookBookmarkRealm] {
-        guard let realm = realm else { return [] }
-        
-        let objects = realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND removed != true", bookPrefId))
-            .filter{ page == nil || $0.page == page?.intValue }
-        
-        return Array(objects)
+    func bookmarks(excludeRemoved: Bool = true) -> [BookBookmark] {
+        return annotationRepository.getBookmarks(forBookId: bookPrefId, excludeRemoved: excludeRemoved)
     }
     
-    func bookmarks(getBy bookmarkPos: String) -> BookBookmarkRealm? {
-        guard let realm = realm else { return nil }
-        
-        return realm.objects(BookBookmarkRealm.self)
-            .filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookPrefId, bookmarkPos))
-            .first
+    func bookmarks(andPage page: NSNumber?) -> [BookBookmark] {
+        let all = annotationRepository.getBookmarks(forBookId: bookPrefId, excludeRemoved: true)
+        return all.filter { page == nil || $0.page == page?.intValue }
+    }
+    
+    func bookmarks(getBy bookmarkPos: String) -> BookBookmark? {
+        return annotationRepository.getBookmark(byPos: bookmarkPos, bookId: bookPrefId)
     }
     
     func bookmarks(updated bookmarkPos: String, title: String) {
-        guard let realm = realm else { return }
-        
-        try? realm.write {
-            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookPrefId, bookmarkPos)).forEach {
-                $0.date = .init()
-                $0.title = title
-            }
+        if let existing = annotationRepository.getBookmark(byPos: bookmarkPos, bookId: bookPrefId) {
+            var updated = existing
+            updated.title = title
+            updated.date = Date()
+            _ = annotationRepository.saveBookmark(updated)
         }
     }
     
     func bookmarks(removed bookmarkPos: String) {
-        guard let realm = realm else { return }
-        
-        try? realm.write {
-            realm.objects(BookBookmarkRealm.self).filter(NSPredicate(format: "bookId = %@ AND pos = %@ AND removed != true", bookPrefId, bookmarkPos)).forEach {
-                $0.date = .init()
-                $0.removed = true
-            }
-        }
+        annotationRepository.removeBookmark(pos: bookmarkPos, bookId: bookPrefId)
     }
     
-    func bookmarks(added bookmark: BookBookmarkRealm) -> (Int, String?) {
-        guard let realm = self.realm else { return (-1, nil) }
-        
-        if let existing = bookmarks(getBy: bookmark.pos) { return (-2, existing.title) }
-        
-        do {
-            try realm.write {
-                realm.add(bookmark)
-            }
-        } catch let e as NSError {
-            return (-3, e.localizedDescription)
-        }
-        
-        return (0, nil)
+    func bookmarks(added bookmark: BookBookmark) -> (Int, String?) {
+        return annotationRepository.saveBookmark(bookmark)
+    }
+    
+    func bookmarks(added entries: [CalibreBookAnnotationBookmarkEntry]) -> Int {
+        return annotationRepository.syncBookmarks(entries: entries, forBookId: bookPrefId)
     }
 }
 
 // MARK: Highlight
 extension BookAnnotation {
     func highlights(saveNoteFor highlightId: String, with note: String?) {
-        guard let realm = self.realm,
-              let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId)
-        else { return }
-        
-        try? realm.write {
-            object.note = note
-            object.date = Date()
-        }
-    }
-    func highlights(excludeRemoved: Bool = true) -> [BookHighlightRealm] {
-        guard let realm = self.realm else { return .init() }
-        
-        var results = realm.objects(BookHighlightRealm.self)
-            .where { $0.bookId == bookPrefId }
-        if excludeRemoved {
-            results = results.filter(NSPredicate(format: "removed == false"))
-        }
-        
-        return Array(results)
+        annotationRepository.updateHighlightNote(id: highlightId, note: note)
     }
     
-    func highlights(allByBookId bookId: String, andPage page: NSNumber?) -> [BookHighlightRealm] {
-        guard let realm = self.realm else { return .init() }
-        
-        let predicate = { () -> NSPredicate in
-            if let page = page {
-                return NSPredicate(format: "removed == false && bookId = %@ && page = %@", bookId, page)
-            } else {
-                return NSPredicate(format: "removed == false && bookId = %@", bookId)
-            }
-        }()
-        
-        return Array(realm.objects(BookHighlightRealm.self)
-            .filter(predicate))
+    func highlights(excludeRemoved: Bool = true) -> [BookHighlight] {
+        return annotationRepository.getHighlights(forBookId: bookPrefId, excludeRemoved: excludeRemoved)
     }
     
-    func highlight(getById highlightId: String) -> BookHighlightRealm? {
-        guard let realm = self.realm else { return nil}
-        
-        return realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId)
+    func highlights(allByBookId bookId: String, andPage page: NSNumber?) -> [BookHighlight] {
+        let all = annotationRepository.getHighlights(forBookId: bookId, excludeRemoved: true)
+        return all.filter { page == nil || $0.page == page?.intValue }
+    }
+    
+    func highlight(getById highlightId: String) -> BookHighlight? {
+        return annotationRepository.getHighlight(byId: highlightId)
     }
     
     func highlight(updateById highlightId: String, type: Int) {
-        guard let realm = self.realm,
-              let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId)
-        else { return }
-        
-        try? realm.write {
-            object.type = type
-            object.date = Date()
+        if let existing = annotationRepository.getHighlight(byId: highlightId) {
+            var updated = existing
+            updated.type = type
+            updated.date = Date()
+            annotationRepository.saveHighlight(updated)
         }
     }
     
     func highlight(removedId highlightId: String) {
-        guard let realm = self.realm,
-              let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId)
-        else { return }
-        
-        try? realm.write {
-            object.removed = true
-            object.date = Date()
-        }
+        annotationRepository.removeHighlight(id: highlightId)
     }
     
-    /**
-     will replace existing entry
-     */
-    func highlight(added highlight: BookHighlightRealm) {
-        guard let realm = self.realm else { return }
-        
-        try? realm.write {
-            realm.add(highlight, update: .modified)
-        }
+    func highlight(added highlight: BookHighlight) {
+        annotationRepository.saveHighlight(highlight)
+    }
+    
+    func highlights(added entries: [CalibreBookAnnotationHighlightEntry]) -> Int {
+        return annotationRepository.syncHighlights(entries: entries, forBookId: bookPrefId)
     }
 }

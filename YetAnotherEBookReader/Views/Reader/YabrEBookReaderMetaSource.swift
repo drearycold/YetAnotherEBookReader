@@ -123,14 +123,14 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmarkRealm(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
         book.readPos.bookmarks(added: bookBookmark)
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmarkRealm(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
         book.readPos.bookmarks(removed: bookBookmark.pos)
@@ -145,17 +145,17 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlightRealm(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
         else { return }
         
         book.readPos.highlight(added: bookHighlight)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlightRealm(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
         else { return }
         
-        book.readPos.highlight(removedId: bookHighlight.highlightId)
+        book.readPos.highlight(removedId: bookHighlight.id)
         view?.removeHighlight(highlight: highlight)
     }
     
@@ -187,22 +187,20 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
 }
 
-extension BookBookmarkRealm {
-    convenience init?(bookId: String, pdfBookmark: PDFBookmark) {
+extension BookBookmark {
+    init?(bookId: String, pdfBookmark: PDFBookmark) {
         guard let posData = try? JSONEncoder().encode(pdfBookmark.pos),
               let pos = String(data: posData, encoding: .utf8)
         else { return nil }
         
-        self.init()
-        self.bookId = bookId
-        self.page = pdfBookmark.pos.page
-        self.pos_type = BookBookmarkRealm.PDFBookmarkPosType
-        self.pos = pos
-        
-        self.title = pdfBookmark.title
-        self.date = pdfBookmark.date
-        
-        self.removed = false
+        self.init(
+            bookId: bookId,
+            page: pdfBookmark.pos.page,
+            pos_type: BookBookmarkRealm.PDFBookmarkPosType,
+            pos: pos,
+            title: pdfBookmark.title,
+            date: pdfBookmark.date
+        )
     }
     
     func toPDFBookmark() -> PDFBookmark? {
@@ -215,39 +213,37 @@ extension BookBookmarkRealm {
     }
 }
 
-extension BookHighlightRealm {
-    convenience init?(bookId: String, pdfHighlight: PDFHighlight) {
+extension BookHighlight {
+    init?(bookId: String, pdfHighlight: PDFHighlight) {
         guard let posData = try? JSONEncoder().encode(pdfHighlight.pos),
               let pos = String(data: posData, encoding: .utf8)
         else { return nil }
         
-        self.init()
-        self.bookId = bookId
-        self.readerName = ReaderType.YabrPDF.rawValue
-        self.highlightId = pdfHighlight.uuid.uuidString
-        
-        self.page = pdfHighlight.pos.first?.page ?? 1
-        self.startOffset = 0
-        self.endOffset = 0
-        self.ranges = pos
-        
-        self.date = pdfHighlight.date
-        self.type = pdfHighlight.type
-        self.note = pdfHighlight.note
-        
-        self.tocFamilyTitles.removeAll()
-        self.content = pdfHighlight.content
-        self.contentPre = ""
-        self.contentPost = ""
-        
-        self.cfiStart = "/\((pdfHighlight.pos.first?.page ?? 1) * 2)"
-        self.cfiEnd = "/\((pdfHighlight.pos.last?.page ?? 1) * 2)"
-        self.spineName = nil
+        self.init(
+            id: pdfHighlight.uuid.uuidString,
+            bookId: bookId,
+            readerName: ReaderType.YabrPDF.rawValue,
+            page: pdfHighlight.pos.first?.page ?? 1,
+            startOffset: 0,
+            endOffset: 0,
+            date: pdfHighlight.date,
+            type: pdfHighlight.type,
+            note: pdfHighlight.note,
+            tocFamilyTitles: [],
+            content: pdfHighlight.content,
+            contentPost: "",
+            contentPre: "",
+            cfiStart: "/\((pdfHighlight.pos.first?.page ?? 1) * 2)",
+            cfiEnd: "/\((pdfHighlight.pos.last?.page ?? 1) * 2)",
+            spineName: nil,
+            ranges: pos,
+            removed: false
+        )
     }
     
     func toPDFHighlight() -> PDFHighlight? {
         guard readerName.isEmpty || readerName == ReaderType.YabrPDF.rawValue,
-              let uuid = UUID(uuidString: self.highlightId),
+              let uuid = UUID(uuidString: self.id),
               let posData = self.ranges?.data(using: .utf8),
               let pos = try? JSONDecoder().decode([PDFHighlight.PageLocation].self, from: posData)
         else { return nil }
