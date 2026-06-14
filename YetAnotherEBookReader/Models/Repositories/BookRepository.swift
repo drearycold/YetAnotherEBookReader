@@ -14,6 +14,9 @@ protocol BookRepositoryProtocol {
     func deleteBook(id: String)
     func getAllBooksInShelf() -> [CalibreBook]
     func bookExists(id: String) -> Bool
+    func bulkUpdateBooks(records: [[String: Any]])
+    func findDeletedBookIds(serverUUID: String, libraryName: String, activeIds: [String: Any]) -> [Int32]
+    func countAndNeedUpdateBooks(serverUUID: String, libraryName: String) -> (count: Int, needUpdateIds: [Int32])
     func getBookRealm(id: String) -> CalibreBookRealm? // Legacy bridge
 }
 
@@ -87,5 +90,37 @@ class RealmBookRepository: BookRepositoryProtocol {
     func getBookRealm(id: String) -> CalibreBookRealm? {
         guard let realm = getRealm() else { return nil }
         return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id)
+    }
+    
+    func bulkUpdateBooks(records: [[String: Any]]) {
+        guard let realm = getRealm() else { return }
+        try? realm.write {
+            records.forEach { record in
+                realm.create(CalibreBookRealm.self, value: record, update: .modified)
+            }
+        }
+    }
+    
+    func findDeletedBookIds(serverUUID: String, libraryName: String, activeIds: [String: Any]) -> [Int32] {
+        guard let realm = getRealm() else { return [] }
+        let objects = realm.objects(CalibreBookRealm.self).filter(
+            "serverUUID == %@ AND libraryName == %@", serverUUID, libraryName
+        )
+        return objects
+            .filter { $0.inShelf == false && activeIds[$0.idInLib.description] == nil }
+            .map { $0.idInLib }
+    }
+    
+    func countAndNeedUpdateBooks(serverUUID: String, libraryName: String) -> (count: Int, needUpdateIds: [Int32]) {
+        guard let realm = getRealm() else { return (0, []) }
+        let objects = realm.objects(CalibreBookRealm.self).filter(
+            "serverUUID == %@ AND libraryName == %@", serverUUID, libraryName
+        )
+        let count = objects.count
+        let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
+        let needUpdateIds = objectsNeedUpdate
+            .sorted(byKeyPath: "lastModified", ascending: false)
+            .map { $0.idInLib }
+        return (count, Array(needUpdateIds))
     }
 }

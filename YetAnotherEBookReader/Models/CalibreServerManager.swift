@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import RealmSwift
 import SwiftUI
 import OSLog
 
@@ -16,6 +15,7 @@ class CalibreServerManager: ObservableObject {
     
     weak var modelData: ModelData?
     let databaseService: DatabaseService
+    private let serverRepository: ServerRepositoryProtocol
     
     @Published var calibreServers = [String: CalibreServer]()
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
@@ -25,9 +25,10 @@ class CalibreServerManager: ObservableObject {
     }
     var documentServer: CalibreServer?
     
-    init(modelData: ModelData, databaseService: DatabaseService) {
+    init(modelData: ModelData, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
         self.modelData = modelData
         self.databaseService = databaseService
+        self.serverRepository = serverRepository
     }
     
     // MARK: - Migrated Methods
@@ -53,29 +54,17 @@ class CalibreServerManager: ObservableObject {
     }
 
     func populateServers() {
-        guard let realm = databaseService.realm else { return }
-        let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
-        serversCached.forEach { serverRealm in
-            guard serverRealm.removed == false,
-                  serverRealm.baseUrl != nil
+        let servers = serverRepository.getAllServers().sorted(by: {
+            if $0.username == $1.username {
+                return $0.baseUrl < $1.baseUrl
+            }
+            return $0.username < $1.username
+        })
+        servers.forEach { calibreServer in
+            guard calibreServer.removed == false,
+                  calibreServer.baseUrl.isEmpty == false
             else { return }
             
-            guard let uuidString = serverRealm.primaryKey,
-                  let uuid = UUID(uuidString: uuidString)
-            else { return }
-            
-            let calibreServer = CalibreServer(
-                uuid: uuid,
-                name: serverRealm.name ?? serverRealm.baseUrl!,
-                baseUrl: serverRealm.baseUrl!,
-                hasPublicUrl: serverRealm.hasPublicUrl,
-                publicUrl: serverRealm.publicUrl ?? "",
-                hasAuth: serverRealm.hasAuth,
-                username: serverRealm.username ?? "",
-                password: serverRealm.password ?? "",
-                defaultLibrary: serverRealm.defaultLibrary ?? "",
-                removed: serverRealm.removed
-            )
             calibreServers[calibreServer.id] = calibreServer
             
             if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
@@ -88,9 +77,7 @@ class CalibreServerManager: ObservableObject {
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
         libraries.forEach {
             do {
-                if let realm = databaseService.realm {
-                    try modelData?.updateLibraryRealm(library: $0, realm: realm)
-                }
+                try modelData?.libraryRepository.saveLibrary($0)
                 modelData?.calibreLibraries[$0.id] = $0
             } catch {
                 logger.error("Failed to update library realm: \(error.localizedDescription)")
@@ -106,21 +93,7 @@ class CalibreServerManager: ObservableObject {
     }
     
     func updateServerRealm(server: CalibreServer) throws {
-        guard let realm = databaseService.realm else { return }
-        let serverRealm = CalibreServerRealm()
-        serverRealm.primaryKey = server.uuid.uuidString
-        serverRealm.name = server.name
-        serverRealm.baseUrl = server.baseUrl
-        serverRealm.hasPublicUrl = server.hasPublicUrl
-        serverRealm.publicUrl = server.publicUrl
-        serverRealm.hasAuth = server.hasAuth
-        serverRealm.username = server.username
-        serverRealm.password = server.password
-        serverRealm.defaultLibrary = server.defaultLibrary
-        serverRealm.removed = server.removed
-        try realm.write {
-            realm.add(serverRealm, update: .modified)
-        }
+        try serverRepository.saveServer(server)
     }
     
     @MainActor
@@ -136,24 +109,14 @@ class CalibreServerManager: ObservableObject {
     }
     
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
-        guard let realm = Thread.isMainThread ? databaseService.realm : try? Realm(configuration: databaseService.realmConf) else { return nil }
-        
-        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id),
-              let helper = serverRealm.dsreaderHelper else { return nil }
-        
-        let unmanaged = CalibreServerDSReaderHelper(port: helper.port)
-        unmanaged.configurationData = helper.configurationData
-        return unmanaged
+        return serverRepository.getDSReaderHelper(for: server.id)
     }
     
-    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
-        try? realm.write {
-            if let existing = serverRealm.dsreaderHelper {
-                existing.update(from: dsreaderHelper)
-            } else {
-                serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: dsreaderHelper)
-            }
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Any? = nil) {
+        do {
+            try serverRepository.saveDSReaderHelper(dsreaderHelper, for: serverId)
+        } catch {
+            logger.error("Failed to save DSReaderHelper: \(error.localizedDescription)")
         }
     }
     
@@ -221,9 +184,7 @@ class CalibreServerManager: ObservableObject {
                 let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
                 if modelData?.calibreLibraries[newLibrary.id] == nil {
                     modelData?.calibreLibraries[newLibrary.id] = newLibrary
-                    if let realm = databaseService.realm {
-                        try? modelData?.updateLibraryRealm(library: newLibrary, realm: realm)
-                    }
+                    try? modelData?.libraryRepository.saveLibrary(newLibrary)
                 }
             }
             

@@ -157,9 +157,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     var databaseService = DatabaseService.shared
     
-    lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService)
-    lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService)
-    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService)
+    lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
+    lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
+    lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
+    
+    lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
+    lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
+    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
 
@@ -981,5 +985,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
 extension ModelData: LibraryResolver {
     func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
         return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+    }
+}
+
+extension ModelData: ServerResolver {
+    func server(forUUID uuid: String) -> CalibreServer? {
+        return calibreServers[uuid]
     }
 }
