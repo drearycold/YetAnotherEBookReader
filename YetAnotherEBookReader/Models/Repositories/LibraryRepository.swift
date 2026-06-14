@@ -29,10 +29,12 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
     }
     
     private func getRealm() -> Realm? {
-        if let conf = databaseService.realmConf {
+        if Thread.isMainThread {
+            return databaseService.realm
+        } else if let conf = databaseService.realmConf {
             return try? Realm(configuration: conf)
         }
-        return databaseService.realm
+        return nil
     }
     
     func getAllLibraries() -> [CalibreLibrary] {
