@@ -9,6 +9,10 @@ import Foundation
 import UIKit
 
 class YabrPDFTableViewController: UITableViewController {
+    var pdfViewController: YabrPDFViewController? {
+        (self.parent as? YabrPDFAnnotationPageVC)?.pdfViewController
+        ?? (self.parent as? YabrPDFNavigationPageVC)?.pdfViewController
+    }
     var yabrPDFView: YabrPDFView? {
         (self.parent as? YabrPDFAnnotationPageVC)?.yabrPDFView
         ?? (self.parent as? YabrPDFNavigationPageVC)?.yabrPDFView

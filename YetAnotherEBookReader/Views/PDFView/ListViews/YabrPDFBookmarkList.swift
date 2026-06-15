@@ -165,26 +165,16 @@ class YabrPDFBookmarkList: YabrPDFTableViewController {
     }
     
     func addBookmark(completion: (() -> Void)? = nil) {
-        defer {
+        if let bookmarkManager = pdfViewController?.bookmarkManager {
+            bookmarkManager.addBookmark { [weak self] in
+                guard let self = self else { return }
+                self.loadSections()
+                self.tableView.reloadData()
+                completion?()
+            }
+        } else {
             completion?()
         }
-        guard let destination = yabrPDFView?.currentDestination,
-              let pageNumber = destination.page?.pageRef?.pageNumber
-        else {
-            return
-        }
-        
-        yabrPDFMetaSource?.yabrPDFBookmarks(
-            yabrPDFView,
-            update: PDFBookmark(
-                pos: PDFBookmark.Location(page: pageNumber, offset: destination.point),
-                title: yabrPDFMetaSource?.yabrPDFOutline(yabrPDFView, for: pageNumber)?.label ?? "Page \(pageNumber)",
-                date: Date()
-            )
-        )
-        
-        self.loadSections()
-        self.tableView.reloadData()
     }
     
     @objc func saveBookmarkTitleAction(_ sender: UIButton) {

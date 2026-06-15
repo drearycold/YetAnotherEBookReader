@@ -9,6 +9,7 @@
 import UIKit
 
 class YabrPDFNavigationPageVC: UIPageViewController {
+    weak var pdfViewController: YabrPDFViewController?
     var yabrPDFView: YabrPDFView?
     var yabrPDFMetaSource: YabrPDFMetaSource?
     

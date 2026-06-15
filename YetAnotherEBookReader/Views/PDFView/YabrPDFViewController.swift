@@ -47,6 +47,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     weak var readerEngineDelegate: ReaderEngineDelegate?
     var initialPosition: ReaderEnginePosition?
     
+    var annotationManager: PDFAnnotationManager!
+    var bookmarkManager: PDFBookmarkManager!
+    var searchController: PDFSearchController!
+    
     @Published var pdfOptions = PDFOptions() {
         didSet {
             PDFPageWithBackground.fillColor = pdfOptions.fillColor
@@ -166,6 +170,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        self.annotationManager = PDFAnnotationManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        self.bookmarkManager = PDFBookmarkManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        self.searchController = PDFSearchController(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        
         // pdfView.usePageViewController(true, withViewOptions: nil)
         
         NotificationCenter.default.addObserver(self, selector: #selector(handlePageChange(notification:)), name: .PDFViewPageChanged, object: pdfView)
@@ -200,7 +208,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
 //            self.present(thumbController, animated: true, completion: nil)
             
             let pageController = YabrPDFNavigationPageVC()
-            
+            pageController.pdfViewController = self
             pageController.yabrPDFView = self.pdfView
             pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
             
@@ -329,7 +337,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
             UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { action in
                 let navigationController = YabrPDFNavigationPageVC()
-                
+                navigationController.pdfViewController = self
                 navigationController.yabrPDFView = self.pdfView
                 navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
                 
@@ -343,7 +351,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             })),
             UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { action in
                 let annotationController = YabrPDFAnnotationPageVC()
-                
+                annotationController.pdfViewController = self
                 annotationController.yabrPDFView = self.pdfView
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
                 
@@ -524,9 +532,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             
         }
         
-        yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
-            pdfView.injectHighlight(highlight: highlight)
-        }
+        self.annotationManager.injectAllHighlights()
         
         
         blankView.contentMode = .scaleAspectFill
@@ -1526,34 +1532,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         } else {
             guard let currentSelection = pdfView.currentSelection else { return }
             
-            var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
-            currentSelection.pages.forEach { selectionPage in
-                guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
-                var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
-                for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
-                    let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
-                    pdfHighlightPage.ranges.append(selectionPageRange)
-                }
-                pdfHighlightPageLocations.append(pdfHighlightPage)
-            }
-            
             var style = BookHighlightStyle.yellow.rawValue
             if (sender as? UIButton) == annotationView.underlineButton {
                 style = BookHighlightStyle.underline.rawValue
             }
-            let pdfHighlight = PDFHighlight(
-                uuid: .init(),
-                pos: pdfHighlightPageLocations,
-                type: style,
-                content: currentSelection.string ?? "No Content",
-                date: .init()
-            )
             
-            yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
-            pdfView.injectHighlight(highlight: pdfHighlight)
-            
-            print("\(#function) currentSelection=\(currentSelection)")
-            
+            self.annotationManager.addHighlight(style: style, selection: currentSelection)
             self.annotationView.isHidden = true
         }
     }
