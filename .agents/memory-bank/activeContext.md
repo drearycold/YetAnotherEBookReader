@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), P0-1d (`CalibreBookManager`), P0-1e (`ReadingSessionManager`), P0-3a (`BookRepository`), P0-3b (`ServerRepository` and `LibraryRepository`), and P0-3c (`AnnotationRepository`) to modularize the application state, decouple network/management operations, and separate concerns. All 41 unit and UI tests are passing successfully.
+The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), P0-1d (`CalibreBookManager`), P0-1e (`ReadingSessionManager`), P0-3a (`BookRepository`), P0-3b (`ServerRepository` and `LibraryRepository`), P0-3c (`AnnotationRepository`), and P1a-A06 (`ReaderEngineDelegate` position consolidation) to modularize the application state, decouple network/management operations, and separate concerns. All 41 unit and UI tests are passing successfully.
 
 ## Recent Changes & Decisions
 - **AnnotationRepository (Milestone P0-3c):** Introduced `BookBookmark` and `BookHighlight` value types and `RealmAnnotationRepository` to decouple bookmarks and highlights from direct `RealmSwift` database logic. Ported Calibre annotation sync logic from `CalibreData.swift` into the repository.
@@ -65,7 +65,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] 36. Fixed `libraryRowBuilder` sync status UI in `ServerDetailView.swift` to display mutually exclusive status text instead of overlapping states.
 - [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
 
-## Active Tasks
+## Completed Refactoring Milestones
 - [x] Extract `CalibreServerManager` out of `ModelData` (Milestone P0-1a).
 - [x] Extract `CalibreLibraryManager` out of `ModelData` (Milestone P0-1b).
 - [x] Extract `CalibreBookManager` out of `ModelData` (Milestone P0-1d).
@@ -78,6 +78,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] Extract ReadingPositionService (Milestone P0-1e) into ReadingSessionManager.
 - [x] Introduce BookRepository (Milestone P0-3a) to encapsulate book database operations and remove presentation layer Realm dependency.
 - [x] Decouple bookmarks and highlights (annotations) into AnnotationRepository (Milestone P0-3c) and refactor reader UI adapters.
+- [x] Consolidate reading position saving logic across Readium, FolioReader, and PDF engines (Milestone P1a-A06).
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
