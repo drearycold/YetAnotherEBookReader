@@ -15,6 +15,10 @@ class PDFSearchController: NSObject {
         self.yabrPDFMetaSource = metaSource
     }
 
+    deinit {
+        pdfView?.document?.cancelFindString()
+    }
+
     func search(query: String, completion: @escaping ([PDFSelection]) -> Void) {
         guard let document = pdfView?.document else {
             completion([])

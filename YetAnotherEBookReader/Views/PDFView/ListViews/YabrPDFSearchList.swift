@@ -60,7 +60,7 @@ class YabrPDFSearchList: YabrPDFTableViewController, UISearchBarDelegate {
         activityIndicator.startAnimating()
         
         pdfViewController?.searchController.search(query: query) { [weak self] results in
-            guard let self = self else { return }
+            guard let self = self, self.currentQuery == query else { return }
             self.searchResults = results
             self.isSearching = false
             self.activityIndicator.stopAnimating()
