@@ -361,11 +361,11 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         modelData.readingBookInShelfId = bookId
         
         guard modelData.bookExists(forPrimaryKey: bookId),
-              let book = modelData.readingBook,
-              let bookAnnoRealm = book.readPos.realm
+              let book = modelData.readingBook
         else {
             return
         }
+        let bookAnnoRealm = book.library.server.realmPerf
         
         let readingPositionHistoryView = UIHostingController(
             rootView: ReadingPositionHistoryView(

@@ -61,8 +61,16 @@ class CalibreBookManager: ObservableObject {
     }
     
     let bookRepository: BookRepositoryProtocol
+    let readingPositionRepository: ReadingPositionRepositoryProtocol
+    let annotationRepository: AnnotationRepositoryProtocol
     
-    init(modelData: ModelData? = nil, databaseService: DatabaseService = .shared, bookRepository: BookRepositoryProtocol? = nil) {
+    init(
+        modelData: ModelData? = nil,
+        databaseService: DatabaseService = .shared,
+        bookRepository: BookRepositoryProtocol? = nil,
+        readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,
+        annotationRepository: AnnotationRepositoryProtocol? = nil
+    ) {
         self.modelData = modelData
         self.databaseService = databaseService
         
@@ -73,6 +81,18 @@ class CalibreBookManager: ObservableObject {
                 fatalError("LibraryResolver must be available if no repository is provided")
             }
             self.bookRepository = RealmBookRepository(databaseService: databaseService, libraryResolver: resolver)
+        }
+        
+        if let repo = readingPositionRepository {
+            self.readingPositionRepository = repo
+        } else {
+            self.readingPositionRepository = RealmReadingPositionRepository(databaseService: databaseService, modelData: modelData)
+        }
+        
+        if let repo = annotationRepository {
+            self.annotationRepository = repo
+        } else {
+            self.annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
         }
     }
     
@@ -227,7 +247,7 @@ class CalibreBookManager: ObservableObject {
         
         booksInShelf.removeValue(forKey: inShelfId)
         
-        if book.readPos.getDevices().first?.id == modelData?.deviceName,
+        if readingPositionRepository.getPositions(forBookId: book.bookPrefId).first?.id == modelData?.deviceName,
            let calibreServerService = modelData?.calibreServerService,
            let library = modelData?.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
@@ -236,7 +256,7 @@ class CalibreBookManager: ObservableObject {
             let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             let _ = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
             
-            if let position = book.readPos.getPosition(modelData?.deviceName ?? ""), position.lastProgress > 99 {
+            if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData?.deviceName ?? ""), position.lastProgress > 99 {
                 connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
             }
         }
@@ -589,7 +609,7 @@ class CalibreBookManager: ObservableObject {
                           let entry = annotationsResult["\(book.id):\(formatKey)"]
                     else { continue }
                     
-                    let positions = book.readPos.positions(added: entry.last_read_positions)
+                    let positions = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
                     for pos in positions {
                         if let setTask = calibreServerService.buildSetLastReadPositionTask(library: task.library, bookId: book.id, format: format, entry: pos) {
                             Task {
@@ -598,13 +618,13 @@ class CalibreBookManager: ObservableObject {
                         }
                     }
                     
-                    if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 || book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0 {
+                    if annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId) > 0 || annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId) > 0 {
                         if let updateTask = calibreServerService.buildUpdateAnnotationsTask(
-                            library: task.library,
-                            bookId: book.id,
-                            format: format,
-                            highlights: book.readPos.highlights(excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() },
-                            bookmarks: book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
+                             library: task.library,
+                             bookId: book.id,
+                             format: format,
+                             highlights: annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() },
+                             bookmarks: annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toCalibreBookAnnotationBookmarkEntry() }
                         ) {
                             Task {
                                 await calibreServerService.updateAnnotationByTask(task: updateTask)
@@ -620,9 +640,9 @@ class CalibreBookManager: ObservableObject {
                           let entry = annotationsResult["\(book.id):\(formatKey)"]
                     else { continue }
                     
-                    _ = book.readPos.positions(added: entry.last_read_positions)
-                    _ = book.readPos.highlights(added: entry.annotations_map.highlight ?? [])
-                    _ = book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? [])
+                    _ = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
+                    _ = annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId)
+                    _ = annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId)
                 }
             }
         }

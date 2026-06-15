@@ -96,7 +96,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         var readPosition = readPosition
         readPosition.id = readerInfo.deviceName
         readPosition.readerName = readerInfo.readerType.rawValue
-        book.readPos.updatePosition(readPosition)
+        ModelData.shared?.readingPositionRepository.savePosition(readPosition, forBookId: book.bookPrefId)
     }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
@@ -119,43 +119,43 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {
-        return book.readPos.bookmarks().compactMap { $0.toPDFBookmark() }
+        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFBookmark() }
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
-        book.readPos.bookmarks(added: bookBookmark)
+        _ = ModelData.shared?.annotationRepository.saveBookmark(bookBookmark)
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
-        guard let bookBookmark = BookBookmark(bookId: book.readPos.bookPrefId, pdfBookmark: bookmark)
+        guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
-        book.readPos.bookmarks(removed: bookBookmark.pos)
+        ModelData.shared?.annotationRepository.removeBookmark(pos: bookBookmark.pos, bookId: book.bookPrefId)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight] {
-        return book.readPos.highlights().compactMap { $0.toPDFHighlight() }
+        return (ModelData.shared?.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFHighlight() }
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, getById highlightId: UUID) -> PDFHighlight? {
-        return book.readPos.highlight(getById: highlightId.uuidString)?.toPDFHighlight()
+        return ModelData.shared?.annotationRepository.getHighlight(byId: highlightId.uuidString)?.toPDFHighlight()
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         
-        book.readPos.highlight(added: bookHighlight)
+        ModelData.shared?.annotationRepository.saveHighlight(bookHighlight)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
-        guard let bookHighlight = BookHighlight(bookId: book.readPos.bookPrefId, pdfHighlight: highlight)
+        guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         
-        book.readPos.highlight(removedId: bookHighlight.id)
+        ModelData.shared?.annotationRepository.removeHighlight(id: bookHighlight.id)
         view?.removeHighlight(highlight: highlight)
     }
     
@@ -281,7 +281,7 @@ struct YabrEBookReaderReadiumMetaSource: YabrReadiumMetaSource {
 
         position.epoch = Date().timeIntervalSince1970
         
-        book.readPos.updatePosition(position)
+        ModelData.shared?.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
     }
     
     func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UINavigationController)? {

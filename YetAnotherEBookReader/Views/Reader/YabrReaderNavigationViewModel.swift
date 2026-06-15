@@ -35,14 +35,14 @@ class YabrReaderNavigationViewModel: ObservableObject {
         guard let book = book else { return }
         
         // Load Bookmarks
-        let bookBookmarks = book.readPos.bookmarks()
+        let bookBookmarks = ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []
         self.bookmarks = bookBookmarks.compactMap { b in
             // Assuming 'pos' contains the Locator JSON
             return try? Locator(jsonString: b.pos)
         }
         
         // Load Highlights
-        let bookHighlights = book.readPos.highlights()
+        let bookHighlights = ModelData.shared?.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true) ?? []
         self.highlights = bookHighlights.compactMap { h in
             if let cfi = h.cfiStart, let href = AnyURL(legacyHREF: h.spineName ?? "") {
                 return Locator(

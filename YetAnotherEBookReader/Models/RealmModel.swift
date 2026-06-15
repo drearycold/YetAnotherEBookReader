@@ -167,15 +167,15 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
         return (try? JSONSerialization.jsonObject(with: userMetaData, options: []) as? [String:Any]) ?? [:]
     }
     
-    func readPos(library: CalibreLibrary) -> BookAnnotation {
-        let readPos = BookAnnotation(id: idInLib, library: library)
-        
+    func migrateReadPos(library: CalibreLibrary, repository: ReadingPositionRepositoryProtocol) {
         guard let readPosData = readPosData,
               let readPosDict = try? JSONSerialization.jsonObject(with: readPosData, options: []) as? NSDictionary,
               let deviceMapDict = readPosDict["deviceMap"] as? NSDictionary
         else {
-            return readPos
+            return
         }
+        
+        let bookPrefId = BookAnnotation.PrefId(library: library, id: idInLib)
         
         deviceMapDict.forEach { key, value in
             guard let deviceName = key as? String,
@@ -215,9 +215,8 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
             deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
             deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
             
-            readPos.updatePosition(deviceReadingPosition)
+            repository.savePosition(deviceReadingPosition, forBookId: bookPrefId)
         }
-        return readPos
     }
     
     func updatePrimaryKey() {
@@ -263,7 +262,6 @@ extension CalibreBook: Persistable {
     internal init(managedObject: CalibreBookRealm) {
         self.id = 0
         self.library = .init(server: .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: "")
-        self.readPos = BookAnnotation(id: id, library: library)
     }
     
     public init(managedObject: CalibreBookRealm, library: CalibreLibrary) {
@@ -292,9 +290,11 @@ extension CalibreBook: Persistable {
         self.lastSynced = managedObject.lastSynced
         self.lastUpdated = managedObject.lastUpdated
         self.formats = formatsVer2
-        self.readPos = managedObject.readPos(library: library)
         if managedObject.readPosData != nil,
            managedObject.isFrozen == false {
+            if let repo = ModelData.shared?.readingPositionRepository {
+                managedObject.migrateReadPos(library: library, repository: repo)
+            }
             try? managedObject.realm?.write({
                 managedObject.readPosData = nil
             })

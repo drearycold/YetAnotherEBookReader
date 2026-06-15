@@ -113,7 +113,7 @@ class YabrReadiumReaderViewController:
         if let book = environment.book {
             let config = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
             if let realm = try? Realm(configuration: config) {
-                let bookId = book.readPos.bookPrefId
+                let bookId = book.bookPrefId
                 if let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) {
                     self.readiumPrefs = savedPrefs
                 } else {

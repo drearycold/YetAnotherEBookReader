@@ -8,7 +8,7 @@
 import Foundation
 import RealmSwift
 
-extension BookAnnotation {
+enum BookAnnotation {
     static func PrefId(library: CalibreLibrary, id: Int32) -> String {
         "\(library.key) - \(id)"
     }

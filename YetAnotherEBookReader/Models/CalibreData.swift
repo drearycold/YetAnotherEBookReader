@@ -292,7 +292,9 @@ struct CalibreBook: Hashable {
         return tags.joined(separator: ", ")
     }
     var formats = [String: FormatInfo]()
-    var readPos: BookAnnotation
+    var bookPrefId: String {
+        BookAnnotation.PrefId(library: library, id: id)
+    }
     
     var identifiers = [String: String]()
     
@@ -341,7 +343,6 @@ struct CalibreBook: Hashable {
     init(id: Int32, library: CalibreLibrary) {
         self.id = id
         self.library = library
-        self.readPos = BookAnnotation(id: id, library: library)
     }
 }
 
@@ -561,83 +562,7 @@ struct BookDeviceReadingPosition : Hashable, Codable {
     }
 }
 
-extension BookAnnotation {
-    
-    func positions(added lastReadPositions: [CalibreBookLastReadPositionEntry]) -> [CalibreBookLastReadPositionEntry] {
-        /*guard let realm = realm else { return .init() }*/
-        
-        var devicesUpdated = [String: BookDeviceReadingPosition]()
-        var devicesInserted = [String: BookDeviceReadingPosition]()
 
-        var tasks = [CalibreBookLastReadPositionEntry]()
-        
-        lastReadPositions.forEach { remoteEntry in
-//            let remoteObject = remoteEntry.managedObject()
-            guard let remotePosition = BookDeviceReadingPosition(entry: remoteEntry) else {
-                //not recognisable
-                return
-            }
-            
-            guard let localPosition = self.getPosition(remoteEntry.device)
-            else {
-                self.updatePosition(remotePosition)
-                devicesInserted[remoteEntry.device] = remotePosition
-                return
-            }
-            
-            /* deprecated
-            guard let localObject = realm.object(ofType: CalibreBookLastReadPositionRealm.self, forPrimaryKey: remoteEntry.device),
-                  let localPosition = BookDeviceReadingPosition(managedObject: localObject)
-            else {
-                try? realm.write {
-                    realm.add(remoteEntry.managedObject(), update: .modified)
-                }
-                devicesUpdated[remoteEntry.device] = remotePosition
-                return
-            }
-             */
-            
-            guard localPosition.epoch < remotePosition.epoch else {
-                if localPosition.epoch == remotePosition.epoch {
-                    devicesUpdated[remoteEntry.device] = remotePosition
-                }
-                return
-            }
-            
-            /*
-            try? realm.write {
-                realm.add(remoteObject, update: .modified)
-            }
-             */
-            devicesUpdated[remoteEntry.device] = remotePosition
-        }
-        
-        /*
-        let objects = realm.objects(CalibreBookLastReadPositionRealm.self)
-        objects.forEach {
-            if let position = devicesUpdated[$0.device] {
-                self.updatePosition(position)
-            } else {
-                tasks.append(CalibreBookLastReadPositionEntry(managedObject: $0))
-            }
-        }
-         */
-        self.getDevices().forEach {
-            guard devicesInserted[$0.id] == nil
-            else {
-                return
-            }
-            
-            if let position = devicesUpdated[$0.id] {
-                self.updatePosition(position)
-            } else {
-                tasks.append($0.toEntry())
-            }
-        }
-        
-        return tasks
-    }
-}
 
 struct BookDeviceReadingPositionHistory : Hashable, Codable {
     var bookId: String

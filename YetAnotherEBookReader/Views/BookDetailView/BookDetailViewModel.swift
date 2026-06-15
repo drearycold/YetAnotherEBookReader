@@ -119,12 +119,12 @@ class BookDetailViewModel: ObservableObject {
         if self.listVM == nil {
             if let calibreBook = calibreBook {
                 self.listVM = ReadingPositionListViewModel(
-                    modelData: modelData, book: calibreBook, positions: calibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+                    modelData: modelData, book: calibreBook, positions: modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
                 )
             }
         } else if let calibreBook = calibreBook {
             self.listVM?.book = calibreBook
-            self.listVM?.positions = calibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+            self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
         }
         
         bookObserverToken = bookRealm.objectWillChange
@@ -134,7 +134,7 @@ class BookDetailViewModel: ObservableObject {
                 if let updatedCalibreBook = modelData.convert(bookRealm: b) {
                     self.calibreBook = updatedCalibreBook
                     self.listVM?.book = updatedCalibreBook
-                    self.listVM?.positions = updatedCalibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+                    self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
                 }
             }
     }
@@ -222,11 +222,11 @@ class BookDetailViewModel: ObservableObject {
         guard let modelData = modelData else { return }
         if listVM == nil {
             listVM = ReadingPositionListViewModel(
-                modelData: modelData, book: book, positions: book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+                modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
             )
         } else {
             listVM?.book = book
-            listVM?.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+            listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
         }
     }
     
@@ -238,7 +238,7 @@ class BookDetailViewModel: ObservableObject {
             return false
         }
         
-        let readPosition = book.readPos.createInitial(deviceName: modelData.deviceName, reader: reader)
+        let readPosition = modelData.readingPositionRepository.createInitial(deviceName: modelData.deviceName, reader: reader)
         
         modelData.prepareBookReading(
             url: bookFileUrl,

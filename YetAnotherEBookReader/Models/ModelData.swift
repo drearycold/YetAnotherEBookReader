@@ -160,10 +160,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
     lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
     lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
+    lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, modelData: self)
+    lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
     
     lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
-    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository)
+    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
 
@@ -265,7 +267,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                FileManager.default.fileExists(atPath: bookSavedUrl.path) == false {
                 FileManager.default.createFile(atPath: bookSavedUrl.path, contents: String("EPUB").data(using: .utf8), attributes: nil)
             }
-            book.readPos = BookAnnotation(id: book.id, library: book.library, localFilename: book.title + ".epub")
             
             var position = BookDeviceReadingPosition(
                 id: self.deviceName,
@@ -281,7 +282,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             )
             position.epoch = 1645495322
             
-            book.readPos.updatePosition(position)
+            self.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
             
             self.readingBook = book
             
