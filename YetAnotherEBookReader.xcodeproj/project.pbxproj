@@ -229,6 +229,8 @@
 		E71F35002FDEC37A007AB0B1 /* AnnotationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */; };
 		E71F35022FDEF06F007AB0B1 /* ReadingPositionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */; };
 		E71F35032FDEF06F007AB0B1 /* ReadingPositionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */; };
+		E71F35052FDF99C3007AB0B1 /* ReaderEngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35042FDF99C3007AB0B1 /* ReaderEngineProtocol.swift */; };
+		E71F35062FDF99C3007AB0B1 /* ReaderEngineProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35042FDF99C3007AB0B1 /* ReaderEngineProtocol.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -448,6 +450,7 @@
 		E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookHighlight.swift; sourceTree = "<group>"; };
 		E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationRepository.swift; sourceTree = "<group>"; };
 		E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionRepository.swift; sourceTree = "<group>"; };
+		E71F35042FDF99C3007AB0B1 /* ReaderEngineProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderEngineProtocol.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E738C89E29160AA700A4AC6E /* CalibreBrowser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBrowser.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
@@ -916,6 +919,7 @@
 				E70A25C92F7BDC8D004F006E /* YabrReaderSettingsView.swift */,
 				E70A25CC2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift */,
 				E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */,
+				E71F35042FDF99C3007AB0B1 /* ReaderEngineProtocol.swift */,
 			);
 			path = Reader;
 			sourceTree = "<group>";
@@ -1262,6 +1266,7 @@
 				E792C7E62F83F5190015E020 /* CalibreActivityLogger.swift in Sources */,
 				E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */,
 				2AC340D32647A23600A477ED /* DSReaderHelperConnector.swift in Sources */,
+				E71F35052FDF99C3007AB0B1 /* ReaderEngineProtocol.swift in Sources */,
 				E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */,
 				E75A97CD2A68C79D000F4292 /* YabrPDFSharingProvider.swift in Sources */,
 				E71F34E02FDCF7DC007AB0B1 /* ReaderOptionsViewModel.swift in Sources */,
@@ -1423,6 +1428,7 @@
 				E792C7E52F83F5190015E020 /* CalibreActivityLogger.swift in Sources */,
 				2ADCD82E26F4B96200FBAE11 /* LibraryBookListFilter.swift in Sources */,
 				2ADCD82F26F4B96200FBAE11 /* RecentShelfUI.swift in Sources */,
+				E71F35062FDF99C3007AB0B1 /* ReaderEngineProtocol.swift in Sources */,
 				2ADCD83126F4B96200FBAE11 /* LibraryInfoView.swift in Sources */,
 				2ADCD83226F4B96200FBAE11 /* CalibreServerService.swift in Sources */,
 				E71F34DF2FDCF7DC007AB0B1 /* ReaderOptionsViewModel.swift in Sources */,

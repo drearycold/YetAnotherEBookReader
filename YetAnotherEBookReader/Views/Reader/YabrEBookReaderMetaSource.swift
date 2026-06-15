@@ -88,16 +88,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         return pdfDocument.outlineItem(for: pdfPageSelection)
     }
     
-    func yabrPDFReadPosition(_ view: YabrPDFView?) -> BookDeviceReadingPosition? {
-        return readerInfo.position
-    }
     
-    func yabrPDFReadPosition(_ view: YabrPDFView?, update readPosition: BookDeviceReadingPosition) {
-        var readPosition = readPosition
-        readPosition.id = readerInfo.deviceName
-        readPosition.readerName = readerInfo.readerType.rawValue
-        ModelData.shared?.readingPositionRepository.savePosition(readPosition, forBookId: book.bookPrefId)
-    }
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
         return prefObj
@@ -252,39 +243,4 @@ extension BookHighlight {
     }
 }
 
-struct YabrEBookReaderReadiumMetaSource: YabrReadiumMetaSource {
-    let book: CalibreBook
-    let readerInfo: ReaderInfo
-    var dictViewer: (String, UINavigationController)? = nil
-    
-    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController) -> BookDeviceReadingPosition? {
-        return readerInfo.position
-    }
-    
-    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController, update readPosition: (Double, Double, [String: Any], String)) {
-        var position = readerInfo.position
-        position.id = readerInfo.deviceName
-        position.readerName = readerInfo.readerType.rawValue
-        
-        position.lastChapterProgress = readPosition.0 * 100
-        position.lastProgress = readPosition.1 * 100
-        
-        position.lastReadPage = readPosition.2["pageNumber"] as? Int ?? 1
-        position.maxPage = readPosition.2["maxPage"] as? Int ?? 1
-        position.lastPosition[0] = readPosition.2["pageNumber"] as? Int ?? 1
-        position.lastPosition[1] = readPosition.2["pageOffsetX"] as? Int ?? 0
-        position.lastPosition[2] = readPosition.2["pageOffsetY"] as? Int ?? 0
-        
-        position.lastReadChapter = readPosition.3
-        
-        position.cfi = ""
 
-        position.epoch = Date().timeIntervalSince1970
-        
-        ModelData.shared?.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
-    }
-    
-    func yabrReadiumDictViewer(_ viewController: YabrReadiumReaderViewController) -> (String, UINavigationController)? {
-        return dictViewer
-    }
-}

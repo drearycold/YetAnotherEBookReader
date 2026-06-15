@@ -44,6 +44,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let thumbImageView = UIImageView()
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
+    weak var readerEngineDelegate: ReaderEngineDelegate?
+    var initialPosition: ReaderEnginePosition?
     
     @Published var pdfOptions = PDFOptions() {
         didSet {
@@ -147,14 +149,14 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             self.pdfOptions = pdfOptions
         }
         
-        if let position = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
-            let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
+        if let position = initialPosition {
+            let intialPageNum = position.pageNumber > 0 ? position.pageNumber : 1
         
             pageViewPositionHistory.removeAll()
             
             pageViewPositionHistory[intialPageNum] = PageViewPosition(
                 scaler: pdfOptions.lastScale,
-                point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
+                point: CGPoint(x: position.pageOffsetX, y: position.pageOffsetY)
             )
         }
         
@@ -724,7 +726,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     }
     
     @objc private func handlePageChange(notification: Notification) {
-        var titleLabel = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView)?.lastReadChapter
+        var titleLabel = initialPosition?.chapterName
         guard let curPage = pdfView.currentPage else { return }
 
         if var outlineRoot = pdfView.document?.outlineRoot {
@@ -1434,24 +1436,17 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             }
         }
         
-        if var updatedReadingPosition = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
-            updatedReadingPosition.lastPosition[0] = curPageNum
-            updatedReadingPosition.lastPosition[1] = Int(curPagePos.point.x.rounded())
-            updatedReadingPosition.lastPosition[2] = Int(curPagePos.point.y.rounded())
-            updatedReadingPosition.maxPage = self.pdfView.document?.pageCount ?? 1
-            updatedReadingPosition.lastReadPage = curPageNum
-            updatedReadingPosition.lastChapterProgress = chapterProgress
-            updatedReadingPosition.lastProgress = bookProgress
-            updatedReadingPosition.lastReadChapter = chapterName
-            let docTitle = pdfView.document?.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
-            updatedReadingPosition.lastReadBook = docTitle ?? "Unknown Title"
-            updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
-            updatedReadingPosition.epoch = Date().timeIntervalSince1970
-            
-            yabrPDFMetaSource?.yabrPDFReadPosition(pdfView, update: updatedReadingPosition)
-            
-            print("\(#function) updatedReadingPosition=\(updatedReadingPosition)")
-        }
+        let enginePos = ReaderEnginePosition(
+            pageNumber: curPageNum,
+            maxPage: self.pdfView.document?.pageCount ?? 1,
+            pageOffsetX: Int(curPagePos.point.x.rounded()),
+            pageOffsetY: Int(curPagePos.point.y.rounded()),
+            bookProgress: bookProgress,
+            chapterProgress: chapterProgress,
+            chapterName: chapterName,
+            cfi: nil
+        )
+        self.readerEngineDelegate?.readerEngine(self, didUpdatePosition: enginePos)
     }
     
 //    @objc func lookupStarDict() {
@@ -1655,9 +1650,7 @@ protocol YabrPDFMetaSource {
 
     func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline?
     
-    func yabrPDFReadPosition(_ view: YabrPDFView?) -> BookDeviceReadingPosition?
-    
-    func yabrPDFReadPosition(_ view: YabrPDFView?, update readPosition: BookDeviceReadingPosition)
+
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions?
     
