@@ -13,6 +13,7 @@ import ReadiumShared
 import ReadiumStreamer
 import ReadiumAdapterGCDWebServer
 import ReadiumGCDWebServer
+import RealmSwift
 
 @available(macCatalyst 14.0, *)
 struct YabrEBookReader: View {
@@ -105,6 +106,26 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                     }() else { return }
                     
                     readerVC.readerEngineDelegate = context.coordinator
+                    
+                    // Load and apply initial preferences
+                    let server = self.book.library.server
+                    let config = BookAnnotation.getBookPreferenceServerConfig(server)
+                    if let realm = try? Realm(configuration: config) {
+                        let bookId = self.book.bookPrefId
+                        if let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) {
+                            let enginePrefs = ReaderEnginePreferences(
+                                themeMode: savedPrefs.themeMode,
+                                fontSizePercentage: savedPrefs.fontSizePercentage,
+                                fontFamily: savedPrefs.fontFamily,
+                                lineHeight: savedPrefs.lineHeight,
+                                pageMargins: savedPrefs.pageMargins,
+                                scroll: savedPrefs.scroll,
+                                scrollDirection: savedPrefs.scrollAxis,
+                                volumeKeyPaging: savedPrefs.volumeKeyPaging
+                            )
+                            readerVC.applyPreferences(enginePrefs)
+                        }
+                    }
                     readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
                         systemItem: .close,
                         primaryAction: UIAction(
@@ -163,6 +184,35 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             )
             let ret = pdfViewController.open()
             if ret == 0 {
+                // Load and apply initial preferences for PDF
+                let server = book.library.server
+                let config = BookAnnotation.getBookPreferenceServerConfig(server)
+                if let realm = try? Realm(configuration: config) {
+                    if let savedPrefs = realm.objects(PDFOptions.self).filter("bookId == %@ AND libraryName == %@", book.id, book.library.name).first {
+                        let enginePrefs = ReaderEnginePreferences(
+                            themeMode: {
+                                switch savedPrefs.themeMode {
+                                case .serpia: return 1
+                                case .dark: return 2
+                                default: return 0
+                                }
+                            }(),
+                            fontSizePercentage: 100.0,
+                            fontFamily: "Original",
+                            lineHeight: 1.2,
+                            pageMargins: 1.0,
+                            scroll: savedPrefs.pageMode == .Scroll,
+                            scrollDirection: savedPrefs.scrollDirection == .Horizontal ? 1 : 0,
+                            volumeKeyPaging: false
+                        )
+                        pdfViewController.applyPreferences(enginePrefs)
+                    }
+                }
+                
+                // Load and apply initial highlights for PDF
+                let highlights = modelData.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
+                pdfViewController.applyHighlights(highlights)
+                
                 nav.pushViewController(pdfViewController, animated: false)
             } else {
                 errorLabel.text = "Fail to open PDF, code=\(ret)"
@@ -199,6 +249,34 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             epubReaderContainer.readerEngineDelegate = context.coordinator
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
+            
+            // Load and apply initial preferences for FolioReader
+            let server = book.library.server
+            let config = BookAnnotation.getBookPreferenceServerConfig(server)
+            if let realm = try? Realm(configuration: config) {
+                let bookId = book.bookPrefId
+                if let savedPrefs = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: bookId) {
+                    let themeMode = savedPrefs.themeMode == FolioReaderThemeMode.serpia.rawValue ? 1 : (savedPrefs.nightMode ? 2 : 0)
+                    let fontSizeStr = savedPrefs.currentFontSize ?? "100%"
+                    let fontSizePercentage = Double(fontSizeStr.replacingOccurrences(of: "%", with: "")) ?? 100.0
+                    
+                    let enginePrefs = ReaderEnginePreferences(
+                        themeMode: themeMode,
+                        fontSizePercentage: fontSizePercentage,
+                        fontFamily: savedPrefs.currentFont ?? "Georgia",
+                        lineHeight: 1.2,
+                        pageMargins: 1.0,
+                        scroll: savedPrefs.currentScrollDirection != 0,
+                        scrollDirection: savedPrefs.currentScrollDirection,
+                        volumeKeyPaging: false
+                    )
+                    epubReaderContainer.applyPreferences(enginePrefs)
+                }
+                
+                // Load and apply initial highlights for FolioReader
+                let highlights = modelData.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
+                epubReaderContainer.applyHighlights(highlights)
+            }
             
             nav.pushViewController(epubReaderContainer, animated: false)
             nav.setToolbarHidden(true, animated: false)
@@ -253,6 +331,72 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             dbPosition.epoch = Date().timeIntervalSince1970
             
             parent.modelData.readingPositionRepository.savePosition(dbPosition, forBookId: parent.book.bookPrefId)
+        }
+        
+        func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {
+            let bookHighlight = highlight.toBookHighlight()
+            parent.modelData.annotationRepository.saveHighlight(bookHighlight)
+        }
+        
+        func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {
+            parent.modelData.annotationRepository.removeHighlight(id: highlightId)
+        }
+        
+        func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {
+            let server = parent.book.library.server
+            let config = BookAnnotation.getBookPreferenceServerConfig(server)
+            guard let realm = try? Realm(configuration: config) else { return }
+            
+            let bookId = parent.book.bookPrefId
+            try? realm.write {
+                if parent.readerInfo.readerType == .ReadiumEPUB || parent.readerInfo.readerType == .ReadiumPDF || parent.readerInfo.readerType == .ReadiumCBZ {
+                    let dbPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) ?? {
+                        let newPrefs = ReadiumPreferenceRealm()
+                        newPrefs.id = bookId
+                        realm.add(newPrefs)
+                        return newPrefs
+                    }()
+                    dbPrefs.themeMode = prefs.themeMode
+                    dbPrefs.fontSizePercentage = prefs.fontSizePercentage
+                    dbPrefs.fontFamily = prefs.fontFamily
+                    dbPrefs.lineHeight = prefs.lineHeight
+                    dbPrefs.pageMargins = prefs.pageMargins
+                    dbPrefs.scroll = prefs.scroll
+                    dbPrefs.scrollAxis = prefs.scrollDirection
+                    dbPrefs.volumeKeyPaging = prefs.volumeKeyPaging
+                } else if parent.readerInfo.format == .PDF {
+                    let dbPrefs = realm.objects(PDFOptions.self).filter("bookId == %@ AND libraryName == %@", parent.book.id, parent.book.library.name).first ?? {
+                        let newPrefs = PDFOptions()
+                        newPrefs.bookId = parent.book.id
+                        newPrefs.libraryName = parent.book.library.name
+                        realm.add(newPrefs)
+                        return newPrefs
+                    }()
+                    
+                    switch prefs.themeMode {
+                    case 1:
+                        dbPrefs.themeMode = .serpia
+                    case 2:
+                        dbPrefs.themeMode = .dark
+                    default:
+                        dbPrefs.themeMode = .none
+                    }
+                    dbPrefs.pageMode = prefs.scroll ? .Scroll : .Page
+                    dbPrefs.scrollDirection = prefs.scrollDirection == 0 ? .Vertical : .Horizontal
+                } else if parent.readerInfo.format == .EPUB { // FolioReader
+                    let dbPrefs = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: bookId) ?? {
+                        let newPrefs = FolioReaderPreferenceRealm()
+                        newPrefs.id = bookId
+                        realm.add(newPrefs)
+                        return newPrefs
+                    }()
+                    dbPrefs.nightMode = (prefs.themeMode == 2)
+                    dbPrefs.themeMode = prefs.themeMode
+                    dbPrefs.currentFontSize = "\(Int(prefs.fontSizePercentage))%"
+                    dbPrefs.currentFont = prefs.fontFamily
+                    dbPrefs.currentScrollDirection = prefs.scrollDirection
+                }
+            }
         }
     }
 }

@@ -170,7 +170,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        self.annotationManager = PDFAnnotationManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        let bookId = self.yabrPDFMetaSource?.yabrPDFBook(self.pdfView, info: "Key") ?? ""
+        self.annotationManager = PDFAnnotationManager(pdfView: self.pdfView, delegate: self.readerEngineDelegate, bookId: bookId)
         self.bookmarkManager = PDFBookmarkManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
         self.searchController = PDFSearchController(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
         
@@ -1689,5 +1690,28 @@ extension YabrPDFViewController: UIEditMenuInteractionDelegate {
         
         // Present the edit menu interaction.
         interaction.presentEditMenu(with: configuration)
+    }
+}
+
+extension YabrPDFViewController: ReaderEngineController {
+    func applyPreferences(_ preferences: ReaderEnginePreferences) {
+        let newOptions = PDFOptions()
+        switch preferences.themeMode {
+        case 1:
+            newOptions.themeMode = .serpia
+        case 2:
+            newOptions.themeMode = .dark
+        default:
+            newOptions.themeMode = .none
+        }
+        
+        newOptions.pageMode = preferences.scroll ? .Scroll : .Page
+        newOptions.scrollDirection = preferences.scrollDirection == 0 ? .Vertical : .Horizontal
+        
+        self.handleOptionsChange(pdfOptions: newOptions)
+    }
+
+    func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
+        self.annotationManager.applyHighlights(highlights)
     }
 }

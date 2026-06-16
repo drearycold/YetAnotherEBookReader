@@ -425,9 +425,7 @@ class YabrPDFView: PDFView {
             return
         }
 
-        if let pdfHighlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightTapped) {
-            self.yabrPDFMetaSource?.yabrPDFHighlights(self, remove: pdfHighlight)
-        }
+        self.yabrPDFViewController?.annotationManager.removeHighlight(uuid: highlightTapped)
     }
 }
 
@@ -484,16 +482,7 @@ extension YabrPDFView {
     }
     
     func modifyHighlightStyle(highlightId: UUID, type: BookHighlightStyle) {
-        guard var highlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightId)
-        else { return }
-        
-        self.removeHighlight(highlight: highlight)
-        
-        highlight.type = type.rawValue
-        highlight.date = .init()
-        
-        self.yabrPDFMetaSource?.yabrPDFHighlights(self, update: highlight)
-        self.injectHighlight(highlight: highlight)
+        self.yabrPDFViewController?.annotationManager.modifyHighlightStyle(uuid: highlightId, type: type)
     }
     
     func removeHighlight(highlight: PDFHighlight) {
@@ -528,9 +517,7 @@ extension YabrPDFView {
         }
         
         menuItems.append(UIMenuItem(title: "Delete", image: nil, action: { _ in
-            if let pdfHighlight = self.yabrPDFMetaSource?.yabrPDFHighlights(self, getById: highlightTapped) {
-                self.yabrPDFMetaSource?.yabrPDFHighlights(self, remove: pdfHighlight)
-            }
+            self.yabrPDFViewController?.annotationManager.removeHighlight(uuid: highlightTapped)
         }))
         
         return menuItems
