@@ -66,6 +66,41 @@ extension EpubFolioReaderContainer {
     }
 }
 
+func folioFontSizeToPercentage(_ fontSize: String) -> Double {
+    switch fontSize {
+    case "15.5px": return 90.0
+    case "17px":   return 100.0
+    case "18.5px": return 110.0
+    case "20px":   return 120.0
+    case "22px":   return 130.0
+    case "24px":   return 140.0
+    case "26px":   return 150.0
+    case "28px":   return 160.0
+    case "30.5px": return 180.0
+    case "33px":   return 200.0
+    case "35.5px": return 220.0
+    default:
+        if fontSize.hasSuffix("%"), let val = Double(fontSize.dropLast()) {
+            return val
+        }
+        return 100.0
+    }
+}
+
+func percentageToFolioFontSize(_ percentage: Double) -> String {
+    if percentage <= 95.0 { return "15.5px" }
+    if percentage <= 105.0 { return "17px" }
+    if percentage <= 115.0 { return "18.5px" }
+    if percentage <= 125.0 { return "20px" }
+    if percentage <= 135.0 { return "22px" }
+    if percentage <= 145.0 { return "24px" }
+    if percentage <= 155.0 { return "26px" }
+    if percentage <= 170.0 { return "28px" }
+    if percentage <= 190.0 { return "30.5px" }
+    if percentage <= 210.0 { return "33px" }
+    return "35.5px"
+}
+
 class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     let folioReader: FolioReader
     weak var delegate: ReaderEngineDelegate?
@@ -134,16 +169,15 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         values["nightMode"] = nightMode
         values["themeMode"] = preferences.themeMode
         
-        let fontSizeInt = Int(preferences.fontSizePercentage)
-        values["currentFontSize"] = "\(fontSizeInt)%"
+        values["currentFontSize"] = percentageToFolioFontSize(preferences.fontSizePercentage)
         values["currentFont"] = preferences.fontFamily
         values["currentScrollDirection"] = preferences.scrollDirection
     }
     
     private func notifyDelegate() {
         let themeMode = values["themeMode"] as? Int ?? (values["nightMode"] as? Bool == true ? 2 : 1)
-        let fontSizeStr = values["currentFontSize"] as? String ?? "100%"
-        let fontSizePercentage = Double(fontSizeStr.replacingOccurrences(of: "%", with: "")) ?? 100.0
+        let fontSizeStr = values["currentFontSize"] as? String ?? FolioReader.DefaultFontSize
+        let fontSizePercentage = folioFontSizeToPercentage(fontSizeStr)
         let fontFamily = values["currentFont"] as? String ?? "Original"
         let scrollDirection = values["currentScrollDirection"] as? Int ?? 0
         
