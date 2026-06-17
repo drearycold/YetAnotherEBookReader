@@ -290,15 +290,7 @@ extension CalibreBook: Persistable {
         self.lastSynced = managedObject.lastSynced
         self.lastUpdated = managedObject.lastUpdated
         self.formats = formatsVer2
-        if managedObject.readPosData != nil,
-           managedObject.isFrozen == false {
-            if let repo = ModelData.shared?.readingPositionRepository {
-                managedObject.migrateReadPos(library: library, repository: repo)
-            }
-            try? managedObject.realm?.write({
-                managedObject.readPosData = nil
-            })
-        }
+        // Migration of readPosData moved to background startup sweep to avoid blocking the main thread
         
         self.inShelf = managedObject.inShelf
         

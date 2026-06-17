@@ -581,6 +581,44 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         calibreUpdatedSubject.send(.shelf)
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+        
+        migrateLegacyReadPosData()
+    }
+    
+    func migrateLegacyReadPosData() {
+        DispatchQueue.global(qos: .background).async {
+            guard let realm = try? Realm(configuration: self.realmConf) else {
+                return
+            }
+            
+            let bookKeysToMigrate = realm.objects(CalibreBookRealm.self)
+                .filter("readPosData != nil")
+                .compactMap { $0.primaryKey }
+            
+            guard !bookKeysToMigrate.isEmpty else { return }
+            
+            print("migrateLegacyReadPosData: Found \(bookKeysToMigrate.count) legacy reading positions to migrate.")
+            
+            for key in bookKeysToMigrate {
+                guard let freshRealm = try? Realm(configuration: self.realmConf),
+                      let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
+                      let serverUUID = bookRealm.serverUUID,
+                      let libraryName = bookRealm.libraryName
+                else {
+                    continue
+                }
+                
+                if let library = self.library(forServerUUID: serverUUID, libraryName: libraryName) {
+                    bookRealm.migrateReadPos(library: library, repository: self.readingPositionRepository)
+                }
+                
+                try? freshRealm.write {
+                    bookRealm.readPosData = nil
+                }
+            }
+            
+            print("migrateLegacyReadPosData: Completed background migration of legacy reading positions.")
+        }
     }
     
     func importCustomFonts(urls: [URL]) -> [CFArray]? {

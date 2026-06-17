@@ -23,6 +23,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - **Unified Search Modernization (Phase 4):** Refactored UI layer (Views and ViewModels) to consume `UnifiedSearchResult` via Combine, removing tight coupling to Realm objects like `CalibreUnifiedSearchObject`. Removed the $O(N)$ lookup `getMergedBookIndex()` logic in favor of straightforward array iteration.
 - **Development Environment Migration:** Transitioning the project to an agent-first development workflow using the Google Antigravity CLI.
 - **Architectural Shift (MVVM):** Transitioning from a single monolithic `@EnvironmentObject var modelData` to modular `@StateObject` ViewModels for complex views.
+- **Unified Search Cache Model Refactoring:** Removed `@Persisted var books: List<CalibreBookRealm>` from `CalibreLibrarySearchValueObject`. Search result mapping in `RealmSearchCacheStore` now resolves the books array dynamically from `bookIds` using primary key lookups in `Realm`. `CalibreBrowser` was refactored to check resolved books count dynamically, completely eliminating the need for `books` list mutations and changeset observation. Bumped database schema version to `139` across all targets.
 - **Context Guardrails:** Established the `.agents/memory-bank` directory to provide strict architectural guidelines, preventing subagents from hallucinating or deviating from the Swift Package Manager / SwiftUI architecture.
 - **MCP Integration:** Moved Xcode toolchain configurations to `.agents/mcp_config.json` to allow the Antigravity CLI to autonomously interact with `xcodebuild` and the iOS Simulator.
 
@@ -65,6 +66,8 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] 35. Refactored ServerView components (`AddModServerView`, `ServerDetailView`, `ServerOptionsDSReaderHelper`, `LibraryDetailView`) to MVVM using two view models (`ServerViewModel` and `LibraryViewModel`), completely decoupling `LibraryDetailView` from Realm.
 - [x] 36. Fixed `libraryRowBuilder` sync status UI in `ServerDetailView.swift` to display mutually exclusive status text instead of overlapping states.
 - [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
+- [x] 38. Corrected the FolioReader font size mapping alignment with unified preferences (index 3/"20px" as 100%).
+- [x] 39. Implemented all 5 performance optimization fixes to eliminate Realm database hangs and UI freezes when opening `BookDetailView`.
 
 ## Completed Refactoring Milestones
 - [x] Extract `CalibreServerManager` out of `ModelData` (Milestone P0-1a).
@@ -81,6 +84,9 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] Decouple bookmarks and highlights (annotations) into AnnotationRepository (Milestone P0-3c) and refactor reader UI adapters.
 - [x] Consolidate reading position saving logic across Readium, FolioReader, and PDF engines (Milestone P1a-A06).
 - [x] Dismantle PDF God VC by extracting Annotation, Bookmark, and Search managers and implementing a Search tab (Milestone P1b-A03).
+- [x] Correct FolioReader font size mapping discrepancy and align with unified preferences.
+- [x] Mitigate Realm database hangs/UI freezes when opening BookDetailView (Fixes 1-5).
+- [x] Remove books property from CalibreLibrarySearchValueObject and dynamically resolve books list.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

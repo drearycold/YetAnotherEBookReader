@@ -37,8 +37,14 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     private func getRealm() -> Realm? {
         if Thread.isMainThread {
             return databaseService.realm
-        } else if let conf = databaseService.realmConf {
-            return try? Realm(configuration: conf)
+        }
+        let key = "AnnotationRepositoryRealm"
+        if let cachedRealm = Thread.current.threadDictionary[key] as? Realm {
+            return cachedRealm
+        }
+        if let conf = databaseService.realmConf, let realm = try? Realm(configuration: conf) {
+            Thread.current.threadDictionary[key] = realm
+            return realm
         }
         return nil
     }

@@ -291,18 +291,29 @@ class CalibreLibrarySearchManager: ObservableObject {
                     return
                 }
                 
-                guard sourceObj.books.count <= sourceObj.bookIds.count
-                else {
+                if let library = self.modelData.calibreLibraries[cacheObj.libraryId] {
+                    let serverUUID = library.server.uuid.uuidString
+                    let libraryName = library.name
+                    
+                    var resolvedCount = 0
+                    for bookId in sourceObj.bookIds {
+                        let pk = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
+                        if cacheRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) != nil {
+                            resolvedCount += 1
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    if sourceObj.bookIds.count > resolvedCount {
+                        try! cacheRealm.write {
+                            sourceObj.bookIds.removeLast(sourceObj.bookIds.count - resolvedCount)
+                        }
+                    }
+                } else {
                     try! cacheRealm.write {
                         cacheObj.sources.removeObject(for: sourceKey)
                         cacheRealm.delete(sourceObj)
-                    }
-                    return
-                }
-                
-                if sourceObj.bookIds.count > sourceObj.books.count {
-                    try! cacheRealm.write {
-                        sourceObj.bookIds.removeLast(sourceObj.bookIds.count - sourceObj.books.count)
                     }
                 }
             }
@@ -369,109 +380,44 @@ class CalibreLibrarySearchManager: ObservableObject {
     func registerCacheSearchValueChangeReceiver(librarySearchKey: LibrarySearchKey, cacheObj: CalibreLibrarySearchObject, sourceObj: CalibreLibrarySearchValueObject) {
         sourceObj.bookIds.changesetPublisher
             .subscribe(on: cacheRealmQueue)
-            .map { changes -> (library: CalibreLibrary?, insertedBookIds: [Int32]) in
-                var insertedBookIds = [Int32]()
-                
-                switch changes {
-                case .initial(_):
-                    guard sourceObj.bookIds.count > sourceObj.books.count
-                    else {
-                        return (nil, [])
-                    }
-                    insertedBookIds.append(contentsOf: sourceObj.bookIds[ sourceObj.books.count...])
-                case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) bookIds changeset deletion \(deletions.map { $0.description }.joined(separator: ","))")
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) bookIds changeset insertions \(insertions.map { $0.description }.joined(separator: ","))")
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) bookIds changeset modifications \(modifications.map { $0.description }.joined(separator: ","))")
-                    
-                    insertedBookIds.append(contentsOf: insertions.map {
-                        sourceObj.bookIds[$0]
-                    })
-                case .error(_):
+            .map { changes -> (library: CalibreLibrary?, toFetchIDs: [Int32]) in
+                guard let library = self.modelData.calibreLibraries[librarySearchKey.libraryId] else {
                     return (nil, [])
-                }
-                
-                //trigger book metadata fetcher
-                guard let library = self.modelData.calibreLibraries[librarySearchKey.libraryId]
-                else {
-                    return (nil, [])
-                }
-                
-                return (library, insertedBookIds)
-            }
-            .receive(on: self.cacheRealmQueue)
-            .sink { library, insertedBookIds in
-                guard let library = library
-                else {
-                    return
                 }
                 
                 let serverUUID = library.server.uuid.uuidString
+                let libraryName = library.name
                 
-                var books = [CalibreBookRealm]()
-                var toFetchIDs = [Int32]()
-                
-//                insertedBookIds.forEach { bookId in
-                guard sourceObj.books.count < sourceObj.bookIds.count
-                else {
-                    return
-                }
-                
-                sourceObj.bookIds[sourceObj.books.count...].forEach { bookId in
-                    if let obj = self.cacheRealm.object(
-                        ofType: CalibreBookRealm.self,
-                        forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
-                    ) {
-                        books.append(obj)
-                    } else {
-                        toFetchIDs.append(bookId)
-                    }
-                }
-                
-                if toFetchIDs.isEmpty {
-                    try! self.cacheRealm.write {
-                        sourceObj.books.append(objectsIn: books)
-                        assert(sourceObj.books.count <= sourceObj.bookIds.count)
-                    }
-                } else {
-                    self.metadataRequestSubject.send(
-                        .init(
-                            library: library,
-                            books: toFetchIDs,
-                            getAnnotations: false
-                        )
-                    )
-                }
-            }
-            .store(in: &cancellables)
-        
-        sourceObj.books.changesetPublisher
-            .subscribe(on: cacheRealmQueue)
-            .sink { changes in
-                var insertedBooks: [CalibreBookRealm] = []
+                var targetBookIds = [Int32]()
                 switch changes {
+                case .initial(let list):
+                    targetBookIds = Array(list)
+                case .update(let list, _, let insertions, _):
+                    targetBookIds = insertions.map { list[$0] }
                 case .error(_):
-                    break
-                case .initial(_):
-//                    insertedBooks.append(contentsOf: sourceObj.books)
-                    break
-                case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) books changeset insertions \(insertions.map { $0.description }.joined(separator: ","))")
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) books changeset deletions \(deletions.map { $0.description }.joined(separator: ","))")
-                    self.logger.info("cacheRealm \(sourceObj._id) \(librarySearchKey) books changeset modifications \(modifications.map { $0.description }.joined(separator: ","))")
-                    
-                    insertedBooks.append(contentsOf: insertions.map({
-                        sourceObj.books[$0]
-                    }))
-                    break
+                    return (nil, [])
                 }
                 
-                guard self.modelData.calibreLibraries[librarySearchKey.libraryId] != nil
-                else {
+                let toFetchIDs = targetBookIds.filter { bookId in
+                    let pk = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
+                    return self.cacheRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) == nil
+                }
+                
+                return (library, toFetchIDs)
+            }
+            .receive(on: self.cacheRealmQueue)
+            .sink { library, toFetchIDs in
+                guard let library = library, !toFetchIDs.isEmpty else {
                     return
                 }
                 
-
+                self.metadataRequestSubject.send(
+                    .init(
+                        library: library,
+                        books: toFetchIDs,
+                        getAnnotations: false
+                    )
+                )
             }
             .store(in: &cancellables)
     }
@@ -525,7 +471,6 @@ class CalibreLibrarySearchManager: ObservableObject {
                         let sourceObj = self.getOrCreateLibrarySearchValueObject(librarySearchKey: searchKey, cacheObj: cacheObj, serverUrl: serverKey)
                         
                         if request.force || sourceObj.generation < library.lastModified {
-                            sourceObj.books.removeAll()
                             sourceObj.bookIds.removeAll()
                             sourceObj.generation = Date.distantPast
                             parameters[serverKey] = (generation: library.lastModified, num: request.limit, offset: 0)
@@ -590,11 +535,17 @@ class CalibreLibrarySearchManager: ObservableObject {
                     guard task.num > 0
                     else {
                         //let's trigger metadata request
-                        if sourceObj.books.count < sourceObj.bookIds.count {
+                        let serverUUID = task.library.server.uuid.uuidString
+                        let libraryName = task.library.name
+                        let toFetchIDs = sourceObj.bookIds.filter { bookId in
+                            let pk = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
+                            return self.cacheRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) == nil
+                        }
+                        if !toFetchIDs.isEmpty {
                             self.metadataRequestSubject.send(
                                 .init(
                                     library: task.library,
-                                    books: sourceObj.bookIds[sourceObj.books.count ..< sourceObj.bookIds.count].map { $0 },
+                                    books: Array(toFetchIDs),
                                     getAnnotations: false
                                 )
                             )
@@ -611,10 +562,6 @@ class CalibreLibrarySearchManager: ObservableObject {
                     if task.generation == sourceObj.generation {
                         sourceObj.totalNumber = ajaxSearchResult.total_num
                         if sourceObj.bookIds.count == task.offset {
-                            guard sourceObj.books.count <= sourceObj.bookIds.count
-                            else {
-                                fatalError("\(task.booksListUrl.absoluteString) \(sourceObj.description) books.count beyond bookIds.count")
-                            }
                             sourceObj.bookIds.append(objectsIn: ajaxSearchResult.book_ids)
                         } else {
                             //redundant request, discard
@@ -623,7 +570,6 @@ class CalibreLibrarySearchManager: ObservableObject {
                         if task.offset == 0 {
                             sourceObj.totalNumber = ajaxSearchResult.total_num
                             sourceObj.generation = task.generation
-                            sourceObj.books.removeAll()
                             sourceObj.bookIds.removeAll()
                             sourceObj.bookIds.append(objectsIn: ajaxSearchResult.book_ids)
                         } else {
@@ -634,16 +580,6 @@ class CalibreLibrarySearchManager: ObservableObject {
                     } else {
                         //task.generation < cacheObj.generation
                         //discard result
-                    }
-                    
-                    if sourceObj.books.count < sourceObj.bookIds.count {
-                        self.metadataRequestSubject.send(
-                            .init(
-                                library: task.library,
-                                books: sourceObj.bookIds[sourceObj.books.count ..< sourceObj.bookIds.count].map { $0 },
-                                getAnnotations: false
-                            )
-                        )
                     }
                 }
                 return task
@@ -718,45 +654,7 @@ class CalibreLibrarySearchManager: ObservableObject {
                 }
             }
             .receive(on: cacheRealmQueue)
-            .sink { task in
-                let serverUUID = task.library.server.uuid.uuidString
-                
-                self.cacheSearchLibraryObjects.forEach { searchKey, cacheObjId in
-                    guard searchKey.libraryId == task.library.id,
-                          let cacheObj = self.cacheRealm.object(ofType: CalibreLibrarySearchObject.self, forPrimaryKey: cacheObjId)
-                          
-                    else {
-                        return
-                    }
-                    
-                    cacheObj.sources.forEach { sourceEntry in
-                        
-                        guard let sourceObj = sourceEntry.value,
-                              sourceObj.bookIds.count > sourceObj.books.count
-                        else {
-                            return
-                        }
-                        
-                        try? self.cacheRealm.write({
-                            var idx = sourceObj.books.endIndex
-                            while idx < sourceObj.bookIds.count,
-                                  let bookObj = self.cacheRealm.object(
-                                    ofType: CalibreBookRealm.self,
-                                    forPrimaryKey: CalibreBookRealm.PrimaryKey(
-                                        serverUUID: serverUUID,
-                                        libraryName: task.library.name,
-                                        id: sourceObj.bookIds[idx].description
-                                    )
-                                  ) {
-                                sourceObj.books.append(bookObj)
-                                idx += 1
-                            }
-                            assert(sourceObj.books.count <= sourceObj.bookIds.count)
-                        })
-                    }
-                    
-                }
-            }
+            .sink { _ in }
             .store(in: &cancellables)
     }
     

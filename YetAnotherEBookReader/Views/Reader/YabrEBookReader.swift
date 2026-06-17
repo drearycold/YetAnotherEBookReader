@@ -257,7 +257,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                 let bookId = book.bookPrefId
                 if let savedPrefs = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: bookId) {
                     let themeMode = savedPrefs.themeMode == FolioReaderThemeMode.serpia.rawValue ? 1 : (savedPrefs.nightMode ? 2 : 0)
-                    let fontSizeStr = savedPrefs.currentFontSize ?? "17px"
+                    let fontSizeStr = savedPrefs.currentFontSize ?? FolioReader.DefaultFontSize
                     let fontSizePercentage = folioFontSizeToPercentage(fontSizeStr)
                     
                     let enginePrefs = ReaderEnginePreferences(

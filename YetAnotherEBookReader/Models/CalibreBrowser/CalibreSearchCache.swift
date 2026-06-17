@@ -22,11 +22,8 @@ class CalibreLibrarySearchValueObject: Object, ObjectKeyIdentifiable {
     
     @Persisted var bookIds: List<Int32>
     
-    //books after getting metadata and annotations
-    @Persisted var books: List<CalibreBookRealm>
-    
     override var description: String {
-        return "Gen: \(generation) / Total: \(totalNumber) / IDs: \(bookIds.count) / Books: \(books.count)"
+        return "Gen: \(generation) / Total: \(totalNumber) / IDs: \(bookIds.count)"
     }
 }
 
