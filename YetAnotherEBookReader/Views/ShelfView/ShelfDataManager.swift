@@ -45,8 +45,7 @@ class YabrShelfDataModel: ObservableObject {
         }
         
     }
-    private let service: CalibreServerService
-    private let searchManager: CalibreLibrarySearchManager
+    private let unifiedSearchService: UnifiedSearchService
     private let modelData: ModelData
     
     @Published var categories: Set<CategoryObject> = []
@@ -63,9 +62,8 @@ class YabrShelfDataModel: ObservableObject {
     
     var realmOnQueue: Realm!
     
-    init(service: CalibreServerService, searchManager: CalibreLibrarySearchManager, modelData: ModelData) {
-        self.service = service
-        self.searchManager = searchManager
+    init(unifiedSearchService: UnifiedSearchService, modelData: ModelData) {
+        self.unifiedSearchService = unifiedSearchService
         self.modelData = modelData
         
         dispatchQueue.sync {
@@ -181,7 +179,7 @@ class YabrShelfDataModel: ObservableObject {
                 )
             )
             
-            searchManager.unifiedSearchService.publisher(for: key)
+            unifiedSearchService.publisher(for: key)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self, weak category] result in
                     guard let self = self, let category = category else { return }
@@ -272,7 +270,7 @@ class YabrShelfDataModel: ObservableObject {
                     )
                 )
                 Task {
-                    await self.searchManager.unifiedSearchService.resetSearch(for: key, force: true)
+                    await self.unifiedSearchService.resetSearch(for: key, force: true)
                 }
             }
         }

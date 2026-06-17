@@ -28,7 +28,7 @@ class UnifiedCategoryViewModel: ObservableObject {
             fatalError("ModelData.shared must be initialized before creating UnifiedCategoryViewModel")
         }
         self.modelData = resolvedModelData
-        self.unifiedCategoryService = unifiedCategoryService ?? resolvedModelData.librarySearchManager.unifiedCategoryService
+        self.unifiedCategoryService = unifiedCategoryService ?? resolvedModelData.unifiedCategoryService
     }
     
     func mergeCategory(categoryName: String, searchString: String) {
@@ -83,10 +83,10 @@ class UnifiedCategoryViewModel: ObservableObject {
     func forceRefreshCategory(categoryName: String) {
         let calibreLibraries = modelData.calibreLibraries.values
         let activeLibraries = calibreLibraries.filter { !$0.hidden && !$0.server.removed }
-        let repository = modelData.librarySearchManager.categoryCacheRepository
+        let repository = modelData.categoryCacheRepository
         
         for library in activeLibraries {
-            try? repository?.invalidateCategoryCache(libraryId: library.id, categoryName: categoryName)
+            try? repository.invalidateCategoryCache(libraryId: library.id, categoryName: categoryName)
             
             Task {
                 await modelData.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))

@@ -103,8 +103,8 @@ extension LibraryInfoView {
         
         func fetchAvailableCategories() {
             guard let modelData = ModelData.shared else { return }
-            let repository = modelData.librarySearchManager.categoryCacheRepository
-            if let summaries = try? repository?.fetchCategorySummaries() {
+            let repository = modelData.categoryCacheRepository
+            if let summaries = try? repository.fetchCategorySummaries() {
                 self.availableCategories = summaries
             }
         }

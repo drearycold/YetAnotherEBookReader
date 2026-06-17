@@ -261,58 +261,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
             .init(title: "Clear", style: .plain, target: shelfView, action: #selector(shelfView.clearSelection(_:)))
         ], animated: true)
         
-        
-        ///
-        /*
-        modelData.librarySearchManager.cacheRealmQueue.sync {
-            let lastAdded = SearchCriteriaMergedKey(libraryIds: [], criteria: .init(searchString: "", sortCriteria: .init(by: .Added, ascending: false), filterCriteriaCategory: [:]))
-            
-            let lastAddedObject = modelData.librarySearchManager.getUnifiedResult(libraryIds: lastAdded.libraryIds, searchCriteria: lastAdded.criteria)
-            
-            shelfObjects[lastAdded] = lastAddedObject
-            
-            shelfObjects = modelData.booksInShelf.reduce(into: shelfObjects) { partialResult, bookEntry in
-                
-            }
-            
-            valuePublisher(lastAddedObject, keyPaths: ["books"])
-                .receive(on: modelData.librarySearchManager.cacheRealmQueue)
-                .map { object -> ShelfModelSection in
-                    print("\(#function) lastAddedObject changed books.count=\(object.books.count)")
-                    
-                    let shelfModels: [ShelfModel] = object.books.prefix(20).map { book -> ShelfModel in
-                            .init(bookCoverSource: "", bookId: book.primaryKey!, bookTitle: book.title, bookProgress: 0, bookStatus: .READY, sectionId: "last-added")
-                    }
-                    
-                    return .init(sectionName: "Last Added", sectionId: "last-added", sectionShelf: shelfModels)
-                }
-                .receive(on: snaptshotQueue)
-                .sink { completion in
-                    
-                } receiveValue: { section in
-                    let shelfModels = [section]
-                    var snapshot = shelfModels.reduce(
-                        into: NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>(),
-                        { partialResult, section in
-                            var sectionShelf = section.sectionShelf
-                            
-                            sectionShelf[sectionShelf.startIndex].type = .left
-                            sectionShelf[sectionShelf.endIndex-1].type = .right
-                            
-                            partialResult.appendSections([ShelfModelSection(sectionName: section.sectionName, sectionId: section.sectionId, sectionShelf: [])])
-                            
-                            partialResult.appendItems(sectionShelf)
-                        })
-                    
-                    self.fillSnapshotToScreen(snapshot: &snapshot)
-                    
-                    self.shelfView.applyDataSourceSnapshot(snapshot: snapshot)
-                }
-                .store(in: &cancellables)
-        }
-        */
-        
-        
         /*
         modelData.shelfDataModel.$discoverShelf
             .receive(on: snaptshotQueue)
@@ -366,14 +314,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     
     func fillSnapshotToScreen(snapshot: inout NSDiffableDataSourceSnapshot<ShelfModelSection, ShelfModel>) {
         while snapshot.numberOfSections < Int(self.shelfView.grids.height) {
-            let sectionId = LibrarySearchKey(
-                libraryId: self.modelData.localLibrary?.id ?? "",
-                criteria: .init(
-                    searchString: "\(snapshot.numberOfSections)",
-                    sortCriteria: .init(),
-                    filterCriteriaCategory: [:]
-                )
-            ).description
+            let sectionId = "filler-\(self.modelData.localLibrary?.id ?? "unknown")-\(snapshot.numberOfSections)"
             
             snapshot.appendSections([.init(
                 sectionName: "",

@@ -71,20 +71,6 @@ class CalibreLibraryCategoryItemObject: Object, ObjectKeyIdentifiable {
     @Persisted(indexed: true) var url: String
 }
 
-class CalibreUnifiedCategoryItemObject: Object, ObjectKeyIdentifiable {
-    @Persisted(primaryKey: true) var _id: ObjectId
-    
-    @Persisted(originProperty: "items") var assignee: LinkingObjects<CalibreUnifiedCategoryObject>
-    
-    @Persisted(indexed: true) var categoryName: String
-    @Persisted(indexed: true) var name: String
-    @Persisted var averageRating: Double
-    @Persisted var count: Int
-    
-    @Persisted var items: MutableSet<CalibreLibraryCategoryItemObject>
-}
-
-
 class CalibreLibraryCategoryObject: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
@@ -96,27 +82,4 @@ class CalibreLibraryCategoryObject: Object, ObjectKeyIdentifiable {
     
     @Persisted var items: List<CalibreLibraryCategoryItemObject>
 }
-
-class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
-    @Persisted(primaryKey: true) var _id: ObjectId
-    
-    @Persisted(indexed: true) var categoryName: String
-    @Persisted(indexed: true) var search: String
-    
-    @Persisted var totalNumber: Int
-    @Persisted var itemsCount: Int
-    @Persisted var items: List<CalibreUnifiedCategoryItemObject>
-    
-    var key: CalibreUnifiedCategoryKey {
-        .init(categoryName: categoryName, search: search)
-    }
-}
-
-
-
-struct CalibreLibrarySearchRuntime {
-    var loading = 0
-    var error = false
-}
-
 

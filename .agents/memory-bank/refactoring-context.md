@@ -4,6 +4,70 @@
 
 ## Latest Update: 2026-06-17
 
+## P1e Implementation: 2026-06-17
+
+P1e is now implemented. The V2 search/category stack is the application root dependency graph, and the V1 `CalibreBrowser` path has been removed rather than wrapped.
+
+### Delivered Structure
+
+- `ModelData` now owns and wires:
+  - `searchCacheRepository: RealmSearchCacheStore`
+  - `librarySearchService: LibrarySearchService`
+  - `unifiedSearchService: UnifiedSearchService`
+  - `categoryCacheRepository: CategoryCacheRepository`
+  - `libraryCategoryService: LibraryCategoryService`
+  - `unifiedCategoryService: UnifiedCategoryService`
+- `YabrShelfDataModel` now depends directly on `UnifiedSearchService`.
+- `UnifiedSearchViewModel`, `UnifiedCategoryViewModel`, `LibraryInfoView.ViewModel`, and `CalibreLibraryManager` now resolve V2 services and repositories directly from `ModelData`.
+
+### Removed V1 Surface
+
+- Deleted `Models/CalibreBrowser/CalibreBrowser.swift`
+- Removed `CalibreLibrarySearchManager` from `ModelData`
+- Removed the old V1-only runtime/cache orchestration layer and helper types, including:
+  - `CalibreLibrarySearchRuntime`
+  - `CalibreUnifiedCategoryObject`
+  - `CalibreUnifiedCategoryItemObject`
+- Deleted the `searchLibraryBooks(task:)` path by making `LibrarySearchService` the search execution boundary and moving request construction into `Network/CalibreServerService+Search.swift`
+
+### Shared Types Preserved
+
+Search/category value types that are still valid in V2 were retained and moved to neutral locations:
+
+- `UnifiedSearchModels.swift`
+  - `LibrarySearchSort`
+  - `SortCriteria`
+  - `SearchCriteria`
+  - `SearchCriteriaMergedKey`
+- `CategoryModels.swift`
+  - `LibraryCategoryList`
+  - `LibraryCategoryListResult`
+
+### Persistence / Migration Changes
+
+- Realm schema version advanced from `138` to `139`
+- Added one-time migration cleanup:
+  - `migration.deleteData(forType: CalibreUnifiedCategoryObject.className())`
+  - `migration.deleteData(forType: CalibreUnifiedCategoryItemObject.className())`
+- Removed the old `<110` unified-category field backfill branch because the deprecated object type no longer exists in the runtime schema
+
+### Test Coverage Added
+
+- `V2MigrationDependencyTests`
+  - verifies `UnifiedSearchViewModel` defaults to `ModelData.unifiedSearchService`
+  - verifies `UnifiedCategoryViewModel` defaults to `ModelData.unifiedCategoryService`
+  - verifies `LibraryInfoView.ViewModel.fetchAvailableCategories()` uses `categoryCacheRepository`
+  - verifies `YabrShelfDataModel.refresh()` resets active unified searches through `UnifiedSearchService`
+- Updated `UnifiedSearchIntegrationTests` to construct and inject V2 services directly instead of using `CalibreLibrarySearchManager`
+
+### Verification
+
+- Build:
+  - `xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'`
+- Tests:
+  - `xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'`
+- Latest result: 55 unit tests + 1 UI test passed
+
 ## P1d A04 Plan: 2026-06-17
 
 The next high-value refactoring target is `CalibreServerService.swift` (1436 lines). The goal is not a cosmetic split, but to turn the file into a maintainable network boundary with explicit error semantics and endpoint-local responsibilities.

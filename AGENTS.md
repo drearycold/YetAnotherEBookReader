@@ -123,8 +123,10 @@ code.
 The modern path is value-type/actor based. Do not revive direct
 `CalibreUnifiedSearchObject` bindings in views.
 
-- `CalibreLibrarySearchManager` in `Models/CalibreBrowser/CalibreBrowser.swift`
-  is the legacy-compatible coordinator and service factory.
+- `ModelData` now owns the V2 root dependencies directly:
+  `searchCacheRepository`, `librarySearchService`,
+  `unifiedSearchService`, `libraryCategoryService`, and
+  `unifiedCategoryService`.
 - `LibrarySearchService` performs per-library search, online/offline source
   selection, metadata fetch, and cache writes.
 - `UnifiedSearchService` is an actor that coordinates active multi-library
@@ -134,6 +136,9 @@ The modern path is value-type/actor based. Do not revive direct
   cache results.
 - `UnifiedSearchViewModel` and `UnifiedCategoryViewModel` are the UI-facing
   adapters for LibraryInfo views.
+- `Models/CalibreBrowser/CalibreBrowser.swift` and
+  `CalibreLibrarySearchManager` are historical only; treat older analysis that
+  references them as pre-P1e context rather than live architecture.
 
 ### Reader Stack
 
