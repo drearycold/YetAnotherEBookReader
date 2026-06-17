@@ -20,6 +20,12 @@
 		2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A270B24272F7E07006552A3 /* ActivityList.swift */; };
 		2A2A853A275C699500C17825 /* YabrEBookReaderNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2A8539275C699500C17825 /* YabrEBookReaderNavigationController.swift */; };
 		2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */; };
+		A04D200130C0000100000001 /* CalibreAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000001 /* CalibreAPIError.swift */; };
+		A04D200130C0000100000002 /* CalibreServerService+LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000002 /* CalibreServerService+LibrarySync.swift */; };
+		A04D200130C0000100000003 /* CalibreServerService+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000003 /* CalibreServerService+Metadata.swift */; };
+		A04D200130C0000100000004 /* CalibreServerService+Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000004 /* CalibreServerService+Discovery.swift */; };
+		A04D200130C0000100000005 /* CalibreServerService+ReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */; };
+		A04D200130C0000100000006 /* CalibreServerService+Annotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */; };
 		2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581627B9EF8400642AD1 /* ServerDetailView.swift */; };
 		2A47581927BA8C0200642AD1 /* LibraryDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581827BA8C0200642AD1 /* LibraryDetailView.swift */; };
 		2A47581B27BE250600642AD1 /* AddModServerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A47581A27BE250600642AD1 /* AddModServerView.swift */; };
@@ -59,6 +65,13 @@
 		2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3225BDBC11004A6633 /* YetAnotherEBookReaderTests.swift */; };
 		2AC3EC3E25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */; };
 		2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC9D73F30A0A10000AA0001 /* YabrPDFViewControllerTests.swift */; };
+		A04D200130C0000200000001 /* CalibreAPIError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000001 /* CalibreAPIError.swift */; };
+		A04D200130C0000200000002 /* CalibreServerService+LibrarySync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000002 /* CalibreServerService+LibrarySync.swift */; };
+		A04D200130C0000200000003 /* CalibreServerService+Metadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000003 /* CalibreServerService+Metadata.swift */; };
+		A04D200130C0000200000004 /* CalibreServerService+Discovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000004 /* CalibreServerService+Discovery.swift */; };
+		A04D200130C0000200000005 /* CalibreServerService+ReadingPosition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */; };
+		A04D200130C0000200000006 /* CalibreServerService+Annotations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */; };
+		A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000007 /* CalibreServerServiceTests.swift */; };
 		2AC3EC5D25BE7A3B004A6633 /* ModelData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AC3EC5C25BE7A3B004A6633 /* ModelData.swift */; };
 		2ACE265526A920E10037FCB4 /* YabrData.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265426A920E10037FCB4 /* YabrData.swift */; };
 		2ACE265926A921230037FCB4 /* RealmModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACE265826A921230037FCB4 /* RealmModel.swift */; };
@@ -416,6 +429,7 @@
 		2AC3EC2925BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2AC3EC2E25BDBC11004A6633 /* YetAnotherEBookReaderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YetAnotherEBookReaderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC3EC3225BDBC11004A6633 /* YetAnotherEBookReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderTests.swift; sourceTree = "<group>"; };
+		A04D100130C0000100000007 /* CalibreServerServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerServiceTests.swift; sourceTree = "<group>"; };
 		2AC3EC3425BDBC11004A6633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2AC3EC3925BDBC11004A6633 /* YetAnotherEBookReaderUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = YetAnotherEBookReaderUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2AC3EC3D25BDBC11004A6633 /* YetAnotherEBookReaderUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YetAnotherEBookReaderUITests.swift; sourceTree = "<group>"; };
@@ -507,6 +521,12 @@
 		E792C7E12F83F1EE0015E020 /* YabrAppInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrAppInfo.swift; sourceTree = "<group>"; };
 		E792C7E42F83F5190015E020 /* CalibreActivityLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreActivityLogger.swift; sourceTree = "<group>"; };
 		E792C7E72F83FD640015E020 /* BookDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDownloadManager.swift; sourceTree = "<group>"; };
+		A04D100130C0000100000001 /* CalibreAPIError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreAPIError.swift; sourceTree = "<group>"; };
+		A04D100130C0000100000002 /* CalibreServerService+LibrarySync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+LibrarySync.swift"; sourceTree = "<group>"; };
+		A04D100130C0000100000003 /* CalibreServerService+Metadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Metadata.swift"; sourceTree = "<group>"; };
+		A04D100130C0000100000004 /* CalibreServerService+Discovery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Discovery.swift"; sourceTree = "<group>"; };
+		A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+ReadingPosition.swift"; sourceTree = "<group>"; };
+		A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CalibreServerService+Annotations.swift"; sourceTree = "<group>"; };
 		E792C7EA2F84990E0015E020 /* ReadingSessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSessionManager.swift; sourceTree = "<group>"; };
 		E792C7ED2F849A2B0015E020 /* FontsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontsManager.swift; sourceTree = "<group>"; };
 		E792C7F02F84A48B0015E020 /* DatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DatabaseService.swift; sourceTree = "<group>"; };
@@ -643,8 +663,14 @@
 			isa = PBXGroup;
 			children = (
 				E792C7E72F83FD640015E020 /* BookDownloadManager.swift */,
+				A04D100130C0000100000001 /* CalibreAPIError.swift */,
 				E792C7E42F83F5190015E020 /* CalibreActivityLogger.swift */,
 				2A2C38DA26C4B056007E2F3B /* CalibreServerService.swift */,
+				A04D100130C0000100000006 /* CalibreServerService+Annotations.swift */,
+				A04D100130C0000100000004 /* CalibreServerService+Discovery.swift */,
+				A04D100130C0000100000002 /* CalibreServerService+LibrarySync.swift */,
+				A04D100130C0000100000003 /* CalibreServerService+Metadata.swift */,
+				A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */,
 				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */,
 				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
@@ -823,6 +849,7 @@
 		2AC3EC3125BDBC11004A6633 /* YetAnotherEBookReaderTests */ = {
 			isa = PBXGroup;
 			children = (
+				A04D100130C0000100000007 /* CalibreServerServiceTests.swift */,
 				2AC3EC3225BDBC11004A6633 /* YetAnotherEBookReaderTests.swift */,
 				2AC3EC3425BDBC11004A6633 /* Info.plist */,
 				E71F34852FD3AED3007AB0B1 /* BookDetailViewModelTests.swift */,
@@ -1328,6 +1355,12 @@
 				E7C777A728ED495900939D63 /* YabrPDFHighlightList.swift in Sources */,
 				E74729C329D52F5E007659A1 /* LibraryInfoBookListInfoView.swift in Sources */,
 				2A2C38DB26C4B056007E2F3B /* CalibreServerService.swift in Sources */,
+				A04D200130C0000100000006 /* CalibreServerService+Annotations.swift in Sources */,
+				A04D200130C0000100000001 /* CalibreAPIError.swift in Sources */,
+				A04D200130C0000100000004 /* CalibreServerService+Discovery.swift in Sources */,
+				A04D200130C0000100000002 /* CalibreServerService+LibrarySync.swift in Sources */,
+				A04D200130C0000100000003 /* CalibreServerService+Metadata.swift in Sources */,
+				A04D200130C0000100000005 /* CalibreServerService+ReadingPosition.swift in Sources */,
 				2ABB9143261ED7E5004AA7C0 /* Constants.swift in Sources */,
 				E792C7E62F83F5190015E020 /* CalibreActivityLogger.swift in Sources */,
 				E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */,
@@ -1350,6 +1383,7 @@
 				E71F34AF2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift in Sources */,
 				E71F34862FD3AED3007AB0B1 /* BookDetailViewModelTests.swift in Sources */,
 				E71F34B82FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift in Sources */,
+				A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */,
 				2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 				E71F34BA2FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift in Sources */,
@@ -1473,6 +1507,12 @@
 				E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E71F352B2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */,
 				E71F352E2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */,
+				A04D200130C0000200000006 /* CalibreServerService+Annotations.swift in Sources */,
+				A04D200130C0000200000001 /* CalibreAPIError.swift in Sources */,
+				A04D200130C0000200000004 /* CalibreServerService+Discovery.swift in Sources */,
+				A04D200130C0000200000002 /* CalibreServerService+LibrarySync.swift in Sources */,
+				A04D200130C0000200000003 /* CalibreServerService+Metadata.swift in Sources */,
+				A04D200130C0000200000005 /* CalibreServerService+ReadingPosition.swift in Sources */,
 				2ADCD7EF26F4B96200FBAE11 /* YetAnotherEBookReaderApp.swift in Sources */,
 				2ADCD7F026F4B96200FBAE11 /* CalibreData.swift in Sources */,
 				2ADCD7F226F4B96200FBAE11 /* YabrPDFOptionView.swift in Sources */,
