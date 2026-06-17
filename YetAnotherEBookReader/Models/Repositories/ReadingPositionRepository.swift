@@ -30,7 +30,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         self.modelData = modelData
     }
     
-    private func getRealm(forBookId bookId: String) -> Realm? {
+    private func getRealmConfiguration(forBookId bookId: String) -> Realm.Configuration? {
         let actualModelData = modelData ?? ModelData.shared
         
         // 1. If bookId is inShelfId (id^libraryName@serverUUID)
@@ -39,7 +39,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             if components.count > 1 {
                 let serverUUID = components[1]
                 if let server = actualModelData?.calibreServers[serverUUID] {
-                    return server.realmPerf
+                    return BookAnnotation.getBookPreferenceServerConfig(server)
                 }
             }
         }
@@ -49,12 +49,25 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         if components.count > 1 {
             let libraryKey = components[0]
             if let library = actualModelData?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
-                return library.server.realmPerf
+                return BookAnnotation.getBookPreferenceServerConfig(library.server)
             }
         }
         
         // Fallback
-        return databaseService.realm
+        return databaseService.realmConf
+    }
+    
+    private func getRealm(forBookId bookId: String) -> Realm? {
+        guard let config = getRealmConfiguration(forBookId: bookId) else { return nil }
+        
+        let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? "default")"
+        if let cachedRealm = Thread.current.threadDictionary[cacheKey] as? Realm {
+            return cachedRealm
+        }
+        
+        guard let realm = try? Realm(configuration: config) else { return nil }
+        Thread.current.threadDictionary[cacheKey] = realm
+        return realm
     }
     
     func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
