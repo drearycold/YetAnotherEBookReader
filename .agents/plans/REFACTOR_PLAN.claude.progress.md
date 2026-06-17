@@ -1,7 +1,7 @@
 # REFACTOR_PLAN.md — YetAnotherEBookReader (D.S.Reader)
 
 > 基于对全部 88 个 Swift 源文件的完整分析，生成于 2026-06-05
-> **最后更新**: 2026-06-16 — 反映 10 天开发进度 (42 commits)
+> **最后更新**: 2026-06-17 — 继续拆分 YabrPDFViewController 导航/Chrome/选区/分享/选项职责
 
 ---
 
@@ -16,10 +16,11 @@ pie title 任务完成状态
     "P2 未开始" : 6
 ```
 
-| 指标 | 初始 (06-05) | 当前 (06-16) | 变化 |
+| 指标 | 初始 (06-05) | 当前 (06-17) | 变化 |
 |------|-------------|-------------|------|
 | **ModelData.swift 行数** | 2,180 | 996 | 🟢 **-54%** |
 | **CalibreBrowser.swift 行数** | 2,137 | 1,320 | 🟢 **-38%** |
+| **YabrPDFViewController.swift 行数** | 1,716 | 311 | 🟢 **-82%** |
 | **测试文件数** | 1 (占位) | 7 | 🟢 **+600%** |
 | **测试代码行数** | ~0 | 2,029 | 🟢 **从零到有** |
 | **通过的单元测试** | 0 | 41+ | 🟢 |
@@ -103,6 +104,14 @@ pie title 任务完成状态
 | `PDFAnnotationManager` | 从 PDFViewController 提取 | [PDFAnnotationManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFAnnotationManager.swift) |
 | `PDFBookmarkManager` | 从 PDFViewController 提取 | [PDFBookmarkManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFBookmarkManager.swift) |
 | `PDFSearchController` | 从 PDFViewController 提取 + Search Tab | [PDFSearchController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFSearchController.swift) |
+| `PDFMarginCropController` | PDF 自动裁边、可见内容缓存、空白遮罩、像素扫描 | [PDFMarginCropController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/Managers/PDFMarginCropController.swift) |
+| `YabrPDFViewController+Chrome` | 阅读器 UI Chrome、导航栏、工具栏、缩略图约束 | [YabrPDFViewController+Chrome.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Chrome.swift) |
+| `YabrPDFViewController+Navigation` | 目录、页码变化、阅读进度、位置历史 | [YabrPDFViewController+Navigation.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Navigation.swift) |
+| `YabrPDFViewController+Options` | ReaderEngineController 偏好应用、缩放、DisplayBox、高亮入口 | [YabrPDFViewController+Options.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Options.swift) |
+| `YabrPDFViewController+Selection` | 文本选区菜单、字典、标注动作 | [YabrPDFViewController+Selection.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Selection.swift) |
+| `YabrPDFViewController+Sharing` | PDF 原文/带标注分享入口 | [YabrPDFViewController+Sharing.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Sharing.swift) |
+
+2026-06-17 继续拆分：`YabrPDFViewController.swift` 从 1,717 行降到 311 行，新增 `PDFMarginCropController.swift` 与 5 个职责扩展文件。验证通过 `xcodebuild build` 与 `xcodebuild test`，共 40 个单元测试 + 1 个 UI 测试通过。
 
 #### A08: ViewModel 引入进度
 
