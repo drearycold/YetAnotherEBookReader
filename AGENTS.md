@@ -109,9 +109,30 @@ code.
 
 ### Models
 
-- `CalibreData.swift`: value/domain types for servers, libraries, books, sync
-  tasks, custom columns, plugin prefs, annotations payloads, and Calibre API
-  result structures.
+- `CalibreData.swift` has been split (Milestone P2/A11) into focused files in
+  `Models/` and `Network/`. The decomposition is a zero-behavior move:
+  - `CalibreCoreModels.swift`: `CalibreServer`, `CalibreLibrary`,
+    `CalibreBook`, `CalibreSyncStatus`.
+  - `ReadingPositionModels.swift`: `BookDeviceReadingPosition`,
+    `BookDeviceReadingPositionHistory`, reading statistics.
+  - `CalibreHighlightStyle.swift`: `BookHighlightStyle` (only model file in the
+    split that imports UIKit).
+  - `CalibreTasks.swift`: network/metadata task structs
+    (`CalibreBookTask`, `CalibreBooksMetadataRequest`, `CalibreBooksTask`,
+    `CalibreLibraryProbeTask`, `CalibreLibrarySearchTask`,
+    `CalibreBookSetLastReadPositionTask`, `CalibreBookUpdateAnnotationsTask`).
+  - `CalibrePayloadModels.swift`: Codable API entry/result payloads
+    (`CalibreBookEntry`, `CalibreBookLastReadPositionEntry`,
+    `CalibreBookAnnotationsResult`, `CalibreBookAnnotationsMap`,
+    `CalibreLibraryBooksResult`, etc.).
+  - `CalibreSyncModels.swift`: custom columns, category keys, probe/sync
+    requests, `CalibreCdbCmdListResult`.
+  - `CalibrePluginModels.swift`: DSReader Helper / Count Pages / Goodreads Sync
+    preferences and `CalibreDSReaderHelperConfiguration`.
+  - `Network/CalibreActivityModels.swift`: `CalibreActivity`/`Start`/`Finish`.
+  - `CalibreServerConfigProvider.swift`: the `CalibreServerConfigProvider`
+    protocol used to bridge managers/services with the `ModelData` facade.
+  - `Array+Chunks.swift`: generic `Array.chunks(size:)` helper.
 - `RealmModel.swift`: Realm object schema. Treat edits here as migration work.
 - `YabrData.swift`: format, reader, reader-info, and app-specific value types.
 - `BookFiles.swift`: import and local-file helpers.
@@ -246,6 +267,15 @@ decomposition.
 
 Recent important state:
 
+- **P2/A11 CalibreData Split (Milestone A11):** Decomposed the 1307-line
+  `Models/CalibreData.swift` into ten focused files (see the Architecture Map
+  `Models` section above) as a zero-behavior-change move. The original
+  `CalibreData.swift` was deleted; all new files are registered in both app and
+  Catalyst targets. Added `YetAnotherEBookReaderTests/CalibreDataSplitTests`
+  (20 cases) covering `CalibreServer`/`CalibreLibrary` identity and hashing,
+  `CalibreBook.inShelfId`, `BookHighlightStyle` class/color mapping, plugin
+  preference Codable decoding, custom-column snake_case CodingKeys,
+  `Array.chunks`, and the `CalibreActivity` class hierarchy.
 - **P1f / MVVM Modernization (Milestone A08):** Successfully migrated high-traffic main screens out of monolithic `@EnvironmentObject var modelData` orchestration into focused, isolated ViewModels.
 - **New ViewModels Introduced:**
   - `MainViewModel` (manages app shell tab selection, terms acceptance, book imports, and modal presentations).
@@ -253,7 +283,7 @@ Recent important state:
   - `SupportInfoViewModel` (decouples file-processing ZIP/backup operations and state tracking).
   - `RecentShelfViewModel` and `SectionShelfViewModel` (extract business flows out of UIKit/compositional shelf controllers).
 - **LibraryInfo & Filter Consolidations:** Extended `LibraryInfoView.ViewModel` to handle search string alterations, category filtering, and count/status string derivations, eliminating direct `ModelData` reads in subviews.
-- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, and `RecentShelfViewModelTests` (total suite: 67 unit tests + 1 UI test).
+- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, `RecentShelfViewModelTests`, and `CalibreDataSplitTests` (total suite: 87 unit tests + 1 UI test).
 
 Latest recorded verification in handoff notes:
 
@@ -261,7 +291,10 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 67 unit tests and 1 UI test passed.
+Recorded result: 87 unit tests and 1 UI test passed. The Mac Catalyst build is
+currently blocked by a pre-existing SPM package product resolution issue
+(`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
+the P2/A11 split.
 
 ## Known Risks
 
