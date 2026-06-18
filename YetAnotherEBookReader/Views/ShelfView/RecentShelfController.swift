@@ -29,6 +29,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
 
     // @IBOutlet var motherView: UIView!
     var modelData: ModelData!
+    var viewModel: RecentShelfViewModel!
     var dismissControllerCancellable: AnyCancellable?
     var reloadShelfCancellable: AnyCancellable?
     
@@ -99,7 +100,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         #endif
         
         reloadShelfCancellable?.cancel()
-        reloadShelfCancellable = modelData.recentShelfModelSubject
+        reloadShelfCancellable = viewModel.$books
             .receive(on: DispatchQueue.main)
             .sink { bookModel in
                 self.shelfView.reloadBooks(bookModel: bookModel)
@@ -114,9 +115,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         self.navigationController?.navigationBar.scrollEdgeAppearance = navBarScrollApp
         
         refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
-            self.modelData.refreshShelfMetadataV2(serverReachableChanged: false)
-            
-            self.modelData.probeServersReachability(with: [], updateLibrary: true)
+            self.viewModel.refreshShelf()
         })
         
         self.navigationItem.setLeftBarButtonItems([
@@ -447,7 +446,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         guard let book = modelData.readingBook,
               book.inShelfId == modelData.readingBookInShelfId  else { return }
         
-        modelData.clearCache(inShelfId: book.inShelfId)
+        viewModel.deleteBook(bookId: book.inShelfId)
     }
     
     @objc func finishReading(sender: UIBarButtonItem) {
@@ -464,13 +463,10 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
-        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { _ in
-            self.shelfView.selectedBookIds.forEach {
-                self.modelData.clearCache(inShelfId: $0)
-            }
+        alert.addAction(UIAlertAction(title: "Delete", style: .destructive) { [weak self] _ in
+            guard let self = self else { return }
+            self.viewModel.deleteBooks(bookIds: self.shelfView.selectedBookIds)
             self.setEditing(false, animated: true)
-            
-            self.modelData.calibreUpdatedSubject.send(.shelf)
         })
         
         self.present(alert, animated: true)

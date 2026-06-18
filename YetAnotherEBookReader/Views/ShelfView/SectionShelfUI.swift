@@ -14,6 +14,7 @@ struct SectionShelfUI: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let shelfController = SectionShelfController()
         shelfController.modelData = modelData
+        shelfController.viewModel = SectionShelfViewModel(modelData: modelData)
         
         let navController = UINavigationController(rootViewController: shelfController)
         return navController

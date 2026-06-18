@@ -31,6 +31,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     #endif
 
     var modelData: ModelData!
+    var viewModel: SectionShelfViewModel!
     var generatingCancellable: AnyCancellable?
     var reloadShelfCancellable: AnyCancellable?
     
@@ -235,8 +236,7 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         self.navigationItem.titleView = topButton
         
         refreshBarButtonItem.primaryAction = .init(title: "Refresh", handler: { action in
-//            self.modelData.calibreUpdatedSubject.send(.shelf)
-            self.modelData.shelfDataModel.refresh()
+            self.viewModel.refreshShelf()
         })
         
         self.navigationItem.setLeftBarButtonItems([
@@ -532,22 +532,10 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
         
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         
-        alert.addAction(UIAlertAction(title: "Download", style: .default) { _ in
-//            self.suspendNotificationHandler()
-            
-            self.shelfView.selectedBookIds.forEach { bookId in
-                guard let book = self.modelData.getBook(for: bookId),
-                      let format = self.modelData.getPreferredFormat(for: book)
-                else { return }
-                
-                self.modelData.addToShelf(book: book, formats: [format])
-            }
-            
+        alert.addAction(UIAlertAction(title: "Download", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            self.viewModel.downloadSelectedBooks(bookIds: self.shelfView.selectedBookIds)
             self.setEditing(false, animated: true)
-            
-//            self.registerNotificationHandler()
-            
-//            self.modelData.calibreUpdatedSubject.send(.shelf)
         })
         
         self.present(alert, animated: true)

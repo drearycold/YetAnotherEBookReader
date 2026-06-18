@@ -49,7 +49,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         set { libraryManager.localLibrary = newValue }
     }
     
-    @Published var activeTab = 0
     var documentServer: CalibreServer? {
         get { serverManager.documentServer }
         set { serverManager.documentServer = newValue }

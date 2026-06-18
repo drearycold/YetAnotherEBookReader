@@ -15,28 +15,12 @@ import UserMessagingPlatform
 struct SupportInfoView: View {
     @Environment(\.openURL) var openURL
     @EnvironmentObject var modelData: ModelData
+    @StateObject private var viewModel = SupportInfoViewModel()
 
-    @State private var privacyWebViewPresenting = false
-    @State private var termsWebViewPresenting = false
-    
-    @State private var yabrPrivacyHtml: String?
-    @State private var yabrTermsHtml: String?
-    @State private var yabrVersionHtml: String?
-    
-    @State private var isExporting = false
-    @State private var showFolderPicker = false
-    
-    @State private var exportProgress: Double = 0
-    @State private var currentExportFile = ""
-    
-    @State private var alertMessage = ""
-    @State private var showAlert = false
-    
     var body: some View {
         List {
             Section {
-                
-                if let privacyHtml = YabrAppInfo.shared.privacyHtml {
+                if let privacyHtml = viewModel.yabrPrivacyHtml {
                     NavigationLink {
                         WebViewUI(content: privacyHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     } label: {
@@ -44,7 +28,7 @@ struct SupportInfoView: View {
                     }
                 }
                 
-                if let termsHtml = YabrAppInfo.shared.termsHtml {
+                if let termsHtml = viewModel.yabrTermsHtml {
                     NavigationLink {
                         WebViewUI(content: termsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     } label: {
@@ -52,7 +36,7 @@ struct SupportInfoView: View {
                     }
                 }
                 
-                if let yabrVersionHtml = self.yabrVersionHtml {
+                if let yabrVersionHtml = viewModel.yabrVersionHtml {
                     NavigationLink {
                         WebViewUI(content: yabrVersionHtml, baseURL: YabrAppInfo.shared.baseUrl?.appendingPathComponent("releases"))
                     } label: {
@@ -84,34 +68,34 @@ struct SupportInfoView: View {
             
             Section(header: Text("Data Management")) {
                 Button(action: {
-                    showFolderPicker = true
+                    viewModel.showFolderPicker = true
                 }) {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text("Export App Data")
                             Spacer()
-                            if isExporting {
+                            if viewModel.isExporting {
                                 ProgressView()
                             } else {
                                 Image(systemName: "archivebox")
                             }
                         }
                         
-                        if isExporting {
+                        if viewModel.isExporting {
                             VStack(alignment: .leading, spacing: 4) {
-                                ProgressView(value: exportProgress, total: 1.0)
+                                ProgressView(value: viewModel.exportProgress, total: 1.0)
                                     .progressViewStyle(LinearProgressViewStyle())
                                 
-                                Text(currentExportFile)
+                                Text(viewModel.currentExportFile)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
-                            }
+                             }
                         }
                     }
                 }
-                .disabled(isExporting)
+                .disabled(viewModel.isExporting)
             }
             
             Section {
@@ -126,142 +110,22 @@ struct SupportInfoView: View {
         .navigationTitle("Support")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            self.yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml
-            self.yabrTermsHtml = YabrAppInfo.shared.termsHtml
-            self.yabrVersionHtml = YabrAppInfo.shared.versionHtml
+            viewModel.onAppear()
         }
-        .alert(isPresented: $showAlert) {
+        .alert(isPresented: $viewModel.showAlert) {
             Alert(
                 title: Text("Export App Data"),
-                message: Text(alertMessage),
+                message: Text(viewModel.alertMessage),
                 dismissButton: .default(Text("OK"))
             )
         }
-        .sheet(isPresented: $showFolderPicker) {
+        .sheet(isPresented: $viewModel.showFolderPicker) {
             FolderPicker { folderURL in
                 Task {
-                    await exportAppData(to: folderURL)
+                    await viewModel.exportAppData(to: folderURL)
                 }
             }
         }
-    }
-    
-    private func exportAppData(to folderURL: URL) async {
-        // Gain access to the user-selected directory
-        guard folderURL.startAccessingSecurityScopedResource() else {
-            self.alertMessage = "Access to the selected folder was denied."
-            self.showAlert = true
-            return
-        }
-        
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-        
-        await MainActor.run {
-            isExporting = true
-            exportProgress = 0
-            currentExportFile = "Preparing..."
-        }
-        
-        let zipFileName = "YABR_Backup_\(Int(Date().timeIntervalSince1970)).zip"
-        let destinationURL = folderURL.appendingPathComponent(zipFileName)
-        
-        do {
-            // Run zipping in a detached task to keep the main thread free
-            let result = try await Task.detached(priority: .userInitiated) {
-                return try await self.performZip(destinationURL: destinationURL)
-            }.value
-            
-            await MainActor.run {
-                self.currentExportFile = "Completed"
-                self.exportProgress = 1.0
-                self.isExporting = false
-                
-                if result.skipped > 0 {
-                    self.alertMessage = "Export saved to: \(zipFileName)\n\n\(result.success) files added. \(result.skipped) files were skipped due to system restrictions."
-                } else {
-                    self.alertMessage = "Success! Backup saved as \(zipFileName)."
-                }
-                self.showAlert = true
-            }
-        } catch {
-            await MainActor.run {
-                self.isExporting = false
-                self.alertMessage = "Export failed: \(error.localizedDescription)"
-                self.showAlert = true
-            }
-        }
-    }
-    
-    private func performZip(destinationURL: URL) async throws -> (url: URL, skipped: Int, success: Int) {
-        let fileManager = FileManager.default
-        let archive = try await Archive(url: destinationURL, accessMode: .create)
-        
-        let docsDir = try fileManager.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false).resolvingSymlinksInPath()
-        let appSupportDir = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false).resolvingSymlinksInPath()
-        
-        let sources = [
-            (url: docsDir, label: "Documents"),
-            (url: appSupportDir, label: "ApplicationSupport")
-        ]
-        
-        var totalFiles = 0
-        for source in sources {
-            let enumerator = fileManager.enumerator(at: source.url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsPackageDescendants])
-            while enumerator?.nextObject() != nil { totalFiles += 1 }
-        }
-        
-        var processedFiles = 0
-        var successCount = 0
-        var skippedCount = 0
-        
-        for source in sources {
-            let enumerator = fileManager.enumerator(at: source.url, includingPropertiesForKeys: [.isDirectoryKey, .fileResourceTypeKey], options: [.skipsHiddenFiles, .skipsPackageDescendants])
-            
-            while let sourceURL = (enumerator?.nextObject() as? URL)?.resolvingSymlinksInPath() {
-                // If we are zipping into a subdirectory of Documents, avoid recursion
-                if sourceURL.path == destinationURL.path { continue }
-                
-                let relativePath = sourceURL.path.hasPrefix(source.url.path) ? String(sourceURL.path.dropFirst(source.url.path.count)) : sourceURL.path
-                let entryPath = source.label + relativePath
-                
-                processedFiles += 1
-                if processedFiles % 5 == 0 || processedFiles == totalFiles {
-                    let fileName = sourceURL.lastPathComponent
-                    let progress = Double(processedFiles) / Double(max(1, totalFiles))
-                    await MainActor.run {
-                        self.currentExportFile = "Adding \(fileName)..."
-                        self.exportProgress = progress
-                    }
-                }
-                
-                do {
-                    let resourceValues = try sourceURL.resourceValues(forKeys: [.isDirectoryKey, .fileResourceTypeKey])
-                    if resourceValues.fileResourceType == .directory {
-                        try await archive.addEntry(with: entryPath + "/", type: .directory, uncompressedSize: 0, provider: { _, _ in return Data() })
-                    } else if resourceValues.fileResourceType == .regular {
-                        let fileHandle = try FileHandle(forReadingFrom: sourceURL)
-                        defer { try? fileHandle.close() }
-                        
-                        let fileSize = try fileManager.attributesOfItem(atPath: sourceURL.path)[.size] as? Int64 ?? 0
-                        
-                        try await archive.addEntry(with: entryPath, type: .file, uncompressedSize: fileSize, provider: { (position, size) -> Data in
-                            try fileHandle.seek(toOffset: UInt64(position))
-                            guard let data = try fileHandle.read(upToCount: size) else {
-                                throw NSError(domain: "YABRError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Read failed at \(position)"])
-                            }
-                            return data
-                        })
-                        successCount += 1
-                    } else {
-                        skippedCount += 1
-                    }
-                } catch {
-                    skippedCount += 1
-                }
-            }
-        }
-        
-        return (destinationURL, skippedCount, successCount)
     }
     
     @ViewBuilder
@@ -275,6 +139,15 @@ struct SupportInfoView: View {
                 Image(systemName: "square.and.arrow.up")
             }
         }
+    }
+}
+
+struct SupportInfoView_Previews: PreviewProvider {
+    static let modelData = ModelData(mock: true)
+    
+    static var previews: some View {
+        SupportInfoView()
+            .environmentObject(modelData)
     }
 }
 
@@ -305,14 +178,5 @@ struct FolderPicker: UIViewControllerRepresentable {
             guard let url = urls.first else { return }
             parent.onFolderPicked(url)
         }
-    }
-}
-
-struct SupportInfoView_Previews: PreviewProvider {
-    static let modelData = ModelData(mock: true)
-    
-    static var previews: some View {
-        SupportInfoView()
-            .environmentObject(modelData)
     }
 }

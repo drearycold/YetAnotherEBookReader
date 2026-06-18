@@ -21,29 +21,18 @@ struct MainView: View {
     @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
 
-    @State private var alertItem: AlertItem?
+    @StateObject var viewModel: MainViewModel
+    
+    init(viewModel: MainViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
 
-    @State private var initialTermsAgreementPresenting = false
-    @State private var privacyWebViewPresenting = false
-    @State private var termsWebViewPresenting = false
-    
-    @State private var positionActionPresenting = false
-    @State private var positionActionMessage = ""
-    
-    @State private var bookImportedCancellable: AnyCancellable?
-    @State private var dismissAllCancellable: AnyCancellable?
-
-    @State private var bookImportActionSheetPresenting = false
-    @State private var bookImportInfo: BookImportInfo?
-    
-    @State private var umpFormLoaded = false
-    
     private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
 
     var body: some View {
         ZStack {
-            if let realmConf = modelData.realmConf {
-                TabView(selection: $modelData.activeTab) {
+            if let realmConf = viewModel.realmConf {
+                TabView(selection: $viewModel.activeTab) {
                     RecentShelfUI()
                         .tabItem {
                             Image(systemName: "doc.text.fill")
@@ -73,7 +62,7 @@ struct MainView: View {
                         .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
-                        SettingsView()
+                        SettingsView(viewModel: SettingsViewModel(modelData: modelData))
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
@@ -87,7 +76,7 @@ struct MainView: View {
                 Color.clear
             }
             
-            if modelData.activeTab < 1 && modelData.realm != nil && modelData.booksInShelf.isEmpty {
+            if viewModel.showWelcome {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Welcome!")
@@ -121,8 +110,8 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $sessionManager.presentingEBookReaderFromShelf) {
-            if let book = sessionManager.readingBook, let readerInfo = sessionManager.readerInfo {
+        .fullScreenCover(isPresented: $viewModel.presentingEBookReaderFromShelf) {
+            if let book = viewModel.readingBook, let readerInfo = viewModel.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
             } else {
                 NavigationView {
@@ -130,7 +119,7 @@ struct MainView: View {
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
                                 Button(action: {
-                                    sessionManager.presentingEBookReaderFromShelf = false
+                                    viewModel.presentingEBookReaderFromShelf = false
                                 }) {
                                     Image(systemName: "xmark")
                                 }
@@ -139,13 +128,13 @@ struct MainView: View {
                 }
             }
         }
-        .alert(item: $alertItem) { item in
+        .alert(item: $viewModel.alertItem) { item in
             if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
                 return Alert(
                     title: Text("Confirm New Progress"),
                     message: Text(item.msg ?? ""),
                     primaryButton: .destructive(Text("Confirm")) {
-                        modelData.updateCurrentPosition(alertDelegate: self)
+                        viewModel.updateCurrentPosition()
                     },
                     secondaryButton: .cancel()
                 )
@@ -164,9 +153,9 @@ struct MainView: View {
                 secondaryButton: .cancel()
             )
         }
-        .sheet(isPresented: $initialTermsAgreementPresenting, onDismiss: {
+        .sheet(isPresented: $viewModel.initialTermsAgreementPresenting, onDismiss: {
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
-            alertItem = AlertItem(id: "ATTNotice")
+            viewModel.alertItem = AlertItem(id: "ATTNotice")
         }, content: {
             VStack(spacing: 4) {
                 VStack(spacing: 16) {
@@ -189,44 +178,43 @@ struct MainView: View {
                     """)
                 
                 if let yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml {
-                    Button(action: { privacyWebViewPresenting = true }) {
+                    Button(action: { viewModel.privacyWebViewPresenting = true }) {
                         Text("Private Policy")
-                    }.sheet(isPresented: $privacyWebViewPresenting) {
+                    }.sheet(isPresented: $viewModel.privacyWebViewPresenting) {
                         WebViewUI(content: yabrPrivacyHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
                 if let yabrTermsHtml = YabrAppInfo.shared.termsHtml {
-                    Button(action: { termsWebViewPresenting = true }) {
+                    Button(action: { viewModel.termsWebViewPresenting = true }) {
                         Text("Terms & Conditions")
-                    }.sheet(isPresented: $termsWebViewPresenting) {
+                    }.sheet(isPresented: $viewModel.termsWebViewPresenting) {
                         WebViewUI(content: yabrTermsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
                 
                 HStack {
                     Button(action: {
-                        UserDefaults.standard.setValue(false, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
-                        exit(1)
+                        viewModel.declineTerms()
                     }) {
                         Text("Decline and Exit").foregroundColor(.red)
                     }.padding()
                     
                     Button(action: {
-                        initialTermsAgreementPresenting = false
+                        viewModel.acceptTerms()
                     }) {
                         Text("Accept")
                     }.padding()
                 }
             }.padding()
         })
-        .actionSheet(isPresented: $bookImportActionSheetPresenting, content: {
-            guard let bookImportInfo = bookImportInfo else {
+        .actionSheet(isPresented: $viewModel.bookImportActionSheetPresenting, content: {
+            guard let bookImportInfo = viewModel.bookImportInfo else {
                 return ActionSheet(
                     title: Text("Importing"),
                     message: Text("Unexpected error occured (code empty result). Please consider report this."),
                     buttons: [
                         .default(Text("Report"), action: {
-                            openURL(URL(string: issueURL + "&title=Error+Importing+Book+Empty+Result&body=")!)
+                            viewModel.reportImportError()
                         }),
                         .cancel()])
             }
@@ -236,12 +224,7 @@ struct MainView: View {
                     message: Text("Imported, read now?"),
                     buttons: [
                         .default(Text("Read"), action: {
-                            guard let localLibrary = modelData.localLibrary else { return }
-                            let book = CalibreBook(id: bookId, library: localLibrary)
-                            modelData.readingBookInShelfId = book.inShelfId
-                            guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
-
-                            sessionManager.presentingEBookReaderFromShelf = true
+                            viewModel.openImportedBook()
                         }),
                         .cancel()
                     ]
@@ -253,12 +236,10 @@ struct MainView: View {
                     message: Text("Book of same file name already exists. Do you wish to overwrite existing one?"),
                     buttons: [
                         .default(Text("As a new book"), action: {
-                            let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookImportInfo.bookId)
-                            modelData.bookImportedSubject.send(result)
+                            viewModel.importBookAsNew(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
                         }),
                         .destructive(Text("Overwrite"), action: {
-                            let result = modelData.onOpenURL(url: bookImportInfo.url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookImportInfo.bookId)
-                            modelData.bookImportedSubject.send(result)
+                            viewModel.importBookOverwrite(url: bookImportInfo.url, bookId: bookImportInfo.bookId)
                         }),
                         .cancel()
                     ]
@@ -269,7 +250,7 @@ struct MainView: View {
                 message: Text("Unexpected error occured (code \(bookImportInfo.error?.rawValue ?? "unknown")). Please consider report this."),
                 buttons: [
                     .default(Text("Report"), action: {
-                        openURL(URL(string: issueURL + "&title=Error+Importing+Book+\(String(describing: bookImportInfo.error))&body=")!)
+                        viewModel.reportImportError()
                     }),
                     .cancel()])
         })
@@ -280,64 +261,19 @@ struct MainView: View {
             let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)            
             modelData.bookImportedSubject.send(result)
         }.onAppear {
-            let termsAccepted = UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
-            if !termsAccepted {
-                initialTermsAgreementPresenting = true
-            } else {
-                requestIDFA()
-            }
-            
-            dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
-                sessionManager.presentingEBookReaderFromShelf = false
-                positionActionPresenting = false
-            }
-
-            bookImportedCancellable?.cancel()
-            bookImportedCancellable = modelData.bookImportedSubject
-                .sink { bookImportInfo in
-                    print("bookImportedCancellable sink \(bookImportInfo)")
-                    self.bookImportInfo = bookImportInfo
-                    
-                    print("dismissAll \(modelData.presentingStack.count)")
-                    dismissAll() {
-                        modelData.dismissAllSubject.send("")
-                        modelData.activeTab = 0
-                        
-                        bookImportActionSheetPresenting = false
-                        
-                        if let localLibrary = modelData.localLibrary,
-                           let bookId = bookImportInfo.bookId,
-                           let book = modelData.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-                            modelData.calibreUpdatedSubject.send(.book(book))
-                        }
-                        
-                        DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
-                            bookImportActionSheetPresenting = true
-                        }
-                    }
-                }
+            viewModel.onAppear()
         }
-        
-    }
-    
-    private func dismissAll(completion: @escaping () -> Void) {
-        print("dismissAll \(modelData.presentingStack)")
-        
-        if let latest = modelData.presentingStack.last {
-            if latest.wrappedValue == true {
-                latest.wrappedValue = false
-                print("dismissAll dismissed \(latest)")
-                DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
-                    dismissAll(completion: completion)
-                }
-            } else {
-                print("dismissAll already dismissed \(latest)")
-                _ = modelData.presentingStack.popLast()
-                dismissAll(completion: completion)
+        .onChange(of: viewModel.consentRequestTriggered) { triggered in
+            if triggered {
+                requestIDFA()
+                viewModel.consentRequestTriggered = false
             }
-        } else {
-            completion()
+        }
+        .onChange(of: viewModel.urlToOpen) { url in
+            if let url = url {
+                openURL(url)
+                viewModel.urlToOpen = nil
+            }
         }
     }
     
@@ -351,13 +287,6 @@ struct MainView: View {
     private func showConsentInformation() {
         #if canImport(GoogleMobileAds)
         let parameters = UMPRequestParameters()
-//        #if DEBUG
-//        let debugSettings = UMPDebugSettings()
-//        debugSettings.testDeviceIdentifiers = ["kGADSimulatorID"]
-//        debugSettings.geography = UMPDebugGeography.EEA
-//        parameters.debugSettings = debugSettings
-//        #endif
-
         // false means users are not under age.
         parameters.tagForUnderAgeOfConsent = false
         
@@ -400,20 +329,13 @@ struct MainView: View {
     #endif
 }
 
-extension MainView: AlertDelegate {
-    func alert(alertItem: AlertItem) {
-        self.alertItem = alertItem
-    }
-}
-
 @available(macCatalyst 14.0, *)
 struct MainView_Previews: PreviewProvider {
     static private var modelData = ModelData()
     
     static var previews: some View {
-        MainView()
+        MainView(viewModel: MainViewModel(modelData: modelData, sessionManager: modelData.sessionManager))
             .environmentObject(modelData)
             .environmentObject(modelData.sessionManager)
-        // ReaderView()
     }
 }

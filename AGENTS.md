@@ -246,18 +246,14 @@ decomposition.
 
 Recent important state:
 
-- `YabrPDFViewController` has been split substantially and the main controller
-  was reduced to roughly 311 lines in the latest handoff context.
-- PDF responsibilities have been moved into annotation, bookmark, search,
-  margin-crop, chrome, navigation, options, selection, and sharing components.
-- Recent related commit: `2f26f2f refactor: split PDF view controller responsibilities`.
-- Tests were added for `YabrPDFViewController` coordination behavior and
-  `ReadingPositionRepository` threading behavior.
-- A nil unwrap in `YabrPDFViewController.applyHighlights(_:)` was fixed by lazy
-  initializing `annotationManager`, `bookmarkManager`, and `searchController`.
-- A `Realm accessed from incorrect thread` issue was fixed by opening Realm from
-  the current thread using `Realm.Configuration` rather than reusing main-thread
-  Realm instances.
+- **P1f / MVVM Modernization (Milestone A08):** Successfully migrated high-traffic main screens out of monolithic `@EnvironmentObject var modelData` orchestration into focused, isolated ViewModels.
+- **New ViewModels Introduced:**
+  - `MainViewModel` (manages app shell tab selection, terms acceptance, book imports, and modal presentations).
+  - `SettingsViewModel` (orchestrates server listings, staging deletion, reachability flags, and server replacements).
+  - `SupportInfoViewModel` (decouples file-processing ZIP/backup operations and state tracking).
+  - `RecentShelfViewModel` and `SectionShelfViewModel` (extract business flows out of UIKit/compositional shelf controllers).
+- **LibraryInfo & Filter Consolidations:** Extended `LibraryInfoView.ViewModel` to handle search string alterations, category filtering, and count/status string derivations, eliminating direct `ModelData` reads in subviews.
+- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, and `RecentShelfViewModelTests` (total suite: 67 unit tests + 1 UI test).
 
 Latest recorded verification in handoff notes:
 
@@ -265,7 +261,7 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 49 unit tests and 1 UI test passed.
+Recorded result: 67 unit tests and 1 UI test passed.
 
 ## Known Risks
 
