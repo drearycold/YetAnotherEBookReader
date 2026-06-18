@@ -163,7 +163,7 @@ pie title 任务完成状态
 | **A20** | CalibreBrowser Realm force unwrap | ✅ **已消除** | CalibreBrowser 已删除 |
 | **A21** | UIKit/SwiftUI 混合书架 | ❌ 未开始 | |
 | **A22** | CalibreSearchCache 废弃属性 | ✅ 已完成 | P2/A22: removed 4 deprecated props, schema bump 140 on 2026-06-18 |
-| **A23** | DatabaseService force unwrap | ❌ 未开始 | |
+| **A23** | DatabaseService force unwrap | ✅ 已完成 | P2/A23: converted to optionals on 2026-06-18 |
 | **A26** | Readium timing hack | ❌ 未开始 | |
 | **A27** | Realm ↔ 值类型手动转换 | 🟡 Repository 层部分解决 | |
 

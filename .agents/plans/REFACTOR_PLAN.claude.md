@@ -352,12 +352,13 @@ YetAnotherEBookReader/
 
 ---
 
-### [A23] DatabaseService — 使用 Force Unwrap 的 Realm 实例
+### [A23] DatabaseService — 使用 Force Unwrap 的 Realm 实例 ✅ 已完成 (P2/A23, 2026-06-18)
 
-- **位置**：[DatabaseService.swift:L12-13](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/DatabaseService.swift#L12-L13)
+- **位置**：~~[DatabaseService.swift:L12-13](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/DatabaseService.swift#L12-L13)~~ → 已修复
 - **现象**：`@Published var realmConf: Realm.Configuration!` 和 `@Published var realm: Realm!` 使用隐式解包可选值。
 - **影响**：在数据库初始化失败时会 crash，而非优雅降级。
-- **严重程度**：🟡 中
+- **严重程度**：🟡 中 → ✅ 已解决
+- **状态**：✅ 已将 `realmConf` 和 `realm` 从隐式解包可选值（`!`）改为普通可选值（`?`）。`setup()` 中的 `try!` 改为 `do/catch`，失败时通过 `OSLog.Logger` 记录错误并将 `realm` 设为 `nil`。所有 5 个调用方（`CalibreBookManager`、4 个 Repository）的 `getRealm()` 方法已经使用 `if Thread.isMainThread { return databaseService.realm }` 模式返回 `Realm?`，无需修改。唯一需要改动的是 `LibrarySearchService.getRealm()` 中直接传递 `realmConf` 给 `Realm(configuration:)` 的地方，添加了 `guard let` 解包。`xcodebuild build` + `xcodebuild test` 通过：90 unit + 1 UI。
 
 ---
 

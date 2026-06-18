@@ -18,7 +18,10 @@ actor LibrarySearchService {
     }
     
     private func getRealm() throws -> Realm {
-        return try Realm(configuration: service.database.realmConf)
+        guard let conf = service.database.realmConf else {
+            throw URLError(.cannotConnectToHost)
+        }
+        return try Realm(configuration: conf)
     }
     
     func getTargetSource(for library: CalibreLibrary) -> String {
