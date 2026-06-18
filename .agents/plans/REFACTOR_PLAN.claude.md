@@ -251,16 +251,13 @@ YetAnotherEBookReader/
 
 ---
 
-### [A13] Book.swift 中约 200 行废弃代码
+### [A13] Book.swift 中约 200 行废弃代码 ✅ 已完成 (P2/A13, 2026-06-18)
 
-- **位置**：[Book.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift)
-  - [L13](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift#L13): `@available(*, deprecated)` `InShelfBook`
-  - [L20](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift#L20): `@available(*, deprecated)` `CalibreBookMetadata`
-  - [L223](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift#L223): `@available(*, deprecated)` `CalibreBookEntry`
-  - [L257](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift#L257): `@available(*, deprecated)` `CalibreBookEntryCodable`
+- **位置**：~~[Book.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Book.swift)~~ → 已删除
 - **现象**：378 行中约 200+ 行是标记为废弃的旧数据迁移结构体。
 - **影响**：增加编译时间和代码复杂度。新开发者易混淆新旧 API。
-- **严重程度**：🟡 中
+- **严重程度**：🟡 中 → ✅ 已解决
+- **状态**：✅ 整个 `Book.swift` 文件（378 行）已删除。该文件未注册在 Xcode 项目中（不在 app 或 Catalyst target 中），因此从未被编译。所有类型（`ServerInfo`、`LibraryInfo`、`Library`、`Book`、`BookRealm`、`BookReadingPosition`、`BookDeviceReadingPosition` 旧副本）均无外部引用——仅自引用。活跃的 `CalibreServerInfo` 定义在 `CalibreServerService.swift`，活跃的 `CalibreBookRealm` 定义在 `RealmModel.swift`，活跃的 `BookDeviceReadingPosition` 定义在 `ReadingPositionModels.swift`，均与该文件中的类型无关。`xcodebuild build` + `xcodebuild test` 通过：90 unit + 1 UI。
 
 ---
 

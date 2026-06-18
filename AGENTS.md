@@ -269,6 +269,11 @@ decomposition.
 
 Recent important state:
 
+- **P2/A13 Book.swift Deleted (Milestone A13):** Deleted the entire 378-line
+  `Models/Book.swift`. The file was not registered in the Xcode project and
+  was never compiled; all 7 types in it (`ServerInfo`, `LibraryInfo`,
+  `Library`, `Book`, `BookRealm`, `BookReadingPosition`, `BookDeviceReadingPosition`
+  old duplicate) had zero external references.
 - **P2/A07 Providers.swift Dead Code Removal (Milestone A07):** Deleted 417
   lines of unreachable/deprecated code from `Providers.swift` and
   `RealmModel.swift`: `FolioReaderRealmPreferenceProvider` (replaced by

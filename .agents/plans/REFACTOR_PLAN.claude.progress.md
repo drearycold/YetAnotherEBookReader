@@ -157,7 +157,7 @@ pie title 任务完成状态
 | **A10** | ShelfDataManager 错放在 Views | ✅ 已完成 | `b2edb0e` moved to Models/ |
 | **A11** | CalibreData.swift 1542行 | ✅ **已拆分** | `0c0b956` split into 10 files |
 | **A12+A24** | RealmModel.swift + Readium 耦合 | ❌ 未开始 | |
-| **A13** | Book.swift ~200行废弃代码 | ❌ 未开始 | |
+| **A13** | Book.swift ~200行废弃代码 | ✅ 已完成 | P2/A13: deleted entire 378-line file on 2026-06-18 |
 | **A16+A17** | BookDetailView + LibraryInfoBookListView 超大 | 🟡 已有 ViewModel | 逻辑已迁移，视图文件仍大 |
 | **A19** | 网络层无统一错误处理 | ❌ 未开始 | |
 | **A20** | CalibreBrowser Realm force unwrap | ✅ **已消除** | CalibreBrowser 已删除 |
@@ -262,7 +262,7 @@ gantt
 | **P1** | A09 | 重构 DSReaderHelper 线程安全 | ✅ 已完成 | ~0.5 天 |
 | **P2** | A10 | 移动 ShelfDataManager | ✅ **完成** | — |
 | **P2** | A11 | 拆分 CalibreData.swift | ✅ **完成 (10 文件)** | — |
-| **P2** | A07+A13+A22 | 清理废弃代码 | 🟡 进行中 | A07 完成, A13/A22 待做 |
+| **P2** | A07+A13+A22 | 清理废弃代码 | 🟡 进行中 | A07+A13 完成, A22 待做 |
 | **P2** | A12+A24 | RealmModel + Readium 解耦 | ❌ 未开始 | ~2 天 |
 | **P2** | A19 | 统一网络错误处理 | ❌ 未开始 | ~2 天 |
 | **P2** | A21 | 书架 SwiftUI 原生化 | ❌ 未开始 | ~3 天 |
