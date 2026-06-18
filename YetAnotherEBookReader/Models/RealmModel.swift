@@ -875,36 +875,6 @@ class BookHighlightRealm: Object {
     }
 }
 
-extension FolioReaderHighlightRealm {
-    func toBookHighlightRealm(readerName: String) -> BookHighlightRealm? {
-        guard let bookId = bookId, let highlightId = highlightId else { return nil }
-        
-        let managedObject = BookHighlightRealm()
-        managedObject.bookId = bookId
-        managedObject.highlightId = highlightId
-        managedObject.readerName = readerName
-        
-        managedObject.page = page
-        managedObject.startOffset = startOffset
-        managedObject.endOffset = endOffset
-        
-        managedObject.date = date
-        managedObject.type = type
-        managedObject.note = noteForHighlight
-        
-        managedObject.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
-        managedObject.content = content ?? ""
-        managedObject.contentPost = contentPost ?? ""
-        managedObject.contentPre = contentPre ?? ""
-        
-        managedObject.cfiStart = cfiStart
-        managedObject.cfiEnd = cfiEnd
-        managedObject.spineName = spineName
-        
-        return managedObject
-    }
-}
-
 class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var port: Int = 0
     @Persisted var configurationData: Data?

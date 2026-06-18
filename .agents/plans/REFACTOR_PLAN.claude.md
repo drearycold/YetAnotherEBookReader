@@ -182,14 +182,15 @@ YetAnotherEBookReader/
 
 ---
 
-### [A07] Providers.swift 中 ~370 行废弃代码仍然存在
+### [A07] Providers.swift 中 ~370 行废弃代码仍然存在 ✅ 已完成 (P2/A07, 2026-06-18)
 
-- **位置**：[Providers.swift:L330-700](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/FolioReaderView/Providers.swift#L330-L700)
+- **位置**：~~[Providers.swift:L330-700](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/FolioReaderView/Providers.swift#L330-L700)~~ → 已清理
 - **现象**：
   - L330: `@available(*, deprecated, message: "replaced by BookHighlightRealm")` — 旧的高亮处理类，约 170 行
   - L501: `@available(*, deprecated, message: "replaced by BookDeviceReadingPositionRealm")` — 旧的位置处理类，约 200 行
 - **影响**：增加维护负担和代码阅读成本。编译时间浪费。
-- **严重程度**：🟡 中
+- **严重程度**：🟡 中 → ✅ 已解决
+- **状态**：✅ 已删除 417 行废弃代码：`FolioReaderRealmPreferenceProvider`（176行，无调用者）、`FolioReaderHighlightRealm`（68行，deprecated，不在 Realm schema 中）、`FolioReaderYabrHighlightProvider`（51行，无调用者）、`FolioReaderReadPositionRealm`（88行，deprecated，不在 Realm schema 中）、`RealmModel.swift` 中的 `extension FolioReaderHighlightRealm`（30行，无调用者）。Providers.swift 从 1095 行减至 708 行。`xcodebuild build` + `xcodebuild test` 通过：90 unit + 1 UI。
 
 ---
 

@@ -269,6 +269,15 @@ decomposition.
 
 Recent important state:
 
+- **P2/A07 Providers.swift Dead Code Removal (Milestone A07):** Deleted 417
+  lines of unreachable/deprecated code from `Providers.swift` and
+  `RealmModel.swift`: `FolioReaderRealmPreferenceProvider` (replaced by
+  `FolioReaderDelegatePreferenceProvider`), `FolioReaderHighlightRealm`
+  (deprecated, not in Realm schema), `FolioReaderYabrHighlightProvider`
+  (replaced by `FolioReaderDelegateHighlightProvider`),
+  `FolioReaderReadPositionRealm` (deprecated, not in Realm schema), and the
+  dead `extension FolioReaderHighlightRealm` in `RealmModel.swift`.
+  `Providers.swift` shrank from 1095 to 708 lines.
 - **P1/A09 DSReaderHelperConnector Thread Safety (Milestone A09):** Removed the
   `DispatchQueue.main.sync` call and redundant `URLCredentialStorage.shared.set`
   block from `DSReaderHelperConnector.urlSession`. Authentication is now handled
