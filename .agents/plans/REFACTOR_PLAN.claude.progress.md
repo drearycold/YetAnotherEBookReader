@@ -136,7 +136,7 @@ pie title 任务完成状态
 | # | 问题 | 状态 | 备注 |
 |---|------|------|------|
 | **A07** | Providers.swift ~370行废弃代码 | ❌ 未开始 | |
-| **A10** | ShelfDataManager 错放在 Views | ❌ 未开始 | |
+| **A10** | ShelfDataManager 错放在 Views | ✅ 已完成 | P2/A10: moved to Models/ on 2026-06-18 |
 | **A11** | CalibreData.swift 1542行 | ❌ 未开始 | |
 | **A12+A24** | RealmModel.swift + Readium 耦合 | ❌ 未开始 | |
 | **A13** | Book.swift ~200行废弃代码 | ❌ 未开始 | |
@@ -222,7 +222,7 @@ gantt
 | **P2** | A07+A13+A22 | 清理废弃代码 | ❌ 未开始 | ~1 天 |
 | **P2** | A11 | 拆分 CalibreData.swift | ❌ 未开始 | ~1 天 |
 | **P2** | A12+A24 | RealmModel + Readium 解耦 | ❌ 未开始 | ~2 天 |
-| **P2** | A10 | 移动 ShelfDataManager | ❌ 未开始 | ~0.5 天 |
+| **P2** | A10 | 移动 ShelfDataManager | ✅ 已完成 | ~0.5 天 |
 | **P2** | A19 | 统一网络错误处理 | ❌ 未开始 | ~2 天 |
 | **P2** | A21 | 书架 SwiftUI 原生化 | ❌ 未开始 | ~3 天 |
 
@@ -257,7 +257,7 @@ gantt
 ├── [P1-A18] 完成 V2 迁移
 │   └── 废弃 CalibreBrowser V1 分类系统
 ├── [P2-A11] 拆分 CalibreData.swift
-└── [P2-A10] 移动 ShelfDataManager 到 Models
+└── [P2-A10] 移动 ShelfDataManager 到 Models ✅
 ```
 
 ### 长期目标

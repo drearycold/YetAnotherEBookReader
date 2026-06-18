@@ -179,7 +179,9 @@ The modern path is value-type/actor based. Do not revive direct
 - `Views/BookDetailView/*`: book detail, preview, activity, reading position UI.
 - `Views/SettingsView/*`: settings, server/library configuration, reader
   options, import pickers.
-- `Views/ShelfView/*`: recent/discover shelf UIKit adapters and shelf data model.
+- `Views/ShelfView/*`: recent/discover shelf UIKit adapters. The shelf data
+  model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved
+  out of `Views/ShelfView/` in Milestone P2/A10).
 - `Views/DictView/*`: dictionary and external lookup UI.
 
 ## Coding Rules
@@ -267,6 +269,12 @@ decomposition.
 
 Recent important state:
 
+- **P2/A10 ShelfDataManager Move (Milestone A10):** Moved
+  `ShelfDataManager.swift` (containing `YabrShelfDataModel` and the
+  `ModelData.registerRecentShelfUpdater()`/`parseShelfSectionId` helpers) from
+  `Views/ShelfView/` to `Models/`. The Xcode project was updated via
+  `xcode_XcodeMV`, preserving both app and Catalyst target memberships. Pure
+  file move, no declaration changes.
 - **P2/A11 CalibreData Split (Milestone A11):** Decomposed the 1307-line
   `Models/CalibreData.swift` into ten focused files (see the Architecture Map
   `Models` section above) as a zero-behavior-change move. The original

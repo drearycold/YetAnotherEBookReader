@@ -189,7 +189,7 @@ while mergedObj.books.count < mergedObj.limitNumber,
 | [LibraryInfoBookRow](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookRow.swift#L19) | LibraryInfoBookRow.swift:19 | `@ObservedRealmObject` | 列表行展示 |
 | [LibraryInfoView.ViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoViewModel.swift#L89) | LibraryInfoViewModel.swift:89 | `@Published property` | 状态管理 |
 | [SectionShelfController](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/SectionShelfController.swift#L46) | SectionShelfController.swift:46 | `dict property` | 分类书架展示 |
-| [YabrShelfDataModel.CategoryObject](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/ShelfDataManager.swift#L29) | ShelfDataManager.swift:29 | `optional property` | 发现书架 |
+| [YabrShelfDataModel.CategoryObject](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/ShelfDataManager.swift#L29) | ShelfDataManager.swift:29 | `optional property` | 发现书架 |
 
 ### 3.2 消费模式问题
 

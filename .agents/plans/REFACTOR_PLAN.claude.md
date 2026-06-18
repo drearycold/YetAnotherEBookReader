@@ -67,7 +67,7 @@ YetAnotherEBookReader/
 │   ├── ShelfView/
 │   │   ├── SectionShelfController.swift    # UIKit 书架 (612行)
 │   │   ├── RecentShelfController.swift     # UIKit 最近 (479行)
-│   │   ├── ShelfDataManager.swift          # 🔴 错放在 Views 的数据管理 (392行)
+│   │   ├── ShelfDataManager.swift          # ✅ 已移动到 Models/ (P2/A10)
 │   │   └── ...UI 包装文件
 │   ├── SettingsView/
 │   │   ├── SettingsView.swift              # 设置主页 (350行)
@@ -159,7 +159,7 @@ YetAnotherEBookReader/
   - [BookDetailView.swift:L11](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/BookDetailView/BookDetailView.swift#L11)
   - [LibraryInfoBookListView.swift:L9](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListView.swift#L9)
   - [SectionShelfController.swift:L12](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/SectionShelfController.swift#L12)
-  - [ShelfDataManager.swift:L11](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/ShelfDataManager.swift#L11)
+  - [ShelfDataManager.swift:L11](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/ShelfDataManager.swift#L11)
   - [Providers.swift:L10](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/FolioReaderView/Providers.swift#L10)
   - [BookDownloadManager.swift:L11](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/BookDownloadManager.swift#L11)
   - ...及另外 13+ 个视图文件
@@ -223,12 +223,13 @@ YetAnotherEBookReader/
 
 ---
 
-### [A10] ShelfDataManager 错放在 Views 目录
+### [A10] ShelfDataManager 错放在 Views 目录 ✅ 已完成 (P2/A10, 2026-06-18)
 
-- **位置**：[ShelfDataManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/ShelfDataManager.swift) (392行)
+- **位置**：~~[ShelfDataManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/ShelfDataManager.swift)~~ → [Models/ShelfDataManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/ShelfDataManager.swift)
 - **现象**：数据管理类放在 `Views/ShelfView/` 目录下，包含大量 Realm 操作和 Combine 管道。
 - **影响**：违反目录组织约定。其他需要书架数据的模块找不到这个类。暗示整个项目的分层边界不清晰。
 - **严重程度**：🟡 中
+- **状态**：✅ 已通过 `xcode_XcodeMV` 移动到 `Models/`，保留 app 和 Catalyst 双 target 成员资格，无声明改动。`xcodebuild build` + 全量 `xcodebuild test` 通过（87 unit + 1 UI）。
 
 ---
 

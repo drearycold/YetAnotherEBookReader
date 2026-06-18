@@ -830,7 +830,6 @@
 				2ABB9126261DE894004AA7C0 /* RecentShelfController.swift */,
 				2ABB9127261DE894004AA7C0 /* SectionShelfUI.swift */,
 				2ABB9129261DE894004AA7C0 /* RecentShelfUI.swift */,
-				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
 				E7939151261F1A47004AB033 /* RecentShelfViewModel.swift */,
 				E7939151261F1A47004AB043 /* SectionShelfViewModel.swift */,
 			);
@@ -976,6 +975,7 @@
 				E71F35292FE3B397007AB0B1 /* CalibrePluginModels.swift */,
 				E71F352F2FE3B3A3007AB0B1 /* CalibreServerConfigProvider.swift */,
 				E71F35322FE3B3A9007AB0B1 /* Array+Chunks.swift */,
+				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
