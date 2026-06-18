@@ -342,12 +342,13 @@ YetAnotherEBookReader/
 
 ---
 
-### [A22] CalibreSearchCache 中 4 个废弃属性仍在使用
+### [A22] CalibreSearchCache 中 4 个废弃属性仍在使用 ✅ 已完成 (P2/A22, 2026-06-18)
 
-- **位置**：[CalibreSearchCache.swift:L49-59](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreBrowser/CalibreSearchCache.swift#L49-L59)
+- **位置**：~~[CalibreSearchCache.swift:L49-59](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreBrowser/CalibreSearchCache.swift#L49-L59)~~ → 已清理
 - **现象**：4 个属性标记为 `@available(*, deprecated, message: "use sources")`，但仍被 CalibreBrowser.swift 引用。
 - **影响**：废弃迁移未完成，增加代码理解难度。
-- **严重程度**：🟢 低
+- **严重程度**：🟢 低 → ✅ 已解决
+- **状态**：✅ 已从 `CalibreLibrarySearchObject` 删除 4 个废弃 `@Persisted` 属性（`generation`、`totalNumber`、`bookIds`、`books: List<CalibreBookRealm>`）。CalibreBrowser.swift 已在 P1e 中删除，这些属性已无任何调用者。Realm schema 版本从 139 升级到 140（同时更新 `CFBundleVersion` 和 `ModelData.RealmSchemaVersion`），并添加 `oldSchemaVersion < 140` 的 migration block 条目。`xcodebuild build` + `xcodebuild test` 通过：90 unit + 1 UI。
 
 ---
 

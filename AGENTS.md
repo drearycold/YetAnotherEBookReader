@@ -269,6 +269,12 @@ decomposition.
 
 Recent important state:
 
+- **P2/A22 CalibreSearchCache Deprecated Properties (Milestone A22):** Removed
+  4 deprecated `@Persisted` properties (`generation`, `totalNumber`, `bookIds`,
+  `books: List<CalibreBookRealm>`) from `CalibreLibrarySearchObject` in
+  `CalibreSearchCache.swift`. Bumped Realm schema version 139→140 (updated
+  `ModelData.RealmSchemaVersion`, `CFBundleVersion` in both iOS and macOS
+  Info.plist files, and added migration block entry for `oldSchemaVersion < 140`).
 - **P2/A13 Book.swift Deleted (Milestone A13):** Deleted the entire 378-line
   `Models/Book.swift`. The file was not registered in the Xcode project and
   was never compiled; all 7 types in it (`ServerInfo`, `LibraryInfo`,

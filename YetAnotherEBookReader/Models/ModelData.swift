@@ -144,7 +144,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion: UInt64 = 139
+    static var RealmSchemaVersion: UInt64 = 140
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -214,7 +214,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         ModelData.shared = self
         
         // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = 139
+        ModelData.RealmSchemaVersion = 140
         let initialConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { _, _ in }
@@ -341,6 +341,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                 if oldSchemaVersion < 139 {
                     migration.deleteData(forType: "CalibreUnifiedCategoryObject")
                     migration.deleteData(forType: "CalibreUnifiedCategoryItemObject")
+                }
+                if oldSchemaVersion < 140 {
+                    // Removed deprecated properties from CalibreLibrarySearchObject:
+                    // generation, totalNumber, bookIds, books. Realm automatically
+                    // drops removed columns during migration.
                 }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in

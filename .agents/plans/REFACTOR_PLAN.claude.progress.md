@@ -162,7 +162,7 @@ pie title 任务完成状态
 | **A19** | 网络层无统一错误处理 | ❌ 未开始 | |
 | **A20** | CalibreBrowser Realm force unwrap | ✅ **已消除** | CalibreBrowser 已删除 |
 | **A21** | UIKit/SwiftUI 混合书架 | ❌ 未开始 | |
-| **A22** | CalibreSearchCache 废弃属性 | ❌ 未开始 | |
+| **A22** | CalibreSearchCache 废弃属性 | ✅ 已完成 | P2/A22: removed 4 deprecated props, schema bump 140 on 2026-06-18 |
 | **A23** | DatabaseService force unwrap | ❌ 未开始 | |
 | **A26** | Readium timing hack | ❌ 未开始 | |
 | **A27** | Realm ↔ 值类型手动转换 | 🟡 Repository 层部分解决 | |
@@ -262,7 +262,7 @@ gantt
 | **P1** | A09 | 重构 DSReaderHelper 线程安全 | ✅ 已完成 | ~0.5 天 |
 | **P2** | A10 | 移动 ShelfDataManager | ✅ **完成** | — |
 | **P2** | A11 | 拆分 CalibreData.swift | ✅ **完成 (10 文件)** | — |
-| **P2** | A07+A13+A22 | 清理废弃代码 | 🟡 进行中 | A07+A13 完成, A22 待做 |
+| **P2** | A07+A13+A22 | 清理废弃代码 | ✅ **完成** | A07+A13+A22 全部完成 |
 | **P2** | A12+A24 | RealmModel + Readium 解耦 | ❌ 未开始 | ~2 天 |
 | **P2** | A19 | 统一网络错误处理 | ❌ 未开始 | ~2 天 |
 | **P2** | A21 | 书架 SwiftUI 原生化 | ❌ 未开始 | ~3 天 |
