@@ -269,6 +269,11 @@ decomposition.
 
 Recent important state:
 
+- **P1/A09 DSReaderHelperConnector Thread Safety (Milestone A09):** Removed the
+  `DispatchQueue.main.sync` call and redundant `URLCredentialStorage.shared.set`
+  block from `DSReaderHelperConnector.urlSession`. Authentication is now handled
+  solely by `CalibreServerTaskDelegate`'s challenge callback. Added
+  `DSReaderHelperConnectorTests` (3 cases) for background-thread-safe access.
 - **P2/A10 ShelfDataManager Move (Milestone A10):** Moved
   `ShelfDataManager.swift` (containing `YabrShelfDataModel` and the
   `ModelData.registerRecentShelfUpdater()`/`parseShelfSectionId` helpers) from
@@ -291,7 +296,7 @@ Recent important state:
   - `SupportInfoViewModel` (decouples file-processing ZIP/backup operations and state tracking).
   - `RecentShelfViewModel` and `SectionShelfViewModel` (extract business flows out of UIKit/compositional shelf controllers).
 - **LibraryInfo & Filter Consolidations:** Extended `LibraryInfoView.ViewModel` to handle search string alterations, category filtering, and count/status string derivations, eliminating direct `ModelData` reads in subviews.
-- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, `RecentShelfViewModelTests`, and `CalibreDataSplitTests` (total suite: 87 unit tests + 1 UI test).
+- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, `RecentShelfViewModelTests`, `CalibreDataSplitTests`, and `DSReaderHelperConnectorTests` (total suite: 90 unit tests + 1 UI test).
 
 Latest recorded verification in handoff notes:
 
@@ -299,10 +304,10 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 87 unit tests and 1 UI test passed. The Mac Catalyst build is
+Recorded result: 90 unit tests and 1 UI test passed. The Mac Catalyst build is
 currently blocked by a pre-existing SPM package product resolution issue
 (`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
-the P2/A11 split.
+the P1/P2 work.
 
 ## Known Risks
 

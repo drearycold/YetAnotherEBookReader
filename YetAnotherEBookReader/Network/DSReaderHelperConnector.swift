@@ -22,20 +22,7 @@ struct DSReaderHelperConnector {
     }()
     
     var urlSession: URLSession {
-        if let space = calibreServerService.getProtectionSpace(server: server, port: dsreaderHelperServer.port) {
-            let userCredential = URLCredential(user: server.username,
-                                               password: server.password,
-                                               persistence: .forSession)
-            if Thread.isMainThread == false {
-                DispatchQueue.main.sync {
-                    URLCredentialStorage.shared.set(userCredential, for: space)
-                }
-            } else {
-                URLCredentialStorage.shared.set(userCredential, for: space)
-            }
-        }
-        
-        return calibreServerService.urlSession(server: server)
+        calibreServerService.urlSession(server: server)
     }
     
     func endpointConfiguration() -> URLComponents? {
