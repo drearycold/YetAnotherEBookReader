@@ -11,18 +11,22 @@ import Combine
 import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
-    private let config: Realm.Configuration
+    private let customConfig: Realm.Configuration?
     private let modelData: ModelData
     
     var defaultLog = Logger()
     
-    init(config: Realm.Configuration, modelData: ModelData) {
-        self.config = config
+    init(config: Realm.Configuration? = nil, modelData: ModelData) {
+        self.customConfig = config
         self.modelData = modelData
     }
     
     private func getRealm() throws -> Realm {
-        return try Realm(configuration: config)
+        var conf = customConfig ?? modelData.realmConf ?? Realm.Configuration()
+        // Strip closures to prevent EXC_BAD_ACCESS in swift_retain when copying on concurrent queues
+        conf.migrationBlock = nil
+        conf.shouldCompactOnLaunch = nil
+        return try Realm(configuration: conf)
     }
     
     func fetchLibraryCachedResult(

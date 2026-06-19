@@ -167,7 +167,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
-    lazy var searchCacheRepository = RealmSearchCacheStore(config: self.realmConf, modelData: self)
+    lazy var searchCacheRepository = RealmSearchCacheStore(modelData: self)
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
