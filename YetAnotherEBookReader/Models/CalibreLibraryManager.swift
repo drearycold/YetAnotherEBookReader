@@ -233,7 +233,7 @@ class CalibreLibraryManager: ObservableObject {
         let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
         guard let modelData = self.modelData else { return }
         modelData.probeLibraryLastModifiedSubject.receive(on: queue)
-            .flatMap { [weak self] request -> AnyPublisher<CalibreSyncLibraryResult, Never> in
+            .flatMap { [weak self] request -> AnyPublisher<Result<CalibreSyncLibraryResult, CalibreAPIError>, Never> in
                 guard let self = self, let calibreServerService = self.modelData?.calibreServerService else {
                     return Empty().eraseToAnyPublisher()
                 }
@@ -243,24 +243,31 @@ class CalibreLibraryManager: ObservableObject {
                     filter: "",
                     limit: 1
                 )
+                .map { Result.success($0) }
+                .catch { Just(Result.failure($0)) }
+                .eraseToAnyPublisher()
             }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] result in
-                guard let self = self,
-                      var library = self.calibreLibraries[result.request.library.id],
-                      let lastModifiedStr = result.list.data.last_modified.first?.value.v,
-                      let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
-                else {
-                    return
+                guard let self = self else { return }
+                switch result {
+                case .success(let syncResult):
+                    guard var library = self.calibreLibraries[syncResult.request.library.id],
+                          let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
+                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
+                    else {
+                        return
+                    }
+                    if lastModified > library.lastModified {
+                        library.lastModified = lastModified
+                        self.calibreLibraries[syncResult.request.library.id] = library
+                        try? self.libraryRepository.saveLibrary(library)
+                    }
+
+                    self.modelData?.calibreUpdatedSubject.send(.library(library))
+                case .failure(let error):
+                    self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                 }
-                
-                if lastModified > library.lastModified {
-                    library.lastModified = lastModified
-                    self.calibreLibraries[result.request.library.id] = library
-                    try? self.libraryRepository.saveLibrary(library)
-                }
-                
-                self.modelData?.calibreUpdatedSubject.send(.library(library))
             }
             .store(in: &calibreCancellables)
     }

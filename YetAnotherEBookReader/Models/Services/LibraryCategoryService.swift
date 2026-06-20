@@ -48,8 +48,13 @@ actor LibraryCategoryService {
                 throw URLError(.badURL)
             }
             
-            let session = service.urlSession(server: library.server, qos: .background)
-            let (data, _) = try await session.data(from: url)
+            let data: Data
+            if url.scheme?.lowercased().hasPrefix("http") == true {
+                (data, _) = try await service.validatedData(from: url, server: library.server, qos: .background)
+            } else {
+                let session = service.urlSession(server: library.server, qos: .background)
+                (data, _) = try await session.data(from: url)
+            }
             let result = try JSONDecoder().decode(LibraryCategoryListResult.self, from: data)
             
             let fetched = result.items.map { item in

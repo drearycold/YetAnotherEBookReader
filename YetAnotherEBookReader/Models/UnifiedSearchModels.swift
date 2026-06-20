@@ -87,9 +87,10 @@ struct SearchCriteriaMergedKey: Hashable {
 }
 
 enum SearchError: Error, Equatable, Sendable {
-    case network(String)
+    case network(CalibreAPIError)
     case database(String)
-    case unknown(String)
+    case invalidState(String)
+    case cancelled
 }
 
 struct LibrarySearchStatus: Equatable, Sendable {

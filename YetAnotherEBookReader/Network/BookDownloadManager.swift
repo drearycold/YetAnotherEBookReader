@@ -10,6 +10,29 @@ import Combine
 import OSLog
 import RealmSwift
 
+public enum DownloadStartError: Error, LocalizedError, Equatable {
+    case missingFormatInfo
+    case invalidURL
+    case missingSavedURL
+    case fileAlreadyExists
+    case downloadAlreadyActive
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingFormatInfo:
+            return "Book is not available in the requested format on the server."
+        case .invalidURL:
+            return "The download URL is invalid."
+        case .missingSavedURL:
+            return "Unable to determine local save location."
+        case .fileAlreadyExists:
+            return "The book is already downloaded."
+        case .downloadAlreadyActive:
+            return "A download is already in progress for this book."
+        }
+    }
+}
+
 class BookDownloadManager: ObservableObject {
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     
@@ -38,7 +61,7 @@ class BookDownloadManager: ObservableObject {
         bookFormatDownloadSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] request in
-                let _ = self?.startDownload(request.book, format: request.format, overwrite: false)
+                _ = self?.startDownloadNew(request.book, format: request.format, overwrite: false)
             }
             .store(in: &cancellables)
     }
@@ -116,9 +139,9 @@ class BookDownloadManager: ObservableObject {
         return true
     }
     
-    func startDownload(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
+    func startDownloadNew(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
         guard let formatInfo = book.formats[format.rawValue] else {
-            return false
+            return .failure(.missingFormatInfo)
         }
         
         guard let url = URL(string: book.library.server.serverUrl)?
@@ -127,23 +150,23 @@ class BookDownloadManager: ObservableObject {
                 .appendingPathComponent(book.id.description, isDirectory: true)
                 .appendingPathComponent(book.library.key, isDirectory: false)
                 else {
-            return false
+            return .failure(.invalidURL)
         }
 
         defaultLog.info("prepare downloadURL: \(url.absoluteString)")
         
         guard let savedURL = getSavedUrl(book: book, format: format) else {
-            return false
+            return .failure(.missingSavedURL)
         }
         
         self.defaultLog.info("savedURL: \(savedURL.absoluteString)")
         
         if FileManager.default.fileExists(atPath: savedURL.path) && !overwrite {
-            return false
+            return .failure(.fileAlreadyExists)
         }
         
         if activeDownloads[url]?.isDownloading == true && !overwrite {
-            return false
+            return .failure(.downloadAlreadyActive)
         }
         
         var bookFormatDownload = BookFormatDownload(book: book, format: format, startDatetime: Date(), sourceURL: url, savedURL: savedURL, modificationDate: formatInfo.serverMTime)
@@ -191,7 +214,17 @@ class BookDownloadManager: ObservableObject {
         
         defaultLog.info("start downloadURL: \(url.absoluteString)")
         
-        return true
+        return .success(())
+    }
+
+    @available(*, deprecated, message: "Use startDownloadNew instead")
+    func startDownload(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
+        switch startDownloadNew(book, format: format, overwrite: overwrite) {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
     }
     
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
@@ -265,7 +298,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
             self.defaultLog.info("isFileExist: \(self.isFileExist)")
             
         } catch {
-            print ("file error: \(error)")
+            self.defaultLog.error("file error: \(error.localizedDescription)")
         }
 
     }

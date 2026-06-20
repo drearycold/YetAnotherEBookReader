@@ -11,19 +11,19 @@ import RealmSwift
 actor LibrarySearchService {
     private let service: CalibreServerService
     private let repository: SearchCacheRepository
-    
+
     init(service: CalibreServerService, repository: SearchCacheRepository) {
         self.service = service
         self.repository = repository
     }
-    
+
     private func getRealm() throws -> Realm {
         guard let conf = service.database.realmConf else {
             throw URLError(.cannotConnectToHost)
         }
         return try Realm(configuration: conf)
     }
-    
+
     func getTargetSource(for library: CalibreLibrary) -> String {
         if library.server.isLocal {
             return URL(fileURLWithPath: "/realm").absoluteString
@@ -35,7 +35,7 @@ actor LibrarySearchService {
             }
         }
     }
-    
+
     func searchAndFetchMetadata(
         library: CalibreLibrary,
         criteria: SearchCriteria,
@@ -50,10 +50,10 @@ actor LibrarySearchService {
             sortAsc: criteria.sortCriteria.ascending,
             filters: criteria.filterCriteriaCategory
         )
-        
+
         let targetSource = getTargetSource(for: library)
         let sourceObj = cacheResult?.sources[targetSource]
-        
+
         let needsFetch: Bool
         if force || sourceObj == nil || sourceObj!.generation < library.lastModified {
             needsFetch = true
@@ -62,68 +62,66 @@ actor LibrarySearchService {
         } else {
             needsFetch = false
         }
-        
+
         if !needsFetch, let cached = cacheResult {
             return cached
         }
-        
+
         // Build search parameters
         let offset = sourceObj?.bookIds.count ?? 0
         let numToFetch = limit - offset
-        
+
         var parameters = [String: (generation: Date, num: Int, offset: Int)]()
         parameters[targetSource] = (generation: library.lastModified, num: numToFetch, offset: offset)
-        
+
         let searchTasks = service.buildLibrarySearchTasks(library: library, searchCriteria: criteria, parameters: parameters)
         guard let task = searchTasks.first(where: {
             $0.serverUrl.absoluteString.replacingOccurrences(of: ".", with: "_") == targetSource
         }) else {
-            throw SearchError.network("Could not build search task for source: \(targetSource)")
+            throw SearchError.invalidState("Could not build search task for source: \(targetSource)")
         }
-        
+
         try Task.checkCancellation()
-        
+
         var finalTask = task
         if task.booksListUrl.isHTTP {
-            let session = service.urlSession(server: library.server)
-            let (data, response) = try await session.data(from: task.booksListUrl)
-            
-            try Task.checkCancellation()
-            
-            guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode) else {
-                throw SearchError.network("Server returned invalid response code.")
-            }
-            
             do {
-                finalTask.ajaxSearchResult = try JSONDecoder().decode(CalibreLibraryBooksResult.SearchResult.self, from: data)
+                let (data, _) = try await service.validatedData(from: task.booksListUrl, server: library.server)
+                try Task.checkCancellation()
+
+                finalTask.ajaxSearchResult = try service.decodePayload(CalibreLibraryBooksResult.SearchResult.self, from: data)
+            } catch is CancellationError {
+                throw SearchError.cancelled
             } catch {
-                throw SearchError.network("Failed to decode search results: \(error.localizedDescription)")
+                try Task.checkCancellation()
+                let calibreError = CalibreAPIError(error: error)
+                throw SearchError.network(calibreError)
             }
         } else if task.booksListUrl.isFileURL {
             finalTask = try performLocalSearch(task: task)
         }
-        
+
         try Task.checkCancellation()
-        
+
         guard let searchResult = finalTask.ajaxSearchResult else {
-            throw SearchError.network("Search did not yield results.")
+            throw SearchError.invalidState("Search did not yield results.")
         }
-        
+
         let serverUUID = library.server.uuid.uuidString
         let libraryName = library.name
-        
+
         var toFetchIDs = [Int32]()
-        
+
         var currentBookIds = sourceObj?.bookIds ?? []
         var currentBooks = sourceObj?.books ?? []
-        
+
         if offset == currentBookIds.count {
             currentBookIds.append(contentsOf: searchResult.book_ids)
         } else {
             currentBookIds = searchResult.book_ids
             currentBooks = []
         }
-        
+
         // We need to resolve what we already have in local Realm
         for bookId in currentBookIds[currentBooks.count...] {
             if let realmBook = try? getRealm().object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)) {
@@ -133,9 +131,9 @@ actor LibrarySearchService {
                 toFetchIDs.append(bookId)
             }
         }
-        
+
         try Task.checkCancellation()
-        
+
         if !toFetchIDs.isEmpty {
             let metadataTask = service.buildBooksMetadataTask(
                 library: library,
@@ -144,12 +142,12 @@ actor LibrarySearchService {
             )
             if let metadataTask = metadataTask {
                 let completedTask = await service.getBooksMetadata(task: metadataTask)
-                
+
                 try Task.checkCancellation()
-                
+
                 if let entries = completedTask.booksMetadataEntry {
                     try writeMetadataToCache(library: library, entries: entries, json: completedTask.booksMetadataJSON)
-                    
+
                     for bookId in toFetchIDs {
                         if let realmBook = try? getRealm().object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)) {
                             let book = CalibreBook(managedObject: realmBook, library: library)
@@ -159,16 +157,16 @@ actor LibrarySearchService {
                 }
             }
         }
-        
+
         try Task.checkCancellation()
-        
+
         let updatedSourceResult = LibrarySourceSearchResult(
             generation: library.lastModified,
             totalNumber: searchResult.total_num,
             bookIds: currentBookIds,
             books: currentBooks
         )
-        
+
         try repository.saveLibrarySourceResult(
             libraryId: library.id,
             search: criteria.searchString,
@@ -178,7 +176,7 @@ actor LibrarySearchService {
             sourceUrl: targetSource,
             result: updatedSourceResult
         )
-        
+
         if let updatedCachedResult = try repository.fetchLibraryCachedResult(
             libraryId: library.id,
             search: criteria.searchString,
@@ -188,17 +186,17 @@ actor LibrarySearchService {
         ) {
             return updatedCachedResult
         }
-        
+
         throw SearchError.database("Failed to fetch updated search result from cache.")
     }
-    
+
     private func performLocalSearch(task: CalibreLibrarySearchTask) throws -> CalibreLibrarySearchTask {
         let realm = try getRealm()
         let libraryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
             NSPredicate(format: "serverUUID = %@", task.library.server.uuid.uuidString),
             NSPredicate(format: "libraryName = %@", task.library.name)
         ])
-        
+
         var predicates = [NSPredicate]()
         let searchTerms = task.searchCriteria.searchString
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -213,10 +211,10 @@ actor LibrarySearchService {
                 ])
             })
         }
-        
+
         predicates = task.searchCriteria.filterCriteriaCategory.reduce(into: predicates) { partialResult, categoryFilter in
             guard !categoryFilter.value.isEmpty else { return }
-            
+
             switch categoryFilter.key {
             case "Tags":
                 partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
@@ -250,20 +248,20 @@ actor LibrarySearchService {
                 partialResult.append(NSPredicate(value: false))
             }
         }
-        
+
         let allbooks = realm.objects(CalibreBookRealm.self)
             .filter(libraryPredicate)
             .sorted(byKeyPath: task.searchCriteria.sortCriteria.by.sortKeyPath, ascending: task.searchCriteria.sortCriteria.ascending)
         let filteredBooks = allbooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
-        
+
         let offset = task.offset
         let num = task.num
-        
+
         var bookIds = [Int32]()
         if offset < filteredBooks.count {
             bookIds = filteredBooks[offset..<min(offset + num, filteredBooks.count)].map { $0.idInLib }
         }
-        
+
         var completedTask = task
         completedTask.ajaxSearchResult = .init(
             total_num: filteredBooks.count,
@@ -279,7 +277,7 @@ actor LibrarySearchService {
         )
         return completedTask
     }
-    
+
     private func writeMetadataToCache(library: CalibreLibrary, entries: [String: CalibreBookEntry?], json: NSDictionary?) throws {
         let realm = try getRealm()
         let serverUUID = library.server.uuid.uuidString
@@ -288,7 +286,7 @@ actor LibrarySearchService {
                 guard let entry = entry else { return }
                 guard let bookId = Int32(key) else { return }
                 let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: bookId.description)
-                
+
                 let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? CalibreBookRealm()
                 if bookRealm.realm == nil {
                     bookRealm.primaryKey = primaryKey
@@ -297,7 +295,7 @@ actor LibrarySearchService {
                     bookRealm.idInLib = bookId
                     realm.add(bookRealm)
                 }
-                
+
                 let bookRoot = json?[key] as? NSDictionary ?? NSDictionary()
                 self.service.handleLibraryBookOne(library: library, bookRealm: bookRealm, entry: entry, root: bookRoot)
             }

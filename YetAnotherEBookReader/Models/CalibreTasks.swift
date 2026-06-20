@@ -51,6 +51,8 @@ struct CalibreBooksTask {
     var booksDeleted = Set<Int32>()
     var booksInShelf = [CalibreBook]()
     var booksAnnotation = [CalibreBook]()
+
+    var error: CalibreAPIError? = nil
 }
 
 struct CalibreLibraryProbeTask {
@@ -89,6 +91,7 @@ struct CalibreBookSetLastReadPositionTask {
     var urlResponse: URLResponse?
     var data: Data?
     let startDatetime: Date
+    var error: CalibreAPIError?
 }
 
 struct CalibreBookUpdateAnnotationsTask {
@@ -100,4 +103,5 @@ struct CalibreBookUpdateAnnotationsTask {
     var urlRequest: URLRequest
     var urlResponse: URLResponse?
     var data: Data?
+    var error: CalibreAPIError?
 }

@@ -263,6 +263,8 @@ struct CalibreServerInfo: Identifiable {
     var defaultLibrary: String
     var libraryMap: [String:String] = [:]
     
+    var error: CalibreAPIError? = nil
+
     var request: CalibreProbeServerRequest
 }
 
@@ -317,8 +319,6 @@ class CalibreServerTaskDelegate: NSObject, URLSessionTaskDelegate {
             completionHandler(.cancelAuthenticationChallenge, nil)
             return
         }
-        
-        print("CalibreServerTaskDelegate \(task) \(challenge.previousFailureCount) \(challenge.protectionSpace)")
         
 //        let credentials = URLCredentialStorage.shared.credentials(for: challenge.protectionSpace)
         completionHandler(.useCredential, userCredential)

@@ -9,10 +9,10 @@ import Foundation
 import Combine
 
 extension CalibreServerService {
-    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
         guard let lastReadPositionUrl = task.lastReadPositionUrl,
               lastReadPositionUrl.isHTTP else {
-            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
         }
 
         return validatedDataPublisher(from: lastReadPositionUrl, server: task.library.server)
@@ -21,21 +21,23 @@ extension CalibreServerService {
                 task.lastReadPositionsData = data
                 return task
             }
+            .eraseToAnyPublisher()
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
+    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
+        getLastReadPosition(task: task)
             .mapError(\.asURLError)
             .eraseToAnyPublisher()
     }
 
-    func buildSetLastReadPositionTask(library: CalibreLibrary, bookId: Int32, format: Format, entry: CalibreBookLastReadPositionEntry) -> CalibreBookSetLastReadPositionTask? {
-        guard let lastReadPositionEndpointUrl = try? makeEndpointURL(
+    func buildSetLastReadPositionTask(library: CalibreLibrary, bookId: Int32, format: Format, entry: CalibreBookLastReadPositionEntry) throws -> CalibreBookSetLastReadPositionTask {
+        let lastReadPositionEndpointUrl = try makeEndpointURL(
             server: library.server,
             path: "/book-set-last-read-position/\(library.key)/\(bookId)/\(format.rawValue)"
-        ) else {
-            return nil
-        }
+        )
 
-        guard let postData = try? JSONEncoder().encode(entry) else {
-            return nil
-        }
+        let postData = try JSONEncoder().encode(entry)
 
         let urlRequest = makeJSONRequest(url: lastReadPositionEndpointUrl, method: "POST", body: postData)
 
@@ -58,10 +60,13 @@ extension CalibreServerService {
             resultTask.urlResponse = response
             resultTask.data = data
         } catch {
+            resultTask.error = CalibreAPIError(error: error)
         }
 
         let logErrMsg: String
-        if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
+        if let calibreError = resultTask.error {
+            logErrMsg = calibreError.localizedDescription
+        } else if let httpUrlResponse = resultTask.urlResponse as? HTTPURLResponse {
             logErrMsg = "HTTP \(httpUrlResponse.statusCode)"
         } else {
             logErrMsg = "Unknown"
@@ -71,14 +76,21 @@ extension CalibreServerService {
         return resultTask
     }
 
-    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, Never> {
+    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, CalibreAPIError> {
         validatedDataPublisher(for: task.urlRequest, server: task.library.server)
             .map { data, response -> CalibreBookSetLastReadPositionTask in
-                var task = task
-                task.urlResponse = response
-                task.data = data
-                return task
+                var resultTask = task
+                resultTask.urlResponse = response
+                resultTask.data = data
+                return resultTask
             }
+            .eraseToAnyPublisher()
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
+    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, Never> {
+        let publisher: AnyPublisher<CalibreBookSetLastReadPositionTask, CalibreAPIError> = setLastReadPositionByTask(task: task)
+        return publisher
             .replaceError(with: task)
             .eraseToAnyPublisher()
     }

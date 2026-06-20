@@ -792,8 +792,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         bookManager.removeFromShelf(inShelfId: inShelfId)
     }
     
+    func startDownloadFormatNew(book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
+        return downloadManager.startDownloadNew(book, format: format, overwrite: overwrite)
+    }
+
+    @available(*, deprecated, message: "Use startDownloadFormatNew instead")
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
-        return downloadManager.startDownload(book, format: format, overwrite: overwrite)
+        switch startDownloadFormatNew(book: book, format: format, overwrite: overwrite) {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
     }
     
     func cancelDownloadFormat(book: CalibreBook, format: Format) {
@@ -951,34 +961,46 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         let queue = DispatchQueue(label: "sync-server-helper", qos: .userInitiated)
         syncServerHelperConfigSubject
             .receive(on: queue)
-            .flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
+            .flatMap { serverId -> AnyPublisher<Result<(id: String, port: Int, data: Data), URLError>, Never> in
                 if let server = self.calibreServers[serverId],
                    let dsreaderHelperServer = self.serverManager.queryServerDSReaderHelper(server: server),
                    let publisher = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil).refreshConfiguration() {
                     return publisher
+                        .map { Result.success($0) }
+                        .catch { Just(Result.failure($0)) }
+                        .eraseToAnyPublisher()
                 } else {
-                    return Just((id: serverId, port: 0, data: Data())).setFailureType(to: URLError.self).eraseToAnyPublisher()
+                    return Just(Result.failure(URLError(.unknown))).eraseToAnyPublisher()
                 }
             }
-            .map { task -> (id: String, port: Int, data: Data, config: CalibreDSReaderHelperConfiguration?) in
-                return (
-                    id: task.id,
-                    port: task.port,
-                    data: task.data,
-                    config: try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data)
-                )
+            .map { result -> (id: String, port: Int, data: Data, config: CalibreDSReaderHelperConfiguration?, error: URLError?) in
+                switch result {
+                case .success(let task):
+                    return (
+                        id: task.id,
+                        port: task.port,
+                        data: task.data,
+                        config: try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data),
+                        error: nil
+                    )
+                case .failure(let error):
+                    return (id: "", port: 0, data: Data(), config: nil, error: error)
+                }
             }
             .receive(on: DispatchQueue.main)
-            .sink { completion in
-                
-            } receiveValue: { task in
+            .sink { task in
+                if let error = task.error {
+                    self.defaultLog.error("Failed to sync server helper configuration: \(error.localizedDescription)")
+                    return
+                }
                 if let config = task.config, config.dsreader_helper_prefs != nil {
                     let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
                     dsreaderHelper.configurationData = task.data
                     
                     self.serverManager.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
                 }
-            }.store(in: &calibreCancellables)
+            }
+            .store(in: &calibreCancellables)
     }
     
     @MainActor

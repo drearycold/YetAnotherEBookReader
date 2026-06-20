@@ -13,36 +13,36 @@ struct DSReaderHelperConnector {
     let server: CalibreServer
     let dsreaderHelperServer: CalibreServerDSReaderHelper
     let goodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs?
-    
+
     let metadataQueue: OperationQueue = {
         var queue = OperationQueue()
         queue.name = "Book Metadata queue"
         queue.maxConcurrentOperationCount = 1
         return queue
     }()
-    
+
     var urlSession: URLSession {
         calibreServerService.urlSession(server: server)
     }
-    
+
     func endpointConfiguration() -> URLComponents? {
         guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
               var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/configuration")
-        
+
         return urlComponents
     }
-    
+
     func endpointConfigurationV1(libraryKey: String) -> URLComponents? {
         guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
               var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/1/configuration/\(libraryKey)")
-        
+
         return urlComponents
     }
-    
+
     func endpointBaseUrlAddRemove(goodreads_id: String, shelfName: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
         guard let profileName = goodreadsSync?.profileName else { return nil }
@@ -53,19 +53,19 @@ struct DSReaderHelperConnector {
             URLQueryItem(name: "profile_name", value: profileName),
             URLQueryItem(name: "shelf_name", value: shelfName)
         ]
-        
+
         return urlComponents
     }
-    
+
     func endpointDictLookup() -> URLComponents? {
         guard let serverUrl = calibreServerService.getServerUrlByReachability(server: server),
               var urlComponents = URLComponents(url: serverUrl, resolvingAgainstBaseURL: false) else { return nil }
         urlComponents.port = dsreaderHelperServer.port
         urlComponents.path.append("/dshelper/dict_viewer/lookup")
-        
+
         return urlComponents
     }
-    
+
     func endpointBaseUrlPrecent(goodreads_id: String) -> URLComponents? {
         guard var urlComponents = URLComponents(string: server.serverUrl) else { return nil }
         guard let profileName = goodreadsSync?.profileName else { return nil }
@@ -75,135 +75,109 @@ struct DSReaderHelperConnector {
             URLQueryItem(name: "goodreads_id", value: goodreads_id.description),
             URLQueryItem(name: "profile_name", value: profileName)
         ]
-        
+
         return urlComponents
     }
-    
+
     func refreshConfiguration() -> AnyPublisher<(id: String, port: Int, data: Data), URLError>? {
         guard let url = endpointConfiguration()?.url else { return nil }
         let serverId = self.server.uuid.uuidString
         let publisher = urlSession.dataTaskPublisher(for: url)
             .map { (id: serverId, port: self.dsreaderHelperServer.port, data: $0.data) }
             .eraseToAnyPublisher()
-        
+
         return publisher
     }
-    
+
     func refreshConfiguration(_ libraryKey: String) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
         guard let url = endpointConfigurationV1(libraryKey: libraryKey)?.url else {
             throw URLError(.badURL)
         }
-        
+
         let (data, _) = try await urlSession.data(from: url)
         let config = try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
-        
+
         return (config, data)
     }
-    
-    func addToShelf(goodreads_id: String, shelfName: String) -> Bool {
+
+    func addToShelf(goodreads_id: String, shelfName: String) async throws {
         guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
-            return false
+            throw CalibreAPIError.invalidURL("addToShelf")
         }
         endpointBaseUrl.queryItems!.append(URLQueryItem(name: "action", value: "add"))
-        
-        guard let url = endpointBaseUrl.url else { return false }
-        
-        let request = URLRequest(url: url)
-        
-        let task = urlSession.dataTask(with: request) { [self] data, response, error in
-            if let error = error {
-                
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                
-                return
-            }
-            if !(200...299).contains(httpResponse.statusCode) {
-                
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data,
-               let string = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async {
-                    
-                }
-            }
+
+        guard let url = endpointBaseUrl.url else {
+            throw CalibreAPIError.invalidURL("addToShelf")
         }
-        
-        task.resume()
-        return true
+
+        let request = URLRequest(url: url)
+        _ = try await calibreServerService.validatedData(for: request, server: server)
     }
-    
-    func removeFromShelf(goodreads_id: String, shelfName: String) -> Bool {
+
+    func removeFromShelf(goodreads_id: String, shelfName: String) async throws {
         guard var endpointBaseUrl = endpointBaseUrlAddRemove(goodreads_id: goodreads_id, shelfName: shelfName) else {
-            return false
+            throw CalibreAPIError.invalidURL("removeFromShelf")
         }
         endpointBaseUrl.queryItems!.append(URLQueryItem(name: "action", value: "remove"))
-        
-        guard let url = endpointBaseUrl.url else { return false }
-        let request = URLRequest(url: url)
 
-        let task = urlSession.dataTask(with: request) { [self] data, response, error in
-            if let error = error {
-                
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                
-                return
-            }
-            if !(200...299).contains(httpResponse.statusCode) {
-                
-                return
-            }
-            
-            if let mimeType = httpResponse.mimeType, mimeType == "application/json",
-               let data = data,
-               let string = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async {
-                    
-                }
-            }
+        guard let url = endpointBaseUrl.url else {
+            throw CalibreAPIError.invalidURL("removeFromShelf")
         }
-        
-        task.resume()
-        return true
+
+        let request = URLRequest(url: url)
+        _ = try await calibreServerService.validatedData(for: request, server: server)
     }
-    
-    func updateReadingProgress(goodreads_id: String, progress: Double) -> Bool {
+
+    func updateReadingProgress(goodreads_id: String, progress: Double) async throws {
         guard var endpointBaseUrl = endpointBaseUrlPrecent(goodreads_id: goodreads_id) else {
-            return false
+            throw CalibreAPIError.invalidURL("updateReadingProgress")
         }
         endpointBaseUrl.queryItems!.append(URLQueryItem(name: "percent", value: progress.description))
-        
-        guard let url = endpointBaseUrl.url else { return false }
-        let request = URLRequest(url: url)
 
-        let task = urlSession.dataTask(with: request) { [self] data, response, error in
-            if let error = error {
-                
-                return
-            }
-            guard let httpResponse = response as? HTTPURLResponse else {
-                
-                return
-            }
-            if !(200...299).contains(httpResponse.statusCode) {
-                
-                return
-            }
-            
-            if let data = data, let string = String(data: data, encoding: .utf8) {
-                DispatchQueue.main.async {
-                    print(string)
-                }
+        guard let url = endpointBaseUrl.url else {
+            throw CalibreAPIError.invalidURL("updateReadingProgress")
+        }
+
+        let request = URLRequest(url: url)
+        _ = try await calibreServerService.validatedData(for: request, server: server)
+    }
+
+    @available(*, deprecated, message: "Use async throws version instead")
+    @discardableResult
+    func addToShelf(goodreads_id: String, shelfName: String) -> Bool {
+        Task {
+            do {
+                try await addToShelf(goodreads_id: goodreads_id, shelfName: shelfName)
+            } catch {
+                // Captured error
             }
         }
-        
-        task.resume()
+        return true
+    }
+
+    @available(*, deprecated, message: "Use async throws version instead")
+    @discardableResult
+    func removeFromShelf(goodreads_id: String, shelfName: String) -> Bool {
+        Task {
+            do {
+                try await removeFromShelf(goodreads_id: goodreads_id, shelfName: shelfName)
+            } catch {
+                // Captured error
+            }
+        }
+        return true
+    }
+
+    @available(*, deprecated, message: "Use async throws version instead")
+    @discardableResult
+    func updateReadingProgress(goodreads_id: String, progress: Double) -> Bool {
+        Task {
+            do {
+                try await updateReadingProgress(goodreads_id: goodreads_id, progress: progress)
+            } catch {
+                // Captured error
+            }
+        }
         return true
     }
 }

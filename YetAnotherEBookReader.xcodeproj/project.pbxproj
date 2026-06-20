@@ -379,7 +379,7 @@
 		E7939151261F1A47004AB107 /* RecentShelfViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */; };
 		E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
 		E7A8EA2E2A75282B00D5C95B /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
-		E7A8EA302A75579100D5C95B /* DIctViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */; };
+		E7A8EA302A75579100D5C95B /* DictViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */; };
 		E7A8EA322A77674300D5C95B /* DictWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA312A77674300D5C95B /* DictWebView.swift */; };
 		E7AD2143293720AC00736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
 		E7AD2144293727D700736FEF /* ShelfDataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7AD2142293720AC00736FEF /* ShelfDataManager.swift */; };
@@ -405,7 +405,7 @@
 		E7D315112BE5F8AF00A5B50A /* EncycloView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */; };
 		E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */; };
 		E7D315132BE5F8AF00A5B50A /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
-		E7D315142BE5F8AF00A5B50A /* DIctViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */; };
+		E7D315142BE5F8AF00A5B50A /* DictViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */; };
 		E7DFE3EF297A729900C60E7B /* ReaderOptionsReaderHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3EE297A729900C60E7B /* ReaderOptionsReaderHelpView.swift */; };
 		E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7DFE3F0297A749800C60E7B /* ReaderOptionsFontHelpView.swift */; };
 		E7FC81A02A71283A005CB3BB /* MDictViewEdit.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */; };
@@ -623,7 +623,7 @@
 		E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentShelfViewModelTests.swift; sourceTree = "<group>"; };
 		E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictTabBarController.swift; sourceTree = "<group>"; };
 		E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncycloView.swift; sourceTree = "<group>"; };
-		E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DIctViewModel.swift; sourceTree = "<group>"; };
+		E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictViewModel.swift; sourceTree = "<group>"; };
 		E7A8EA312A77674300D5C95B /* DictWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictWebView.swift; sourceTree = "<group>"; };
 		E7AD2142293720AC00736FEF /* ShelfDataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfDataManager.swift; sourceTree = "<group>"; };
 		E7C7779428ED324300939D63 /* YabrPDFAnnotationPageVC.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = YabrPDFAnnotationPageVC.swift; sourceTree = "<group>"; };
@@ -1151,7 +1151,7 @@
 				E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */,
 				E7FC819F2A71283A005CB3BB /* MDictViewEdit.swift */,
 				2A6FF9E8270D5DC000811C50 /* MDictViewUIVC.swift */,
-				E7A8EA2F2A75579100D5C95B /* DIctViewModel.swift */,
+				E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */,
 			);
 			path = DictView;
 			sourceTree = "<group>";
@@ -1360,7 +1360,7 @@
 				E71F352A2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */,
 				E7C777AD28EE7E1600939D63 /* YabrPDFReferenceListCell.swift in Sources */,
 				E71F35482FE4F320007AB0B1 /* CalibreActivityLogEntry.swift in Sources */,
-				E7A8EA302A75579100D5C95B /* DIctViewModel.swift in Sources */,
+				E7A8EA302A75579100D5C95B /* DictViewModel.swift in Sources */,
 				E70A25D12F7D1A69004F006E /* YabrReaderNavigationView.swift in Sources */,
 				E71F352D2FE3B39D007AB0B1 /* CalibreActivityModels.swift in Sources */,
 				E71F34AC2FD90701007AB0B1 /* UnifiedSearchMergeService.swift in Sources */,
@@ -1571,7 +1571,7 @@
 				E7D315122BE5F8AF00A5B50A /* DictTabBarController.swift in Sources */,
 				E7D315132BE5F8AF00A5B50A /* MDictViewEdit.swift in Sources */,
 				E71F352B2FE3B397007AB0B1 /* CalibrePluginModels.swift in Sources */,
-				E7D315142BE5F8AF00A5B50A /* DIctViewModel.swift in Sources */,
+				E7D315142BE5F8AF00A5B50A /* DictViewModel.swift in Sources */,
 				E71F35472FE4F320007AB0B1 /* CalibreActivityLogEntry.swift in Sources */,
 				E7B249AC2A693130008D65DB /* YabrPDFSharingProvider.swift in Sources */,
 				E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */,
