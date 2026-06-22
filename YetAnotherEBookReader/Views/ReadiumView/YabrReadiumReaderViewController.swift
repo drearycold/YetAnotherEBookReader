@@ -78,8 +78,8 @@ class YabrReadiumReaderViewController:
     
     private var volumeView: MPVolumeView?
     private var volumeObserver: NSKeyValueObservation?
-    private var isHandlingVolumeChange = false
-    private var lastRequestedVolume: Float?
+    private let pagingCoordinator = ReadiumVolumeKeyPagingCoordinator()
+    private var pendingBaselineVolume: Float?
     
     /// This regex matches any string with at least 2 consecutive letters (not limited to ASCII).
     /// It's used when evaluating whether to display the body of a noteref referrer as the note's title.
@@ -122,10 +122,6 @@ class YabrReadiumReaderViewController:
             let vMargin = isScroll ? 0 : CGFloat(self.readiumPrefs?.verticalMargin ?? 0.0)
             self.log(.debug, "Initial vMargin set to \(vMargin) (isScroll: \(isScroll))")
             navigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
-            
-            // Initial volume key paging setup
-            self.setupVolumeKeyPaging(isEnabled: self.readiumPrefs?.volumeKeyPaging ?? false)
-            
             if let prefs = self.readiumPrefs {
                 self.applyPreferences(prefs)
             }
@@ -234,6 +230,10 @@ class YabrReadiumReaderViewController:
                 stackViewTopConstraint.constant = statusBarHeight
                 view.setNeedsLayout()
             }
+        }
+        
+        if pendingBaselineVolume != nil {
+            attemptSettingPendingBaselineVolume()
         }
     }
     
@@ -498,26 +498,24 @@ class YabrReadiumReaderViewController:
     
     // MARK: - Volume Key Paging
     
-    func handleVolumeKey(up: Bool) {
+    func performVolumeKeyPage(up: Bool) async {
         // To be overridden by subclasses if specialized scrolling is needed.
         // Default implementation just goes forward/backward or left/right.
         
         let isRTL = self.publication.metadata.readingProgression == .rtl
         let visualNavigator = self.navigator as? VisualNavigator
         
-        Task {
-            if up {
-                if isRTL {
-                    await visualNavigator?.goRight(options: .animated)
-                } else {
-                    await visualNavigator?.goLeft(options: .animated)
-                }
+        if up {
+            if isRTL {
+                _ = await visualNavigator?.goRight(options: .animated)
             } else {
-                if isRTL {
-                    await visualNavigator?.goLeft(options: .animated)
-                } else {
-                    await visualNavigator?.goRight(options: .animated)
-                }
+                _ = await visualNavigator?.goLeft(options: .animated)
+            }
+        } else {
+            if isRTL {
+                _ = await visualNavigator?.goLeft(options: .animated)
+            } else {
+                _ = await visualNavigator?.goRight(options: .animated)
             }
         }
     }
@@ -525,6 +523,11 @@ class YabrReadiumReaderViewController:
     func setupVolumeKeyPaging(isEnabled: Bool) {
         guard isEnabled else {
             teardownVolumeKeyPaging()
+            return
+        }
+        
+        if volumeObserver != nil && volumeView != nil {
+            self.log(.debug, "Volume key paging is already active, skipping setup")
             return
         }
         
@@ -552,7 +555,8 @@ class YabrReadiumReaderViewController:
             self.log(.error, "Failed to activate audio session: \(error)")
         }
         
-        setSystemVolume(0.5)
+        pendingBaselineVolume = 0.5
+        attemptSettingPendingBaselineVolume()
         
         if volumeObserver == nil {
             volumeObserver = session.observe(\.outputVolume, options: [.new, .old]) { [weak self] session, change in
@@ -563,46 +567,24 @@ class YabrReadiumReaderViewController:
                     
                     self.log(.debug, "RAW Change detected \(oldVol) -> \(newVol)")
                     
-                    // 1. Exact Programmatic Match: Ignore completely
-                    if let lastReq = self.lastRequestedVolume, abs(newVol - lastReq) < 0.01 {
+                    let resolution = self.pagingCoordinator.handleVolumeChange(newVolume: newVol, oldVolume: oldVol)
+                    
+                    switch resolution {
+                    case .ignoreProgrammatic:
                         self.log(.debug, "Programmatic change handled (\(newVol))")
-                        self.lastRequestedVolume = nil
-                        return
-                    }
-                    
-                    // 2. Determine direction
-                    let isUp: Bool
-                    
-                    // If there's a massive jump (>0.15) while a request is pending, our programmatic setting
-                    // was combined with a physical key press. Compare against the TARGET, not the old volume.
-                    if let lastReq = self.lastRequestedVolume, abs(newVol - oldVol) > 0.15 {
-                        self.log(.debug, "Massive jump. Target: \(lastReq), Actual: \(newVol)")
-                        // If the actual volume fell short of the 0.5 target, they pressed DOWN.
-                        // If it overshot the 0.5 target, they pressed UP.
-                        isUp = newVol > lastReq
-                    } else {
-                        // Normal user step
-                        isUp = newVol > oldVol
-                    }
-                    
-                    // 3. Clear pending request flags
-                    self.lastRequestedVolume = nil
-                    
-                    // 4. Rate Limiting
-                    if self.isHandlingVolumeChange {
+                        
+                    case .ignoreBusy:
                         self.log(.debug, "Busy, skipping event")
-                        return
-                    }
-                    self.isHandlingVolumeChange = true
-                    
-                    // 5. Process
-                    self.log(.debug, "USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
-                    self.handleVolumeKey(up: isUp)
-                    
-                    // 6. Reset to baseline 0.5
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.setSystemVolume(0.5)
-                        self.isHandlingVolumeChange = false
+                        
+                    case .pageUp, .pageDown:
+                        let isUp = (resolution == .pageUp)
+                        self.log(.debug, "USER EVENT! UP=\(isUp) (\(oldVol) -> \(newVol))")
+                        
+                        Task { @MainActor in
+                            await self.performVolumeKeyPage(up: isUp)
+                            self.setSystemVolume(0.5)
+                            self.pagingCoordinator.unlock()
+                        }
                     }
                 }
             }
@@ -632,30 +614,31 @@ class YabrReadiumReaderViewController:
         volumeObserver = nil
         volumeView?.removeFromSuperview()
         volumeView = nil
+        pendingBaselineVolume = nil
+        pagingCoordinator.reset()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
     
-    private func setSystemVolume(_ volume: Float, retryCount: Int = 0) {
+    private func attemptSettingPendingBaselineVolume() {
+        guard let pending = pendingBaselineVolume, let volumeView = volumeView else { return }
+        if let slider = ReadiumVolumeKeyPagingCoordinator.findVolumeSlider(in: volumeView) {
+            self.log(.debug, "Volume slider found, applying baseline volume \(pending)")
+            self.pagingCoordinator.requestVolumeChange(to: pending)
+            slider.value = pending
+            pendingBaselineVolume = nil
+        } else {
+            self.log(.debug, "Volume slider not ready yet")
+        }
+    }
+    
+    private func setSystemVolume(_ volume: Float) {
         guard let volumeView = volumeView else { return }
-        self.lastRequestedVolume = volume
+        self.pagingCoordinator.requestVolumeChange(to: volume)
         
-        DispatchQueue.main.async {
-            func findSlider(in view: UIView) -> UISlider? {
-                if let slider = view as? UISlider { return slider }
-                for subview in view.subviews {
-                    if let found = findSlider(in: subview) { return found }
-                }
-                return nil
-            }
-            
-            if let slider = findSlider(in: volumeView) {
-                slider.value = volume
-            } else if retryCount < 10 {
-                // Slider might not be ready yet due to lazy loading of MPVolumeView subviews
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                    self?.setSystemVolume(volume, retryCount: retryCount + 1)
-                }
-            }
+        if let slider = ReadiumVolumeKeyPagingCoordinator.findVolumeSlider(in: volumeView) {
+            slider.value = volume
+        } else {
+            self.log(.warning, "Could not set system volume: volume slider not found")
         }
     }
     

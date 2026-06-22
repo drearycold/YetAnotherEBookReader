@@ -1,7 +1,7 @@
 # REFACTOR_PLAN.md — YetAnotherEBookReader (D.S.Reader)
 
 > 基于对全部 88 个 Swift 源文件的完整分析，生成于 2026-06-05
-> **最后更新**: 2026-06-22 — P0/P1 全部完成；P2 主要架构项与 A21 书架 SwiftUI 原生化完成
+> **最后更新**: 2026-06-22 — A27 持久化映射现代化已完成；下一研究项目选择 A26 Readium volume-key timing hack 清理
 
 ---
 
@@ -11,9 +11,9 @@
 pie title 任务完成状态
     "P0 已完成" : 4
     "P1 已完成" : 8
-    "P2 已完成" : 12
-    "P2 下一项目" : 0
-    "P2 剩余/持续项" : 2
+    "P2 已完成" : 13
+    "P2 下一项目" : 1
+    "P2 剩余/持续项" : 1
 ```
 
 | 指标 | 初始 (06-05) | 上次 (06-17) | 当前 (06-22) | 变化 |
@@ -26,12 +26,12 @@ pie title 任务完成状态
 | **YabrPDFViewController.swift** | 1,716 | 311 | 311 | 🟢 **-82%** |
 | **BookDetailView.swift** | 802 | 802 | 已完成组件拆分 | 🟢 **A16 完成** |
 | **LibraryInfoBookListView.swift** | 714 | 432 | ✅ 已完成 MVVM 拆分 | 🟢 **A17 已提交** |
-| **测试文件数** | 1 (占位) | 7 | 17 | 🟢 **+16 个** |
-| **通过的单元测试** | 0 | 41+ | 159 | 🟢 **安全网扩大** |
-| **Views 层 `import RealmSwift` 文件数** | 20+ | 17 | 19 | ⚪ (拆分中仍有历史视图依赖) |
-| **总 `import RealmSwift` 文件数** | 36 | 36 | 48 | ⚪ (Realm schema 拆分增加文件数) |
-| **Swift 源文件数** | 88 | 144 | 194 | 📈 (含 extensions/split/VMs) |
-| **总代码行数** | 28,702 | 31,486 | 30,666 | 🟢 **-3%** (净减少，含删除旧代码) |
+| **测试文件数** | 1 (占位) | 7 | 20 | 🟢 **+19 个** |
+| **通过的单元测试** | 0 | 41+ | 174 | 🟢 **安全网扩大** |
+| **Views 层 `import RealmSwift` 文件数** | 20+ | 17 | 18 | 🟢 (A27 未增加视图 Realm 泄漏) |
+| **总 `import RealmSwift` 文件数** | 36 | 36 | 50 | ⚪ (Realm schema/mapper 拆分增加文件数) |
+| **Swift 源文件数** | 88 | 144 | 217 | 📈 (含 SwiftUI shelves、mappers、tests) |
+| **总代码行数** | 28,702 | 31,486 | 36,558 | 📈 (测试与拆分文件显著增加) |
 
 ---
 
@@ -167,8 +167,8 @@ pie title 任务完成状态
 | **A21** | UIKit/SwiftUI 混合书架 | ✅ 已完成 | 已实现 Recent/Discover 原生 SwiftUI 化，删除了 legacy UIKit 书架控制器和 ShelfView 依赖 |
 | **A22** | CalibreSearchCache 废弃属性 | ✅ 已完成 | P2/A22: removed 4 deprecated props, schema bump 140 on 2026-06-18 |
 | **A23** | DatabaseService force unwrap | ✅ 已完成 | P2/A23: converted to optionals on 2026-06-18 |
-| **A26** | Readium timing hack | ❌ 未开始 | |
-| **A27** | Realm ↔ 值类型手动转换 | 🟡 Repository 层部分解决 | |
+| **A26** | Readium timing hack | 🟡 已研究/待执行 | 已选为下一项目；方案见 `p2-a26-readium-volume-key-timing-plan.md` |
+| **A27** | Realm ↔ 值类型手动转换 | ✅ 已完成 | Commit `1e053da`; explicit mappers + `RealmDomainMappingTests` |
 
 #### A11: CalibreData.swift 拆分详情 — ✅ 新完成
 
@@ -280,16 +280,15 @@ gantt
 
 ```
 近期 ─── P2 收尾 + 下一项 ─────────────────────────────
-└── [P0-A05/A27] 继续减少 Views 层 RealmSwift 导入和 Realm ↔ value 样板
+└── [P2-A26] Readium volume-key timing hack 清理
 ```
 
 ### 中长期目标
 
 ```
 后续 ─── 深度解耦 + 现代化 ──────────────────────────────
-├── [P2-A26] Readium timing hack 清理
-├── [P2-A27] Realm ↔ 值类型转换样板继续收敛
-└── 持续提升测试覆盖率
+├── [P2-A26] Readium timing hack 清理（下一执行项）
+└── 持续提升测试覆盖率，减少 Views 层 Realm 依赖
 ```
 
 ### 更新的依赖关系图
@@ -310,14 +309,18 @@ graph LR
     
     P2_Clean["✅ P2 清理废弃代码"]
     P2_Realm["✅ P2 RealmModel 解耦"]
-    P2_View["🟡 P2 视图拆分"]
+    P2_View["✅ P2 视图拆分"]
     P2_Shelf["✅ P2 书架原生化"]
     P2_Error["✅ P2 统一错误处理"]
+    P2_Mapping["✅ P2 Realm/value 映射"]
+    P2_ReadiumTiming["🟡 P2 Readium timing"]
 
     P1_Network --> P2_Error
     P1_VM --> P2_Realm
     P1_VM --> P2_View
     P1_VM --> P2_Shelf
+    P2_Realm --> P2_Mapping
+    P1_Reader --> P2_ReadiumTiming
     
     style P0_ModelData fill:#4CAF50,color:#fff
     style P0_Test fill:#4CAF50,color:#fff
@@ -331,9 +334,11 @@ graph LR
     style P1_DSReader fill:#4CAF50,color:#fff
     style P2_Clean fill:#4CAF50,color:#fff
     style P2_Realm fill:#4CAF50,color:#fff
-    style P2_View fill:#FF9800,color:#fff
+    style P2_View fill:#4CAF50,color:#fff
     style P2_Shelf fill:#4CAF50,color:#fff
     style P2_Error fill:#4CAF50,color:#fff
+    style P2_Mapping fill:#4CAF50,color:#fff
+    style P2_ReadiumTiming fill:#FF9800,color:#fff
 ```
 
 > **关键路径更新**：P0 ✅ → P1 ✅ → P2 收尾；A21 书架原生化已完成。

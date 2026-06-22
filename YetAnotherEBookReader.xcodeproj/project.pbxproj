@@ -349,6 +349,9 @@
 		E71F35A42FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */; };
 		E71F35A62FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
 		E71F35A72FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
+		E71F35A92FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
+		E71F35AA2FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
+		E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -644,6 +647,8 @@
 		E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationRealmMappers.swift; sourceTree = "<group>"; };
+		E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinator.swift; sourceTree = "<group>"; };
+		E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinatorTests.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -788,6 +793,7 @@
 				2AF6FE092701B205002BA27E /* YabrReadiumPDFViewController.swift */,
 				2AF6FE0B2701D0F7002BA27E /* YabrReadiumReaderViewController.swift */,
 				E71F355B2FE4F39C007AB0B1 /* ReadiumPreferenceAdapter.swift */,
+				E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */,
 			);
 			path = ReadiumView;
 			sourceTree = "<group>";
@@ -1027,6 +1033,7 @@
 				E71F358D2FE8E2C9007AB0B1 /* SectionShelfViewModelTests.swift */,
 				E71F35922FE8E881007AB0B1 /* ShelfDisplayModelsTests.swift */,
 				E71F359D2FE92514007AB0B1 /* RealmDomainMappingTests.swift */,
+				E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */,
 			);
 			path = YetAnotherEBookReaderTests;
 			sourceTree = "<group>";
@@ -1450,6 +1457,7 @@
 				E71F35122FDFAD10007AB0B1 /* YabrPDFSearchListCell.swift in Sources */,
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				E71F356E2FE77F0C007AB0B1 /* BookCountPagesCorner.swift in Sources */,
+				E71F35AA2FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */,
 				E792C7E22F83F1EE0015E020 /* YabrAppInfo.swift in Sources */,
 				E71F34A22FD8FDE4007AB0B1 /* UnifiedSearchModels.swift in Sources */,
 				2A8C26B525C54BC800FC7FC0 /* WebViewUIVC.swift in Sources */,
@@ -1628,6 +1636,7 @@
 				E71F34D72FDBDA3F007AB0B1 /* UnifiedCategoryServiceTests.swift in Sources */,
 				E71F358E2FE8E2C9007AB0B1 /* SectionShelfViewModelTests.swift in Sources */,
 				E71F34AF2FD9070B007AB0B1 /* UnifiedSearchMergeServiceTests.swift in Sources */,
+				E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */,
 				E71F359E2FE92514007AB0B1 /* RealmDomainMappingTests.swift in Sources */,
 				E71F34862FD3AED3007AB0B1 /* BookDetailViewModelTests.swift in Sources */,
 				E71F357D2FE8CC8A007AB0B1 /* LibraryInfoBookListViewModelTests.swift in Sources */,
@@ -1684,6 +1693,7 @@
 				E71F35132FDFAD10007AB0B1 /* YabrPDFSearchListCell.swift in Sources */,
 				E732E3F22A3F03350075D1AC /* LibraryInfoViewModel.swift in Sources */,
 				E71F356F2FE77F0C007AB0B1 /* BookCountPagesCorner.swift in Sources */,
+				E71F35A92FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */,
 				E732E3F32A3F03350075D1AC /* ReaderOptionsReaderHelpView.swift in Sources */,
 				E792C7E32F83F1EE0015E020 /* YabrAppInfo.swift in Sources */,
 				E71F34A12FD8FDE4007AB0B1 /* UnifiedSearchModels.swift in Sources */,

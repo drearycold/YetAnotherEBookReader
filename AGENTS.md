@@ -273,8 +273,12 @@ Avoid growing the main controller again.
 The main workstream is still reader architecture modernization and large-file
 decomposition.
 
-Recent important state:
-
+- **P2/A26 Readium Volume Key Timing Modernization (Milestone A26):** Modernized the volume key paging timing and event interpretation architecture in Readium view controllers, completely removing wall-clock delays (`DispatchQueue.main.asyncAfter`) and polling loops:
+  - Extracted a pure event resolver `ReadiumVolumeKeyEventResolver` and state coordinator `ReadiumVolumeKeyPagingCoordinator` under `Views/ReadiumView/` to interpret raw volume changes (up/down/busy/programmatic) thread-safely.
+  - Replaced the recursive `setSystemVolume` timer loop in `YabrReadiumReaderViewController.swift` with layout-driven `UISlider` discovery using a static tree-search helper `findVolumeSlider(in:)` invoked in `viewDidLayoutSubviews()`.
+  - Replaced the 0.1-second event unlock delay with completion-based async boundaries: introduced `performVolumeKeyPage(up:) async` and awaited page navigation / vertical scroll animations (using a safe non-blocking offset polling loop with a 0.4s timeout) before resetting and unlocking.
+  - Hardened lifecycle de-activation, settings toggles, and added idempotency guards.
+  - Added comprehensive test coverage in `ReadiumVolumeKeyPagingCoordinatorTests.swift` covering resolver, coordinator, and slider discovery. All 180 unit tests pass.
 - **P2/A27 Realm Value Conversion Modernization (Milestone A27):** Modernized the persistence mapping layer to prevent boilerplate duplication, thread boundary leaks, and field drift risks:
   - Created dedicated explicit mapping files `CalibreRealmMappers.swift`, `ReadingPositionRealmMappers.swift`, and `AnnotationRealmMappers.swift` under `Models/Realm/`.
   - Refactored repositories (`RealmServerRepository`, `RealmLibraryRepository`, `RealmBookRepository`, `RealmAnnotationRepository`, and `RealmReadingPositionRepository`) to use the explicit mappers.
