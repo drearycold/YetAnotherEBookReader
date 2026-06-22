@@ -12,19 +12,16 @@ struct LibraryInfoBookRow: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     
-    @EnvironmentObject var viewModel: UnifiedSearchViewModel
-
     let book: CalibreBook
     let index: Int
+    let onAppearAction: (() -> Void)?
     
     var body: some View {
             HStack {
                 Text((index + 1).description)
                     .frame(minWidth: 40)
                     .onAppear {
-                        guard let result = viewModel.unifiedSearchResult else { return }
-                        guard index + 1 > result.limitNumber - 20 else { return }
-                        viewModel.expandSearchUnifiedBookLimit()
+                        onAppearAction?()
                     }
                 
                 HStack(alignment: .bottom) {
