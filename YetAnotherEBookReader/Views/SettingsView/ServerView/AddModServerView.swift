@@ -14,7 +14,7 @@ struct AddModServerView: View {
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     @ObservedObject var viewModel: ServerViewModel
-    @Binding var server: CalibreServer
+    @Binding var server: CalibreServer?
     @Binding var isActive: Bool
     
     @State private var localLibraryImportBooksPicked = [URL]()
@@ -30,8 +30,8 @@ struct AddModServerView: View {
                 footer: Text(viewModel.calibreServerUrlWelformed)
                         .font(.caption).foregroundColor(.red)
             ) {
-                textFieldView(label: "Name", title: "Name Your Server", text: $viewModel.calibreServerName, original: server.name)
-                textFieldView(label: "URL", title: "Internal Server Address", text: $viewModel.calibreServerUrl, original: server.baseUrl)
+                textFieldView(label: "Name", title: "Name Your Server", text: $viewModel.calibreServerName, original: server?.name ?? "")
+                textFieldView(label: "URL", title: "Internal Server Address", text: $viewModel.calibreServerUrl, original: server?.baseUrl ?? "")
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
@@ -53,7 +53,7 @@ struct AddModServerView: View {
                 }
             ) {
                 Toggle("Internet Accessible", isOn: $viewModel.calibreServerSetPublicAddress)
-                textFieldView(label: "Address", title: "Public Server Address", text: $viewModel.calibreServerUrlPublic, original: server.publicUrl)
+                textFieldView(label: "Address", title: "Public Server Address", text: $viewModel.calibreServerUrlPublic, original: server?.publicUrl ?? "")
                     .keyboardType(.URL)
                     .autocapitalization(.none)
                     .disableAutocorrection(true)
@@ -63,11 +63,11 @@ struct AddModServerView: View {
                 Toggle("Require", isOn: $viewModel.calibreServerNeedAuth)
                 
                 Group {
-                    textFieldView(label: "Username", title: "Username", text: $viewModel.calibreUsername, original: server.username)
+                    textFieldView(label: "Username", title: "Username", text: $viewModel.calibreUsername, original: server?.username ?? "")
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
-                    secureFieldView(label: "Password", title: "", text: $viewModel.calibrePassword, visible: $viewModel.calibrePasswordVisible, original: server.password)
+                    secureFieldView(label: "Password", title: "", text: $viewModel.calibrePassword, visible: $viewModel.calibrePasswordVisible, original: server?.password ?? "")
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                 }.disabled(!viewModel.calibreServerNeedAuth)
@@ -79,20 +79,20 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    if modelData.isServerProbing(server: server) {
+                    if let server = server, modelData.isServerProbing(server: server) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
                         Text(viewModel.calibreServerInfo?.errorMsg ?? "Unknown")
                     }
                     
-                    if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
+                    if let server = server, let reachable = modelData.isServerReachable(server: server, isPublic: false) {
                         Image(
                             systemName: reachable ? "flag.circle" : "flag.slash.circle"
                         ).foregroundColor(reachable ? .green : .red)
                     }
                     
-                    if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
+                    if let server = server, let reachable = modelData.isServerReachable(server: server, isPublic: true) {
                         Image(
                             systemName: reachable ? "flag" : "flag.slash"
                         ).foregroundColor(reachable ? .green : .red)
@@ -146,7 +146,7 @@ struct AddModServerView: View {
                         Image(systemName: "square.and.arrow.down")
                     }
                 }
-                .disabled(viewModel.isProbing || modelData.isServerProbing(server: server))
+                .disabled(viewModel.isProbing || (server != nil && modelData.isServerProbing(server: server!)))
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -154,7 +154,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
-                .disabled(viewModel.isProbing || modelData.isServerProbing(server: server))
+                .disabled(viewModel.isProbing || (server != nil && modelData.isServerProbing(server: server!)))
             }
         }
     }
@@ -279,7 +279,7 @@ struct AddModServerView: View {
 struct AddModServerView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
     
-    @State static private var server = CalibreServer(uuid: .init(), name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
+    @State static private var server: CalibreServer? = CalibreServer(uuid: .init(), name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
     @State static private var addServerActive = false
 
     static var previews: some View {
@@ -288,9 +288,11 @@ struct AddModServerView_Previews: PreviewProvider {
             AddModServerView(viewModel: viewModel, server: $server, isActive: $addServerActive)
                 .environmentObject(modelData)
                 .onAppear() {
-                    modelData.calibreServers[server.id] = server
-                    let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
-                    modelData.calibreLibraries[library.id] = library
+                    if let server = server {
+                        modelData.calibreServers[server.id] = server
+                        let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
+                        modelData.calibreLibraries[library.id] = library
+                    }
                 }
         }.navigationViewStyle(StackNavigationViewStyle())
     }

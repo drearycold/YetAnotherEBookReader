@@ -27,7 +27,14 @@ struct ServerDetailView: View {
         Form {
             Section(header: Text("Options")) {
                 NavigationLink(
-                    destination: AddModServerView(viewModel: viewModel, server: $server, isActive: $modServerActive)
+                    destination: AddModServerView(
+                        viewModel: viewModel,
+                        server: Binding<CalibreServer?>(
+                            get: { server },
+                            set: { if let val = $0 { server = val } }
+                        ),
+                        isActive: $modServerActive
+                    )
                         .navigationTitle("Modify: \(server.name)"),
                     isActive: $modServerActive,
                     label: {

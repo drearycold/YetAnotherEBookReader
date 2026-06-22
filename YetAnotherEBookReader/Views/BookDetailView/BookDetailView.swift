@@ -18,8 +18,6 @@ struct BookDetailView: View {
     
     var viewMode: Mode
     
-    @StateObject private var previewViewModel = BookPreviewViewModel()
-    
     var defaultLog = Logger()
     
     @StateObject private var _viewModel = BookDetailViewModel()
@@ -28,11 +26,11 @@ struct BookDetailView: View {
         ScrollView {
             if let calibreBook = _viewModel.calibreBook {
                 Text(calibreBook.title)
-                viewContent(book: calibreBook, isCompat: sizeClass == .compact)
+                BookDetailContentView(viewModel: _viewModel, book: calibreBook, isCompat: sizeClass == .compact)
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
                     .navigationTitle(Text(calibreBook.title))
                     .toolbar {
-                        toolbarContent(book: calibreBook)
+                        BookDetailToolbar(viewModel: _viewModel, book: calibreBook)
                     }
                     .alert(item: $_viewModel.alertItem) { item in
                         return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
@@ -49,129 +47,6 @@ struct BookDetailView: View {
                 _viewModel.fetchMetadata(book: calibreBook)
             }
         }
-    }
-    
-    @ViewBuilder
-    private func viewContent(book: CalibreBook, isCompat: Bool) -> some View {
-        VStack(alignment: .center) {
-            
-            #if canImport(GoogleMobileAds)
-            #if GAD_ENABLED
-            Banner()
-            #endif
-            #endif
-            
-            if isCompat {
-                VStack(alignment: .center, spacing: 16) {
-                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $_viewModel.alertItem)
-                    
-                    BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $_viewModel.alertItem)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                        .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    
-                    let countPage = book.library.pluginCountPagesWithDefault
-                    if countPage.isEnabled {
-                        BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                    }
-                }
-            } else {
-                HStack(alignment: .top, spacing: 32) {
-                    BookCoverView(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, alertItem: $_viewModel.alertItem)
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        BookMetadataSection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        BookConnectivitySection(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat, alertItem: $_viewModel.alertItem)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        BookFormatList(viewModel: _viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
-                            .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        
-                        let countPage = book.library.pluginCountPagesWithDefault
-                        if countPage.isEnabled {
-                            BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
-                                .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
-                        }
-                    }
-                }
-            }
-            
-            #if canImport(GoogleMobileAds)
-            #if GAD_ENABLED
-            Banner()
-            #endif
-            #endif
-            
-            WebViewUI(
-                content: book.comments,
-                baseURL: book.commentBaseURL
-            )
-            .frame(maxWidth: isCompat ? 400 : 600, minHeight: 400, maxHeight: 400, alignment: .center)
-            
-        }
-    }
-    
-    @ToolbarContentBuilder
-    private func toolbarContent(book: CalibreBook) -> some ToolbarContent {
-        ToolbarItem(placement: .cancellationAction) {
-            Button(action: {
-                _viewModel.refresh(book: book)
-            }) {
-                if _viewModel.updatingMetadata {
-                    Image(systemName: "xmark")
-                } else {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                }
-            }
-        }
-        
-        ToolbarItem(placement: .confirmationAction) {
-            Button(action: {
-                _viewModel.downloadOrClearCache(book: book)
-            }) {
-                if let download = _viewModel.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                } else if book.inShelf {
-                    Image(systemName: "star.slash")
-                } else {
-                    Image(systemName: "star")
-                }
-            }
-        }
-        
-        ToolbarItem(placement: .confirmationAction) {
-            Button(action: {
-                _viewModel.readingPositionHistoryViewPresenting = true
-            }) {
-                Image(systemName: "clock")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 20, height: 20)
-            }
-        }
-    }
-    
-    func handleBookDeleted() {
-//        modelData.libraryInfo.deleteBook(book: book)
-        //TODO
-        //getMetadata()
-    }
-    
-    func generateCommentWithTOC(comments: String, toc: String) -> String {
-        let lines = toc.split(separator: "\n")
-        let tocHTML = lines.reduce("<div><b>Table of Content</b><ul>\n") { result, line in
-            result.appending("<li>").appending(line).appending("</li>").appending("\n")
-        }.appending("</ul></div>\n")
-        
-        return comments + "\n" + tocHTML
     }
 }
 

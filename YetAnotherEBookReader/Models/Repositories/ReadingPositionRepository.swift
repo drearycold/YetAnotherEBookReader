@@ -62,6 +62,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         
         let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? "default")"
         if let cachedRealm = Thread.current.threadDictionary[cacheKey] as? Realm {
+            cachedRealm.refresh()
             return cachedRealm
         }
         
