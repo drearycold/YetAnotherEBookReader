@@ -82,8 +82,8 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
         
         return objects.filter(NSPredicate(format: "takePrecedence == true"))
-            .map({ BookDeviceReadingPosition(managedObject: $0) })
-            .first ?? objects.map({ BookDeviceReadingPosition(managedObject: $0) }).first
+            .map({ $0.toDomain() })
+            .first ?? objects.map({ $0.toDomain() }).first
     }
     
     func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
@@ -91,7 +91,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         let objects = realm.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId == %@", bookId))
             .sorted(byKeyPath: "epoch", ascending: false)
-        return objects.map { BookDeviceReadingPosition(managedObject: $0) }
+        return objects.map { $0.toDomain() }
     }
     
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String) {
@@ -132,7 +132,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             )
         if existing.isEmpty {
             try? realm.write {
-                realm.add(position.managedObject(bookId: bookId))
+                realm.add(position.makeRealmObject(bookId: bookId))
             }
         }
     }
@@ -161,7 +161,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 : NSPredicate(format: "bookId == %@ AND startDatetime >= %@", bookId, startDateAfter! as NSDate)
             )
             .filter { $0.endPosition != nil }
-        return results.map { BookDeviceReadingPositionHistory(managedObject: $0) }
+        return results.map { $0.toDomain() }
     }
     
     func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date? {
@@ -182,8 +182,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 let historyEntry = BookDeviceReadingPositionHistoryRealm()
                 historyEntry.bookId = bookId
                 historyEntry.startDatetime = startDatetime
-                historyEntry.startPosition = readPosition.managedObject()
-                historyEntry.startPosition?.bookId = "\(bookId) - History"
+                historyEntry.startPosition = readPosition.makeRealmObject(bookId: "\(bookId) - History")
                 realm.add(historyEntry)
             }
         }
@@ -200,8 +199,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
         
         try? realm.write {
-            let newEndPositionObject = readPosition.managedObject()
-            newEndPositionObject.bookId = "\(bookId) - History"
+            let newEndPositionObject = readPosition.makeRealmObject(bookId: "\(bookId) - History")
             if let endPositionObject = historyEntry.endPosition {
                 newEndPositionObject._id = endPositionObject._id
                 realm.add(newEndPositionObject, update: .modified)

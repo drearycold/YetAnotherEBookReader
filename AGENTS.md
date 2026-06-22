@@ -216,6 +216,14 @@ The modern path is value-type/actor based. Do not revive direct
 - Schema changes require a version bump and migration handling in
   `ModelData.tryInitializeDatabase(statusHandler:)`.
 
+### Verification Checklist
+
+Before finalizing any changes to persistence, check that none of the following patterns are introduced:
+- Direct `RealmSwift` imports in views:
+  `rg "import RealmSwift" YetAnotherEBookReader/Views/`
+- Direct `CalibreBook(managedObject:)` or `BookDeviceReadingPosition(managedObject:)` usage outside approved mapper or repository files.
+- `realm.create(... value: [String: Any])` outside repository/cache sync paths.
+
 ## Common Change Paths
 
 ### Server Or Library Settings
@@ -267,6 +275,15 @@ decomposition.
 
 Recent important state:
 
+- **P2/A27 Realm Value Conversion Modernization (Milestone A27):** Modernized the persistence mapping layer to prevent boilerplate duplication, thread boundary leaks, and field drift risks:
+  - Created dedicated explicit mapping files `CalibreRealmMappers.swift`, `ReadingPositionRealmMappers.swift`, and `AnnotationRealmMappers.swift` under `Models/Realm/`.
+  - Refactored repositories (`RealmServerRepository`, `RealmLibraryRepository`, `RealmBookRepository`, `RealmAnnotationRepository`, and `RealmReadingPositionRepository`) to use the explicit mappers.
+  - Eliminated duplicate conversion shims outside the persistence boundary in `LibrarySearchService`, `RealmSearchCacheStore`, `CalibreBookManager`, `ReadingSessionManager`, and `ReadingPositionViewModel`.
+  - Standardized write-side population by implementing in-place `applyDomain` updates on all 7 Realm models, guarding identity properties/primary keys against modification on managed objects.
+  - Introduced a generic `replaceAll` extension on Realm `List` to cleanly update nested collections in-place.
+  - Refactored `RealmAnnotationRepository.saveBookmark` to perform in-place updates on existing managed bookmarks.
+  - Cleaned up Calibre sync payload boundary by deleting unused legacy payload converter extensions on `BookHighlightRealm` and `BookBookmarkRealm`.
+  - Added a golden test suite `RealmDomainMappingTests` verifying all round-trip and update semantics.
 - **P2/A21 SwiftUI Native Shelves and UIKit Removal (Milestone A21):** Completed the UIKit-to-SwiftUI native migration of Recent and Discover shelves (Stage A21-S1 through A21-S6). Deleted `RecentShelfController.swift`, `RecentShelfUI.swift`, `SectionShelfController.swift`, and `SectionShelfUI.swift` from the codebase. Removed the `ShelfView` SPM dependency usage entirely and cleaned up related publishers/subjects/computed-properties in `RecentShelfViewModel`, `SectionShelfViewModel`, `ModelData`, `CalibreBookManager`, `ShelfDataManager`, `ShelfDisplayModels`, `MainView`, and associated tests.
 - **P2/A22 CalibreSearchCache Deprecated Properties (Milestone A22):** Removed
   4 deprecated `@Persisted` properties (`generation`, `totalNumber`, `bookIds`,
@@ -323,7 +340,7 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 159 unit tests and 1 UI test passed. The Mac Catalyst build is
+Recorded result: 174 unit tests passed. The Mac Catalyst build is
 currently blocked by a pre-existing SPM package product resolution issue
 (`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
 the P1/P2 work.

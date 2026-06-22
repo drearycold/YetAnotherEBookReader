@@ -43,37 +43,16 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
         
         return librariesCached.compactMap { libraryRealm -> CalibreLibrary? in
             guard let serverUUID = libraryRealm.serverUUID,
-                  let server = serverResolver?.server(forUUID: serverUUID),
-                  let name = libraryRealm.name
+                  let server = serverResolver?.server(forUUID: serverUUID)
             else { return nil }
             
-            return CalibreLibrary(
-                server: server,
-                key: libraryRealm.key ?? name,
-                name: name,
-                autoUpdate: libraryRealm.autoUpdate,
-                discoverable: libraryRealm.discoverable,
-                hidden: libraryRealm.hidden,
-                lastModified: libraryRealm.lastModified,
-                customColumnInfos: {
-                    guard let data = libraryRealm.customColumnsData else { return [:] }
-                    return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
-                }()
-            )
+            return libraryRealm.toDomain(server: server)
         }
     }
     
     func saveLibrary(_ library: CalibreLibrary) throws {
         guard let realm = getRealm() else { return }
-        let libraryRealm = CalibreLibraryRealm()
-        libraryRealm.key = library.key
-        libraryRealm.name = library.name
-        libraryRealm.serverUUID = library.server.uuid.uuidString
-        libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
-        libraryRealm.autoUpdate = library.autoUpdate
-        libraryRealm.discoverable = library.discoverable
-        libraryRealm.hidden = library.hidden
-        libraryRealm.lastModified = library.lastModified
+        let libraryRealm = library.makeRealmObject()
         
         try realm.write {
             realm.add(libraryRealm, update: .all)

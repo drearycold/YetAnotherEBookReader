@@ -147,105 +147,10 @@ extension CalibreBook: Persistable {
     }
     
     public init(managedObject: CalibreBookRealm, library: CalibreLibrary) {
-        let formatsVer1 = managedObject.formats().reduce(
-            into: [String: FormatInfo]()
-        ) { result, entry in
-            result[entry.key] = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-        }
-        let decoder = JSONDecoder()
-        let formatsVer2 = (try? decoder.decode([String:FormatInfo].self, from: managedObject.formatsData as Data? ?? .init()))
-                ?? formatsVer1
-        
-        self.id = managedObject.idInLib
-        self.library = library
-        self.title = managedObject.title
-        self.comments = managedObject.comments
-        self.publisher = managedObject.publisher
-        self.series = managedObject.series
-        self.seriesIndex = managedObject.seriesIndex
-        self.rating = managedObject.rating
-        self.size = managedObject.size
-        self.pubDate = managedObject.pubDate
-        self.timestamp = managedObject.timestamp
-        self.lastModified = managedObject.lastModified
-        self.lastSynced = managedObject.lastSynced
-        self.lastUpdated = managedObject.lastUpdated
-        self.formats = formatsVer2
-        
-        self.inShelf = managedObject.inShelf
-        
-        if managedObject.identifiersData != nil {
-            self.identifiers = managedObject.identifiers()
-        }
-        if managedObject.userMetaData != nil {
-            self.userMetadatas = managedObject.userMetadatas()
-        }
-        if let authorFirst = managedObject.authorFirst {
-            self.authors.append(authorFirst)
-        }
-        if let authorSecond = managedObject.authorSecond {
-            self.authors.append(authorSecond)
-        }
-        if let authorThird = managedObject.authorThird {
-            self.authors.append(authorThird)
-        }
-        self.authors.append(contentsOf: managedObject.authorsMore)
-        
-        if let tagFirst = managedObject.tagFirst {
-            self.tags.append(tagFirst)
-        }
-        if let tagSecond = managedObject.tagSecond {
-            self.tags.append(tagSecond)
-        }
-        if let tagThird = managedObject.tagThird {
-            self.tags.append(tagThird)
-        }
-        self.tags.append(contentsOf: managedObject.tagsMore)
+        self = managedObject.toDomain(library: library)
     }
     
     public func managedObject() -> CalibreBookRealm {
-        let bookRealm = CalibreBookRealm()
-        bookRealm.serverUUID = self.library.server.uuid.uuidString
-        bookRealm.libraryName = self.library.name
-        bookRealm.idInLib = self.id
-        
-        bookRealm.title = self.title
-        
-        var authors = self.authors
-        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
-        bookRealm.authorSecond = authors.popFirst()
-        bookRealm.authorThird = authors.popFirst()
-        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
-        
-        bookRealm.comments = self.comments
-        bookRealm.publisher = self.publisher
-        bookRealm.series = self.series
-        bookRealm.seriesIndex = self.seriesIndex
-        bookRealm.rating = self.rating
-        bookRealm.size = self.size
-        bookRealm.pubDate = self.pubDate
-        bookRealm.timestamp = self.timestamp
-        bookRealm.lastModified = self.lastModified
-        bookRealm.lastSynced = self.lastSynced
-        bookRealm.lastUpdated = self.lastUpdated
-        
-        var tags = self.tags
-        bookRealm.tagFirst = tags.popFirst()
-        bookRealm.tagSecond = tags.popFirst()
-        bookRealm.tagThird = tags.popFirst()
-        bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
-        
-        bookRealm.inShelf = self.inShelf
-        
-        let encoder = JSONEncoder()
-        bookRealm.formatsData = try? encoder.encode(self.formats)
-        
-        bookRealm.identifiersData = try? encoder.encode(self.identifiers)
-        
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: self.userMetadatas, options: [])
-        
-        bookRealm.readPosData = nil
-        
-        return bookRealm
+        return self.makeRealmObject()
     }
 }

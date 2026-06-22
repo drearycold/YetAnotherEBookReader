@@ -143,8 +143,7 @@ class CalibreBookManager: ObservableObject {
     }
 
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
-        let calibreBook = CalibreBook(managedObject: bookRealm, library: library)
-        return calibreBook
+        return bookRealm.toDomain(library: library)
     }
 
     func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {

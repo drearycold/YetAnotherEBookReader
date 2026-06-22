@@ -56,19 +56,18 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         if excludeRemoved {
             results = results.filter("removed != true")
         }
-        return results.map { $0.toValue() }
+        return results.map { $0.toDomain() }
     }
     
     func getBookmark(byPos pos: String, bookId: String) -> BookBookmark? {
         guard let realm = getRealm() else { return nil }
         let objects = realm.objects(BookBookmarkRealm.self).filter("bookId == %@ AND pos == %@", bookId, pos)
-        return objects.first?.toValue()
+        return objects.first?.toDomain()
     }
     
     func saveBookmark(_ bookmark: BookBookmark) -> (Int, String?) {
         guard let realm = getRealm() else { return (0, nil) }
         
-        let bookmarkRealm = BookBookmarkRealm(value: bookmark)
         var returnStatus = 0
         var oldTitle: String? = nil
         
@@ -78,13 +77,13 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             if let first = existing.first {
                 oldTitle = first.title
                 if first.title != bookmark.title {
-                    first.title = bookmark.title
-                    first.date = bookmark.date
+                    first.applyDomain(bookmark)
                     returnStatus = 2 // updated title
                 } else {
                     returnStatus = 0 // same
                 }
             } else {
+                let bookmarkRealm = bookmark.makeRealmObject()
                 realm.add(bookmarkRealm, update: .modified)
                 returnStatus = 1 // added new
             }
@@ -110,18 +109,18 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         if excludeRemoved {
             results = results.filter("removed != true")
         }
-        return results.map { $0.toValue() }
+        return results.map { $0.toDomain() }
     }
     
     func getHighlight(byId id: String) -> BookHighlight? {
         guard let realm = getRealm() else { return nil }
         let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: id)
-        return object?.toValue()
+        return object?.toDomain()
     }
     
     func saveHighlight(_ highlight: BookHighlight) {
         guard let realm = getRealm() else { return }
-        let highlightRealm = BookHighlightRealm(value: highlight)
+        let highlightRealm = highlight.makeRealmObject()
         try? realm.write {
             realm.add(highlightRealm, update: .all)
         }
@@ -324,77 +323,49 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
 // MARK: - Mappings
 extension BookBookmarkRealm {
     func toValue() -> BookBookmark {
-        return BookBookmark(
-            id: self._id.stringValue,
-            bookId: self.bookId,
-            page: self.page,
-            pos_type: self.pos_type,
-            pos: self.pos,
-            title: self.title,
-            date: self.date,
-            removed: self.removed
-        )
+        return self.toDomain()
     }
     
     convenience init(value: BookBookmark) {
         self.init()
-        if let objectId = try? ObjectId(string: value.id) {
-            self._id = objectId
-        }
-        self.bookId = value.bookId
-        self.page = value.page
-        self.pos_type = value.pos_type
-        self.pos = value.pos
-        self.title = value.title
-        self.date = value.date
-        self.removed = value.removed
+        let object = value.makeRealmObject()
+        self._id = object._id
+        self.bookId = object.bookId
+        self.page = object.page
+        self.pos_type = object.pos_type
+        self.pos = object.pos
+        self.title = object.title
+        self.date = object.date
+        self.removed = object.removed
     }
 }
 
 extension BookHighlightRealm {
     func toValue() -> BookHighlight {
-        return BookHighlight(
-            id: self.highlightId,
-            bookId: self.bookId,
-            readerName: self.readerName,
-            page: self.page,
-            startOffset: self.startOffset,
-            endOffset: self.endOffset,
-            date: self.date,
-            type: self.type,
-            note: self.note,
-            tocFamilyTitles: Array(self.tocFamilyTitles),
-            content: self.content,
-            contentPost: self.contentPost,
-            contentPre: self.contentPre,
-            cfiStart: self.cfiStart,
-            cfiEnd: self.cfiEnd,
-            spineName: self.spineName,
-            ranges: self.ranges,
-            removed: self.removed
-        )
+        return self.toDomain()
     }
     
     convenience init(value: BookHighlight) {
         self.init()
-        self.highlightId = value.id
-        self.bookId = value.bookId
-        self.readerName = value.readerName
-        self.page = value.page
-        self.startOffset = value.startOffset
-        self.endOffset = value.endOffset
-        self.date = value.date
-        self.type = value.type
-        self.note = value.note
+        let object = value.makeRealmObject()
+        self.highlightId = object.highlightId
+        self.bookId = object.bookId
+        self.readerName = object.readerName
+        self.page = object.page
+        self.startOffset = object.startOffset
+        self.endOffset = object.endOffset
+        self.date = object.date
+        self.type = object.type
+        self.note = object.note
         self.tocFamilyTitles.removeAll()
-        self.tocFamilyTitles.append(objectsIn: value.tocFamilyTitles)
-        self.content = value.content
-        self.contentPost = value.contentPost
-        self.contentPre = value.contentPre
-        self.cfiStart = value.cfiStart
-        self.cfiEnd = value.cfiEnd
-        self.spineName = value.spineName
-        self.ranges = value.ranges
-        self.removed = value.removed
+        self.tocFamilyTitles.append(objectsIn: object.tocFamilyTitles)
+        self.content = object.content
+        self.contentPost = object.contentPost
+        self.contentPre = object.contentPre
+        self.cfiStart = object.cfiStart
+        self.cfiEnd = object.cfiEnd
+        self.spineName = object.spineName
+        self.ranges = object.ranges
+        self.removed = object.removed
     }
 }

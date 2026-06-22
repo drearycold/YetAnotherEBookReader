@@ -125,7 +125,7 @@ actor LibrarySearchService {
         // We need to resolve what we already have in local Realm
         for bookId in currentBookIds[currentBooks.count...] {
             if let realmBook = try? getRealm().object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)) {
-                let book = CalibreBook(managedObject: realmBook, library: library)
+                let book = realmBook.toDomain(library: library)
                 currentBooks.append(book)
             } else {
                 toFetchIDs.append(bookId)
@@ -150,7 +150,7 @@ actor LibrarySearchService {
 
                     for bookId in toFetchIDs {
                         if let realmBook = try? getRealm().object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)) {
-                            let book = CalibreBook(managedObject: realmBook, library: library)
+                            let book = realmBook.toDomain(library: library)
                             currentBooks.append(book)
                         }
                     }

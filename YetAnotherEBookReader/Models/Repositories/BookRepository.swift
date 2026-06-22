@@ -52,12 +52,12 @@ class RealmBookRepository: BookRepositoryProtocol {
               let library = libraryResolver?.library(forServerUUID: serverUUID, libraryName: libraryName)
         else { return nil }
         
-        return CalibreBook(managedObject: bookRealm, library: library)
+        return bookRealm.toDomain(library: library)
     }
     
     func saveBook(_ book: CalibreBook) {
         guard let realm = getRealm() else { return }
-        let bookRealm = book.managedObject()
+        let bookRealm = book.makeRealmObject()
         try? realm.write {
             realm.add(bookRealm, update: .modified)
         }
@@ -80,7 +80,7 @@ class RealmBookRepository: BookRepositoryProtocol {
                   let libraryName = bookRealm.libraryName,
                   let library = libraryResolver?.library(forServerUUID: serverUUID, libraryName: libraryName)
             else { return nil }
-            return CalibreBook(managedObject: bookRealm, library: library)
+            return bookRealm.toDomain(library: library)
         }
     }
     
