@@ -68,8 +68,8 @@ test target or class first, then state exactly what was and was not verified.
   `ModelData`, initializes Realm on scene activation, and injects shared
   environment objects.
 - `YetAnotherEBookReader/MainView.swift` owns the main tab shell:
-  - `RecentShelfUI`
-  - `SectionShelfUI`
+  - `RecentShelfView`
+  - `SectionShelfView`
   - `LibraryInfoView`
   - `SettingsView`
 - `YetAnotherEBookReader/Models/ModelData.swift` is still the composition root
@@ -179,9 +179,7 @@ The modern path is value-type/actor based. Do not revive direct
 - `Views/BookDetailView/*`: book detail, preview, activity, reading position UI.
 - `Views/SettingsView/*`: settings, server/library configuration, reader
   options, import pickers.
-- `Views/ShelfView/*`: recent/discover shelf UIKit adapters. The shelf data
-  model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved
-  out of `Views/ShelfView/` in Milestone P2/A10).
+- `Views/ShelfView/*`: native SwiftUI Recent/Discover shelves (`RecentShelfView`, `SectionShelfView`, view models, and components). The shelf data model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved out of `Views/ShelfView/` in Milestone P2/A10).
 - `Views/DictView/*`: dictionary and external lookup UI.
 
 ## Coding Rules
@@ -269,6 +267,7 @@ decomposition.
 
 Recent important state:
 
+- **P2/A21 SwiftUI Native Shelves and UIKit Removal (Milestone A21):** Completed the UIKit-to-SwiftUI native migration of Recent and Discover shelves (Stage A21-S1 through A21-S6). Deleted `RecentShelfController.swift`, `RecentShelfUI.swift`, `SectionShelfController.swift`, and `SectionShelfUI.swift` from the codebase. Removed the `ShelfView` SPM dependency usage entirely and cleaned up related publishers/subjects/computed-properties in `RecentShelfViewModel`, `SectionShelfViewModel`, `ModelData`, `CalibreBookManager`, `ShelfDataManager`, `ShelfDisplayModels`, `MainView`, and associated tests.
 - **P2/A22 CalibreSearchCache Deprecated Properties (Milestone A22):** Removed
   4 deprecated `@Persisted` properties (`generation`, `totalNumber`, `bookIds`,
   `books: List<CalibreBookRealm>`) from `CalibreLibrarySearchObject` in
@@ -324,7 +323,7 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 90 unit tests and 1 UI test passed. The Mac Catalyst build is
+Recorded result: 159 unit tests and 1 UI test passed. The Mac Catalyst build is
 currently blocked by a pre-existing SPM package product resolution issue
 (`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
 the P1/P2 work.

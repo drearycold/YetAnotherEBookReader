@@ -11,7 +11,6 @@ import RealmSwift
 import SwiftUI
 import OSLog
 import Kingfisher
-import ShelfView
 import CryptoSwift
 
 #if canImport(R2Shared)
@@ -36,8 +35,6 @@ class CalibreBookManager: ObservableObject {
             }
         }
     }
-
-    @Published var bookModelSection = [ShelfModelSection]()
 
     var currentBookId: String = "" {
         didSet {

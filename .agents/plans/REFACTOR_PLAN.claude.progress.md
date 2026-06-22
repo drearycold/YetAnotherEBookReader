@@ -1,7 +1,7 @@
 # REFACTOR_PLAN.md — YetAnotherEBookReader (D.S.Reader)
 
 > 基于对全部 88 个 Swift 源文件的完整分析，生成于 2026-06-05
-> **最后更新**: 2026-06-22 — P0/P1 全部完成；P2 主要架构项完成，A17 已完成并提交，A21 进入方案阶段
+> **最后更新**: 2026-06-22 — P0/P1 全部完成；P2 主要架构项与 A21 书架 SwiftUI 原生化完成
 
 ---
 
@@ -11,8 +11,8 @@
 pie title 任务完成状态
     "P0 已完成" : 4
     "P1 已完成" : 8
-    "P2 已完成" : 11
-    "P2 下一项目" : 1
+    "P2 已完成" : 12
+    "P2 下一项目" : 0
     "P2 剩余/持续项" : 2
 ```
 
@@ -27,7 +27,7 @@ pie title 任务完成状态
 | **BookDetailView.swift** | 802 | 802 | 已完成组件拆分 | 🟢 **A16 完成** |
 | **LibraryInfoBookListView.swift** | 714 | 432 | ✅ 已完成 MVVM 拆分 | 🟢 **A17 已提交** |
 | **测试文件数** | 1 (占位) | 7 | 17 | 🟢 **+16 个** |
-| **通过的单元测试** | 0 | 41+ | 131 完整基线；A17 新增 12 | 🟢 **安全网扩大** |
+| **通过的单元测试** | 0 | 41+ | 159 | 🟢 **安全网扩大** |
 | **Views 层 `import RealmSwift` 文件数** | 20+ | 17 | 19 | ⚪ (拆分中仍有历史视图依赖) |
 | **总 `import RealmSwift` 文件数** | 36 | 36 | 48 | ⚪ (Realm schema 拆分增加文件数) |
 | **Swift 源文件数** | 88 | 144 | 194 | 📈 (含 extensions/split/VMs) |
@@ -151,7 +151,7 @@ pie title 任务完成状态
 
 ---
 
-### P2 任务 (有益但可延后) — 主要架构项完成，A21 下一项
+### P2 任务 (有益但可延后) — 主要架构项与 A21 书架 SwiftUI 原生化已完成
 
 | # | 问题 | 状态 | 备注 |
 |---|------|------|------|
@@ -164,7 +164,7 @@ pie title 任务完成状态
 | **A17** | LibraryInfoBookListView 超大 | ✅ 已完成 | Commit `27af6b1`; ViewModel + 子组件拆分 + 12 tests |
 | **A19** | 网络层无统一错误处理 | ✅ 已完成 | A19-S1...S8 完成，`CalibreAPIError` 边界落地 |
 | **A20** | CalibreBrowser Realm force unwrap | ✅ **已消除** | CalibreBrowser 已删除 |
-| **A21** | UIKit/SwiftUI 混合书架 | 📝 下一项目 | 方案保存到 memory bank |
+| **A21** | UIKit/SwiftUI 混合书架 | ✅ 已完成 | 已实现 Recent/Discover 原生 SwiftUI 化，删除了 legacy UIKit 书架控制器和 ShelfView 依赖 |
 | **A22** | CalibreSearchCache 废弃属性 | ✅ 已完成 | P2/A22: removed 4 deprecated props, schema bump 140 on 2026-06-18 |
 | **A23** | DatabaseService force unwrap | ✅ 已完成 | P2/A23: converted to optionals on 2026-06-18 |
 | **A26** | Readium timing hack | ❌ 未开始 | |
@@ -270,7 +270,7 @@ gantt
 | **P2** | A16 | BookDetailView 拆分 | ✅ **完成** | — |
 | **P2** | A17 | LibraryInfoBookListView 拆分 | ✅ **完成** | Commit `27af6b1` |
 | **P2** | A19 | 统一网络错误处理 | ✅ **完成** | — |
-| **P2** | A21 | 书架 SwiftUI 原生化 | 📝 下一项目 | 分阶段推进 |
+| **P2** | A21 | 书架 SwiftUI 原生化 | ✅ **完成** | — |
 
 ---
 
@@ -280,7 +280,6 @@ gantt
 
 ```
 近期 ─── P2 收尾 + 下一项 ─────────────────────────────
-├── [P2-A21] 书架视图 SwiftUI 原生化：按 memory-bank 阶段计划推进
 └── [P0-A05/A27] 继续减少 Views 层 RealmSwift 导入和 Realm ↔ value 样板
 ```
 
@@ -288,7 +287,6 @@ gantt
 
 ```
 后续 ─── 深度解耦 + 现代化 ──────────────────────────────
-├── [P2-A21] 书架视图 SwiftUI 原生化
 ├── [P2-A26] Readium timing hack 清理
 ├── [P2-A27] Realm ↔ 值类型转换样板继续收敛
 └── 持续提升测试覆盖率
@@ -313,7 +311,7 @@ graph LR
     P2_Clean["✅ P2 清理废弃代码"]
     P2_Realm["✅ P2 RealmModel 解耦"]
     P2_View["🟡 P2 视图拆分"]
-    P2_Shelf["📝 P2 书架原生化"]
+    P2_Shelf["✅ P2 书架原生化"]
     P2_Error["✅ P2 统一错误处理"]
 
     P1_Network --> P2_Error
@@ -334,8 +332,8 @@ graph LR
     style P2_Clean fill:#4CAF50,color:#fff
     style P2_Realm fill:#4CAF50,color:#fff
     style P2_View fill:#FF9800,color:#fff
-    style P2_Shelf fill:#2196F3,color:#fff
+    style P2_Shelf fill:#4CAF50,color:#fff
     style P2_Error fill:#4CAF50,color:#fff
 ```
 
-> **关键路径更新**：P0 ✅ → P1 ✅ → P2 收尾；A21 书架原生化是下一项独立项目。
+> **关键路径更新**：P0 ✅ → P1 ✅ → P2 收尾；A21 书架原生化已完成。

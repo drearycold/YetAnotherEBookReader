@@ -27,9 +27,14 @@ final class MainViewModel: ObservableObject {
     @Published var consentRequestTriggered = false
     @Published var urlToOpen: URL?
     
+    let recentShelfViewModel: RecentShelfViewModel
+    let sectionShelfViewModel: SectionShelfViewModel
+    
     init(modelData: ModelData, sessionManager: ReadingSessionManager) {
         self.modelData = modelData
         self.sessionManager = sessionManager
+        self.recentShelfViewModel = RecentShelfViewModel(modelData: modelData)
+        self.sectionShelfViewModel = SectionShelfViewModel(modelData: modelData)
         
         setupSubscriptions()
     }

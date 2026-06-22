@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import ShelfView
 import RealmSwift
 
 class YabrShelfDataModel: ObservableObject {
@@ -50,9 +49,7 @@ class YabrShelfDataModel: ObservableObject {
     
     @Published var categories: Set<CategoryObject> = []
     
-    @Published var discoverShelf = [String: ShelfModelSection]()
-    
-    let discoverShelfSubject = PassthroughSubject<[String: ShelfModelSection], Never>()
+    @Published var discoverShelfItems = [String: ShelfSectionItem]()
     
     let addToShelfSubject = PassthroughSubject<CalibreBookRealm, Never>()
     
@@ -185,19 +182,21 @@ class YabrShelfDataModel: ObservableObject {
                     guard let self = self, let category = category else { return }
                     category.unifiedSearchResult = result
                     
-                    let discoverShelfSection = self.buildShelfModelSection(category: category)
-                    if discoverShelfSection.sectionShelf.count > 1 {
-                        self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
-                        self.discoverShelfSubject.send(self.discoverShelf)
+                    let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
+                    Task { @MainActor in
+                        if discoverShelfSectionItem.books.count > 1 {
+                            self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
+                            self.notifyDiscoverShelfChanged()
+                        }
                     }
                 }
                 .store(in: &category.cancellables)
                 
-            let discoverShelfSection = self.buildShelfModelSection(category: category)
-            DispatchQueue.main.async {
-                if discoverShelfSection.sectionShelf.count > 1 {
-                    self.discoverShelf[discoverShelfSection.sectionId] = discoverShelfSection
-                    self.discoverShelfSubject.send(self.discoverShelf)
+            let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
+            Task { @MainActor in
+                if discoverShelfSectionItem.books.count > 1 {
+                    self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
+                    self.notifyDiscoverShelfChanged()
                 }
             }
         }
@@ -231,31 +230,36 @@ class YabrShelfDataModel: ObservableObject {
             category.cancellables.removeAll()
             category.unifiedSearchResult = nil
             
-            let discoverShelfSection = self.buildShelfModelSection(category: category)
-            DispatchQueue.main.async {
-                self.discoverShelf.removeValue(forKey: discoverShelfSection.sectionId)
-                self.discoverShelfSubject.send(self.discoverShelf)
+            let sectionName = "\(category.type.rawValue): \(category.category)"
+            Task { @MainActor in
+                self.discoverShelfItems.removeValue(forKey: sectionName)
+                self.notifyDiscoverShelfChanged()
             }
             
             categories.remove(at: index)
         }
     }
     
-    func buildShelfModelSection(category: CategoryObject) -> ShelfModelSection {
+    func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
         let sectionName = "\(category.type.rawValue): \(category.category)"
         
-        let sectionShelf: [ShelfModel] = category.unifiedSearchResult?.books.map {
-            ShelfModel(
-                bookCoverSource: $0.coverURL?.absoluteString ?? "",
-                bookId: $0.id.description,
-                bookTitle: $0.title,
-                bookProgress: 0,
-                bookStatus: .READY,
-                sectionId: sectionName
+        let books: [ShelfBookItem] = category.unifiedSearchResult?.books.map {
+            ShelfBookItem(
+                id: $0.id.description,
+                title: $0.title,
+                coverURL: $0.coverURL?.absoluteString ?? "",
+                progress: 0,
+                status: .ready
             )
         } ?? []
         
-        return .init(sectionName: sectionName, sectionId: sectionName, sectionShelf: sectionShelf)
+        return ShelfSectionItem(id: sectionName, title: sectionName, books: books)
+    }
+    
+    @MainActor
+    private func notifyDiscoverShelfChanged() {
+        let displaySections = self.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
+        self.modelData.discoverShelfItemsSubject.send(displaySections)
     }
     
     func refresh() {
@@ -307,55 +311,50 @@ extension ModelData {
                 }
             }
             .receive(on: queue)
-            .map { books -> [BookModel] in
-                books
-                    .map { (inShelfId, book, readerInfo) -> BookModel in
-//                        let readerInfo = self.prepareBookReading(book: book)
-                        
-                        let bookUptoDate = book.formats.allSatisfy {
-                            $1.cached == false ||
-                            ($1.cached && $1.cacheUptoDate)
-                        }
-                        let missingFormats = book.formats.filter {
-                            $1.selected == true && $1.cached == false
-                        }
-                        
-                        var bookStatus = BookModel.BookStatus.READY
-                        if self.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-                            bookStatus = .NOCONNECT
-                        } else {
-                            missingFormats.forEach {
-                                guard let format = Format(rawValue: $0.key) else { return }
-                                self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
-                            }
-                            
-                            if !bookUptoDate {
-                                bookStatus = .HASUPDATE
-                            }
-                            if self.downloadManager.activeDownloads.contains(where: { (url, download) in
-                                download.isDownloading && download.book.inShelfId == inShelfId
-                            }) {
-                                bookStatus = .DOWNLOADING
-                            }
-                        }
-                        if book.library.server.isLocal {
-                            bookStatus = .LOCAL
-                        }
-                        
-                        return BookModel(
-                            bookCoverSource: book.coverURL?.absoluteString ?? "",
-                            bookId: inShelfId,
-                            bookTitle: book.title,
-                            bookProgress: Int(floor(readerInfo.position.lastProgress)),
-                            bookStatus: bookStatus
-                        )
+            .map { books -> [ShelfBookItem] in
+                books.map { (inShelfId, book, readerInfo) -> ShelfBookItem in
+                    let bookUptoDate = book.formats.allSatisfy {
+                        $1.cached == false ||
+                        ($1.cached && $1.cacheUptoDate)
                     }
+                    let missingFormats = book.formats.filter {
+                        $1.selected == true && $1.cached == false
+                    }
+                    
+                    var status = ShelfBookStatus.ready
+                    if self.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
+                        status = .noConnect
+                    } else {
+                        missingFormats.forEach {
+                            guard let format = Format(rawValue: $0.key) else { return }
+                            self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+                        }
+                        
+                        if !bookUptoDate {
+                            status = .hasUpdate
+                        }
+                        if self.downloadManager.activeDownloads.contains(where: { (url, download) in
+                            download.isDownloading && download.book.inShelfId == inShelfId
+                        }) {
+                            status = .downloading
+                        }
+                    }
+                    if book.library.server.isLocal {
+                        status = .local
+                    }
+                    
+                    return ShelfBookItem(
+                        id: inShelfId,
+                        title: book.title,
+                        coverURL: book.coverURL?.absoluteString ?? "",
+                        progress: Int(floor(readerInfo.position.lastProgress)),
+                        status: status
+                    )
+                }
             }
             .receive(on: RunLoop.main)
-            .sink(receiveValue: { result in
-//                self.books = result.0
-//                self.shelfView.reloadBooks(bookModel: result.1)
-                self.recentShelfModelSubject.send(result)
+            .sink(receiveValue: { displayBooks in
+                self.recentShelfItemsSubject.send(displayBooks)
             })
             .store(in: &calibreCancellables)
     }
