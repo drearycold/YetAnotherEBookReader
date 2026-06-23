@@ -28,10 +28,14 @@ extension EpubFolioReaderContainer {
         if let highlightProvider = folioReaderHighlightProvider {
             return highlightProvider
         } else {
-            guard let book = modelData?.readingBook else {
+            guard let book = modelData?.readingBook,
+                  let readerInfo = modelData?.readerInfo else {
                 return FolioReaderDummyHighlightProvider()
             }
-            let highlightProvider = FolioReaderDelegateHighlightProvider(delegate: self.readerEngineDelegate, bookId: book.bookPrefId)
+            let highlightProvider = FolioReaderDelegateHighlightProvider(
+                delegate: self.readerEngineDelegate,
+                bookIdentity: FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
+            )
             self.folioReaderHighlightProvider = highlightProvider
             return highlightProvider
         }
@@ -67,6 +71,31 @@ extension EpubFolioReaderContainer {
 }
 
 private let folioFontSizes = ["15.5px", "17px", "18.5px", "20px", "22px", "24px", "26px", "28px", "30.5px", "33px", "35.5px"]
+
+struct FolioReaderBookIdentity {
+    let canonicalBookId: String
+    let folioReaderBookId: String
+
+    init(canonicalBookId: String, folioReaderBookId: String) {
+        self.canonicalBookId = canonicalBookId
+        self.folioReaderBookId = folioReaderBookId
+    }
+
+    init(book: CalibreBook, readerInfo: ReaderInfo) {
+        self.init(
+            canonicalBookId: book.bookPrefId,
+            folioReaderBookId: readerInfo.url.deletingPathExtension().lastPathComponent
+        )
+    }
+
+    func accepts(_ bookId: String) -> Bool {
+        bookId == canonicalBookId || bookId == folioReaderBookId
+    }
+
+    func canonicalizing(_ bookId: String) -> String? {
+        accepts(bookId) ? canonicalBookId : nil
+    }
+}
 
 func folioFontSizeToPercentage(_ fontSize: String) -> Double {
     if let index = folioFontSizes.firstIndex(of: fontSize) {
@@ -184,19 +213,23 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
 
 class FolioReaderDelegateHighlightProvider: FolioReaderHighlightProvider {
     weak var delegate: ReaderEngineDelegate?
-    var bookId: String
+    let bookIdentity: FolioReaderBookIdentity
+    var bookId: String { bookIdentity.canonicalBookId }
     
     private var activeHighlights = [String: ReaderEngineHighlight]()
     
-    init(delegate: ReaderEngineDelegate?, bookId: String) {
+    init(delegate: ReaderEngineDelegate?, bookIdentity: FolioReaderBookIdentity) {
         self.delegate = delegate
-        self.bookId = bookId
+        self.bookIdentity = bookIdentity
     }
     
     func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
         activeHighlights.removeAll()
         highlights.forEach {
-            activeHighlights[$0.id] = $0
+            var highlight = $0
+            guard bookIdentity.accepts(highlight.bookId) else { return }
+            highlight.bookId = bookIdentity.canonicalBookId
+            activeHighlights[highlight.id] = highlight
         }
     }
     
@@ -204,7 +237,9 @@ class FolioReaderDelegateHighlightProvider: FolioReaderHighlightProvider {
         defer {
             completion?(nil)
         }
-        let engineHighlight = highlight.toReaderEngineHighlight()
+        var engineHighlight = highlight.toReaderEngineHighlight()
+        guard bookIdentity.accepts(engineHighlight.bookId) else { return }
+        engineHighlight.bookId = bookIdentity.canonicalBookId
         activeHighlights[highlight.highlightId] = engineHighlight
         delegate?.readerEngine(folioReader, didAddHighlight: engineHighlight)
     }
@@ -224,19 +259,20 @@ class FolioReaderDelegateHighlightProvider: FolioReaderHighlightProvider {
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> FolioReaderHighlight? {
-        return activeHighlights[highlightId]?.toFolioReaderHighlight()
+        return activeHighlights[highlightId]?.toFolioReaderHighlight().map(ensureEncoded)
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
-        return activeHighlights.values.filter { $0.bookId == bookId && (page == nil || $0.page == page?.intValue) }.compactMap {
+        guard bookIdentity.accepts(bookId) else { return [] }
+        return activeHighlights.values.filter { $0.bookId == bookIdentity.canonicalBookId && (page == nil || $0.page == page?.intValue) }.compactMap {
             $0.toFolioReaderHighlight()
-        }
+        }.map(ensureEncoded)
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
-        return activeHighlights.values.filter { $0.bookId == bookId }.compactMap {
+        return activeHighlights.values.filter { $0.bookId == bookIdentity.canonicalBookId }.compactMap {
             $0.toFolioReaderHighlight()
-        }
+        }.map(ensureEncoded)
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
@@ -263,13 +299,18 @@ extension ReaderEngineHighlight {
 
 extension EpubFolioReaderContainer: ReaderEngineController {
     func applyPreferences(_ preferences: ReaderEnginePreferences) {
-        if let preferenceProvider = self.folioReaderPreferenceProvider as? FolioReaderDelegatePreferenceProvider {
+        if let preferenceProvider = self.folioReaderPreferenceProvider(self.folioReader) as? FolioReaderDelegatePreferenceProvider {
             preferenceProvider.applyPreferences(preferences)
         }
     }
     
     func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
-        if let highlightProvider = self.folioReaderHighlightProvider as? FolioReaderDelegateHighlightProvider {
+        // Route through the protocol method (not the cached property) so the
+        // provider is created on first use. FolioReaderKit calls
+        // folioReaderHighlightProvider?(folioReader) internally; if we only
+        // consumed the cached property we would silently drop the persisted
+        // highlights when applyHighlights runs before the provider exists.
+        if let highlightProvider = self.folioReaderHighlightProvider(self.folioReader) as? FolioReaderDelegateHighlightProvider {
             highlightProvider.applyHighlights(highlights)
         }
     }
@@ -305,6 +346,13 @@ extension BookHighlight {
         highlight.spineName = spineName
         
         highlight.style = FolioReaderHighlightStyle.classForStyle(type)
+        
+        // FolioReaderKit's Bridge.js injectHighlight() calls
+        // decodeURIComponent(oHighlight.contentEncoded) on the injected payload.
+        // If we skip encodeContents(), the encoded fields are nil and
+        // decodeURIComponent throws, which aborts the highlight batch and
+        // also blocks the page load path that restores reading position.
+        highlight.encodeContents()
         
         return highlight
     }
@@ -453,24 +501,26 @@ extension BookDeviceReadingPositionHistory {
 public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvider {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let bookIdentity: FolioReaderBookIdentity
     weak var readerEngineDelegate: ReaderEngineDelegate?
     
     init(book: CalibreBook, readerInfo: ReaderInfo, readerEngineDelegate: ReaderEngineDelegate? = nil) {
         self.book = book
         self.readerInfo = readerInfo
+        self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
         self.readerEngineDelegate = readerEngineDelegate
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
-        guard book.bookPrefId == bookId else { return nil }
+        guard bookIdentity.accepts(bookId) else { return nil }
         
-        return ModelData.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: nil)?.toFolioReaderReadPosition()
+        return ModelData.shared?.readingPositionRepository.getPosition(forBookId: bookIdentity.canonicalBookId, deviceName: nil)?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
-        guard book.bookPrefId == bookId else { return nil }
+        guard bookIdentity.accepts(bookId) else { return nil }
 
-        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? [])
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? [])
             .filter({
                 $0.readerName == ReaderType.YabrEPUB.rawValue
                 &&
@@ -482,7 +532,10 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
-        guard book.bookPrefId == bookId else { return }
+        defer {
+            completion?(nil)
+        }
+        guard bookIdentity.accepts(bookId) else { return }
         
         let bookDevPos = readPosition.toBookDeviceReadingPosition()
         let enginePos = ReaderEnginePosition(
@@ -502,14 +555,14 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         if let delegate = readerEngineDelegate {
             delegate.readerEngine(self, didUpdatePosition: enginePos)
         } else {
-            ModelData.shared?.readingPositionRepository.savePosition(bookDevPos, forBookId: book.bookPrefId)
+            ModelData.shared?.readingPositionRepository.savePosition(bookDevPos, forBookId: bookIdentity.canonicalBookId)
         }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
-        guard book.bookPrefId == bookId else { return }
+        guard bookIdentity.accepts(bookId) else { return }
         
-        ModelData.shared?.readingPositionRepository.removePosition(position: readPosition.toBookDeviceReadingPosition(), forBookId: book.bookPrefId)
+        ModelData.shared?.readingPositionRepository.removePosition(position: readPosition.toBookDeviceReadingPosition(), forBookId: bookIdentity.canonicalBookId)
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
@@ -518,19 +571,19 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
-        guard book.bookPrefId == bookId else { return [] }
+        guard bookIdentity.accepts(bookId) else { return [] }
         
-        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? []).map { $0.toFolioReaderReadPosition() }
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? []).map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
-        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? []).map { $0.toFolioReaderReadPosition() }
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? []).map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
-        guard book.bookPrefId == bookId else { return [] }
+        guard bookIdentity.accepts(bookId) else { return [] }
         
-        return (ModelData.shared?.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: nil) ?? []).map { $0.toFolioReaderReadPositionHistory() }
+        return (ModelData.shared?.readingPositionRepository.sessions(forBookId: bookIdentity.canonicalBookId, list: nil) ?? []).map { $0.toFolioReaderReadPositionHistory() }
     }
     
 }
@@ -572,10 +625,12 @@ fileprivate extension FolioReaderBookmark {
 public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let bookIdentity: FolioReaderBookIdentity
 
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
         self.readerInfo = readerInfo
+        self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, added bookmark: FolioReaderBookmark, completion: Completion?) {
@@ -584,14 +639,19 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
             completion?(error as NSError?)
         }
         
-        guard let bookBookmark = bookmark.toBookBookmark() else {
+        guard var bookBookmark = bookmark.toBookBookmark() else {
             error = FolioReaderBookmarkError.emptyError("")
             return
         }
+        guard bookIdentity.accepts(bookBookmark.bookId) else {
+            error = FolioReaderBookmarkError.runtimeError("Unexpected book id")
+            return
+        }
+        bookBookmark.bookId = bookIdentity.canonicalBookId
         
         let result = ModelData.shared?.annotationRepository.saveBookmark(bookBookmark) ?? (-1, nil)
         switch result.0 {
-        case 0:
+        case 0, 1, 2:
             error = nil
         case -1:
             error = FolioReaderBookmarkError.runtimeError("Realm Provider Error")
@@ -605,11 +665,11 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, removed bookmarkPos: String) {
-        ModelData.shared?.annotationRepository.removeBookmark(pos: bookmarkPos, bookId: book.bookPrefId)
+        ModelData.shared?.annotationRepository.removeBookmark(pos: bookmarkPos, bookId: bookIdentity.canonicalBookId)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, updated bookmarkPos: String, title: String) {
-        if let existing = ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: book.bookPrefId) {
+        if let existing = ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: bookIdentity.canonicalBookId) {
             var updated = existing
             updated.title = title
             updated.date = Date()
@@ -618,14 +678,30 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, getBy bookmarkPos: String) -> FolioReaderBookmark? {
-        return ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: book.bookPrefId)?.toFolioReaderBookmark()
+        return ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: bookIdentity.canonicalBookId)?.toFolioReaderBookmark()
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderBookmark] {
-        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).filter { page == nil || $0.page == page?.intValue }.map { $0.toFolioReaderBookmark() }
+        guard bookIdentity.accepts(bookId) else { return [] }
+        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: bookIdentity.canonicalBookId, excludeRemoved: true) ?? []).filter { page == nil || $0.page == page?.intValue }.map { $0.toFolioReaderBookmark() }
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader) -> [FolioReaderBookmark] {
-        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).map { $0.toFolioReaderBookmark() }
+        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: bookIdentity.canonicalBookId, excludeRemoved: true) ?? []).map { $0.toFolioReaderBookmark() }
     }
+}
+
+// FolioReaderKit's Bridge.js injectHighlight() calls
+// decodeURIComponent(oHighlight.contentEncoded) on every highlight. If the
+// encoded fields are nil, decodeURIComponent throws and aborts the
+// highlight batch (and the page load that depends on it). `ensureEncoded`
+// is a last-line guard: it runs encodeContents() if any encoded field is
+// still nil when a highlight is about to be handed to FolioReaderKit.
+fileprivate func ensureEncoded(_ highlight: FolioReaderHighlight) -> FolioReaderHighlight {
+    if highlight.contentEncoded == nil
+        || highlight.contentPreEncoded == nil
+        || highlight.contentPostEncoded == nil {
+        highlight.encodeContents()
+    }
+    return highlight
 }
