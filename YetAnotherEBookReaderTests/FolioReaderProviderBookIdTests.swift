@@ -493,4 +493,120 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             realm.delete(realm.objects(BookBookmarkRealm.self).filter("bookId IN %@", [book?.bookPrefId ?? "", folioReaderBookId]))
         }
     }
+
+    func testDefaultProfileSeededAndContainsLegacyDefaults() {
+        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderProfileTests")
+
+        let folioReader = FolioReader()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRealmConfig: isolatedConfig
+        )
+
+        // Assert listProfile returns ["Default"]
+        let profiles = provider.preference(listProfile: nil)
+        XCTAssertTrue(profiles.contains("Default"), "Profiles list should contain 'Default'")
+
+        // Assert loadProfile("Default") populates values
+        provider.preference(loadProfile: "Default")
+
+        XCTAssertEqual(provider.preference(intFor: "themeMode", default: -1), FolioReaderThemeMode.serpia.rawValue)
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: true), false)
+        XCTAssertEqual(provider.preference(stringFor: "currentFont", default: ""), "Georgia")
+        XCTAssertEqual(provider.preference(stringFor: "currentFontSize", default: ""), FolioReader.DefaultFontSize)
+        XCTAssertEqual(provider.preference(stringFor: "currentFontWeight", default: ""), FolioReader.DefaultFontWeight)
+
+        XCTAssertEqual(provider.preference(intFor: "currentMarginTop", default: -1), folioReader.defaultMarginTop)
+        XCTAssertEqual(provider.preference(intFor: "currentMarginBottom", default: -1), folioReader.defaultMarginBottom)
+        XCTAssertEqual(provider.preference(intFor: "currentMarginLeft", default: -1), folioReader.defaultMarginLeft)
+        XCTAssertEqual(provider.preference(intFor: "currentMarginRight", default: -1), folioReader.defaultMarginRight)
+
+        XCTAssertEqual(provider.preference(boolFor: "currentVMarginLinked", default: false), true)
+        XCTAssertEqual(provider.preference(boolFor: "currentHMarginLinked", default: false), true)
+
+        XCTAssertEqual(provider.preference(intFor: "currentLetterSpacing", default: -1), FolioReader.DefaultLetterSpacing)
+        XCTAssertEqual(provider.preference(intFor: "currentLineHeight", default: -1), FolioReader.DefaultLineHeight)
+        XCTAssertEqual(provider.preference(intFor: "currentTextIndent", default: -1), FolioReader.DefaultTextIndent)
+
+        XCTAssertEqual(provider.preference(boolFor: "doWrapPara", default: true), false)
+    }
+
+    func testCustomProfileSaveLoadListAndRemove() {
+        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderCustomProfileTests")
+
+        let folioReader = FolioReader()
+        let mockDelegate = MockReaderEngineDelegate()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: mockDelegate,
+            bookId: book.bookPrefId,
+            profileRealmConfig: isolatedConfig
+        )
+
+        // 1. Initially lists only "Default"
+        XCTAssertEqual(provider.preference(listProfile: nil), ["Default"])
+
+        // 2. Change some properties in-memory
+        provider.preference(setBool: true, for: "nightMode")
+        provider.preference(setInt: 2, for: "themeMode") // Dark theme
+        provider.preference(setString: "Avenir", for: "currentFont")
+
+        // 3. Save as custom profile "DarkAvenir"
+        provider.preference(saveProfile: "DarkAvenir")
+
+        // 4. Verify listed profiles contains "DarkAvenir"
+        let profilesAfterSave = provider.preference(listProfile: nil)
+        XCTAssertTrue(profilesAfterSave.contains("DarkAvenir"))
+        XCTAssertTrue(profilesAfterSave.contains("Default"))
+
+        // 5. Verify filter works on listProfile
+        XCTAssertEqual(provider.preference(listProfile: "Dark"), ["DarkAvenir"])
+        XCTAssertEqual(provider.preference(listProfile: "NonExistent"), [])
+
+        // 6. Create a fresh provider instance to test load
+        let provider2 = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: mockDelegate,
+            bookId: book.bookPrefId,
+            profileRealmConfig: isolatedConfig
+        )
+
+        // Before load: has Default profile (e.g. nightMode = false)
+        XCTAssertEqual(provider2.preference(boolFor: "nightMode", default: true), false)
+
+        // Load custom profile
+        provider2.preference(loadProfile: "DarkAvenir")
+
+        // Verify values are updated
+        XCTAssertEqual(provider2.preference(boolFor: "nightMode", default: false), true)
+        XCTAssertEqual(provider2.preference(intFor: "themeMode", default: -1), 2)
+        XCTAssertEqual(provider2.preference(stringFor: "currentFont", default: ""), "Avenir")
+
+        // Verify delegate was notified on load
+        XCTAssertNotNil(mockDelegate.lastUpdatedPreferences)
+        XCTAssertEqual(mockDelegate.lastUpdatedPreferences?.themeMode, 2)
+        XCTAssertEqual(mockDelegate.lastUpdatedPreferences?.fontFamily, "Avenir")
+
+        // 7. Remove custom profile
+        provider2.preference(removeProfile: "DarkAvenir")
+        XCTAssertEqual(provider2.preference(listProfile: nil), ["Default"])
+
+        // 8. Remove Default and verify it is recreated on list
+        provider2.preference(removeProfile: "Default")
+        // listProfile should recreate Default via ensureDefaultProfile()
+        XCTAssertEqual(provider2.preference(listProfile: nil), ["Default"])
+    }
+}
+
+class MockReaderEngineDelegate: ReaderEngineDelegate {
+    var lastUpdatedPreferences: ReaderEnginePreferences?
+
+    func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {}
+    func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {}
+    func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {}
+    func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {
+        lastUpdatedPreferences = prefs
+    }
 }

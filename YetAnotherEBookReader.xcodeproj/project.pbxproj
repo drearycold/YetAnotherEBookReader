@@ -353,6 +353,12 @@
 		E71F35AA2FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
 		E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */; };
 		E71F35AE2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35AD2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift */; };
+		E71F35B02FEA701B007AB0B1 /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35AF2FEA701B007AB0B1 /* ReadiumNavigator */; };
+		E71F35B22FEA7021007AB0B1 /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B12FEA7021007AB0B1 /* ReadiumShared */; };
+		E71F35B42FEA7035007AB0B1 /* ReadiumAdapterGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B32FEA7035007AB0B1 /* ReadiumAdapterGCDWebServer */; };
+		E71F35B62FEA7051007AB0B1 /* ReadiumGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B52FEA7051007AB0B1 /* ReadiumGCDWebServer */; };
+		E71F35B82FEA7930007AB0B1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B72FEA7930007AB0B1 /* ReadiumStreamer */; };
+		E71F35BA2FEA7939007AB0B1 /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B92FEA7939007AB0B1 /* Collections */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -374,10 +380,6 @@
 		E769B4352F72736A00EABE1E /* KingfisherSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4342F72736A00EABE1E /* KingfisherSwiftUI */; };
 		E769B4372F72736A00EABE1E /* RealmSwift in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4362F72736A00EABE1E /* RealmSwift */; };
 		E769B4392F72736A00EABE1E /* MBProgressHUD in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4382F72736A00EABE1E /* MBProgressHUD */; };
-		E769B43B2F72736A00EABE1E /* GCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43A2F72736A00EABE1E /* GCDWebServer */; };
-		E769B43D2F72736A00EABE1E /* R2Navigator in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43C2F72736A00EABE1E /* R2Navigator */; };
-		E769B43F2F72736A00EABE1E /* R2Shared in Frameworks */ = {isa = PBXBuildFile; productRef = E769B43E2F72736A00EABE1E /* R2Shared */; };
-		E769B4412F72736A00EABE1E /* R2Streamer in Frameworks */ = {isa = PBXBuildFile; productRef = E769B4402F72736A00EABE1E /* R2Streamer */; };
 		E77B8D5029751C2A00363F39 /* YabrResources in Resources */ = {isa = PBXBuildFile; fileRef = E77B8D4F29751C2A00363F39 /* YabrResources */; };
 		E77B8D5129751C2A00363F39 /* YabrResources in Resources */ = {isa = PBXBuildFile; fileRef = E77B8D4F29751C2A00363F39 /* YabrResources */; };
 		E7804CCC29C0220D0066BD43 /* CalibreSearchCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */; };
@@ -747,14 +749,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				E769B4392F72736A00EABE1E /* MBProgressHUD in Frameworks */,
+				E71F35B02FEA701B007AB0B1 /* ReadiumNavigator in Frameworks */,
 				E769B4332F72736A00EABE1E /* SwiftUICharts in Frameworks */,
-				E769B43D2F72736A00EABE1E /* R2Navigator in Frameworks */,
+				E71F35B62FEA7051007AB0B1 /* ReadiumGCDWebServer in Frameworks */,
+				E71F35BA2FEA7939007AB0B1 /* Collections in Frameworks */,
+				E71F35B22FEA7021007AB0B1 /* ReadiumShared in Frameworks */,
 				E769B4352F72736A00EABE1E /* KingfisherSwiftUI in Frameworks */,
-				E769B43B2F72736A00EABE1E /* GCDWebServer in Frameworks */,
 				E769B4372F72736A00EABE1E /* RealmSwift in Frameworks */,
-				E769B43F2F72736A00EABE1E /* R2Shared in Frameworks */,
+				E71F35B42FEA7035007AB0B1 /* ReadiumAdapterGCDWebServer in Frameworks */,
 				E769B42F2F72736A00EABE1E /* FolioReaderKit in Frameworks */,
-				E769B4412F72736A00EABE1E /* R2Streamer in Frameworks */,
+				E71F35B82FEA7930007AB0B1 /* ReadiumStreamer in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -2557,6 +2561,36 @@
 			package = E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */;
 			productName = Collections;
 		};
+		E71F35AF2FEA701B007AB0B1 /* ReadiumNavigator */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
+			productName = ReadiumNavigator;
+		};
+		E71F35B12FEA7021007AB0B1 /* ReadiumShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
+			productName = ReadiumShared;
+		};
+		E71F35B32FEA7035007AB0B1 /* ReadiumAdapterGCDWebServer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
+			productName = ReadiumAdapterGCDWebServer;
+		};
+		E71F35B52FEA7051007AB0B1 /* ReadiumGCDWebServer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E76EF6D12F72473A0037219B /* XCRemoteSwiftPackageReference "GCDWebServer" */;
+			productName = ReadiumGCDWebServer;
+		};
+		E71F35B72FEA7930007AB0B1 /* ReadiumStreamer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
+			productName = ReadiumStreamer;
+		};
+		E71F35B92FEA7939007AB0B1 /* Collections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E71F34A32FD902E4007AB0B1 /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = Collections;
+		};
 		E769B42E2F72736A00EABE1E /* FolioReaderKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E7C602022F7134560060265A /* XCLocalSwiftPackageReference "../FolioReaderKit" */;
@@ -2581,26 +2615,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = E7C602192F7141C00060265A /* XCRemoteSwiftPackageReference "MBProgressHUD" */;
 			productName = MBProgressHUD;
-		};
-		E769B43A2F72736A00EABE1E /* GCDWebServer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E76EF6D12F72473A0037219B /* XCRemoteSwiftPackageReference "GCDWebServer" */;
-			productName = GCDWebServer;
-		};
-		E769B43C2F72736A00EABE1E /* R2Navigator */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
-			productName = R2Navigator;
-		};
-		E769B43E2F72736A00EABE1E /* R2Shared */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
-			productName = R2Shared;
-		};
-		E769B4402F72736A00EABE1E /* R2Streamer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = E7A20DF02F725BDE006D940C /* XCLocalSwiftPackageReference "../swift-toolkit" */;
-			productName = R2Streamer;
 		};
 		E7C602032F7134560060265A /* FolioReaderKit */ = {
 			isa = XCSwiftPackageProductDependency;
