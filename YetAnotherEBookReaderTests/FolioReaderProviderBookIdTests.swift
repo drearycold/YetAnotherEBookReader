@@ -76,6 +76,94 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(restored?.cfi, "epubcfi(/6/14)")
     }
 
+    func testSavePositionAtomicallyReplacesOlderSameIdentityPosition() throws {
+        let oldPosition = makePosition(page: 4, offsetX: 1, offsetY: 2, cfi: "epubcfi(/6/8)", epoch: 1_000)
+        let newPosition = makePosition(page: 17, offsetX: 33, offsetY: 44, cfi: "epubcfi(/6/34)", epoch: 2_000)
+
+        modelData.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
+        modelData.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+
+        let restored = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData.deviceName)
+        XCTAssertEqual(restored?.lastReadPage, 17)
+        XCTAssertEqual(restored?.lastPosition, [17, 33, 44])
+        XCTAssertEqual(restored?.cfi, "epubcfi(/6/34)")
+
+        let stored = try positionsMatchingIdentity(of: newPosition)
+        XCTAssertEqual(stored.count, 1)
+        XCTAssertEqual(stored.first?.lastReadPage, 17)
+    }
+
+    func testReadPositionProviderReturnsPositionAfterReplacementSave() {
+        let oldPosition = makePosition(page: 6, cfi: "epubcfi(/6/12)", epoch: 1_000)
+        let newPosition = makePosition(page: 18, offsetX: 9, offsetY: 10, cfi: "epubcfi(/6/36)", epoch: 2_000)
+        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+
+        modelData.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
+        modelData.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+
+        let restored = provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId)
+        XCTAssertNotNil(restored)
+        XCTAssertEqual(restored?.pageNumber, 18)
+        XCTAssertEqual(restored?.pageOffset, CGPoint(x: 9, y: 10))
+        XCTAssertEqual(restored?.cfi, "epubcfi(/6/36)")
+    }
+
+    func testConcurrentSaveDoesNotExposeEmptyPositionForSameIdentity() throws {
+        let realm = try readingPositionRealm()
+        let seedEpoch = Date().timeIntervalSince1970
+        try realm.write {
+            for index in 0..<1_000 {
+                let seededPosition = makePosition(page: 3, cfi: "epubcfi(/6/6)", epoch: seedEpoch - Double(index + 1))
+                realm.add(seededPosition.makeRealmObject(bookId: book.bookPrefId))
+            }
+        }
+
+        let repository = modelData.readingPositionRepository
+        let newPosition = makePosition(page: 19, cfi: "epubcfi(/6/38)", epoch: seedEpoch + 1)
+        let writerStarted = DispatchSemaphore(value: 0)
+        let stateLock = NSLock()
+        var writerFinished = false
+        var sawEmptyPosition = false
+
+        let writerExpectation = expectation(description: "writer finished")
+        let readerExpectation = expectation(description: "reader observed non-empty positions")
+
+        DispatchQueue.global(qos: .default).async {
+            writerStarted.signal()
+            repository.savePosition(newPosition, forBookId: self.book.bookPrefId)
+            stateLock.lock()
+            writerFinished = true
+            stateLock.unlock()
+            writerExpectation.fulfill()
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            writerStarted.wait()
+            while true {
+                if repository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.modelData.deviceName) == nil {
+                    stateLock.lock()
+                    sawEmptyPosition = true
+                    stateLock.unlock()
+                    break
+                }
+
+                stateLock.lock()
+                let done = writerFinished
+                stateLock.unlock()
+                if done {
+                    break
+                }
+            }
+            readerExpectation.fulfill()
+        }
+
+        wait(for: [writerExpectation, readerExpectation], timeout: 5.0)
+        stateLock.lock()
+        let didSeeEmptyPosition = sawEmptyPosition
+        stateLock.unlock()
+        XCTAssertFalse(didSeeEmptyPosition)
+    }
+
     func testReadPositionProviderRejectsUnrelatedId() {
         let savedPosition = makePosition(page: 8)
         modelData.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
@@ -300,7 +388,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         return container
     }
 
-    private func makePosition(page: Int, offsetX: Int = 0, offsetY: Int = 0, cfi: String = "/") -> BookDeviceReadingPosition {
+    private func makePosition(
+        page: Int,
+        offsetX: Int = 0,
+        offsetY: Int = 0,
+        cfi: String = "/",
+        epoch: Double = Date().timeIntervalSince1970
+    ) -> BookDeviceReadingPosition {
         BookDeviceReadingPosition(
             id: modelData.deviceName,
             readerName: ReaderType.YabrEPUB.rawValue,
@@ -313,7 +407,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             furthestReadChapter: "Chapter \(page)",
             lastPosition: [page, offsetX, offsetY],
             cfi: cfi,
-            epoch: Date().timeIntervalSince1970
+            epoch: epoch
         )
     }
 
@@ -371,6 +465,26 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         try? realm.write {
             realm.delete(realm.objects(BookDeviceReadingPositionRealm.self))
         }
+    }
+
+    private func readingPositionRealm() throws -> Realm {
+        let components = book.bookPrefId.components(separatedBy: " - ")
+        let library = try XCTUnwrap(modelData.calibreLibraries.values.first(where: { $0.key == components[0] }))
+        return try Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server))
+    }
+
+    private func positionsMatchingIdentity(of position: BookDeviceReadingPosition) throws -> Results<BookDeviceReadingPositionRealm> {
+        let realm = try readingPositionRealm()
+        return realm.objects(BookDeviceReadingPositionRealm.self)
+            .filter(NSPredicate(
+                format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
+                book.bookPrefId,
+                position.id,
+                position.readerName,
+                NSNumber(value: position.structuralStyle),
+                NSNumber(value: position.positionTrackingStyle),
+                NSNumber(value: position.structuralRootPageNumber)
+            ))
     }
 
     private func clearBookmarks() {

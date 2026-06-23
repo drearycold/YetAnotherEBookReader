@@ -116,22 +116,27 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String) {
         guard let realm = getRealm(forBookId: bookId) else { return }
-        removePosition(position: position, forBookId: bookId)
-        
-        let existing = realm.objects(BookDeviceReadingPositionRealm.self)
-            .filter(
-                NSPredicate(
-                    format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
-                    bookId,
-                    position.id,
-                    position.readerName,
-                    NSNumber(value: position.structuralStyle),
-                    NSNumber(value: position.positionTrackingStyle),
-                    NSNumber(value: position.structuralRootPageNumber)
-                )
+
+        try? realm.write {
+            let identityPredicate = NSPredicate(
+                format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
+                bookId,
+                position.id,
+                position.readerName,
+                NSNumber(value: position.structuralStyle),
+                NSNumber(value: position.positionTrackingStyle),
+                NSNumber(value: position.structuralRootPageNumber)
             )
-        if existing.isEmpty {
-            try? realm.write {
+            let olderPositions = realm.objects(BookDeviceReadingPositionRealm.self)
+                .filter(identityPredicate)
+                .filter(NSPredicate(format: "epoch < %@", NSNumber(value: position.epoch)))
+            if !olderPositions.isEmpty {
+                realm.delete(olderPositions)
+            }
+
+            let existing = realm.objects(BookDeviceReadingPositionRealm.self)
+                .filter(identityPredicate)
+            if existing.isEmpty {
                 realm.add(position.makeRealmObject(bookId: bookId))
             }
         }
