@@ -157,6 +157,9 @@
 		A04D200130C0000200000008 /* CalibreServerService+Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000008 /* CalibreServerService+Search.swift */; };
 		A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000007 /* CalibreServerServiceTests.swift */; };
 		A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A04D100130C0000100000009 /* V2MigrationDependencyTests.swift */; };
+		A051200130D1000100000001 /* ReaderPreferenceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000001 /* ReaderPreferenceRepository.swift */; };
+		A051200130D1000200000001 /* ReaderPreferenceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000001 /* ReaderPreferenceRepository.swift */; };
+		A051200130D1000300000002 /* ReaderPreferenceRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */; };
 		E70A25B72F73DEAD004F006E /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B62F73DEAD004F006E /* ReadiumNavigator */; };
 		E70A25B92F73DEAD004F006E /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B82F73DEAD004F006E /* ReadiumShared */; };
 		E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25BA2F73DEAD004F006E /* ReadiumStreamer */; };
@@ -703,6 +706,8 @@
 		E7939151261F1A47004AB104 /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		E7939151261F1A47004AB106 /* SupportInfoViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportInfoViewModelTests.swift; sourceTree = "<group>"; };
 		E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentShelfViewModelTests.swift; sourceTree = "<group>"; };
+		A051100130D1000100000001 /* ReaderPreferenceRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceRepository.swift; sourceTree = "<group>"; };
+		A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceRepositoryTests.swift; sourceTree = "<group>"; };
 		E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictTabBarController.swift; sourceTree = "<group>"; };
 		E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncycloView.swift; sourceTree = "<group>"; };
 		E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictViewModel.swift; sourceTree = "<group>"; };
@@ -1060,6 +1065,7 @@
 				E71F35BB2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift */,
 				E71F35BD2FEA9BA6007AB0B1 /* CalibreLibraryManagerTests.swift */,
 				E71F35BF2FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift */,
+				A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */,
 				E71F35C42FEACD3A007AB0B1 /* TestHelpers */,
 			);
 			path = YetAnotherEBookReaderTests;
@@ -1166,6 +1172,7 @@
 				E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */,
 				E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */,
 				E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */,
+				A051100130D1000100000001 /* ReaderPreferenceRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -1526,6 +1533,7 @@
 				E71F35212FE3B36C007AB0B1 /* CalibreTasks.swift in Sources */,
 				E71F34CF2FDBD789007AB0B1 /* UnifiedCategoryMergeService.swift in Sources */,
 				E71F34F32FDE305D007AB0B1 /* ServerRepository.swift in Sources */,
+				A051200130D1000100000001 /* ReaderPreferenceRepository.swift in Sources */,
 				E71F359C2FE8EE7B007AB0B1 /* SectionShelfView.swift in Sources */,
 				2AAB2998271415E10080B0CB /* AppInfoView.swift in Sources */,
 				E71F35602FE77EFA007AB0B1 /* BookCoverView.swift in Sources */,
@@ -1695,6 +1703,7 @@
 				E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */,
 				E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */,
 				E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */,
+				A051200130D1000300000002 /* ReaderPreferenceRepositoryTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 				E7939151261F1A47004AB101 /* MainViewModelTests.swift in Sources */,
 				E7939151261F1A47004AB103 /* SettingsViewModelTests.swift in Sources */,
@@ -1771,6 +1780,7 @@
 				E71F34CE2FDBD789007AB0B1 /* UnifiedCategoryMergeService.swift in Sources */,
 				E71F35222FE3B36C007AB0B1 /* CalibreTasks.swift in Sources */,
 				E71F34F42FDE305D007AB0B1 /* ServerRepository.swift in Sources */,
+				A051200130D1000200000001 /* ReaderPreferenceRepository.swift in Sources */,
 				6E7B80DF28FBA7AD008B075C /* YabrPDFChapterListCell.swift in Sources */,
 				E71F359B2FE8EE7B007AB0B1 /* SectionShelfView.swift in Sources */,
 				6E7B80E028FBA7AD008B075C /* YabrPDFHighlightList.swift in Sources */,

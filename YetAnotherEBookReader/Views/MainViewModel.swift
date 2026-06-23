@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Combine
-import RealmSwift
 
 @MainActor @available(macCatalyst 14.0, *)
 final class MainViewModel: ObservableObject {
@@ -58,12 +57,8 @@ final class MainViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    var realmConf: Realm.Configuration? {
-        modelData.realmConf
-    }
-    
     var showWelcome: Bool {
-        activeTab < 1 && modelData.realm != nil && modelData.booksInShelf.isEmpty
+        activeTab < 1 && modelData.isDatabaseReady && modelData.booksInShelf.isEmpty
     }
     
     var presentingEBookReaderFromShelf: Bool {

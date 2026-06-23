@@ -7,6 +7,14 @@
 
 ## 一、当前状态
 
+### 2026-06-23 Phase 1 实施结果
+
+- 已完成 `MainViewModel` / `SettingsViewModel` / `ServerViewModel` / `YabrEBookReader` 的 Realm 传参与直接偏好读写清理。
+- 新增 `ReaderPreferenceRepositoryProtocol` 与 `RealmReaderPreferenceRepository`，由 `ModelData.readerPreferenceRepository` 暴露给 reader entry 层使用。
+- `ModelData` 新增 `isDatabaseReady` 与 `refreshDatabase()` facade；`updateServerDSReaderHelper(..., realm:)` 已收口为无 `realm` 版本。
+- `MainView.swift` 继续保留 `RealmSwift` 导入并直接注入 `\.realmConfiguration`，这符合 Phase 1 边界。
+- Views 层 `import RealmSwift` 已从 18 降到 14；残留主要集中在 Phase 2/3 的观察型 ViewModel、reader runtime 与适配器。
+
 18 个 Views 层文件导入 `RealmSwift`，按角色分类：
 
 ### A. ViewModel 层 (9 文件) — 作为 Realm→View 桥接，暂时合理
@@ -65,7 +73,7 @@
 
 ## 三、分阶段实施计划
 
-### Phase 1: 消除 ViewModel 的 Realm 传参模式 (🟢 低风险, ~1 天)
+### Phase 1: 消除 ViewModel 的 Realm 传参模式 (✅ 已完成)
 
 **目标**: 清理 3 个 ViewModel + 1 个路由视图的 Realm 导入
 
@@ -150,7 +158,11 @@ protocol ReaderPreferenceRepositoryProtocol {
 > `YabrReaderSettingsView`、`YabrReadiumReaderVC`、`YabrPDFOptionView` 等文件
 > 都可以通过它消除直接 Realm 操作。
 
-**Phase 1 预期**: 清理 4 个文件 (Main/Settings/ServerVM + YabrEBookReader)，18 → 14
+**Phase 1 实际结果**:
+- 已清理 4 个文件：`MainViewModel.swift`、`SettingsViewModel.swift`、`ServerViewModel.swift`、`YabrEBookReader.swift`
+- 新增 `ReaderPreferenceRepositoryTests`
+- focused 验证：`MainViewModelTests`、`SettingsViewModelTests`、`CalibreServerManagerTests`、`ReaderPreferenceRepositoryTests` 全通过
+- full 验证：`xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17'` 通过（235 unit tests + 1 UI test）
 
 ---
 

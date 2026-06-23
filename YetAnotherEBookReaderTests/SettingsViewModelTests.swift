@@ -14,9 +14,14 @@ import Combine
     var viewModel: SettingsViewModel!
     var mockModelData: ModelData!
     var cancellables: Set<AnyCancellable>!
+    var orderedEvents: [String]!
     
     override func setUpWithError() throws {
         mockModelData = ModelData(mock: true)
+        mockModelData.calibreServers.removeAll()
+        mockModelData.calibreLibraries.removeAll()
+        mockModelData.booksInShelf.removeAll()
+        orderedEvents = []
         viewModel = SettingsViewModel(modelData: mockModelData)
         cancellables = []
     }
@@ -25,6 +30,7 @@ import Combine
         viewModel = nil
         mockModelData = nil
         cancellables = nil
+        orderedEvents = nil
     }
     
     func testInitialization() throws {
@@ -63,5 +69,38 @@ import Combine
         viewModel.cancelServerDeletion()
         
         XCTAssertNil(viewModel.serverListDelete)
+    }
+
+    func testUpdateServerTriggersRefreshPopulateAndProbeInOrder() throws {
+        let oldServer = CalibreServer(uuid: UUID(), name: "Old Server", baseUrl: "http://localhost/old", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        let newServer = CalibreServer(uuid: UUID(), name: "New Server", baseUrl: "http://localhost/new", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        mockModelData.calibreServers[oldServer.id] = oldServer
+        mockModelData.booksInShelf["stale"] = TestFixtures.makeBook()
+        var staleRemovedBeforePopulate = false
+
+        let expectation = expectation(description: "refresh pipeline")
+        viewModel = SettingsViewModel(
+            modelData: mockModelData,
+            refreshDatabaseAction: { [weak self] in
+                self?.orderedEvents.append("refresh")
+                self?.mockModelData.refreshDatabase()
+            },
+            populateBookShelfAction: { [weak self] in
+                self?.orderedEvents.append("populate")
+                staleRemovedBeforePopulate = self?.mockModelData.booksInShelf["stale"] == nil
+                self?.mockModelData.populateBookShelf()
+            },
+            probeServersReachabilityAction: { [weak self] serverIds in
+                self?.orderedEvents.append("probe")
+                self?.mockModelData.probeServersReachability(with: serverIds)
+                expectation.fulfill()
+            }
+        )
+
+        viewModel.updateServer(oldServer: oldServer, newServer: newServer)
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(orderedEvents, ["refresh", "populate", "probe"])
+        XCTAssertTrue(staleRemovedBeforePopulate)
     }
 }

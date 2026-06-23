@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import RealmSwift
 import SwiftUI
 
 @MainActor
@@ -215,8 +214,8 @@ class ServerViewModel: ObservableObject {
                 serverId: newServer.id,
                 dsreaderHelper: CalibreServerDSReaderHelper(
                     port: (url.port ?? -1) + 1
-                ),
-                realm: modelData.realm)
+                )
+            )
         }
         
         modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
@@ -433,7 +432,7 @@ class ServerViewModel: ObservableObject {
         dsreaderHelperServer.configuration = configuration
         dsreaderHelperServer.configurationData = configurationData
         
-        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
+        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
         helperStatus = nil
     }
 }
