@@ -359,6 +359,14 @@
 		E71F35B62FEA7051007AB0B1 /* ReadiumGCDWebServer in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B52FEA7051007AB0B1 /* ReadiumGCDWebServer */; };
 		E71F35B82FEA7930007AB0B1 /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B72FEA7930007AB0B1 /* ReadiumStreamer */; };
 		E71F35BA2FEA7939007AB0B1 /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = E71F35B92FEA7939007AB0B1 /* Collections */; };
+		E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35BB2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift */; };
+		E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35BD2FEA9BA6007AB0B1 /* CalibreLibraryManagerTests.swift */; };
+		E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35BF2FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift */; };
+		E71F35C62FEACDA3007AB0B1 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35C52FEACDA3007AB0B1 /* MockURLProtocol.swift */; };
+		E71F35C82FEACDB3007AB0B1 /* MockDatabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35C72FEACDB3007AB0B1 /* MockDatabaseService.swift */; };
+		E71F35CA2FEACDBD007AB0B1 /* TestFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35C92FEACDBD007AB0B1 /* TestFixtures.swift */; };
+		E71F35CC2FEACDCD007AB0B1 /* MockRepositories.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */; };
+		E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -653,6 +661,14 @@
 		E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinator.swift; sourceTree = "<group>"; };
 		E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinatorTests.swift; sourceTree = "<group>"; };
 		E71F35AD2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioReaderProviderBookIdTests.swift; sourceTree = "<group>"; };
+		E71F35BB2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBookManagerTests.swift; sourceTree = "<group>"; };
+		E71F35BD2FEA9BA6007AB0B1 /* CalibreLibraryManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryManagerTests.swift; sourceTree = "<group>"; };
+		E71F35BF2FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerManagerTests.swift; sourceTree = "<group>"; };
+		E71F35C52FEACDA3007AB0B1 /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
+		E71F35C72FEACDB3007AB0B1 /* MockDatabaseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockDatabaseService.swift; sourceTree = "<group>"; };
+		E71F35C92FEACDBD007AB0B1 /* TestFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestFixtures.swift; sourceTree = "<group>"; };
+		E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockRepositories.swift; sourceTree = "<group>"; };
+		E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockManagers.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1041,6 +1057,10 @@
 				E71F359D2FE92514007AB0B1 /* RealmDomainMappingTests.swift */,
 				E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */,
 				E71F35AD2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift */,
+				E71F35BB2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift */,
+				E71F35BD2FEA9BA6007AB0B1 /* CalibreLibraryManagerTests.swift */,
+				E71F35BF2FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift */,
+				E71F35C42FEACD3A007AB0B1 /* TestHelpers */,
 			);
 			path = YetAnotherEBookReaderTests;
 			sourceTree = "<group>";
@@ -1208,6 +1228,18 @@
 				E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
 			);
 			path = Realm;
+			sourceTree = "<group>";
+		};
+		E71F35C42FEACD3A007AB0B1 /* TestHelpers */ = {
+			isa = PBXGroup;
+			children = (
+				E71F35C52FEACDA3007AB0B1 /* MockURLProtocol.swift */,
+				E71F35C72FEACDB3007AB0B1 /* MockDatabaseService.swift */,
+				E71F35C92FEACDBD007AB0B1 /* TestFixtures.swift */,
+				E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */,
+				E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */,
+			);
+			path = TestHelpers;
 			sourceTree = "<group>";
 		};
 		E730405628E8652B0013BA01 /* Reader */ = {
@@ -1646,15 +1678,23 @@
 				E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */,
 				E71F359E2FE92514007AB0B1 /* RealmDomainMappingTests.swift in Sources */,
 				E71F34862FD3AED3007AB0B1 /* BookDetailViewModelTests.swift in Sources */,
+				E71F35CC2FEACDCD007AB0B1 /* MockRepositories.swift in Sources */,
+				E71F35C62FEACDA3007AB0B1 /* MockURLProtocol.swift in Sources */,
 				E71F357D2FE8CC8A007AB0B1 /* LibraryInfoBookListViewModelTests.swift in Sources */,
 				E71F35932FE8E881007AB0B1 /* ShelfDisplayModelsTests.swift in Sources */,
 				E71F34B82FD9193C007AB0B1 /* UnifiedSearchServiceTests.swift in Sources */,
 				A04D200130C0000300000001 /* CalibreServerServiceTests.swift in Sources */,
 				E71F35AE2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift in Sources */,
 				E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */,
+				E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */,
+				E71F35CA2FEACDBD007AB0B1 /* TestFixtures.swift in Sources */,
+				E71F35C82FEACDB3007AB0B1 /* MockDatabaseService.swift in Sources */,
 				A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */,
+				E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */,
 				2AC9D74030A0A10000AA0001 /* YabrPDFViewControllerTests.swift in Sources */,
+				E71F35BE2FEA9BA7007AB0B1 /* CalibreLibraryManagerTests.swift in Sources */,
 				E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */,
+				E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 				E7939151261F1A47004AB101 /* MainViewModelTests.swift in Sources */,
 				E7939151261F1A47004AB103 /* SettingsViewModelTests.swift in Sources */,

@@ -222,6 +222,7 @@ class CalibreLibraryManager: ObservableObject {
         let libraryName = library.name
         try? libraryRepository.deleteLibrary(serverUUID: serverUUIDString, name: libraryName)
         
+        self.calibreLibraries.removeValue(forKey: library.id)
         self.librarySyncStatus[library.id]?.isSync = false
     }
     
