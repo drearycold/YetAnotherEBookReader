@@ -255,7 +255,7 @@ struct MainView: View {
         .font(.headline)
         .onOpenURL { url in
             print("onOpenURL \(url)")
-            let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)            
+            let result = modelData.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
             modelData.bookImportedSubject.send(result)
         }.onAppear {
             viewModel.onAppear()

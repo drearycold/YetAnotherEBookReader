@@ -99,10 +99,10 @@ class CalibreServerManager: ObservableObject {
     @MainActor
     func removeServer(server: CalibreServer) async {
         guard let modelData = self.modelData else { return }
-        let librariesToRemove = modelData.calibreLibraries.filter { $0.value.server.id == server.id }
+        let librariesToRemove = modelData.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }
         for (_, library) in librariesToRemove {
-            modelData.hideLibrary(libraryId: library.id)
-            await modelData.removeLibrary(library: library)
+            modelData.libraryManager.hideLibrary(libraryId: library.id)
+            await modelData.libraryManager.removeLibrary(library: library)
         }
         
         modelData.calibreUpdatedSubject.send(.shelf)

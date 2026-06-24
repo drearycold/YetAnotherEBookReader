@@ -96,11 +96,11 @@ class LibraryInfoBookListViewModel: ObservableObject {
     
     func downloadOrAddToShelfAction(book: CalibreBook, format: Format, modelData: ModelData) {
         if book.inShelf {
-            if case .failure(let error) = modelData.startDownloadFormatNew(book: book, format: format, overwrite: true) {
+            if case .failure(let error) = modelData.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
                 Logger(subsystem: "YetAnotherEBookReader", category: "LibraryInfoBookListViewModel").error("Failed to start download: \(error.localizedDescription)")
             }
         } else {
-            modelData.addToShelf(book: book, formats: [format])
+            modelData.bookManager.addToShelf(book: book, formats: [format])
         }
     }
     

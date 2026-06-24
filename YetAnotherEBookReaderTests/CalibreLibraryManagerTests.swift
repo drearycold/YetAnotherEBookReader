@@ -41,7 +41,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
             username: "",
             password: ""
         )
-        modelData.calibreServers[server.id] = server
+        modelData.serverManager.calibreServers[server.id] = server
         try? modelData.serverManager.updateServerRealm(server: server)
         
         library = CalibreLibrary(server: server, key: "test_lib", name: "Test Library")
@@ -243,7 +243,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         var book = CalibreBook(id: 777, library: library)
         book.inShelf = true
         modelData.bookManager.updateBook(book: book)
-        modelData.booksInShelf[book.inShelfId] = book
+        modelData.bookManager.booksInShelf[book.inShelfId] = book
         
         try libraryRepository.saveLibrary(library)
         
@@ -255,7 +255,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let dbLibAfter = libraryRepository.getAllLibraries().first { $0.id == library.id }
         XCTAssertNil(dbLibAfter)
         
-        XCTAssertNil(modelData.booksInShelf[book.inShelfId])
+        XCTAssertNil(modelData.bookManager.booksInShelf[book.inShelfId])
         XCTAssertFalse(libraryManager.librarySyncStatus[library.id]?.isSync ?? true)
     }
 

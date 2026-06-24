@@ -24,7 +24,7 @@ struct LibraryInfoBookListInfoView: View {
                             .map({ unifiedOffset in
                                 (
                                     unifiedOffset,
-                                    modelData.calibreLibraries[unifiedOffset.key]
+                                    modelData.libraryManager.calibreLibraries[unifiedOffset.key]
                                 )
                             }), id: \.0.key) { searchResult in
                                 if let library = searchResult.1 {

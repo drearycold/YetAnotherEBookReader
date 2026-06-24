@@ -26,7 +26,7 @@ class ReadingSessionManager: ObservableObject {
                 return
             }
             if readingBook?.inShelfId != readingBookInShelfId {
-                readingBook = modelData?.booksInShelf[readingBookInShelfId] ?? modelData?.getBook(for: readingBookInShelfId)
+                readingBook = modelData?.bookManager.booksInShelf[readingBookInShelfId] ?? modelData?.bookManager.getBook(for: readingBookInShelfId)
             }
         }
     }
@@ -89,11 +89,11 @@ class ReadingSessionManager: ObservableObject {
         if let position = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
             candidatePositions.append(position)
         }
-        if let format = modelData.getPreferredFormat(for: book) {
+        if let format = self.getPreferredFormat(for: book) {
             candidatePositions.append(
                 modelData.readingPositionRepository.createInitial(
                     deviceName: modelData.deviceName,
-                    reader: modelData.getPreferredReader(for: format)
+                    reader: self.getPreferredReader(for: format)
                 )
             )
         }
@@ -155,16 +155,16 @@ class ReadingSessionManager: ObservableObject {
         
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
-            if let book = modelData.booksInShelf[bookInShelfId] {
+            if let book = modelData.bookManager.booksInShelf[bookInShelfId] {
                 historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: startDateAfter))
             }
         } else {
-            modelData.booksInShelf.forEach {
+            modelData.bookManager.booksInShelf.forEach {
                 historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: $0.value.bookPrefId, list: startDateAfter))
             }
         }
         
-        let idMap = modelData.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
+        let idMap = modelData.bookManager.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
             partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
         }
         
@@ -187,9 +187,9 @@ class ReadingSessionManager: ObservableObject {
         guard let updatedReadingPosition = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
 
         if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
-           let library = modelData.calibreLibraries[book.library.id],
+           let library = modelData.libraryManager.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData.shouldAutoUpdateGoodreads(library: library),
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData.bookManager.shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
             
             let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
@@ -227,9 +227,9 @@ class ReadingSessionManager: ObservableObject {
         modelData?.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
 
         if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
-           let library = modelData?.calibreLibraries[readingBook.library.id],
+           let library = modelData?.libraryManager.calibreLibraries[readingBook.library.id],
            let goodreadsId = readingBook.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData?.shouldAutoUpdateGoodreads(library: library),
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData?.bookManager.shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
             let connector = DSReaderHelperConnector(calibreServerService: modelData!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             Task {

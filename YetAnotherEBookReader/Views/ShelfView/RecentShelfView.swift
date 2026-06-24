@@ -205,7 +205,7 @@ struct RecentShelfView: View {
                 get: { viewModel.presentingHistoryBookId.map { IdentifiableString(value: $0) } },
                 set: { viewModel.presentingHistoryBookId = $0?.value }
             )) { historyId in
-                if let book = viewModel.modelData.booksInShelf[historyId.value] {
+                if let book = viewModel.modelData.bookManager.booksInShelf[historyId.value] {
                     NavigationView {
                         ReadingPositionHistoryView(
                             presenting: Binding<Bool>(

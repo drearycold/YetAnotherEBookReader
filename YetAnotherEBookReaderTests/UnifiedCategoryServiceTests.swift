@@ -426,7 +426,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         DatabaseService.shared.setup(conf: config)
         let modelData = ModelData(mock: true)
         modelData.realmConf = config
-        modelData.calibreLibraries = [
+        modelData.libraryManager.calibreLibraries = [
             mockLibrary1.id: mockLibrary1,
             mockLibrary2.id: mockLibrary2
         ]

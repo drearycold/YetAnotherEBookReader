@@ -65,6 +65,6 @@ class ReaderOptionsViewModelTests: XCTestCase {
         let binding = viewModel.preferredFormatBinding
         binding.wrappedValue = .EPUB
         XCTAssertEqual(binding.wrappedValue, .EPUB)
-        XCTAssertEqual(mockModelData.getPreferredFormat(), .EPUB)
+        XCTAssertEqual(mockModelData.sessionManager.getPreferredFormat(), .EPUB)
     }
 }

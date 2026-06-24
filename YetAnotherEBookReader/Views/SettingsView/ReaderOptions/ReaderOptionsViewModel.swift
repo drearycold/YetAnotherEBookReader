@@ -58,25 +58,25 @@ class ReaderOptionsViewModel: ObservableObject {
     }
     
     // MARK: - Format / Reader Preference Bindings
-    
+
     var preferredFormatBinding: Binding<Format> {
         Binding(
             get: { [weak self] in
-                self?.modelData.getPreferredFormat() ?? .EPUB
+                self?.modelData.sessionManager.getPreferredFormat() ?? .EPUB
             },
             set: { [weak self] in
-                self?.modelData.updatePreferredFormat(for: $0)
+                self?.modelData.sessionManager.updatePreferredFormat(for: $0)
             }
         )
     }
-    
+
     func preferredReaderBinding(for format: Format) -> Binding<ReaderType> {
         Binding(
             get: { [weak self] in
-                self?.modelData.getPreferredReader(for: format) ?? .YabrEPUB
+                self?.modelData.sessionManager.getPreferredReader(for: format) ?? .YabrEPUB
             },
             set: { [weak self] in
-                self?.modelData.updatePreferredReader(for: format, with: $0)
+                self?.modelData.sessionManager.updatePreferredReader(for: format, with: $0)
             }
         )
     }

@@ -85,76 +85,65 @@ graph LR
 
 **目标**: 1,061 → ~600 行。让调用者直接访问 Manager/Service。
 
+**状态**: ✅ 已完成 (2026-06-24)
+
+**产出**:
+- ModelData.swift 从 **1,172 → 763 行** (减少 409 行, 35% 缩减)
+- 删除 **84 个 FACADE 标记** (60+ 转发方法 + 18+ 转发属性)
+- 保留 **5 个 `// →` 标记的非 Facade 方法** (Phase 2 处理) 和 6 个 **协议一致性计算属性**
+- 迁移了 **30+ ViewModels/Views/Managers** 改用 `modelData.xxxManager.xxx` 模式
+- 测试同步更新 (10 个测试文件)
+
 #### 1a. Manager 公开化
 
-**现状**: 外部通过 `modelData.addToShelf(book:formats:)` 调用，ModelData 转发到 `bookManager.addToShelf(book:formats:)`。
-
-**改造**: 将 Manager 从 ModelData 的内部实现细节提升为公开属性，让调用者直接使用。
+**实施**: ViewModel 保持 `let modelData: ModelData`，但所有内部访问改为 `modelData.xxxManager.xxx` 模式。
 
 ```swift
-// 之前 (调用者)
+// 之前
 modelData.addToShelf(book: book, formats: formats)
 
-// 之后 (调用者直接访问 Manager)
+// 之后
 modelData.bookManager.addToShelf(book: book, formats: formats)
-// 或更好：通过注入
-bookManager.addToShelf(book: book, formats: formats)
 ```
 
-#### 1b. 批量删除 Facade 转发方法
+#### 1b. 批量删除 Facade 转发方法 ✅
 
-以下方法全部是纯 `{ manager.xxx }` 转发，可安全删除，约 **180 行**：
+删除 60+ 转发方法，约 **300 行**：
+- `bookManager`: 24 方法 (`addToShelf`, `removeFromShelf`, `clearCache`, `queryBookRealm`, `getBook`, 等)
+- `serverManager`: 12 方法 (`probeServersReachability`, `isServerReachable`, `addServer`, 等)
+- `libraryManager`: 12 方法 (`populateLibraries`, `hideLibrary`, `syncLibrary`, 等)
+- `sessionManager`: 11 方法 (`getPreferredFormat`, `prepareBookReading`, 等)
+- `fontsManager`: 3 方法 (`importCustomFonts`, 等)
+- `downloadManager`: 4 方法 (`startDownloadFormatNew`, 等)
+- `logger`: 3 方法 (`logStartCalibreActivity`, 等)
 
-| Manager | 可删除的 Facade 方法 | 行数 |
-|---------|-------------------|------|
-| `bookManager` | `addToShelf`, `removeFromShelf`, `clearCache` (×3), `addedCache`, `getCacheInfo`, `updateBook`, `queryBookRealm`, `updateBookRealm`, `removeFromRealm` (×2), `goToPreviousBook`, `goToNextBook`, `shouldAutoUpdateGoodreads`, `removeDeleteBooksFromServer`, `populateBookShelf`, `onOpenURL`, `calcLocalFileBookId`, `loadLocalLibraryBookMetadata`, `convert` (×2), `queryLibrary`, `getBookRealm`, `bookExists`, `refreshShelfMetadataV2`, `getBook`, `getBooksMetadata` | ~80 |
-| `serverManager` | `probeServersReachability`, `isServerReachable` (×2), `isServerProbing`, `getServerInfo`, `probeServer`, `removeServer`, `addServer`, `updateServerRealm`, `queryServerDSReaderHelper`, `updateServerDSReaderHelper` | ~40 |
-| `libraryManager` | `populateLibraries`, `populateLocalLibraryBooks`, `updateLibraryRealm`, `hideLibrary`, `restoreLibrary`, `queryLibraryBookRealmCount`, `updateServerLibraryInfo`, `probeLibrary`, `removeLibrary`, `registerProbeLibraryLastModifiedCancellable`, `syncLibrary`, `saveBookMetadata` | ~40 |
-| `sessionManager` | `getPreferredFormat` (×2), `updatePreferredFormat`, `getPreferredReader`, `updatePreferredReader`, `updateCurrentPosition`, `defaultReaderForDefaultFormat`, `formatOfReader`, `prepareBookReading` (×2), `listBookDeviceReadingPositionHistory`, `getReadingStatistics` | ~30 |
-| `fontsManager` | `importCustomFonts`, `removeCustomFonts`, `reloadCustomFonts` | ~10 |
-| `downloadManager` | `startDownloadFormatNew`, `startDownloadFormat`, `cancelDownloadFormat`, `pauseDownloadFormat`, `resumeDownloadFormat` | ~20 |
-| `logger` | `logStartCalibreActivity`, `logFinishCalibreActivity`, `cleanCalibreActivities` | ~10 |
+#### 1c. 批量删除 Facade 委托属性 ✅
 
-#### 1c. 批量删除 Facade 委托属性
+删除 18 转发属性，约 **80 行**：
+- `calibreServers`, `calibreLibraries`, `calibreServerInfoStaging`, `calibreLibraryInfoStaging`
+- `localLibrary`, `documentServer`
+- `defaultFormat`, `formatReaderMap`, `formatList`
+- `booksInShelf`, `booksAnnotation`, `currentBookId`, `selectedBookId`
+- `readingBookInShelfId`, `readingBook`, `readerInfo`, `presentingEBookReaderFromShelf`, `selectedPosition`
+- `librarySyncStatus`, `userFontInfos`
 
-以下属性是纯 get/set 转发，约 **80 行**：
+#### 1d. 调用者迁移 ✅
 
-```swift
-// 全部可删除，调用者改为直接访问 Manager
-var calibreServers { get { serverManager.calibreServers } ... }     // → serverManager.calibreServers
-var calibreLibraries { get { libraryManager.calibreLibraries } ... } // → libraryManager.calibreLibraries
-var booksInShelf { get { bookManager.booksInShelf } ... }            // → bookManager.booksInShelf
-var booksAnnotation { get { bookManager.booksAnnotation } ... }
-var defaultFormat { get { sessionManager.defaultFormat } ... }
-var formatReaderMap { get { sessionManager.formatReaderMap } ... }
-var formatList { get { sessionManager.formatList } ... }
-var currentBookId { get { bookManager.currentBookId } ... }
-var selectedBookId { get { bookManager.selectedBookId } ... }
-var readingBookInShelfId { get { bookManager.readingBookInShelfId } ... }
-var readingBook { get { bookManager.readingBook } ... }
-var readerInfo { get { sessionManager.readerInfo } ... }
-var presentingEBookReaderFromShelf { get { bookManager.presentingEBookReaderFromShelf } ... }
-var selectedPosition { get { sessionManager.selectedPosition } ... }
-var localLibrary { get { libraryManager.localLibrary } ... }
-var documentServer { get { serverManager.documentServer } ... }
-var librarySyncStatus { get { libraryManager.librarySyncStatus } ... }
-var userFontInfos { get { fontsManager.userFontInfos } ... }
-var calibreServerInfoStaging, calibreLibraryInfoStaging
-```
+迁移 30+ 文件：
+- 5 个 ViewModels (Settings, Server, BookDetail, ReadingPosition, RecentShelf, SectionShelf, Main, Library, ReaderOptions, LibraryInfo)
+- 15+ Views (SettingsView, ServerDetailView, AddModServerView, LibraryDetailView, BookPreviewView, ReadingPositionHistoryView, ReadingPositionDetailView, ReaderOptionsView, AppInfoView, RecentShelfView, LibraryInfoView, LibraryInfoBookListView, LibraryInfoBookListContent, etc.)
+- 5 Managers (CalibreLibraryManager, CalibreServerManager, ReadingSessionManager, CalibreBookManager, BookDownloadManager)
+- 10+ Test files
 
-#### 1d. 调用者迁移策略
+#### 1e. 协议一致性保留 ✅
 
-对 15 个 `@EnvironmentObject var modelData` 视图，**不急于一次性迁移**，分批进行：
+为 `CalibreServerConfigProvider` 和 `LibraryProvider` 协议保留 6 个计算属性 (calibreLibraries, calibreServers, librarySyncStatus, calibreServerInfoStaging, booksInShelf, booksAnnotation) 作为薄包装，**仅用于协议一致性**。所有内部调用应直接访问底层 manager。
 
-| 批次 | 视图 | 访问的 Manager | 改造方式 |
-|------|------|--------------|---------|
-| 1 | `SettingsView`, `SupportInfoView` | serverManager, libraryManager | ViewModel 已有，改为 VM 持有 Manager 引用 |
-| 2 | `ServerDetailView`, `AddModServerView`, `ServerOptionsDSReaderHelper` | serverManager | ViewModel 已有 |
-| 3 | `LibraryInfo*` 系列 (6 files) | bookManager, searchService | ViewModel 已有 |
-| 4 | `MainView` | 全部 | MainViewModel 已有 |
-| 5 | `YabrEBookReader`, `AppInfoView`, `SwiftUI_Ad_Banner` | sessionManager, misc | 最后处理 |
+#### 1f. 类型检查修复 (附带) ✅
 
-**Phase 1 预期**: ModelData 从 1,061 → ~600 行 (删除 ~260 行 Facade + ~200 行注释/空行整理)
+修复了 `ShelfDataManager.swift` 中的预存 Swift 类型检查超时问题（拆分了 `map` 闭包为辅助方法 `buildShelfBookItem`）。
+
+#### Phase 1 实际产出: ModelData 从 1,172 → 763 行 (-35%)
 
 ---
 

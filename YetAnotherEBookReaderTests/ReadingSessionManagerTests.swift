@@ -55,7 +55,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testSelectedReadingBook_publishesChange() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.title = "Session Reading Book"
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
@@ -73,7 +73,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testStartSession_recordsTimestamp() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 777, library: library)
         let pos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 12, epoch: 500.0)
         
@@ -82,7 +82,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testEndSession_logsActivity() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 777, library: library)
         let startPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 5, epoch: 500.0)
         let endPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 15, epoch: 1500.0)
@@ -97,7 +97,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testUpdateCurrentPosition_savesViaRepository() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.title = "Update Current Position Book"
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
@@ -120,7 +120,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testFormatList_orderedByPreference() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         book.formats[Format.PDF.rawValue] = FormatInfo(selected: nil, filename: "test.pdf", serverSize: 2000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)

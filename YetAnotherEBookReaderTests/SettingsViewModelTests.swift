@@ -92,7 +92,7 @@ import Combine
             },
             probeServersReachabilityAction: { [weak self] serverIds in
                 self?.orderedEvents.append("probe")
-                self?.mockModelData.probeServersReachability(with: serverIds)
+                self?.mockModelData.serverManager.probeServersReachability(with: serverIds)
                 expectation.fulfill()
             }
         )

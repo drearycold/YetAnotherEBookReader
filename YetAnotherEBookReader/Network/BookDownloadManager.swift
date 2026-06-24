@@ -236,7 +236,7 @@ class BookDownloadManager: ObservableObject {
                       formatInfo.serverSize > 0 else { return nil }
                 return f
             }
-            modelData?.addToShelf(book: book, formats: downloadFormats)
+            modelData?.bookManager.addToShelf(book: book, formats: downloadFormats)
         }
     }
 }
@@ -313,14 +313,14 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 guard let self = self, let manager = self.manager, let modelData = manager.modelData
                        else { return }
                 
-                modelData.addedCache(book: self.download.book, format: self.download.format)
+                modelData.bookManager.addedCache(book: self.download.book, format: self.download.format)
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
                 
                 manager.bookDownloadedSubject.send(self.download.book)
                 
                 guard let request = task.originalRequest else { return }
-                modelData.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(self.fileSize)")
+                modelData.logger?.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Finished Size=\(self.fileSize)")
             }
         } else {
             DispatchQueue.main.async { [weak self] in
@@ -331,7 +331,7 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
                 
-                modelData.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: error?.localizedDescription))")
+                modelData.logger?.logFinishCalibreActivity(type: "Download Format \(self.download.format.rawValue)", request: request, startDatetime: self.download.startDatetime, finishDatetime: Date(), errMsg: "Failed, error=\(String(describing: error?.localizedDescription))")
             }
         }
     }

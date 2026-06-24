@@ -121,7 +121,7 @@ extension LibraryInfoView {
         
         func getLibraryLoadingCount(modelData: ModelData, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
             guard let result = searchResult else { return 0 }
-            return modelData.calibreLibraries
+            return modelData.libraryManager.calibreLibraries
                 .filter({
                     $0.value.hidden == false
                     &&

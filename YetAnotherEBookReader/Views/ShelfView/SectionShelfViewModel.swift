@@ -87,20 +87,20 @@ final class SectionShelfViewModel: ObservableObject {
     
     func downloadSelectedBooks(bookIds: Set<String>) {
         bookIds.forEach { bookId in
-            guard let book = modelData.getBook(for: bookId),
-                  let format = modelData.getPreferredFormat(for: book)
+            guard let book = modelData.bookManager.getBook(for: bookId),
+                  let format = modelData.sessionManager.getPreferredFormat(for: book)
             else { return }
-            modelData.addToShelf(book: book, formats: [format])
+            modelData.bookManager.addToShelf(book: book, formats: [format])
         }
     }
-    
+
     func tapBook(bookId: String) {
         if selectionState.isEditing {
             toggleSelection(bookId: bookId)
             return
         }
-        
-        guard modelData.bookExists(forPrimaryKey: bookId) else { return }
+
+        guard modelData.bookManager.bookExists(forPrimaryKey: bookId) else { return }
         presentingBookDetailId = bookId
     }
     
@@ -129,7 +129,7 @@ final class SectionShelfViewModel: ObservableObject {
     }
     
     func refreshBookFormats(bookId: String) {
-        guard let book = modelData.booksInShelf[bookId] else { return }
+        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
         book.formats.filter {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
@@ -157,7 +157,7 @@ final class SectionShelfViewModel: ObservableObject {
         let librarySet = Set<CalibreLibrary>(
             allDisplaySections.compactMap { section -> CalibreLibrary? in
                 guard let libraryId = ModelData.parseShelfSectionId(sectionId: section.id) else { return nil }
-                return modelData.calibreLibraries[libraryId]
+                return modelData.libraryManager.calibreLibraries[libraryId]
             }
         )
         let libraryList = librarySet.sorted(by: { $0.name < $1.name })

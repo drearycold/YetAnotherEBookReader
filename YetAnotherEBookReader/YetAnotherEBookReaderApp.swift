@@ -76,7 +76,7 @@ struct YetAnotherEBookReaderApp: App {
     }
     
     func enableProbeTimer() {
-        modelData.probeServersReachability(with: [], updateLibrary: true)
+        modelData.serverManager.probeServersReachability(with: [], updateLibrary: true)
         modelData.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
             .autoconnect()
             .receive(on: DispatchQueue.main)

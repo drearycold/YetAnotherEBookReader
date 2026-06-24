@@ -24,7 +24,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         modelData = ModelData(mock: true)
         ModelData.shared = modelData
 
-        guard let library = modelData.calibreLibraries.first?.value else {
+        guard let library = modelData.libraryManager.calibreLibraries.first?.value else {
             XCTFail("No mock library available")
             return
         }
@@ -471,7 +471,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     private func readingPositionRealm() throws -> Realm {
         let components = book.bookPrefId.components(separatedBy: " - ")
-        let library = try XCTUnwrap(modelData.calibreLibraries.values.first(where: { $0.key == components[0] }))
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.values.first(where: { $0.key == components[0] }))
         return try Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server))
     }
 

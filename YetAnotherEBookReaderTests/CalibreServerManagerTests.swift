@@ -75,7 +75,7 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(allServers.contains(where: { $0.id == newServer.id }))
         
         // Verify library was added
-        XCTAssertNotNil(modelData.calibreLibraries[newLib.id])
+        XCTAssertNotNil(modelData.libraryManager.calibreLibraries[newLib.id])
         let allLibs = modelData.libraryRepository.getAllLibraries()
         XCTAssertTrue(allLibs.contains(where: { $0.id == newLib.id }))
     }
@@ -90,11 +90,11 @@ final class CalibreServerManagerTests: XCTestCase {
 
     func testRemoveServer() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Delete Server", baseUrl: "http://localhost/del", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        modelData.serverManager.calibreServers[server.id] = server
         try serverRepository.saveServer(server)
         
         let library = CalibreLibrary(server: server, key: "del_lib", name: "Delete Library")
-        modelData.calibreLibraries[library.id] = library
+        modelData.libraryManager.calibreLibraries[library.id] = library
         try modelData.libraryRepository.saveLibrary(library)
         
         // Verify library exists in repository before deletion
@@ -105,12 +105,12 @@ final class CalibreServerManagerTests: XCTestCase {
         
         // Verify libraries associated with server are deleted from repository
         XCTAssertNil(modelData.libraryRepository.getAllLibraries().first { $0.id == library.id })
-        XCTAssertNil(modelData.calibreLibraries[library.id])
+        XCTAssertNil(modelData.libraryManager.calibreLibraries[library.id])
     }
 
     func testDSReaderHelperOperations() throws {
         let server = CalibreServer(uuid: UUID(), name: "Server DSR", baseUrl: "http://localhost/dsr", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        modelData.serverManager.calibreServers[server.id] = server
         try serverRepository.saveServer(server)
         
         let helperConfig = CalibreServerDSReaderHelper(port: 9090)
@@ -167,7 +167,7 @@ final class CalibreServerManagerTests: XCTestCase {
 
     func testProbeServerSuccess() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Success", baseUrl: "http://localhost/probe_success", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        modelData.serverManager.calibreServers[server.id] = server
         
         // Mock session mapping for CalibreServerService
         let sessionConfig = URLSessionConfiguration.ephemeral
@@ -236,15 +236,15 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(staged?.reachable ?? false)
         XCTAssertEqual(staged?.errorMsg, "Success")
         
-        // Verify library was auto-created in modelData.calibreLibraries and saved to repository
+        // Verify library was auto-created in modelData.libraryManager.calibreLibraries and saved to repository
         let autoLibId = CalibreLibrary(server: server, key: "lib_other", name: "Other Library").id
-        XCTAssertNotNil(modelData.calibreLibraries[autoLibId])
+        XCTAssertNotNil(modelData.libraryManager.calibreLibraries[autoLibId])
         XCTAssertNotNil(modelData.libraryRepository.getAllLibraries().first { $0.id == autoLibId })
     }
 
     func testProbeServerFailure() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Failure", baseUrl: "http://localhost/probe_failure", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        modelData.serverManager.calibreServers[server.id] = server
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]

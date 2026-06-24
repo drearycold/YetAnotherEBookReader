@@ -55,8 +55,8 @@ struct BookPreviewView_Previews: PreviewProvider {
     @StateObject static var modelData = ModelData(mock: true)
 
     static var previews: some View {
-        if let book = modelData.booksInShelf.first?.value,
-           let formatReaderPair: (Format, ReaderType) = modelData.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
+        if let book = modelData.bookManager.booksInShelf.first?.value,
+           let formatReaderPair: (Format, ReaderType) = modelData.sessionManager.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
            let savedUrl = getSavedUrl(book: book, format: formatReaderPair.0) {
             BookPreviewView(
                 viewModel: BookPreviewViewModel(

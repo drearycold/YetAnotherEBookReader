@@ -206,7 +206,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             readerConfiguration.enableMDictViewer = dictViewer.0
-            readerConfiguration.userFontDescriptors = modelData.userFontInfos.mapValues { $0.descriptor }
+            readerConfiguration.userFontDescriptors = modelData.fontsManager.userFontInfos.mapValues { $0.descriptor }
             
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true

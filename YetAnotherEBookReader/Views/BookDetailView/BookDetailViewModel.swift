@@ -73,13 +73,13 @@ class BookDetailViewModel: ObservableObject {
     private var fetchTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var readerInfo: ReaderInfo? {
-        return modelData?.readerInfo
+        return modelData?.sessionManager.readerInfo
     }
-    
+
     var deviceName: String {
         return modelData?.deviceName ?? ""
     }
-    
+
     var updatingMetadataStatus: String {
         return modelData?.updatingMetadataStatus ?? ""
     }
@@ -133,7 +133,7 @@ class BookDetailViewModel: ObservableObject {
         guard let modelData = modelData else { return }
         fetchTask?.cancel()
         fetchTask = Task {
-            await modelData.getBooksMetadata(
+            await modelData.bookManager.getBooksMetadata(
                 request: .init(
                     library: book.library,
                     books: [book.id],
@@ -158,59 +158,59 @@ class BookDetailViewModel: ObservableObject {
     func downloadOrClearCache(book: CalibreBook) {
         guard let modelData = modelData else { return }
         if book.inShelf {
-            modelData.clearCache(inShelfId: book.inShelfId)
+            modelData.bookManager.clearCache(inShelfId: book.inShelfId)
         } else if modelData.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty {
-            if let downloadFormat = modelData.getPreferredFormat(for: book) {
-                modelData.addToShelf(book: book, formats: [downloadFormat])
+            if let downloadFormat = modelData.sessionManager.getPreferredFormat(for: book) {
+                modelData.bookManager.addToShelf(book: book, formats: [downloadFormat])
             } else {
                 alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             }
         }
     }
-    
+
     func readBook(book: CalibreBook) {
         guard let modelData = modelData else { return }
         guard modelData.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
-        
+
         if book.inShelf {
-            modelData.readerInfo = modelData.prepareBookReading(book: book)
+            modelData.sessionManager.readerInfo = modelData.sessionManager.prepareBookReading(book: book)
         } else {
-            if let downloadFormat = modelData.getPreferredFormat(for: book) {
-                modelData.addToShelf(book: book, formats: [downloadFormat])
+            if let downloadFormat = modelData.sessionManager.getPreferredFormat(for: book) {
+                modelData.bookManager.addToShelf(book: book, formats: [downloadFormat])
             } else {
                 alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             }
         }
     }
-    
+
     func cacheFormat(book: CalibreBook, format: Format) {
         guard let modelData = modelData else { return }
         if book.inShelf {
-            switch modelData.startDownloadFormatNew(book: book, format: format, overwrite: true) {
+            switch modelData.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
             case .success:
                 break
             case .failure(let error):
                 alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
             }
         } else {
-            modelData.addToShelf(book: book, formats: [format])
+            modelData.bookManager.addToShelf(book: book, formats: [format])
         }
     }
-    
+
     func pauseDownload(book: CalibreBook, format: Format) {
-        modelData?.pauseDownloadFormat(book: book, format: format)
+        modelData?.downloadManager.pauseDownload(book, format: format)
     }
-    
+
     func resumeDownload(book: CalibreBook, format: Format) {
-        modelData?.resumeDownloadFormat(book: book, format: format)
+        modelData?.downloadManager.resumeDownload(book, format: format)
     }
-    
+
     func cancelDownload(book: CalibreBook, format: Format) {
-        modelData?.cancelDownloadFormat(book: book, format: format)
+        modelData?.downloadManager.cancelDownload(book, format: format)
     }
-    
+
     func clearFormat(book: CalibreBook, format: Format) {
-        modelData?.clearCache(book: book, format: format)
+        modelData?.bookManager.clearCache(book: book, format: format)
     }
     
     func prepareReadingPositionHistory(book: CalibreBook) {
@@ -227,15 +227,15 @@ class BookDetailViewModel: ObservableObject {
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
         guard let modelData = modelData else { return false }
-        guard let reader = modelData.formatReaderMap[format]?.first else { return false }
+        guard let reader = modelData.sessionManager.formatReaderMap[format]?.first else { return false }
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
             alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
             return false
         }
-        
+
         let readPosition = modelData.readingPositionRepository.createInitial(deviceName: modelData.deviceName, reader: reader)
-        
-        modelData.prepareBookReading(
+
+        modelData.sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: reader,
@@ -287,11 +287,11 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func handlePreviewDismiss(book: CalibreBook) {
-        modelData?.readerInfo = modelData?.prepareBookReading(book: book)
+        modelData?.sessionManager.readerInfo = modelData?.sessionManager.prepareBookReading(book: book)
     }
 
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-        return modelData?.convert(bookRealm: bookRealm)
+        return modelData?.bookManager.convert(bookRealm: bookRealm)
     }
 
     var updatingMetadata: Bool {

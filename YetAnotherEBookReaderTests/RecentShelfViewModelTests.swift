@@ -41,7 +41,7 @@ import Combine
         let readerInfoNil = viewModel.prepareReading(bookId: "non-existent")
         XCTAssertNil(readerInfoNil)
         
-        if let mockBook = mockModelData.readingBook {
+        if let mockBook = mockModelData.bookManager.readingBook {
             let readerInfo = viewModel.prepareReading(bookId: mockBook.inShelfId)
             XCTAssertNotNil(readerInfo)
         }
@@ -51,7 +51,7 @@ import Combine
         viewModel.tapBook(bookId: "non-existent")
         XCTAssertNil(viewModel.activeAlert)
         
-        if let mockBook = mockModelData.readingBook {
+        if let mockBook = mockModelData.bookManager.readingBook {
             mockModelData.booksInShelf[mockBook.inShelfId] = mockBook
             
             viewModel.selectionState.isEditing = true
@@ -69,7 +69,7 @@ import Combine
     }
     
     func testRefreshBookFormats() throws {
-        if let mockBook = mockModelData.readingBook {
+        if let mockBook = mockModelData.bookManager.readingBook {
             mockModelData.booksInShelf[mockBook.inShelfId] = mockBook
             viewModel.refreshBookFormats(bookId: mockBook.inShelfId)
         }

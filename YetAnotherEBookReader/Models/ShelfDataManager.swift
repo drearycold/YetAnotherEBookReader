@@ -289,76 +289,93 @@ extension ModelData {
         calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
             .receive(on: queue)
-            .map { signals -> [(key: String, value: CalibreBook, ts: Date)] in
-                self.booksInShelf.map {
-                    (
-                        key: $0.key,
-                        value: $0.value,
-                        ts: max(
-                            $0.value.lastModified,
-                            self.readingPositionRepository.getPositions(forBookId: $0.value.bookPrefId).map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
-                        )
-                    )
+            .map { (_: [calibreUpdatedSignal]) -> [(key: String, value: CalibreBook, ts: Date)] in
+                let booksInShelf: [String: CalibreBook] = self.bookManager.booksInShelf
+                let readingPositionRepository = self.readingPositionRepository
+                var result: [(String, CalibreBook, Date)] = []
+                for (key, book) in booksInShelf {
+                    let positions: [BookDeviceReadingPosition] = readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+                    let maxEpoch: Date? = positions.map { p in Date(timeIntervalSince1970: p.epoch) }.max()
+                    let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
+                    result.append((key, book, ts))
                 }
+                return result
             }
-            .map { books -> [(key: String, value: CalibreBook, ts: Date)] in
-                books.sorted {
-                    $0.ts > $1.ts
+            .map { (books: [(key: String, value: CalibreBook, ts: Date)]) -> [(key: String, value: CalibreBook, ts: Date)] in
+                return books.sorted { lhs, rhs in
+                    return lhs.ts > rhs.ts
                 }
             }
             .receive(on: DispatchQueue.main)
             .map { books -> [(key: String, value: CalibreBook, info: ReaderInfo)] in
-                books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
-                    (inShelfId, book, self.prepareBookReading(book: book))
+                let sessionManager = self.sessionManager
+                return books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
+                    return (inShelfId, book, sessionManager.prepareBookReading(book: book))
                 }
             }
             .receive(on: queue)
             .map { books -> [ShelfBookItem] in
-                books.map { (inShelfId, book, readerInfo) -> ShelfBookItem in
-                    let bookUptoDate = book.formats.allSatisfy {
-                        $1.cached == false ||
-                        ($1.cached && $1.cacheUptoDate)
-                    }
-                    let missingFormats = book.formats.filter {
-                        $1.selected == true && $1.cached == false
-                    }
-                    
-                    var status = ShelfBookStatus.ready
-                    if self.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-                        status = .noConnect
-                    } else {
-                        missingFormats.forEach {
-                            guard let format = Format(rawValue: $0.key) else { return }
-                            self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
-                        }
-                        
-                        if !bookUptoDate {
-                            status = .hasUpdate
-                        }
-                        if self.downloadManager.activeDownloads.contains(where: { (url, download) in
-                            download.isDownloading && download.book.inShelfId == inShelfId
-                        }) {
-                            status = .downloading
-                        }
-                    }
-                    if book.library.server.isLocal {
-                        status = .local
-                    }
-                    
-                    return ShelfBookItem(
-                        id: inShelfId,
-                        title: book.title,
-                        coverURL: book.coverURL?.absoluteString ?? "",
-                        progress: Int(floor(readerInfo.position.lastProgress)),
-                        status: status
-                    )
-                }
+                books.map(self.buildShelfBookItem)
             }
             .receive(on: RunLoop.main)
             .sink(receiveValue: { displayBooks in
                 self.recentShelfItemsSubject.send(displayBooks)
             })
             .store(in: &calibreCancellables)
+    }
+}
+
+extension ModelData {
+    private func buildShelfBookItem(entry: (key: String, value: CalibreBook, info: ReaderInfo)) -> ShelfBookItem {
+        let inShelfId = entry.key
+        let book = entry.value
+        let readerInfo = entry.info
+
+        let formats: [String: FormatInfo] = book.formats
+        let formatArray: [(String, FormatInfo)] = Array(formats)
+
+        var bookUptoDate = true
+        for (_, formatInfo) in formatArray {
+            if !(formatInfo.cached == false || (formatInfo.cached && formatInfo.cacheUptoDate)) {
+                bookUptoDate = false
+                break
+            }
+        }
+
+        var missingFormats: [String: FormatInfo] = [:]
+        for (key, formatInfo) in formatArray where formatInfo.selected == true && formatInfo.cached == false {
+            missingFormats[key] = formatInfo
+        }
+
+        var status = ShelfBookStatus.ready
+        if self.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
+            status = .noConnect
+        } else {
+            missingFormats.forEach {
+                guard let format = Format(rawValue: $0.key) else { return }
+                self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            }
+
+            if !bookUptoDate {
+                status = .hasUpdate
+            }
+            if self.downloadManager.activeDownloads.contains(where: { (url, download) in
+                download.isDownloading && download.book.inShelfId == inShelfId
+            }) {
+                status = .downloading
+            }
+        }
+        if book.library.server.isLocal {
+            status = .local
+        }
+
+        return ShelfBookItem(
+            id: inShelfId,
+            title: book.title,
+            coverURL: book.coverURL?.absoluteString ?? "",
+            progress: Int(floor(readerInfo.position.lastProgress)),
+            status: status
+        )
     }
 }
 

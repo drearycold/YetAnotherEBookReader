@@ -68,13 +68,13 @@ struct LibraryInfoView: View {
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
         .onAppear {
-            viewModel.calibreLibraries = modelData.calibreLibraries
+            viewModel.calibreLibraries = modelData.libraryManager.calibreLibraries
             viewModel.setupCategoryObserver()
-            
-            libraryList = modelData.calibreLibraries.values
+
+            libraryList = modelData.libraryManager.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
-            
+
             dismissAllCancellable?.cancel()
             dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
                 batchDownloadSheetPresenting = false

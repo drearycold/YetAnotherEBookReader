@@ -52,7 +52,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         mockLibrary = CalibreLibrary(server: mockServer, key: "lib1", name: "Library 1")
 
         // Inject library into ModelData using library.id as the key
-        modelData.calibreLibraries = [mockLibrary.id: mockLibrary]
+        modelData.libraryManager.calibreLibraries = [mockLibrary.id: mockLibrary]
 
         // Mock server reachability staging
         let probeRequest = CalibreProbeServerRequest(

@@ -65,12 +65,12 @@ final class RecentShelfViewModel: ObservableObject {
     
     func refreshShelf() {
         modelData.refreshShelfMetadataV2(serverReachableChanged: false)
-        modelData.probeServersReachability(with: [], updateLibrary: true)
+        modelData.serverManager.probeServersReachability(with: [], updateLibrary: true)
     }
-    
+
     func deleteBooks(bookIds: Set<String>) {
         bookIds.forEach {
-            modelData.clearCache(inShelfId: $0)
+            modelData.bookManager.clearCache(inShelfId: $0)
         }
         selectionState.selectedBookIds.subtract(bookIds)
         if selectionState.selectedBookIds.isEmpty {
@@ -78,28 +78,28 @@ final class RecentShelfViewModel: ObservableObject {
         }
         modelData.calibreUpdatedSubject.send(.shelf)
     }
-    
+
     func deleteBook(bookId: String) {
-        modelData.clearCache(inShelfId: bookId)
+        modelData.bookManager.clearCache(inShelfId: bookId)
     }
-    
+
     func prepareReading(bookId: String) -> ReaderInfo? {
-        modelData.readingBookInShelfId = bookId
-        guard let book = modelData.readingBook else { return nil }
-        return modelData.prepareBookReading(book: book)
+        modelData.bookManager.readingBookInShelfId = bookId
+        guard let book = modelData.bookManager.readingBook else { return nil }
+        return modelData.sessionManager.prepareBookReading(book: book)
     }
-    
+
     func tapBook(bookId: String) {
         if selectionState.isEditing {
             toggleSelection(bookId: bookId)
             return
         }
-        
-        guard let book = modelData.booksInShelf[bookId] else { return }
-        
-        modelData.readingBookInShelfId = bookId
-        let readerInfo = modelData.prepareBookReading(book: book)
-        
+
+        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
+
+        modelData.bookManager.readingBookInShelfId = bookId
+        let readerInfo = modelData.sessionManager.prepareBookReading(book: book)
+
         if readerInfo.missing {
             if let activeDownload = modelData.downloadManager.activeDownloads.first(where: {
                 $0.value.book == book && $0.value.format == readerInfo.format
@@ -109,8 +109,8 @@ final class RecentShelfViewModel: ObservableObject {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
         } else {
-            modelData.readerInfo = readerInfo
-            modelData.presentingEBookReaderFromShelf = true
+            modelData.sessionManager.readerInfo = readerInfo
+            modelData.bookManager.presentingEBookReaderFromShelf = true
         }
     }
     
@@ -142,7 +142,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
     
     func refreshBookFormats(bookId: String) {
-        guard let book = modelData.booksInShelf[bookId] else { return }
+        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
         book.formats.filter {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
@@ -150,9 +150,9 @@ final class RecentShelfViewModel: ObservableObject {
             self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
-    
+
     func goodreadsAction(bookId: String) {
-        guard let book = modelData.booksInShelf[bookId] else { return }
+        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
         if let id = book.identifiers["goodreads"],
            let url = URL(string: "https://www.goodreads.com/book/show/\(id)") {
             UIApplication.shared.open(url)
@@ -163,9 +163,9 @@ final class RecentShelfViewModel: ObservableObject {
             }
         }
     }
-    
+
     func doubanAction(bookId: String) {
-        guard let book = modelData.booksInShelf[bookId] else { return }
+        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
         if let id = book.identifiers["douban"],
            let url = URL(string: "https://m.douban.com/book/subject/\(id)/") {
             UIApplication.shared.open(url)

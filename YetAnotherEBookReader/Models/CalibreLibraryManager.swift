@@ -47,16 +47,16 @@ class CalibreLibraryManager: ObservableObject {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
             return
         }
-        
+
         let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         guard let modelData = self.modelData else { return }
-        
-        modelData.documentServer = modelData.calibreServers[tmpServer.id]
-        if modelData.documentServer == nil || modelData.documentServer?.name != tmpServer.name {
-            modelData.calibreServers[tmpServer.id] = tmpServer
-            modelData.documentServer = modelData.calibreServers[tmpServer.id]
+
+        modelData.serverManager.documentServer = modelData.serverManager.calibreServers[tmpServer.id]
+        if modelData.serverManager.documentServer == nil || modelData.serverManager.documentServer?.name != tmpServer.name {
+            modelData.serverManager.calibreServers[tmpServer.id] = tmpServer
+            modelData.serverManager.documentServer = modelData.serverManager.calibreServers[tmpServer.id]
             do {
-                try modelData.serverManager.updateServerRealm(server: modelData.documentServer!)
+                try modelData.serverManager.updateServerRealm(server: modelData.serverManager.documentServer!)
             } catch {
                 logger.error("Failed to update server realm for document folder: \(error.localizedDescription)")
             }
@@ -73,7 +73,7 @@ class CalibreLibraryManager: ObservableObject {
         }
         
         let tmpLibrary = CalibreLibrary(
-            server: modelData.documentServer!,
+            server: modelData.serverManager.documentServer!,
             key: localLibraryURL.lastPathComponent,
             name: localLibraryURL.lastPathComponent)
         localLibrary = calibreLibraries[tmpLibrary.id]
@@ -86,11 +86,11 @@ class CalibreLibraryManager: ObservableObject {
                 logger.error("Failed to update local library realm: \(error.localizedDescription)")
             }
         }
-        
+
         guard let dirEnum = FileManager.default.enumerator(atPath: localLibraryURL.path) else {
             return
         }
-        
+
         dirEnum.forEach {
             guard let fileName = $0 as? String else {
                 return
@@ -103,17 +103,17 @@ class CalibreLibraryManager: ObservableObject {
             if fileName.hasSuffix(".mx") { return }
 
             print("populateLocalLibraryBooks \(fileName)")
-            let fileURL = modelData.documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+            let fileURL = modelData.serverManager.documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
 
-            modelData.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: modelData.documentServer!)
+            modelData.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: modelData.serverManager.documentServer!)
         }
-        
-        let removedBooks: [CalibreBook] = modelData.booksInShelf.values.compactMap { (book: CalibreBook) -> CalibreBook? in
+
+        let removedBooks: [CalibreBook] = modelData.bookManager.booksInShelf.values.compactMap { (book: CalibreBook) -> CalibreBook? in
             guard book.library.server.isLocal else { return nil }
             let existingFormats: [String] = book.formats.compactMap {
                 guard let format = Format(rawValue: $0.key),
                       let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
-                
+
                 var isDirectory : ObjCBool = false
                 guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
                     return nil
@@ -121,19 +121,19 @@ class CalibreLibraryManager: ObservableObject {
                 guard isDirectory.boolValue == false else {
                     return nil
                 }
-                
+
                 return $0.key
             }
 
             guard existingFormats.isEmpty else {
                 return nil
             }
-            
+
             return book
         }
-        
+
         removedBooks.forEach {
-            modelData.removeFromShelf(inShelfId: $0.inShelfId)
+            modelData.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
             print("populateLocalLibraryBooks removeFromShelf \($0)")
         }
     }
@@ -210,12 +210,12 @@ class CalibreLibraryManager: ObservableObject {
         }
         
         //remove cached book files
-        let libraryBooksInShelf = modelData.booksInShelf.filter {
+        let libraryBooksInShelf = modelData.bookManager.booksInShelf.filter {
             $0.value.library.id == library.id
         }
         libraryBooksInShelf.forEach {
-            modelData.clearCache(inShelfId: $0.key)
-            modelData.removeFromShelf(inShelfId: $0.key)     //just in case
+            modelData.bookManager.clearCache(inShelfId: $0.key)
+            modelData.bookManager.removeFromShelf(inShelfId: $0.key)     //just in case
         }
         
         let serverUUIDString = library.server.uuid.uuidString
@@ -490,7 +490,7 @@ class CalibreLibraryManager: ObservableObject {
             
             bookToUpdate.chunks(size: 256).forEach { chunk in
                 Task {
-                    await modelData.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
+                    await modelData.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
                 }
             }
         case .updateDeleted:
@@ -499,7 +499,7 @@ class CalibreLibraryManager: ObservableObject {
             let bookIds = list.compactMap { $0["idInLib"] as? Int32 }
             bookIds.chunks(size: 256).forEach { chunk in
                 Task {
-                    await modelData.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
+                    await modelData.bookManager.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
                 }
             }
         }

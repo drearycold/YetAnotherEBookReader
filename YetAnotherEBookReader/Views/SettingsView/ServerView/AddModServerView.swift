@@ -79,20 +79,20 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    if let server = server, modelData.isServerProbing(server: server) {
+                    if let server = server, modelData.serverManager.isServerProbing(server: server) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
                         Text(viewModel.calibreServerInfo?.errorMsg ?? "Unknown")
                     }
-                    
-                    if let server = server, let reachable = modelData.isServerReachable(server: server, isPublic: false) {
+
+                    if let server = server, let reachable = modelData.serverManager.isServerReachable(server: server, isPublic: false) {
                         Image(
                             systemName: reachable ? "flag.circle" : "flag.slash.circle"
                         ).foregroundColor(reachable ? .green : .red)
                     }
-                    
-                    if let server = server, let reachable = modelData.isServerReachable(server: server, isPublic: true) {
+
+                    if let server = server, let reachable = modelData.serverManager.isServerReachable(server: server, isPublic: true) {
                         Image(
                             systemName: reachable ? "flag" : "flag.slash"
                         ).foregroundColor(reachable ? .green : .red)
@@ -146,7 +146,7 @@ struct AddModServerView: View {
                         Image(systemName: "square.and.arrow.down")
                     }
                 }
-                .disabled(viewModel.isProbing || (server != nil && modelData.isServerProbing(server: server!)))
+                .disabled(viewModel.isProbing || (server != nil && modelData.serverManager.isServerProbing(server: server!)))
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -154,7 +154,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
-                .disabled(viewModel.isProbing || (server != nil && modelData.isServerProbing(server: server!)))
+                .disabled(viewModel.isProbing || (server != nil && modelData.serverManager.isServerProbing(server: server!)))
             }
         }
     }
@@ -211,7 +211,7 @@ struct AddModServerView: View {
                         HStack {
                             Text(libraryEntry.value)
                             Spacer()
-                            if let info = self.modelData.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
+                            if let info = self.modelData.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
                                 Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
                             } else {
                                 Text("Probing")
@@ -289,9 +289,9 @@ struct AddModServerView_Previews: PreviewProvider {
                 .environmentObject(modelData)
                 .onAppear() {
                     if let server = server {
-                        modelData.calibreServers[server.id] = server
+                        modelData.serverManager.calibreServers[server.id] = server
                         let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
-                        modelData.calibreLibraries[library.id] = library
+                        modelData.libraryManager.calibreLibraries[library.id] = library
                     }
                 }
         }.navigationViewStyle(StackNavigationViewStyle())

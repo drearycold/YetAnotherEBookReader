@@ -109,20 +109,20 @@ class LibraryViewModel: ObservableObject {
     private func resolveBookTitles() {
         let serverUUID = library.server.uuid.uuidString
         let libraryName = library.name
-        
+
         var tempFailed: [Int32: String] = [:]
         for bookId in failedBookIds {
             let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = modelData.getBook(for: primaryKey) {
+            if let book = modelData.bookManager.getBook(for: primaryKey) {
                 tempFailed[bookId] = book.title
             }
         }
         self.failedBookTitles = tempFailed
-        
+
         var tempDeleted: [Int32: String] = [:]
         for bookId in deletedBookIds {
             let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = modelData.getBook(for: primaryKey) {
+            if let book = modelData.bookManager.getBook(for: primaryKey) {
                 tempDeleted[bookId] = book.title
             }
         }

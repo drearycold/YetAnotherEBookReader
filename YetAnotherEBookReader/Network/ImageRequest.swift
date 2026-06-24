@@ -18,7 +18,7 @@ class AuthPlugin: ImageDownloadRequestModifier {
     func modified(for request: URLRequest) -> URLRequest? {
         var request = request
         guard let url = request.url, let query = url.query else { return request }
-        modelData.calibreServers.values.forEach { server in
+        modelData.serverManager.calibreServers.values.forEach { server in
             if url.absoluteString.starts(with: server.serverUrl) && server.serverUrl.hasPrefix("https://") && server.username.isEmpty == false && query.hasSuffix("&username=\(server.username)"){
                 let toEncode = "\(server.username):\(server.password)";
                 guard let encoded = toEncode.data(using: .utf8)?.base64EncodedString() else { return }

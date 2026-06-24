@@ -42,13 +42,13 @@ struct ReaderOptionsView: View {
             
             Section {
                 VStack {
-                    ForEach(Format.allCases.filter { (viewModel.modelData.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
+                    ForEach(Format.allCases.filter { (viewModel.modelData.sessionManager.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
                         HStack {
                             Text(format.rawValue)
                                 .frame(minWidth: 64, alignment: .leading)
                                 .padding([.leading], 8)
                             Picker("Prefered", selection: viewModel.preferredReaderBinding(for: format)) {
-                                ForEach(viewModel.modelData.formatReaderMap[format]!, id: \.self) { reader in
+                                ForEach(viewModel.modelData.sessionManager.formatReaderMap[format]!, id: \.self) { reader in
                                     Text(reader.rawValue).tag(reader)
                                 }
                             }.pickerStyle(SegmentedPickerStyle())

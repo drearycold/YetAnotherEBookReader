@@ -66,7 +66,7 @@ import Combine
         try await Task.sleep(nanoseconds: 1_200_000_000)
         
         XCTAssertEqual(viewModel.displaySections.count, 1)
-        XCTAssertEqual(viewModel.displaySections[0].books.count, 1)
+        XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.books.count, 1)
         XCTAssertEqual(viewModel.libraryFilters.count, 1)
         XCTAssertEqual(viewModel.libraryFilters[0].id, libraryId)
         XCTAssertFalse(viewModel.libraryFilters[0].isSelected)

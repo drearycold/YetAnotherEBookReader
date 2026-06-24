@@ -54,7 +54,7 @@ struct ServerDetailView: View {
             }
             
             Section(header: librarySectionHeader()) {
-                ForEach(viewModel.libraryList.compactMap { modelData.calibreLibraries[$0] }, id: \.self) { library in
+                ForEach(viewModel.libraryList.compactMap { modelData.libraryManager.calibreLibraries[$0] }, id: \.self) { library in
                     NavigationLink(
                         destination: libraryEntryDestination(library: library),
                         tag: library.id,
@@ -65,7 +65,7 @@ struct ServerDetailView: View {
                     viewModel.deleteLibrary(at: indexSet)
                 })
             }
-            
+
             NavigationLink(
                 destination: libraryRestoreHiddenView(),
                 isActive: $viewModel.libraryRestoreListActive,
@@ -73,7 +73,7 @@ struct ServerDetailView: View {
                     Text("Restore Hidden Libraries")
                 }
             ).disabled(
-                modelData.calibreLibraries
+                modelData.libraryManager.calibreLibraries
                     .filter { $0.value.server.id == server.id }
                     .allSatisfy { $0.value.hidden == false }
             )
@@ -82,7 +82,7 @@ struct ServerDetailView: View {
         .onAppear() {
             viewModel.updateLibraryList()
         }
-        .onChange(of: modelData.calibreLibraries, perform: { _ in
+        .onChange(of: modelData.libraryManager.calibreLibraries, perform: { _ in
             viewModel.updateLibraryList()
         })
         .toolbar {
@@ -92,7 +92,7 @@ struct ServerDetailView: View {
                 }) {
                     Image(systemName: "xmark.bin")
                 }.disabled(
-                    modelData.librarySyncStatus.filter {
+                    modelData.libraryManager.librarySyncStatus.filter {
                         $0.value.library.server.id == server.id && $0.value.del.count > 0
                     }.isEmpty
                 )
@@ -112,7 +112,7 @@ struct ServerDetailView: View {
         HStack {
             Text("Libraries")
             Spacer()
-            if modelData.librarySyncStatus.filter({
+            if modelData.libraryManager.librarySyncStatus.filter({
                 $0.value.library.server.id == server.id
             }).allSatisfy({ $1.isSync == false }) == false {
                 ProgressView()
@@ -132,7 +132,7 @@ struct ServerDetailView: View {
     private func libraryRestoreHiddenView() -> some View {
         List(selection: $viewModel.libraryRestoreListSelection) {
             ForEach(
-                modelData.calibreLibraries.filter { $0.value.hidden && $0.value.server.id == server.id }.map{$0.value}.sorted{$0.id < $1.id},
+                modelData.libraryManager.calibreLibraries.filter { $0.value.hidden && $0.value.server.id == server.id }.map{$0.value}.sorted{$0.id < $1.id},
                 id: \.id
             ) { library in
                 Text(library.name)
@@ -177,7 +177,7 @@ struct ServerDetailView: View {
             
             Spacer()
             VStack(alignment: .trailing) {
-                if let status = modelData.librarySyncStatus[library.id] {
+                if let status = modelData.libraryManager.librarySyncStatus[library.id] {
                     if status.isSync {
                         if let msg = status.msg {
                             Text("processing\n\(msg)")
@@ -193,13 +193,13 @@ struct ServerDetailView: View {
                         } else if let msg = status.msg {
                             Text(msg)
                         }
-                        
+
                         if status.isUpd && status.upd.count > 0 {
                             Text("Pulling book info, \(status.upd.count) to go")
                         } else if status.upd.count > 0 {
                             Text("\(status.upd.count) entries not up to date")
                         }
-                        
+
                         if status.del.count > 0 {
                             Text("\(status.del.count) entries deleted from server")
                                 .foregroundColor(.red)
@@ -210,7 +210,7 @@ struct ServerDetailView: View {
                 }
             }.font(.caption2)
             ZStack {
-                if modelData.librarySyncStatus[library.id]?.isSync ?? false {
+                if modelData.libraryManager.librarySyncStatus[library.id]?.isSync ?? false {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else {
@@ -218,8 +218,8 @@ struct ServerDetailView: View {
                         .progressViewStyle(CircularProgressViewStyle())
                         .hidden()
                 }
-                
-                if let status = modelData.librarySyncStatus[library.id],
+
+                if let status = modelData.libraryManager.librarySyncStatus[library.id],
                    status.isSync == false,
                    status.isError == false,
                    status.msg == "Success" {
@@ -230,9 +230,9 @@ struct ServerDetailView: View {
                         .foregroundColor(.green)
                         .hidden()
                 }
-                
-                if modelData.librarySyncStatus[library.id]?.isSync == false,
-                   modelData.librarySyncStatus[library.id]?.isError == true {
+
+                if modelData.libraryManager.librarySyncStatus[library.id]?.isSync == false,
+                   modelData.libraryManager.librarySyncStatus[library.id]?.isError == true {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.red)
                 } else {
@@ -248,7 +248,7 @@ struct ServerDetailView: View {
 struct ServerDetailView_Previews: PreviewProvider {
     static private var modelData = ModelData(mock: true)
 
-    @State static private var server = modelData.calibreServers.values.first ?? .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default")
+    @State static private var server = modelData.serverManager.calibreServers.values.first ?? .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default")
     
     static var previews: some View {
         NavigationView {

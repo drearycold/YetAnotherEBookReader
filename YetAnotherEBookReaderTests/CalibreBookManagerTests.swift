@@ -19,7 +19,7 @@ final class CalibreBookManagerTests: XCTestCase {
     override func setUpWithError() throws {
         modelData = ModelData(mock: true)
         bookManager = modelData.bookManager
-        library = modelData.calibreLibraries.first?.value
+        library = modelData.libraryManager.calibreLibraries.first?.value
         cancellables = []
         XCTAssertNotNil(library, "Mock library should be populated")
     }

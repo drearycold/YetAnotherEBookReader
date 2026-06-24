@@ -76,15 +76,15 @@ class UnifiedCategoryViewModel: ObservableObject {
     }
     
     func forceRefreshCategory(categoryName: String) {
-        let calibreLibraries = modelData.calibreLibraries.values
+        let calibreLibraries = modelData.libraryManager.calibreLibraries.values
         let activeLibraries = calibreLibraries.filter { !$0.hidden && !$0.server.removed }
         let repository = modelData.categoryCacheRepository
-        
+
         for library in activeLibraries {
             try? repository.invalidateCategoryCache(libraryId: library.id, categoryName: categoryName)
-            
+
             Task {
-                await modelData.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
+                await modelData.libraryManager.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
             }
         }
     }

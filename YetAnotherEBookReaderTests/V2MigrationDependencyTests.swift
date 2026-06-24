@@ -115,7 +115,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let modelData = makeModelData()
         let repository = MockCategoryCacheRepository()
         let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
-        modelData.calibreLibraries = [library.id: library]
+        modelData.libraryManager.calibreLibraries = [library.id: library]
         modelData.categoryCacheRepository = repository
         let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
         modelData.unifiedCategoryService = unifiedCategoryService
@@ -167,7 +167,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let modelData = makeModelData()
         let repository = MockCategoryCacheRepository()
         let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
-        modelData.calibreLibraries = [library.id: library]
+        modelData.libraryManager.calibreLibraries = [library.id: library]
         modelData.categoryCacheRepository = repository
         let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
         modelData.unifiedCategoryService = unifiedCategoryService
@@ -214,7 +214,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         var hiddenLibrary = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "hidden", name: "Hidden")
         activeLibrary.hidden = false
         hiddenLibrary.hidden = true
-        modelData.calibreLibraries = [
+        modelData.libraryManager.calibreLibraries = [
             activeLibrary.id: activeLibrary,
             hiddenLibrary.id: hiddenLibrary
         ]
@@ -247,7 +247,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         )
         let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
         
-        modelData.calibreLibraries = [library.id: library]
+        modelData.libraryManager.calibreLibraries = [library.id: library]
         modelData.unifiedSearchService = unifiedSearchService
         
         let key = SearchCriteriaMergedKey(

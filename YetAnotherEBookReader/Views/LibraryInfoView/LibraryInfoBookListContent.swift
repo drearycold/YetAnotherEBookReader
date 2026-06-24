@@ -71,11 +71,11 @@ struct LibraryInfoBookListContent: View {
     @ViewBuilder
     private func listEntryView(book: CalibreBook, index: Int) -> some View {
         Group {
-            if modelData.bookExists(forPrimaryKey: book.inShelfId) {
+            if modelData.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
                 NavigationLink (
                     destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
                     tag: book.inShelfId,
-                    selection: $modelData.selectedBookId
+                    selection: $modelData.bookManager.selectedBookId
                 ) {
                     LibraryInfoBookRow(book: book, index: index) {
                         onRowAppear(index: index)
@@ -136,7 +136,7 @@ struct LibraryInfoBookListContent: View {
                     }
                 }
                 
-                ForEach(modelData.calibreLibraries
+                ForEach(modelData.libraryManager.calibreLibraries
                     .sorted(by: { $0.key < $1.key })
                     .filter({
                         $0.value.hidden == false

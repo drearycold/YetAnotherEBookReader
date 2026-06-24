@@ -32,7 +32,7 @@ class BookDetailViewModelTests: XCTestCase {
             password: ""
         )
         let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
-        mockModelData.addServer(server: server, libraries: [library])
+        mockModelData.serverManager.addServer(server: server, libraries: [library])
 
         let probeRequest = CalibreProbeServerRequest(
             server: server,
@@ -155,7 +155,7 @@ class BookDetailViewModelTests: XCTestCase {
     func testReadBookWhenInShelf() throws {
         mockCalibreBook.inShelf = true
         viewModel.readBook(book: mockCalibreBook)
-        XCTAssertNotNil(mockModelData.readerInfo, "Reader info should be populated when reading an in-shelf book")
+        XCTAssertNotNil(mockModelData.sessionManager.readerInfo, "Reader info should be populated when reading an in-shelf book")
     }
     
     func testParseManifestToTOCSuccess() throws {
@@ -770,7 +770,7 @@ class ActivityListViewModelTests: XCTestCase {
 class LibraryViewModelTests: XCTestCase {
     func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
         let modelData = ModelData(mock: true)
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
 
@@ -791,7 +791,7 @@ class LibraryViewModelTests: XCTestCase {
 
     func testFlagMutationsCallUpdateLibraryFlags() throws {
         let modelData = ModelData(mock: true)
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
 

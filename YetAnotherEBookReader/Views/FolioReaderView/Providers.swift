@@ -14,7 +14,7 @@ extension EpubFolioReaderContainer {
         if let preferenceProvider = folioReaderPreferenceProvider {
             return preferenceProvider
         } else {
-            guard let book = modelData?.readingBook else {
+            guard let book = modelData?.bookManager.readingBook else {
                 return FolioReaderDummyPreferenceProvider(folioReader)
             }
             let preferenceProvider = FolioReaderDelegatePreferenceProvider(
@@ -32,8 +32,8 @@ extension EpubFolioReaderContainer {
         if let highlightProvider = folioReaderHighlightProvider {
             return highlightProvider
         } else {
-            guard let book = modelData?.readingBook,
-                  let readerInfo = modelData?.readerInfo else {
+            guard let book = modelData?.bookManager.readingBook,
+                  let readerInfo = modelData?.sessionManager.readerInfo else {
                 return FolioReaderDummyHighlightProvider()
             }
             let highlightProvider = FolioReaderDelegateHighlightProvider(
@@ -49,8 +49,8 @@ extension EpubFolioReaderContainer {
         if let provider = folioReaderReadPositionProvider {
             return provider
         } else {
-            guard let book = modelData?.readingBook,
-                  let readerInfo = modelData?.readerInfo
+            guard let book = modelData?.bookManager.readingBook,
+                  let readerInfo = modelData?.sessionManager.readerInfo
                   else { return FolioReaderNaiveReadPositionProvider() }
             let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo, readerEngineDelegate: self.readerEngineDelegate)
             self.folioReaderReadPositionProvider = provider
@@ -63,8 +63,8 @@ extension EpubFolioReaderContainer {
         if let bookmarkProvider = folioReaderBookmarkProvider {
             return bookmarkProvider
         } else {
-            guard let book = modelData?.readingBook,
-                  let readerInfo = modelData?.readerInfo
+            guard let book = modelData?.bookManager.readingBook,
+                  let readerInfo = modelData?.sessionManager.readerInfo
                   else { return FolioReaderNaiveBookmarkProvider() }
             let bookmarkProvider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
             self.folioReaderBookmarkProvider = bookmarkProvider

@@ -58,18 +58,18 @@ final class MainViewModel: ObservableObject {
     }
     
     var showWelcome: Bool {
-        activeTab < 1 && modelData.isDatabaseReady && modelData.booksInShelf.isEmpty
+        activeTab < 1 && modelData.isDatabaseReady && modelData.bookManager.booksInShelf.isEmpty
     }
-    
+
     var presentingEBookReaderFromShelf: Bool {
         get { sessionManager.presentingEBookReaderFromShelf }
         set { sessionManager.presentingEBookReaderFromShelf = newValue }
     }
-    
+
     var readingBook: CalibreBook? {
         sessionManager.readingBook
     }
-    
+
     var readerInfo: ReaderInfo? {
         sessionManager.readerInfo
     }
@@ -99,38 +99,38 @@ final class MainViewModel: ObservableObject {
             self.modelData.dismissAllSubject.send("")
             self.activeTab = 0
             self.bookImportActionSheetPresenting = false
-            
-            if let localLibrary = self.modelData.localLibrary,
+
+            if let localLibrary = self.modelData.libraryManager.localLibrary,
                let bookId = info.bookId,
-               let book = self.modelData.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
+               let book = self.modelData.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
                 self.modelData.calibreUpdatedSubject.send(.book(book))
             }
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
                 self.bookImportActionSheetPresenting = true
             }
         }
     }
-    
+
     func importBookAsNew(url: URL, bookId: Int32?) {
-        let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
+        let result = modelData.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
         modelData.bookImportedSubject.send(result)
     }
-    
+
     func importBookOverwrite(url: URL, bookId: Int32?) {
-        let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
+        let result = modelData.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
         modelData.bookImportedSubject.send(result)
     }
-    
+
     func openImportedBook() {
         guard let bookId = bookImportInfo?.bookId,
-              let localLibrary = modelData.localLibrary else { return }
+              let localLibrary = modelData.libraryManager.localLibrary else { return }
         let book = CalibreBook(id: bookId, library: localLibrary)
-        modelData.readingBookInShelfId = book.inShelfId
+        modelData.bookManager.readingBookInShelfId = book.inShelfId
         guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
         sessionManager.presentingEBookReaderFromShelf = true
     }
-    
+
     func reportImportError() {
         let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
         let errorStr = bookImportInfo?.error != nil ? String(describing: bookImportInfo?.error) : "Empty+Result"
@@ -138,9 +138,9 @@ final class MainViewModel: ObservableObject {
             urlToOpen = url
         }
     }
-    
+
     func updateCurrentPosition() {
-        modelData.updateCurrentPosition(alertDelegate: self)
+        modelData.sessionManager.updateCurrentPosition(alertDelegate: self)
     }
     
     func dismissAll(completion: @escaping () -> Void) {

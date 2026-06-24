@@ -364,8 +364,8 @@ class CalibreBookManager: ObservableObject {
     func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
         var bookImportInfo = BookImportInfo(url: url, bookId: nil, error: nil)
 
-        guard let documentServer = modelData?.documentServer,
-              let localLibrary = modelData?.localLibrary,
+        guard let documentServer = modelData?.serverManager.documentServer,
+              let localLibrary = modelData?.libraryManager.localLibrary,
               let localBaseUrl = documentServer.localBaseUrl else {
             return bookImportInfo.with(error: .libraryAbsent)
         }
