@@ -15,7 +15,6 @@ import SwiftSoup
 import WebKit
 import AVFoundation
 import MediaPlayer
-import RealmSwift
 
 
 struct YabrReadiumEnvironment {
@@ -23,6 +22,7 @@ struct YabrReadiumEnvironment {
     let assetRetriever: AssetRetriever
     let httpServer: GCDHTTPServer
     let book: CalibreBook?
+    let readerPreferenceRepository: ReaderPreferenceRepositoryProtocol
 }
 
 extension YabrReadiumReaderViewController: UIPopoverPresentationControllerDelegate {
@@ -69,7 +69,7 @@ class YabrReadiumReaderViewController:
 
     weak var readerEngineDelegate: ReaderEngineDelegate? = nil
     
-    var readiumPrefs: ReadiumPreferenceRealm?
+    var readiumPreferences: ReadiumPreferenceValue?
 
     private(set) var stackView: UIStackView!
     private var stackViewTopConstraint: NSLayoutConstraint!
@@ -104,27 +104,19 @@ class YabrReadiumReaderViewController:
         NotificationCenter.default.addObserver(self, selector: #selector(appDidBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         
-        // Initialize local unmanaged preference store
         if let book = environment.book {
-            let bookId = book.bookPrefId
-            let newPrefs = ReadiumPreferenceRealm()
-            newPrefs.id = bookId
-            
+            var initialPreferences = ReadiumPreferenceValue(id: book.bookPrefId)
             if let epub = navigator as? EPUBNavigatorViewController {
-                newPrefs.update(from: epub.settings)
+                initialPreferences.update(from: epub.settings)
             } else if let pdf = navigator as? PDFNavigatorViewController {
-                newPrefs.update(from: pdf.settings)
+                initialPreferences.update(from: pdf.settings)
             }
-            self.readiumPrefs = newPrefs
-            
-            // Initial vertical margin (Only in Paged Mode)
-            let isScroll = self.readiumPrefs?.scroll ?? false
-            let vMargin = isScroll ? 0 : CGFloat(self.readiumPrefs?.verticalMargin ?? 0.0)
-            self.log(.debug, "Initial vMargin set to \(vMargin) (isScroll: \(isScroll))")
-            navigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
-            if let prefs = self.readiumPrefs {
-                self.applyPreferences(prefs)
+
+            if let savedPreferences = environment.readerPreferenceRepository.loadReadiumPreferences(for: book) {
+                initialPreferences = savedPreferences
             }
+
+            self.applyReadiumPreferences(initialPreferences)
         }
     }
 
@@ -148,7 +140,7 @@ class YabrReadiumReaderViewController:
         self.edgesForExtendedLayout = .all
         self.extendedLayoutIncludesOpaqueBars = true
         
-        view.backgroundColor = self.readiumPrefs?.themeColor ?? .white
+        view.backgroundColor = self.readiumPreferences?.themeColor ?? .white
         
         stackView = UIStackView(frame: view.bounds)
         stackView.axis = .vertical
@@ -195,7 +187,7 @@ class YabrReadiumReaderViewController:
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        if !(readiumPrefs?.scroll ?? false), let margin = readiumPrefs?.verticalMargin {
+        if !(readiumPreferences?.scroll ?? false), let margin = readiumPreferences?.verticalMargin {
             navigator.additionalSafeAreaInsets = UIEdgeInsets(top: CGFloat(margin), left: 0, bottom: CGFloat(margin), right: 0)
         } else {
             navigator.additionalSafeAreaInsets = .zero
@@ -203,7 +195,7 @@ class YabrReadiumReaderViewController:
         
         updateNavigationBarTheme()
         updateNavigationBar(animated: false)
-        setupVolumeKeyPaging(isEnabled: readiumPrefs?.volumeKeyPaging ?? false)
+        setupVolumeKeyPaging(isEnabled: readiumPreferences?.volumeKeyPaging ?? false)
         
         // Initial metadata and title sync
         if let location = navigator.currentLocation {
@@ -244,7 +236,7 @@ class YabrReadiumReaderViewController:
     }
     
     private func updateNavigationBarTheme() {
-        guard let prefs = readiumPrefs else { return }
+        guard let prefs = readiumPreferences else { return }
         
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
@@ -260,7 +252,7 @@ class YabrReadiumReaderViewController:
     }
     
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        return (readiumPrefs?.themeMode == 2) ? .lightContent : .darkContent
+        return (readiumPreferences?.themeMode == 2) ? .lightContent : .darkContent
     }
 
     func makeNavigationBarButtons() -> [UIBarButtonItem] {
@@ -280,18 +272,19 @@ class YabrReadiumReaderViewController:
     }
     
     @objc func presentSettings() {
-        guard let prefs = readiumPrefs else { return }
+        guard let preferences = readiumPreferences else { return }
         
-        let viewModel = YabrReaderSettingsViewModel(prefs: prefs, publication: self.publication, navigator: self.navigator)
-        viewModel.onChanged = { [weak self] in
+        let viewModel = YabrReaderSettingsViewModel(
+            preferences: preferences,
+            publication: self.publication,
+            navigator: self.navigator
+        ) { [weak self] updatedPreferences in
             guard let self = self else { return }
-            self.updateNavigationBarTheme()
-            self.setupVolumeKeyPaging(isEnabled: self.readiumPrefs?.volumeKeyPaging ?? false)
-            
-            if let prefs = self.readiumPrefs {
-                let enginePrefs = self.toReaderEnginePreferences(prefs)
-                self.readerEngineDelegate?.readerEngine(self, didUpdatePreferences: enginePrefs)
+            self.applyReadiumPreferences(updatedPreferences)
+            if let book = self.environment.book {
+                self.environment.readerPreferenceRepository.saveReadiumPreferences(updatedPreferences, for: book)
             }
+            self.readerEngineDelegate?.readerEngine(self, didUpdatePreferences: updatedPreferences.toReaderEnginePreferences())
         }
         
         let settingsView = YabrReaderSettingsView(model: viewModel)
@@ -332,12 +325,26 @@ class YabrReadiumReaderViewController:
         present(hostingController, animated: true)
     }
     
-    func applyPreferences(_ prefs: ReadiumPreferenceRealm) {
+    func applyPreferences(_ prefs: ReadiumPreferenceValue) {
         if let epub = navigator as? EPUBNavigatorViewController {
             epub.submitPreferences(prefs.toEPUBPreferences())
         } else if let pdf = navigator as? PDFNavigatorViewController {
             pdf.submitPreferences(prefs.toPDFPreferences())
         }
+    }
+
+    func applyReadiumPreferences(_ preferences: ReadiumPreferenceValue) {
+        self.readiumPreferences = preferences
+        self.applyPreferences(preferences)
+
+        let isScroll = preferences.scroll
+        let verticalMargin = isScroll ? 0 : CGFloat(preferences.verticalMargin)
+        self.log(.debug, "Applying vMargin \(verticalMargin) (isScroll: \(isScroll))")
+        navigator.additionalSafeAreaInsets = UIEdgeInsets(top: verticalMargin, left: 0, bottom: verticalMargin, right: 0)
+        view.backgroundColor = preferences.themeColor
+        setupVolumeKeyPaging(isEnabled: preferences.volumeKeyPaging)
+        updateNavigationBarTheme()
+        setNeedsStatusBarAppearanceUpdate()
     }
     
     func toggleNavigationBar() {
@@ -594,7 +601,7 @@ class YabrReadiumReaderViewController:
     
     @objc private func appDidBecomeActive() {
         guard viewIfLoaded?.window != nil else { return }
-        if readiumPrefs?.volumeKeyPaging == true {
+        if readiumPreferences?.volumeKeyPaging == true {
             log(.debug, "App became active, re-setting up volume key paging")
             teardownVolumeKeyPaging()
             setupVolumeKeyPaging(isEnabled: true)
@@ -602,7 +609,7 @@ class YabrReadiumReaderViewController:
     }
     
     @objc private func appDidEnterBackground() {
-        if readiumPrefs?.volumeKeyPaging == true {
+        if readiumPreferences?.volumeKeyPaging == true {
             log(.debug, "App entered background, tearing down volume key paging")
             teardownVolumeKeyPaging()
         }
@@ -702,44 +709,16 @@ class YabrReadiumReaderViewController:
         Task { await navigator.goForward(options: .animated) }
     }
     
-    func toReaderEnginePreferences(_ prefs: ReadiumPreferenceRealm) -> ReaderEnginePreferences {
-        return ReaderEnginePreferences(
-            themeMode: prefs.themeMode,
-            fontSizePercentage: prefs.fontSizePercentage,
-            fontFamily: prefs.fontFamily,
-            lineHeight: prefs.lineHeight,
-            pageMargins: prefs.pageMargins,
-            scroll: prefs.scroll,
-            scrollDirection: prefs.scrollAxis, // 0: vertical, 1: horizontal
-            volumeKeyPaging: prefs.volumeKeyPaging
-        )
-    }
 }
 
 extension YabrReadiumReaderViewController: ReaderEngineController {
     func applyPreferences(_ preferences: ReaderEnginePreferences) {
-        let prefs = self.readiumPrefs ?? ReadiumPreferenceRealm()
-        prefs.themeMode = preferences.themeMode
-        prefs.fontSizePercentage = preferences.fontSizePercentage
-        prefs.fontFamily = preferences.fontFamily
-        prefs.lineHeight = preferences.lineHeight
-        prefs.pageMargins = preferences.pageMargins
-        prefs.scroll = preferences.scroll
-        prefs.scrollAxis = preferences.scrollDirection
-        prefs.volumeKeyPaging = preferences.volumeKeyPaging
-        self.readiumPrefs = prefs
-        
-        self.applyPreferences(prefs)
-        
-        let isScroll = prefs.scroll
-        let vMargin = isScroll ? 0 : CGFloat(prefs.verticalMargin)
-        navigator.additionalSafeAreaInsets = UIEdgeInsets(top: vMargin, left: 0, bottom: vMargin, right: 0)
-        setupVolumeKeyPaging(isEnabled: prefs.volumeKeyPaging)
-        updateNavigationBarTheme()
+        var updatedPreferences = self.readiumPreferences ?? ReadiumPreferenceValue()
+        updatedPreferences.apply(preferences)
+        applyReadiumPreferences(updatedPreferences)
     }
     
     func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
         // Readium engine highlight rendering is not yet implemented in the UI layer
     }
 }
-

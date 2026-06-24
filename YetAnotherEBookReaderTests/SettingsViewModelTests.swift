@@ -103,4 +103,17 @@ import Combine
         XCTAssertEqual(orderedEvents, ["refresh", "populate", "probe"])
         XCTAssertTrue(staleRemovedBeforePopulate)
     }
+
+    func testServerViewModelProcessInputNormalizesURLAndAllowsBlankPublicURL() {
+        let viewModel = ServerViewModel(modelData: mockModelData, server: nil)
+        viewModel.calibreServerUrl = "example.com"
+        viewModel.calibreServerUrlPublic = ""
+
+        viewModel.processInputAction(server: nil) {}
+
+        XCTAssertEqual(viewModel.calibreServerUrl, "http://example.com/")
+        XCTAssertEqual(viewModel.calibreServerUrlPublic, "")
+        XCTAssertTrue(viewModel.serverCalibreInfoPresenting)
+    }
+
 }

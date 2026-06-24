@@ -108,6 +108,64 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         XCTAssertEqual(loaded?.scrollDirection, 1)
     }
 
+    func testLoadPDFPreferencesReturnsNilWhenMissing() {
+        let book = TestFixtures.makeBook()
+
+        XCTAssertNil(repository.loadPDFPreferences(for: book))
+    }
+
+    func testSavePDFPreferencesCreatesOrUpdatesRealmObject() throws {
+        let book = TestFixtures.makeBook()
+        let preferences = PDFPreferenceValue(
+            themeMode: .dark,
+            selectedAutoScaler: .Custom,
+            pageMode: .Scroll,
+            readingDirection: .TtB_RtL,
+            scrollDirection: .Horizontal,
+            hMarginAutoScaler: 8,
+            vMarginAutoScaler: 9,
+            hMarginDetectStrength: 3,
+            vMarginDetectStrength: 4,
+            marginOffset: 2,
+            lastScale: 1.8,
+            rememberInPagePosition: false
+        )
+
+        repository.savePDFPreferences(preferences, for: book)
+
+        let config = try XCTUnwrap(configByServerId[book.library.server.id])
+        let realm = try Realm(configuration: config)
+        let saved = try XCTUnwrap(
+            realm.objects(PDFOptions.self)
+                .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
+                .first
+        )
+
+        XCTAssertEqual(saved.toValue(), preferences)
+    }
+
+    func testSaveAndLoadPDFPreferencesRoundTrip() {
+        let book = TestFixtures.makeBook()
+        let preferences = PDFPreferenceValue(
+            themeMode: .forest,
+            selectedAutoScaler: .Width,
+            pageMode: .Page,
+            readingDirection: .LtR_TtB,
+            scrollDirection: .Vertical,
+            hMarginAutoScaler: 6,
+            vMarginAutoScaler: 7,
+            hMarginDetectStrength: 2,
+            vMarginDetectStrength: 5,
+            marginOffset: -1,
+            lastScale: 2.1,
+            rememberInPagePosition: true
+        )
+
+        repository.savePDFPreferences(preferences, for: book)
+
+        XCTAssertEqual(repository.loadPDFPreferences(for: book), preferences)
+    }
+
     func testFolioPreferencesSaveAndLoad() throws {
         let book = TestFixtures.makeBook()
         let prefs = ReaderEnginePreferences(
@@ -156,5 +214,95 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         XCTAssertNotNil(realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: readiumBook.bookPrefId))
         XCTAssertNotNil(realm.objects(PDFOptions.self).filter("bookId == %@ AND libraryName == %@", pdfBook.id, pdfBook.library.name).first)
         XCTAssertNotNil(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: folioBook.bookPrefId))
+    }
+
+    func testLoadReadiumPreferencesReturnsNilWhenMissing() {
+        let book = TestFixtures.makeBook()
+
+        XCTAssertNil(repository.loadReadiumPreferences(for: book))
+    }
+
+    func testSaveReadiumPreferencesCreatesOrUpdatesRealmObject() throws {
+        let book = TestFixtures.makeBook()
+        let preferences = ReadiumPreferenceValue(
+            id: book.bookPrefId,
+            themeMode: 2,
+            fontSizePercentage: 140,
+            fontFamily: "Georgia",
+            lineHeight: 1.45,
+            pageMargins: 1.8,
+            publisherStyles: false,
+            scroll: true,
+            textAlign: 4,
+            columnCount: 2,
+            fontWeight: 1.2,
+            letterSpacing: 0.1,
+            wordSpacing: 0.2,
+            hyphens: true,
+            imageFilter: 2,
+            textNormalization: true,
+            typeScale: 1.3,
+            paragraphIndent: 0.3,
+            paragraphSpacing: 0.4,
+            volumeKeyPaging: true,
+            verticalMargin: 20,
+            readingProgression: 1,
+            fit: 2,
+            ligatures: true,
+            offsetFirstPage: true,
+            spread: 2,
+            verticalText: true,
+            pageSpacing: 8,
+            scrollAxis: 1,
+            visibleScrollbar: false
+        )
+
+        repository.saveReadiumPreferences(preferences, for: book)
+
+        let config = try XCTUnwrap(configByServerId[book.library.server.id])
+        let realm = try Realm(configuration: config)
+        let saved = try XCTUnwrap(realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId))
+
+        XCTAssertEqual(saved.toValue(), preferences)
+    }
+
+    func testSaveAndLoadReadiumPreferencesRoundTrip() {
+        let book = TestFixtures.makeBook()
+        let preferences = ReadiumPreferenceValue(
+            id: book.bookPrefId,
+            themeMode: 1,
+            fontSizePercentage: 125,
+            fontFamily: "Avenir",
+            lineHeight: 1.35,
+            pageMargins: 1.6,
+            publisherStyles: true,
+            scroll: false,
+            textAlign: 2,
+            columnCount: 1,
+            fontWeight: 1.1,
+            letterSpacing: 0.05,
+            wordSpacing: 0.08,
+            hyphens: false,
+            imageFilter: 1,
+            textNormalization: false,
+            typeScale: 1.25,
+            paragraphIndent: 0.2,
+            paragraphSpacing: 0.25,
+            volumeKeyPaging: true,
+            verticalMargin: 16,
+            readingProgression: 0,
+            fit: 1,
+            ligatures: false,
+            offsetFirstPage: false,
+            spread: 1,
+            verticalText: false,
+            pageSpacing: 4,
+            scrollAxis: 0,
+            visibleScrollbar: true
+        )
+
+        repository.saveReadiumPreferences(preferences, for: book)
+
+        XCTAssertEqual(repository.loadReadiumPreferences(for: book), preferences)
     }
 }

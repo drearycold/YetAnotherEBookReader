@@ -11,6 +11,10 @@ import RealmSwift
 protocol ReaderPreferenceRepositoryProtocol {
     func loadInitialPreferences(for book: CalibreBook, readerType: ReaderType) -> ReaderEnginePreferences?
     func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType)
+    func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue?
+    func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook)
+    func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue?
+    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook)
 }
 
 final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol {
@@ -30,33 +34,13 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
             guard let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId) else {
                 return nil
             }
-            return ReaderEnginePreferences(
-                themeMode: savedPrefs.themeMode,
-                fontSizePercentage: savedPrefs.fontSizePercentage,
-                fontFamily: savedPrefs.fontFamily,
-                lineHeight: savedPrefs.lineHeight,
-                pageMargins: savedPrefs.pageMargins,
-                scroll: savedPrefs.scroll,
-                scrollDirection: savedPrefs.scrollAxis,
-                volumeKeyPaging: savedPrefs.volumeKeyPaging
-            )
+            return savedPrefs.toValue().toReaderEnginePreferences()
 
         case .YabrPDF:
-            guard let savedPrefs = realm.objects(PDFOptions.self)
-                .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
-                .first else {
+            guard let savedPrefs = loadPDFPreferences(for: book) else {
                 return nil
             }
-            return ReaderEnginePreferences(
-                themeMode: pdfThemeMode(savedPrefs.themeMode),
-                fontSizePercentage: 100.0,
-                fontFamily: "Original",
-                lineHeight: 1.2,
-                pageMargins: 1.0,
-                scroll: savedPrefs.pageMode == .Scroll,
-                scrollDirection: savedPrefs.scrollDirection == .Horizontal ? 1 : 0,
-                volumeKeyPaging: false
-            )
+            return savedPrefs.toReaderEnginePreferences()
 
         case .YabrEPUB:
             guard let savedPrefs = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: book.bookPrefId) else {
@@ -82,25 +66,8 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
     func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {
         guard let realm = openRealm(for: book.library.server) else { return }
 
-        try? realm.write {
-            switch readerType {
-            case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
-                let dbPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId) ?? {
-                    let newPrefs = ReadiumPreferenceRealm()
-                    newPrefs.id = book.bookPrefId
-                    realm.add(newPrefs)
-                    return newPrefs
-                }()
-                dbPrefs.themeMode = preferences.themeMode
-                dbPrefs.fontSizePercentage = preferences.fontSizePercentage
-                dbPrefs.fontFamily = preferences.fontFamily
-                dbPrefs.lineHeight = preferences.lineHeight
-                dbPrefs.pageMargins = preferences.pageMargins
-                dbPrefs.scroll = preferences.scroll
-                dbPrefs.scrollAxis = preferences.scrollDirection
-                dbPrefs.volumeKeyPaging = preferences.volumeKeyPaging
-
-            case .YabrPDF:
+        if readerType == .YabrPDF {
+            try? realm.write {
                 let dbPrefs = realm.objects(PDFOptions.self)
                     .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
                     .first ?? {
@@ -110,9 +77,29 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
                         realm.add(newPrefs)
                         return newPrefs
                     }()
-                dbPrefs.themeMode = pdfThemeMode(preferences.themeMode)
-                dbPrefs.pageMode = preferences.scroll ? .Scroll : .Page
-                dbPrefs.scrollDirection = preferences.scrollDirection == 0 ? .Vertical : .Horizontal
+                var updated = dbPrefs.toValue()
+                updated.apply(preferences)
+                dbPrefs.apply(updated)
+            }
+            return
+        }
+
+        try? realm.write {
+            switch readerType {
+            case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
+                let dbPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId) ?? {
+                    let newPrefs = ReadiumPreferenceRealm()
+                    newPrefs.id = book.bookPrefId
+                    realm.add(newPrefs)
+                    return newPrefs
+                }()
+                var updated = dbPrefs.toValue()
+                updated.apply(preferences)
+                updated.id = book.bookPrefId
+                dbPrefs.apply(updated)
+
+            case .YabrPDF:
+                break
 
             case .YabrEPUB:
                 let dbPrefs = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: book.bookPrefId) ?? {
@@ -133,31 +120,61 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
         }
     }
 
+    func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? {
+        guard let realm = openRealm(for: book.library.server),
+              let preferences = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId) else {
+            return nil
+        }
+        return preferences.toValue()
+    }
+
+    func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook) {
+        guard let realm = openRealm(for: book.library.server) else { return }
+
+        try? realm.write {
+            let dbPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId) ?? {
+                let newPrefs = ReadiumPreferenceRealm()
+                newPrefs.id = book.bookPrefId
+                realm.add(newPrefs)
+                return newPrefs
+            }()
+            var preferences = preferences
+            preferences.id = book.bookPrefId
+            dbPrefs.apply(preferences)
+        }
+    }
+
+    func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue? {
+        guard let realm = openRealm(for: book.library.server),
+              let savedPrefs = realm.objects(PDFOptions.self)
+                .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
+                .first else {
+            return nil
+        }
+        return savedPrefs.toValue()
+    }
+
+    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) {
+        guard let realm = openRealm(for: book.library.server) else { return }
+
+        try? realm.write {
+            let dbPrefs = realm.objects(PDFOptions.self)
+                .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
+                .first ?? {
+                    let newPrefs = PDFOptions()
+                    newPrefs.bookId = book.id
+                    newPrefs.libraryName = book.library.name
+                    realm.add(newPrefs)
+                    return newPrefs
+                }()
+            dbPrefs.apply(preferences)
+        }
+    }
+
     private func openRealm(for server: CalibreServer) -> Realm? {
         try? Realm(configuration: configurationProvider(server))
     }
 
-    private func pdfThemeMode(_ themeMode: PDFThemeMode) -> Int {
-        switch themeMode {
-        case .serpia:
-            return 1
-        case .dark:
-            return 2
-        default:
-            return 0
-        }
-    }
-
-    private func pdfThemeMode(_ themeMode: Int) -> PDFThemeMode {
-        switch themeMode {
-        case 1:
-            return .serpia
-        case 2:
-            return .dark
-        default:
-            return .none
-        }
-    }
 }
 
 private let defaultFolioFontSize = "20px"

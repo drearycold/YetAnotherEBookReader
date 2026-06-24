@@ -316,13 +316,12 @@ extension YabrPDFViewController {
                 title: "Options",
                 image: UIImage(systemName: "doc.badge.gearshape"),
                 primaryAction: UIAction { _ in
-                    let optionView = PDFOptionView(
-                        pdfViewController: Binding<YabrPDFViewController>(
-                            get: { return self },
-                            set: { _ in }
-                        ),
-                        pdfOptions: self.pdfOptions
-                    )
+                    let optionViewModel = PDFOptionViewModel(preferences: self.pdfOptions) { [weak self] updatedPreferences in
+                        guard let self else { return }
+                        self.updatePageViewPositionHistory()
+                        self.handleOptionsChange(pdfOptions: updatedPreferences)
+                    }
+                    let optionView = PDFOptionView(model: optionViewModel)
 
                     let optionViewController = UIHostingController(rootView: optionView.fixedSize())
                     optionViewController.preferredContentSize = CGSize(width: 340, height: 700)

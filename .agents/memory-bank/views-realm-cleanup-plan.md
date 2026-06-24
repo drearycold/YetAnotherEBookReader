@@ -37,8 +37,8 @@
 |------|------|-----------|---------|
 | `YabrEBookReader` | 402 | 直接 `Realm()` 查 ReadiumPreference/PDFOptions/FolioReaderPreference | 🟢 Phase 1 |
 | `YabrReaderSettingsView` | 458 | 持有 `ReadiumPreferenceRealm`，直接 `prefs.realm?.write` | 🟡 Phase 2 |
-| `YabrPDFOptionView` | — | `@ObservedRealmObject var pdfOptions: PDFOptions` | 🟡 Phase 2 |
-| `YabrEBookReaderMetaSource` | 294 | `Realm()` 查 `PDFOptions`，引用 `BookBookmarkRealm` 类型 | 🟡 Phase 2 |
+| `YabrPDFOptionView` | — | 已改为 `PDFOptionViewModel` + `PDFPreferenceValue` | ✅ Phase 2 |
+| `YabrEBookReaderMetaSource` | 294 | 已移除 `Realm()` 直连，改走 `ReaderPreferenceRepository` | ✅ Phase 2 |
 | `Providers.swift` | 707 | `Realm()` 查/写 `FolioReaderPreferenceRealm` (偏好 profile) | 🟡 Phase 3 |
 | `ReadiumPreferenceAdapter` | 45 | `ReadiumPreferenceRealm` extension (Readium ↔ Realm 转换) | ⚪ 保留 |
 | `YabrReadiumReaderVC` | 745 | 持有 `readiumPrefs: ReadiumPreferenceRealm?`，创建/传递 | 🟡 Phase 2 |
@@ -56,7 +56,7 @@
 | 引擎 | Realm 模型 | 操作位置 |
 |------|-----------|---------|
 | Readium | `ReadiumPreferenceRealm` | `YabrEBookReader`, `YabrReaderSettingsView`, `YabrReadiumReaderVC` |
-| PDF | `PDFOptions` | `YabrEBookReader`, `YabrPDFOptionView`, `YabrEBookReaderMetaSource` |
+| PDF | `PDFOptions` | `YabrEBookReader` 统一入口；runtime/UI 已切到 `PDFPreferenceValue` |
 | FolioReader | `FolioReaderPreferenceRealm` | `YabrEBookReader`, `Providers.swift` |
 
 **核心问题**: 阅读器偏好没有 Repository 层。所有偏好的读写都直接在 View/VC 层操作 Realm。
@@ -185,43 +185,62 @@ func applyPreferences(_ prefs: ReadiumPreferenceRealm)  // Realm 类型签名
 - 偏好保存通过 `ReaderPreferenceRepository` 写回
 - 级联更新 `YabrReadiumEPUBVC` 和 `YabrReadiumPDFVC` 的 override 签名
 
-#### 2b. YabrReaderSettingsView — 通过 Repository 操作
+**2026-06-23 实施结果**:
+- 已新增 `ReadiumPreferenceValue`，并将 `themeColor`、EPUB/PDF 偏好映射、`ReaderEnginePreferences` 映射、以及 `ReadiumPreferenceRealm` 桥接全部收口到 `ReadiumPreferenceAdapter.swift`
+- `ReaderPreferenceRepositoryProtocol` 已扩展 `loadReadiumPreferences(for:)` / `saveReadiumPreferences(_:for:)`
+- `YabrReadiumReaderViewController` / EPUB / PDF 子类、`YabrReaderSettingsViewModel`、`YabrReaderSettingsView` 已改为只持有/传递值类型
+- `YabrReadiumEnvironment` 现直接注入 `readerPreferenceRepository`
+- 已补测试：`ReadiumPreferenceValueTests`、`YabrReaderSettingsViewModelTests`、`YabrReadiumReaderViewControllerTests`，并扩展 `ReaderPreferenceRepositoryTests`
+- full 验证：`xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData` 通过（248 unit tests + 1 UI test）
 
-**当前**:
-```swift
-let prefs: ReadiumPreferenceRealm  // 直接持有 Realm object
-if let realm = prefs.realm { try realm.write { ... } }  // 9 处直接写
-```
+#### 2b. YabrReaderSettingsView — 收口完成（✅）
 
-**改造**:
-- 接受 `ReadiumPreferenceValue` 值类型 + 保存回调闭包
-- 或引入轻量 `ReaderSettingsViewModel` 包装 Repository 操作
-- 移除 `import RealmSwift`
+**2026-06-24 状态**:
+- `YabrReaderSettingsView` / `YabrReaderSettingsViewModel` 已在 Phase 2a 一并完成值类型化。
+- 运行时编辑对象已从 `ReadiumPreferenceRealm` 切换为 `ReadiumPreferenceValue`。
+- 持久化通过 `ReaderPreferenceRepositoryProtocol.loadReadiumPreferences/saveReadiumPreferences` 收口。
+- 本阶段不再继续改造 Readium Settings 结构，只保留回归验证，防止后续 reader 改动把 Realm object 重新带回 UI。
 
-#### 2c. YabrPDFOptionView — `@ObservedRealmObject` 替换
+#### 2c. PDF runtime 偏好值类型化（✅ 2026-06-24 完成）
 
-**当前**:
-```swift
-@ObservedRealmObject var pdfOptions: PDFOptions  // Realm 专属 property wrapper
-```
+**实施结果**:
+- 新增 `PDFPreferenceValue`，承接 PDF runtime/UI 所需全部字段与 helper：
+  - `fillColor`
+  - `isDark`
+  - `toReaderEnginePreferences()`
+  - `apply(_ preferences: ReaderEnginePreferences)`
+- `PDFOptions` 保留为持久化模型，仅保留 `toValue()` / `apply(_ value:)` 桥接。
+- `ReaderPreferenceRepositoryProtocol` 已扩展：
+  - `loadPDFPreferences(for:)`
+  - `savePDFPreferences(_:for:)`
+- `RealmReaderPreferenceRepository` 的统一入口 `loadInitialPreferences` / `savePreferences` 已复用 `PDFPreferenceValue` 映射，避免双份 PDF 映射逻辑漂移。
+- `YabrPDFMetaSource` / `YabrEBookReaderPDFMetaSource` 已切到值类型边界：
+  - 删除 `YabrEBookReaderMetaSource.swift` 的 `RealmSwift` 导入
+  - 不再持有 `PDFOptions` managed object
+  - 通过 repository 读取/保存 `PDFPreferenceValue`
+- `YabrPDFViewController` 运行时状态已改为 `@Published var pdfOptions: PDFPreferenceValue`
+  - `open()`
+  - `handleOptionsChange(pdfOptions:)`
+  - `handleScaleChange(_:)`
+  - `applyPreferences(_:)`
+  全部改为只操作值类型；持久化通过 meta source / repository 收口。
+- `YabrPDFOptionView` 已移除 `@ObservedRealmObject` 和 `RealmSwift` 导入，改为：
+  - `PDFOptionViewModel`
+  - `@ObservedObject var model`
+  - 本地值编辑 + 回调提交
+- Views 层 Realm 导入进一步减少 2 个文件：
+  - `YabrPDFOptionView.swift`
+  - `YabrEBookReaderMetaSource.swift`
 
-**改造**:
-- 改为 `@ObservedObject var viewModel: PDFOptionsViewModel` 或接受 Binding
-- `PDFOptionsViewModel` 通过 `ReaderPreferenceRepository` 读写
-- 移除 `import RealmSwift`
-
-#### 2d. YabrEBookReaderMetaSource — 消除直接 Realm 查询
-
-**当前**:
-```swift
-let realm = try! Realm(configuration: realmConfig)
-if let prefObj = realm.objects(PDFOptions.self).where(...)
-```
-
-**改造**:
-- 通过 `ReaderPreferenceRepository` 获取 PDF 选项
-- `BookBookmarkRealm.PDFBookmarkPosType` 引用改为值类型常量
-- 移除 `import RealmSwift`
+**验证**:
+- focused:
+  - `ReaderPreferenceRepositoryTests`
+  - `YabrPDFViewControllerTests`
+  - `YabrReadiumReaderViewControllerTests`
+  共 26 tests 全通过
+- full:
+  - `xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData`
+  - 255 tests + 1 UI test 全通过
 
 #### 2e. BookDetailViewModel — 消除 `CalibreBookRealm` 持有
 

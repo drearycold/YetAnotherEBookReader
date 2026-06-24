@@ -8,11 +8,11 @@
 import Foundation
 import UIKit
 import PDFKit
-import RealmSwift
 
 class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    private let preferenceRepository: ReaderPreferenceRepositoryProtocol
     
     var dictViewerItem = ""
     var dictViewerNav = UINavigationController()
@@ -20,26 +20,24 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     var refText: String?
     
-    let prefObj: PDFOptions
+    private var pdfPreferences: PDFPreferenceValue
     
-    init(book: CalibreBook, readerInfo: ReaderInfo) {
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        preferenceRepository: ReaderPreferenceRepositoryProtocol? = nil
+    ) {
         self.book = book
         self.readerInfo = readerInfo
-        
-        let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
-        let realm = try! Realm(configuration: realmConfig)
-        
-        if let prefObj = realm.objects(PDFOptions.self).where({ $0.bookId == book.id && $0.libraryName == book.library.name }).first {
-            self.prefObj = prefObj
+        self.preferenceRepository = preferenceRepository
+            ?? ModelData.shared?.readerPreferenceRepository
+            ?? RealmReaderPreferenceRepository()
+        if let savedPreferences = self.preferenceRepository.loadPDFPreferences(for: book) {
+            self.pdfPreferences = savedPreferences
         } else {
-            let newObj = PDFOptions()
-            newObj.bookId = book.id
-            newObj.libraryName = book.library.name
-            
-            try? realm.write {
-                realm.add(newObj)
-            }
-            self.prefObj = newObj
+            let defaultPreferences = PDFPreferenceValue()
+            self.pdfPreferences = defaultPreferences
+            self.preferenceRepository.savePDFPreferences(defaultPreferences, for: book)
         }
     }
     
@@ -90,18 +88,13 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     
     
     
-    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
-        return prefObj
+    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFPreferenceValue? {
+        return pdfPreferences
     }
     
-    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        let updateBlock = { self.prefObj.update(other: options) }
-        if let realm = prefObj.realm {
-            try? realm.write(updateBlock)
-        } else {
-            updateBlock()
-        }
-        
+    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFPreferenceValue) {
+        pdfPreferences = options
+        preferenceRepository.savePDFPreferences(options, for: book)
         updateDictViewerStyle(options: options)
     }
     
@@ -162,7 +155,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         yabrPDFOptions(view)?.isDark(f, l) ?? l
     }
     
-    func updateDictViewerStyle(options: PDFOptions) {
+    func updateDictViewerStyle(options: PDFPreferenceValue) {
         let backgroundColor = UIColor(cgColor: options.fillColor)
         let textColor = options.isDark(UIColor(white: 0.7, alpha: 1.0), UIColor.black)
         let navBackgroundColor = backgroundColor
@@ -242,5 +235,3 @@ extension BookHighlight {
         return PDFHighlight(uuid: uuid, pos: pos, type: self.type, content: self.content, note: self.note, date: self.date)
     }
 }
-
-

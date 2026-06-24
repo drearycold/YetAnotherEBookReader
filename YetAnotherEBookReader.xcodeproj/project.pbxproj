@@ -160,6 +160,9 @@
 		A051200130D1000100000001 /* ReaderPreferenceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000001 /* ReaderPreferenceRepository.swift */; };
 		A051200130D1000200000001 /* ReaderPreferenceRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000001 /* ReaderPreferenceRepository.swift */; };
 		A051200130D1000300000002 /* ReaderPreferenceRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */; };
+		A062200130D2000300000001 /* ReadiumPreferenceValueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A062100130D2000100000001 /* ReadiumPreferenceValueTests.swift */; };
+		A062200130D2000300000002 /* YabrReaderSettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A062100130D2000100000002 /* YabrReaderSettingsViewModelTests.swift */; };
+		A062200130D2000300000003 /* YabrReadiumReaderViewControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A062100130D2000100000003 /* YabrReadiumReaderViewControllerTests.swift */; };
 		E70A25B72F73DEAD004F006E /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B62F73DEAD004F006E /* ReadiumNavigator */; };
 		E70A25B92F73DEAD004F006E /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B82F73DEAD004F006E /* ReadiumShared */; };
 		E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25BA2F73DEAD004F006E /* ReadiumStreamer */; };
@@ -708,6 +711,9 @@
 		E7939151261F1A47004AB108 /* RecentShelfViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentShelfViewModelTests.swift; sourceTree = "<group>"; };
 		A051100130D1000100000001 /* ReaderPreferenceRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceRepository.swift; sourceTree = "<group>"; };
 		A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderPreferenceRepositoryTests.swift; sourceTree = "<group>"; };
+		A062100130D2000100000001 /* ReadiumPreferenceValueTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceValueTests.swift; sourceTree = "<group>"; };
+		A062100130D2000100000002 /* YabrReaderSettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderSettingsViewModelTests.swift; sourceTree = "<group>"; };
+		A062100130D2000100000003 /* YabrReadiumReaderViewControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumReaderViewControllerTests.swift; sourceTree = "<group>"; };
 		E7A8EA2B2A74F65800D5C95B /* DictTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictTabBarController.swift; sourceTree = "<group>"; };
 		E7A8EA2D2A75282B00D5C95B /* EncycloView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncycloView.swift; sourceTree = "<group>"; };
 		E7A8EA2F2A75579100D5C95B /* DictViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictViewModel.swift; sourceTree = "<group>"; };
@@ -1066,6 +1072,9 @@
 				E71F35BD2FEA9BA6007AB0B1 /* CalibreLibraryManagerTests.swift */,
 				E71F35BF2FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift */,
 				A051100130D1000100000002 /* ReaderPreferenceRepositoryTests.swift */,
+				A062100130D2000100000001 /* ReadiumPreferenceValueTests.swift */,
+				A062100130D2000100000002 /* YabrReaderSettingsViewModelTests.swift */,
+				A062100130D2000100000003 /* YabrReadiumReaderViewControllerTests.swift */,
 				E71F35C42FEACD3A007AB0B1 /* TestHelpers */,
 			);
 			path = YetAnotherEBookReaderTests;
@@ -1704,6 +1713,9 @@
 				E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */,
 				E71F35C02FEAB6EF007AB0B1 /* CalibreServerManagerTests.swift in Sources */,
 				A051200130D1000300000002 /* ReaderPreferenceRepositoryTests.swift in Sources */,
+				A062200130D2000300000001 /* ReadiumPreferenceValueTests.swift in Sources */,
+				A062200130D2000300000002 /* YabrReaderSettingsViewModelTests.swift in Sources */,
+				A062200130D2000300000003 /* YabrReadiumReaderViewControllerTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 				E7939151261F1A47004AB101 /* MainViewModelTests.swift in Sources */,
 				E7939151261F1A47004AB103 /* SettingsViewModelTests.swift in Sources */,

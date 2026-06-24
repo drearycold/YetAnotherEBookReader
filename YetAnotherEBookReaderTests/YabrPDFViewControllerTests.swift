@@ -26,7 +26,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
     func testOpenLoadsPDFAndRestoresInitialPosition() throws {
         let pdfURL = try makePDFURL(name: "open-restores-position", pageCount: 2)
-        let options = PDFOptions()
+        var options = PDFPreferenceValue()
         options.lastScale = 1.75
 
         let controller = SpyYabrPDFViewController()
@@ -50,6 +50,58 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(controller.pdfOptions.themeMode, .dark)
         XCTAssertEqual(controller.pdfOptions.pageMode, .Scroll)
         XCTAssertEqual(controller.pdfOptions.scrollDirection, .Horizontal)
+    }
+
+    func testPDFPreferenceValueRoundTripAndReaderEngineMapping() {
+        let realmObject = PDFOptions()
+        realmObject.themeMode = .dark
+        realmObject.selectedAutoScaler = .Custom
+        realmObject.pageMode = .Scroll
+        realmObject.readingDirection = .TtB_RtL
+        realmObject.scrollDirection = .Horizontal
+        realmObject.hMarginAutoScaler = 11
+        realmObject.vMarginAutoScaler = 12
+        realmObject.hMarginDetectStrength = 4
+        realmObject.vMarginDetectStrength = 5
+        realmObject.marginOffset = 3
+        realmObject.lastScale = 2.2
+        realmObject.rememberInPagePosition = false
+
+        let value = realmObject.toValue()
+        XCTAssertEqual(value.fillColor.components, CGColor(gray: 0.0, alpha: 1.0).components)
+        XCTAssertTrue(value.isDark)
+        XCTAssertEqual(value.isDark("dark", "light"), "dark")
+
+        let engine = value.toReaderEnginePreferences()
+        XCTAssertEqual(engine.themeMode, 2)
+        XCTAssertEqual(engine.scroll, true)
+        XCTAssertEqual(engine.scrollDirection, 1)
+
+        let copied = PDFOptions()
+        copied.apply(value)
+        XCTAssertEqual(copied.toValue(), value)
+
+        var updated = PDFPreferenceValue()
+        updated.apply(ReaderEnginePreferences(themeMode: 1, scroll: true, scrollDirection: 1))
+        XCTAssertEqual(updated.themeMode, .serpia)
+        XCTAssertEqual(updated.pageMode, .Scroll)
+        XCTAssertEqual(updated.scrollDirection, .Horizontal)
+    }
+
+    func testPDFOptionViewModelCommitTriggersSingleCallback() {
+        var callbackValues: [PDFPreferenceValue] = []
+        let model = PDFOptionViewModel(
+            preferences: PDFPreferenceValue(),
+            onPreferencesChanged: { callbackValues.append($0) }
+        )
+
+        model.preferences.themeMode = .dark
+        model.preferences.pageMode = .Scroll
+        model.preferences.scrollDirection = .Horizontal
+        model.commit()
+
+        XCTAssertEqual(callbackValues.count, 1)
+        XCTAssertEqual(callbackValues.first, model.preferences)
     }
 
     func testBuildDefaultMenuItemsWithoutDictViewerReturnsHighlightOnly() {
@@ -77,15 +129,67 @@ final class YabrPDFViewControllerTests: XCTestCase {
     func testHandleScaleChangeUpdatesLastScale() throws {
         let controller = SpyYabrPDFViewController()
         let pdfURL = try makePDFURL(name: "scale-change", pageCount: 1)
+        let metaSource = MockYabrPDFMetaSource(pdfURL: pdfURL)
+        controller.yabrPDFMetaSource = metaSource
         controller.pdfView.document = PDFDocument(url: pdfURL)
         controller.pdfView.minScaleFactor = 1.0
         controller.pdfView.maxScaleFactor = 4.0
         controller.pdfOptions.lastScale = 1.0
+        let updateCallCountBefore = metaSource.updateCallCount
         controller.pdfView.scaleFactor = 2.25
 
         controller.handleScaleChange(nil)
 
         XCTAssertEqual(controller.pdfOptions.lastScale, 2.25, accuracy: 0.0001)
+        XCTAssertEqual(metaSource.optionsValue.lastScale, 2.25, accuracy: 0.0001)
+        XCTAssertEqual(metaSource.updateCallCount, updateCallCountBefore + 1)
+    }
+
+    func testPDFMetaSourceLoadsPreferencesFromRepositoryAndPersistsUpdates() {
+        let book = TestFixtures.makeBook()
+        let repository = MockPDFPreferenceRepository()
+        repository.loadedPDFPreferences = PDFPreferenceValue(themeMode: .dark, pageMode: .Scroll, lastScale: 1.4)
+        let metaSource = YabrEBookReaderPDFMetaSource(
+            book: book,
+            readerInfo: ReaderInfo(
+                deviceName: "test-device",
+                url: URL(fileURLWithPath: "/tmp/test.pdf"),
+                missing: false,
+                format: .PDF,
+                readerType: .YabrPDF,
+                position: BookDeviceReadingPosition(readerName: ReaderType.YabrPDF.id)
+            ),
+            preferenceRepository: repository
+        )
+
+        XCTAssertEqual(metaSource.yabrPDFOptions(nil)?.themeMode, .dark)
+        XCTAssertTrue(repository.savedPDFPreferences.isEmpty)
+
+        let updated = PDFPreferenceValue(themeMode: .forest, pageMode: .Page, lastScale: 2.0)
+        metaSource.yabrPDFOptions(nil, update: updated)
+
+        XCTAssertEqual(repository.savedPDFPreferences.last, updated)
+    }
+
+    func testPDFMetaSourceCreatesDefaultPreferencesWhenRepositoryIsEmpty() {
+        let book = TestFixtures.makeBook()
+        let repository = MockPDFPreferenceRepository()
+
+        let metaSource = YabrEBookReaderPDFMetaSource(
+            book: book,
+            readerInfo: ReaderInfo(
+                deviceName: "test-device",
+                url: URL(fileURLWithPath: "/tmp/test.pdf"),
+                missing: false,
+                format: .PDF,
+                readerType: .YabrPDF,
+                position: BookDeviceReadingPosition(readerName: ReaderType.YabrPDF.id)
+            ),
+            preferenceRepository: repository
+        )
+
+        XCTAssertEqual(metaSource.yabrPDFOptions(nil), PDFPreferenceValue())
+        XCTAssertEqual(repository.savedPDFPreferences, [PDFPreferenceValue()])
     }
 
     func testSharePDFOriginalCreatesTemporaryFileAndPresentsActivityController() throws {
@@ -177,7 +281,8 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
     private let author: String
     private let key: String
     private let dictViewerValue: (String, UINavigationController)?
-    private let optionsValue: PDFOptions
+    private(set) var optionsValue: PDFPreferenceValue
+    private(set) var updateCallCount = 0
 
     init(
         pdfURL: URL?,
@@ -185,7 +290,7 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
         author: String = "Test Author",
         key: String = "test-key",
         dictViewer: (String, UINavigationController)? = nil,
-        options: PDFOptions = PDFOptions()
+        options: PDFPreferenceValue = PDFPreferenceValue()
     ) {
         self.pdfURLValue = pdfURL
         self.title = title
@@ -226,12 +331,13 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
         nil
     }
 
-    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions? {
+    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFPreferenceValue? {
         optionsValue
     }
 
-    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions) {
-        optionsValue.update(other: options)
+    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFPreferenceValue) {
+        updateCallCount += 1
+        optionsValue = options
     }
 
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)? {
@@ -271,5 +377,32 @@ private final class MockYabrPDFMetaSource: YabrPDFMetaSource {
 
     func yabrPDFOptionsIsNight<T>(_ view: YabrPDFView?, _ f: T, _ l: T) -> T {
         optionsValue.isDark(f, l)
+    }
+}
+
+private final class MockPDFPreferenceRepository: ReaderPreferenceRepositoryProtocol {
+    var loadedPDFPreferences: PDFPreferenceValue?
+    var savedPDFPreferences: [PDFPreferenceValue] = []
+
+    func loadInitialPreferences(for book: CalibreBook, readerType: ReaderType) -> ReaderEnginePreferences? {
+        nil
+    }
+
+    func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {
+    }
+
+    func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? {
+        nil
+    }
+
+    func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook) {
+    }
+
+    func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue? {
+        loadedPDFPreferences
+    }
+
+    func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook) {
+        savedPDFPreferences.append(preferences)
     }
 }

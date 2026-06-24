@@ -116,7 +116,7 @@ class PDFMarginCropController {
         }
     }
 
-    func showBlankOverlay(page: PDFPage?, options: PDFOptions) {
+    func showBlankOverlay(page: PDFPage?, options: PDFPreferenceValue) {
         guard let pdfView = pdfView else { return }
 
         let backgroundColor = UIColor(cgColor: PDFPageWithBackground.fillColor ?? CGColor(gray: 1.0, alpha: 1.0))

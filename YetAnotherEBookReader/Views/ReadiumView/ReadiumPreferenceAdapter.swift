@@ -9,53 +9,88 @@ import RealmSwift
 import ReadiumNavigator
 import ReadiumShared
 
-extension ReadiumPreferenceRealm {
-    
+struct ReadiumPreferenceValue: Equatable {
+    var id: String = ""
+
+    var themeMode: Int = 0
+    var fontSizePercentage: Double = 100.0
+    var fontFamily: String = "Original"
+    var lineHeight: Double = 1.2
+    var pageMargins: Double = 1.0
+    var publisherStyles: Bool = true
+    var scroll: Bool = false
+    var textAlign: Int = 0
+
+    var columnCount: Int = 0
+    var fontWeight: Double = 1.0
+    var letterSpacing: Double = 0.0
+    var wordSpacing: Double = 0.0
+    var hyphens: Bool = false
+    var imageFilter: Int = 0
+    var textNormalization: Bool = false
+    var typeScale: Double = 1.2
+    var paragraphIndent: Double = 0.0
+    var paragraphSpacing: Double = 0.0
+
+    var volumeKeyPaging: Bool = false
+    var verticalMargin: Double = 0.0
+    var readingProgression: Int = 0
+
+    var fit: Int = 0
+    var ligatures: Bool = false
+    var offsetFirstPage: Bool?
+    var spread: Int = 0
+    var verticalText: Bool = false
+
+    var pageSpacing: Double = 0.0
+    var scrollAxis: Int = 0
+    var visibleScrollbar: Bool = true
+
     var themeColor: UIColor {
         switch themeMode {
-        case 1: // Sepia
-            return UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1.0) // #FAF4E8
-        case 2: // Dark
+        case 1:
+            return UIColor(red: 0.98, green: 0.96, blue: 0.91, alpha: 1.0)
+        case 2:
             return .black
-        default: // Light
+        default:
             return .white
         }
     }
 
     func toEPUBPreferences() -> EPUBPreferences {
         EPUBPreferences(
-            columnCount: self.columnCount == 0 ? .auto : (self.columnCount == 1 ? .one : .two),
+            columnCount: columnCount == 0 ? .auto : (columnCount == 1 ? .one : .two),
             fit: {
-                switch self.fit {
+                switch fit {
                 case 1: return .page
                 case 2: return .width
                 default: return .auto
                 }
             }(),
-            fontFamily: self.fontFamily == "Original" ? nil : ReadiumNavigator.FontFamily(rawValue: self.fontFamily),
-            fontSize: self.fontSizePercentage / 100.0,
-            fontWeight: self.fontWeight,
-            hyphens: self.hyphens,
-            imageFilter: self.imageFilter == 0 ? nil : (self.imageFilter == 1 ? .darken : .invert),
-            letterSpacing: self.letterSpacing,
-            ligatures: self.ligatures,
-            lineHeight: self.lineHeight,
-            offsetFirstPage: self.offsetFirstPage,
-            pageMargins: self.pageMargins,
-            paragraphIndent: self.paragraphIndent,
-            paragraphSpacing: self.paragraphSpacing,
-            publisherStyles: self.publisherStyles,
-            readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
-            scroll: self.scroll,
+            fontFamily: fontFamily == "Original" ? nil : ReadiumNavigator.FontFamily(rawValue: fontFamily),
+            fontSize: fontSizePercentage / 100.0,
+            fontWeight: fontWeight,
+            hyphens: hyphens,
+            imageFilter: imageFilter == 0 ? nil : (imageFilter == 1 ? .darken : .invert),
+            letterSpacing: letterSpacing,
+            ligatures: ligatures,
+            lineHeight: lineHeight,
+            offsetFirstPage: offsetFirstPage,
+            pageMargins: pageMargins,
+            paragraphIndent: paragraphIndent,
+            paragraphSpacing: paragraphSpacing,
+            publisherStyles: publisherStyles,
+            readingProgression: readingProgression == 0 ? .ltr : .rtl,
+            scroll: scroll,
             spread: {
-                switch self.spread {
+                switch spread {
                 case 1: return .never
                 case 2: return .always
                 default: return .auto
                 }
             }(),
             textAlign: {
-                switch self.textAlign {
+                switch textAlign {
                 case 1: return .start
                 case 2: return .left
                 case 3: return .right
@@ -63,218 +98,320 @@ extension ReadiumPreferenceRealm {
                 default: return nil
                 }
             }(),
-            textNormalization: self.textNormalization,
+            textNormalization: textNormalization,
             theme: {
-                switch self.themeMode {
+                switch themeMode {
                 case 1: return .sepia
                 case 2: return .dark
                 default: return .light
                 }
             }(),
-            typeScale: self.typeScale,
-            verticalText: self.verticalText,
-            wordSpacing: self.wordSpacing
+            typeScale: typeScale,
+            verticalText: verticalText,
+            wordSpacing: wordSpacing
         )
     }
-    
+
     func toPDFPreferences() -> PDFPreferences {
         PDFPreferences(
             fit: {
-                switch self.fit {
+                switch fit {
                 case 1: return .page
                 case 2: return .width
                 default: return .auto
                 }
             }(),
-            offsetFirstPage: self.offsetFirstPage,
-            pageSpacing: self.pageSpacing,
-            readingProgression: self.readingProgression == 0 ? .ltr : .rtl,
-            scroll: self.scroll,
-            scrollAxis: self.scrollAxis == 1 ? .horizontal : .vertical,
+            offsetFirstPage: offsetFirstPage,
+            pageSpacing: pageSpacing,
+            readingProgression: readingProgression == 0 ? .ltr : .rtl,
+            scroll: scroll,
+            scrollAxis: scrollAxis == 1 ? .horizontal : .vertical,
             spread: {
-                switch self.spread {
+                switch spread {
                 case 1: return .never
                 case 2: return .always
                 default: return .auto
                 }
             }(),
-            visibleScrollbar: self.visibleScrollbar
+            visibleScrollbar: visibleScrollbar
         )
     }
-    
-    func update(from settings: EPUBSettings) {
+
+    mutating func update(from settings: EPUBSettings) {
         switch settings.theme {
-        case .light: self.themeMode = 0
-        case .sepia: self.themeMode = 1
-        case .dark: self.themeMode = 2
+        case .light: themeMode = 0
+        case .sepia: themeMode = 1
+        case .dark: themeMode = 2
         }
-        
-        self.fontSizePercentage = settings.fontSize * 100.0
-        self.fontFamily = settings.fontFamily?.rawValue ?? "Original"
-        self.lineHeight = settings.lineHeight ?? 1.2
-        self.pageMargins = settings.pageMargins
-        self.publisherStyles = settings.publisherStyles
-        self.scroll = settings.scroll
-        self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
-        
+
+        fontSizePercentage = settings.fontSize * 100.0
+        fontFamily = settings.fontFamily?.rawValue ?? "Original"
+        lineHeight = settings.lineHeight ?? 1.2
+        pageMargins = settings.pageMargins
+        publisherStyles = settings.publisherStyles
+        scroll = settings.scroll
+        readingProgression = settings.readingProgression == .rtl ? 1 : 0
+
         switch settings.textAlign {
-        case .start: self.textAlign = 1
-        case .left: self.textAlign = 2
-        case .right: self.textAlign = 3
-        case .justify: self.textAlign = 4
-        default: self.textAlign = 0
+        case .start: textAlign = 1
+        case .left: textAlign = 2
+        case .right: textAlign = 3
+        case .justify: textAlign = 4
+        default: textAlign = 0
         }
-        
+
         switch settings.columnCount {
-        case .auto: self.columnCount = 0
-        case .one: self.columnCount = 1
-        case .two: self.columnCount = 2
+        case .auto: columnCount = 0
+        case .one: columnCount = 1
+        case .two: columnCount = 2
         }
-        
-        self.fontWeight = settings.fontWeight ?? 1.0
-        self.letterSpacing = settings.letterSpacing ?? 0.0
-        self.wordSpacing = settings.wordSpacing ?? 0.0
-        self.hyphens = settings.hyphens ?? false
-        
+
+        fontWeight = settings.fontWeight ?? 1.0
+        letterSpacing = settings.letterSpacing ?? 0.0
+        wordSpacing = settings.wordSpacing ?? 0.0
+        hyphens = settings.hyphens ?? false
+
         switch settings.imageFilter {
-        case .darken: self.imageFilter = 1
-        case .invert: self.imageFilter = 2
-        default: self.imageFilter = 0
+        case .darken: imageFilter = 1
+        case .invert: imageFilter = 2
+        default: imageFilter = 0
         }
-        
-        self.textNormalization = settings.textNormalization
-        self.typeScale = settings.typeScale ?? 1.2
-        self.paragraphIndent = settings.paragraphIndent ?? 0.0
-        self.paragraphSpacing = settings.paragraphSpacing ?? 0.0
-        self.ligatures = settings.ligatures ?? false
-        self.offsetFirstPage = settings.offsetFirstPage ?? false
-        self.verticalText = settings.verticalText
-        
+
+        textNormalization = settings.textNormalization
+        typeScale = settings.typeScale ?? 1.2
+        paragraphIndent = settings.paragraphIndent ?? 0.0
+        paragraphSpacing = settings.paragraphSpacing ?? 0.0
+        ligatures = settings.ligatures ?? false
+        offsetFirstPage = settings.offsetFirstPage
+        verticalText = settings.verticalText
+
         switch settings.spread {
-        case .never: self.spread = 1
-        case .always: self.spread = 2
-        default: self.spread = 0
+        case .never: spread = 1
+        case .always: spread = 2
+        default: spread = 0
         }
-        
+
         switch settings.fit {
-        case .page: self.fit = 1
-        case .width: self.fit = 2
-        default: self.fit = 0
+        case .page: fit = 1
+        case .width: fit = 2
+        default: fit = 0
         }
     }
-    
-    func update(from settings: PDFSettings) {
-        self.scroll = settings.scroll
-        self.readingProgression = settings.readingProgression == .rtl ? 1 : 0
-        self.offsetFirstPage = settings.offsetFirstPage
-        self.pageSpacing = settings.pageSpacing
-        self.scrollAxis = settings.scrollAxis == .horizontal ? 1 : 0
-        self.visibleScrollbar = settings.visibleScrollbar
-        
+
+    mutating func update(from settings: PDFSettings) {
+        scroll = settings.scroll
+        readingProgression = settings.readingProgression == .rtl ? 1 : 0
+        offsetFirstPage = settings.offsetFirstPage
+        pageSpacing = settings.pageSpacing
+        scrollAxis = settings.scrollAxis == .horizontal ? 1 : 0
+        visibleScrollbar = settings.visibleScrollbar
+
         switch settings.fit {
-        case .page: self.fit = 1
-        case .width: self.fit = 2
-        default: self.fit = 0
+        case .page: fit = 1
+        case .width: fit = 2
+        default: fit = 0
         }
-        
+
         switch settings.spread {
-        case .never: self.spread = 1
-        case .always: self.spread = 2
-        default: self.spread = 0
+        case .never: spread = 1
+        case .always: spread = 2
+        default: spread = 0
         }
     }
-    
-    func update(from preferences: EPUBPreferences) {
+
+    mutating func update(from preferences: EPUBPreferences) {
         switch preferences.theme {
-        case .light?: self.themeMode = 0
-        case .sepia?: self.themeMode = 1
-        case .dark?: self.themeMode = 2
-        case nil: self.themeMode = 0
+        case .light?: themeMode = 0
+        case .sepia?: themeMode = 1
+        case .dark?: themeMode = 2
+        case nil: themeMode = 0
         }
-        
-        self.fontSizePercentage = (preferences.fontSize ?? 1.0) * 100.0
-        self.fontFamily = preferences.fontFamily?.rawValue ?? "Original"
-        self.lineHeight = preferences.lineHeight ?? 1.2
-        self.pageMargins = preferences.pageMargins ?? 1.0
-        self.publisherStyles = preferences.publisherStyles ?? true
-        self.scroll = preferences.scroll ?? false
-        
+
+        fontSizePercentage = (preferences.fontSize ?? 1.0) * 100.0
+        fontFamily = preferences.fontFamily?.rawValue ?? "Original"
+        lineHeight = preferences.lineHeight ?? 1.2
+        pageMargins = preferences.pageMargins ?? 1.0
+        publisherStyles = preferences.publisherStyles ?? true
+        scroll = preferences.scroll ?? false
+
         if let readingProgression = preferences.readingProgression {
             self.readingProgression = readingProgression == .rtl ? 1 : 0
         } else {
             self.readingProgression = 0
         }
-        
+
         switch preferences.textAlign {
-        case .start?: self.textAlign = 1
-        case .left?: self.textAlign = 2
-        case .right?: self.textAlign = 3
-        case .justify?: self.textAlign = 4
-        default: self.textAlign = 0
+        case .start?: textAlign = 1
+        case .left?: textAlign = 2
+        case .right?: textAlign = 3
+        case .justify?: textAlign = 4
+        default: textAlign = 0
         }
-        
+
         switch preferences.columnCount {
-        case .one?: self.columnCount = 1
-        case .two?: self.columnCount = 2
-        default: self.columnCount = 0
+        case .one?: columnCount = 1
+        case .two?: columnCount = 2
+        default: columnCount = 0
         }
-        
-        self.fontWeight = preferences.fontWeight ?? 1.0
-        self.letterSpacing = preferences.letterSpacing ?? 0.0
-        self.wordSpacing = preferences.wordSpacing ?? 0.0
-        self.hyphens = preferences.hyphens ?? false
-        
+
+        fontWeight = preferences.fontWeight ?? 1.0
+        letterSpacing = preferences.letterSpacing ?? 0.0
+        wordSpacing = preferences.wordSpacing ?? 0.0
+        hyphens = preferences.hyphens ?? false
+
         switch preferences.imageFilter {
-        case .darken?: self.imageFilter = 1
-        case .invert?: self.imageFilter = 2
-        default: self.imageFilter = 0
+        case .darken?: imageFilter = 1
+        case .invert?: imageFilter = 2
+        default: imageFilter = 0
         }
-        
-        self.textNormalization = preferences.textNormalization ?? false
-        self.typeScale = preferences.typeScale ?? 1.2
-        self.paragraphIndent = preferences.paragraphIndent ?? 0.0
-        self.paragraphSpacing = preferences.paragraphSpacing ?? 0.0
-        self.ligatures = preferences.ligatures ?? false
-        self.offsetFirstPage = preferences.offsetFirstPage
-        self.verticalText = preferences.verticalText ?? false
-        
+
+        textNormalization = preferences.textNormalization ?? false
+        typeScale = preferences.typeScale ?? 1.2
+        paragraphIndent = preferences.paragraphIndent ?? 0.0
+        paragraphSpacing = preferences.paragraphSpacing ?? 0.0
+        ligatures = preferences.ligatures ?? false
+        offsetFirstPage = preferences.offsetFirstPage
+        verticalText = preferences.verticalText ?? false
+
         switch preferences.spread {
-        case .never?: self.spread = 1
-        case .always?: self.spread = 2
-        default: self.spread = 0
+        case .never?: spread = 1
+        case .always?: spread = 2
+        default: spread = 0
         }
-        
+
         switch preferences.fit {
-        case .page?: self.fit = 1
-        case .width?: self.fit = 2
-        default: self.fit = 0
+        case .page?: fit = 1
+        case .width?: fit = 2
+        default: fit = 0
         }
     }
-    
-    func update(from preferences: PDFPreferences) {
-        self.scroll = preferences.scroll ?? false
-        
+
+    mutating func update(from preferences: PDFPreferences) {
+        scroll = preferences.scroll ?? false
+
         if let readingProgression = preferences.readingProgression {
             self.readingProgression = readingProgression == .rtl ? 1 : 0
         } else {
             self.readingProgression = 0
         }
-        
-        self.offsetFirstPage = preferences.offsetFirstPage
-        self.pageSpacing = preferences.pageSpacing ?? 0.0
-        self.scrollAxis = preferences.scrollAxis == .horizontal ? 1 : 0
-        self.visibleScrollbar = preferences.visibleScrollbar ?? true
-        
+
+        offsetFirstPage = preferences.offsetFirstPage
+        pageSpacing = preferences.pageSpacing ?? 0.0
+        scrollAxis = preferences.scrollAxis == .horizontal ? 1 : 0
+        visibleScrollbar = preferences.visibleScrollbar ?? true
+
         switch preferences.fit {
-        case .page?: self.fit = 1
-        case .width?: self.fit = 2
-        default: self.fit = 0
+        case .page?: fit = 1
+        case .width?: fit = 2
+        default: fit = 0
         }
-        
+
         switch preferences.spread {
-        case .never?: self.spread = 1
-        case .always?: self.spread = 2
-        default: self.spread = 0
+        case .never?: spread = 1
+        case .always?: spread = 2
+        default: spread = 0
         }
+    }
+
+    func toReaderEnginePreferences() -> ReaderEnginePreferences {
+        ReaderEnginePreferences(
+            themeMode: themeMode,
+            fontSizePercentage: fontSizePercentage,
+            fontFamily: fontFamily,
+            lineHeight: lineHeight,
+            pageMargins: pageMargins,
+            scroll: scroll,
+            scrollDirection: scrollAxis,
+            volumeKeyPaging: volumeKeyPaging
+        )
+    }
+
+    mutating func apply(_ preferences: ReaderEnginePreferences) {
+        themeMode = preferences.themeMode
+        fontSizePercentage = preferences.fontSizePercentage
+        fontFamily = preferences.fontFamily
+        lineHeight = preferences.lineHeight
+        pageMargins = preferences.pageMargins
+        scroll = preferences.scroll
+        scrollAxis = preferences.scrollDirection
+        volumeKeyPaging = preferences.volumeKeyPaging
+    }
+}
+
+extension ReadiumPreferenceRealm {
+    convenience init(id: String, value: ReadiumPreferenceValue) {
+        self.init()
+        self.id = id
+        apply(value)
+    }
+
+    func apply(_ value: ReadiumPreferenceValue) {
+        if realm == nil, !value.id.isEmpty {
+            id = value.id
+        }
+        themeMode = value.themeMode
+        fontSizePercentage = value.fontSizePercentage
+        fontFamily = value.fontFamily
+        lineHeight = value.lineHeight
+        pageMargins = value.pageMargins
+        publisherStyles = value.publisherStyles
+        scroll = value.scroll
+        textAlign = value.textAlign
+        columnCount = value.columnCount
+        fontWeight = value.fontWeight
+        letterSpacing = value.letterSpacing
+        wordSpacing = value.wordSpacing
+        hyphens = value.hyphens
+        imageFilter = value.imageFilter
+        textNormalization = value.textNormalization
+        typeScale = value.typeScale
+        paragraphIndent = value.paragraphIndent
+        paragraphSpacing = value.paragraphSpacing
+        volumeKeyPaging = value.volumeKeyPaging
+        verticalMargin = value.verticalMargin
+        readingProgression = value.readingProgression
+        fit = value.fit
+        ligatures = value.ligatures
+        offsetFirstPage = value.offsetFirstPage
+        spread = value.spread
+        verticalText = value.verticalText
+        pageSpacing = value.pageSpacing
+        scrollAxis = value.scrollAxis
+        visibleScrollbar = value.visibleScrollbar
+    }
+
+    func toValue() -> ReadiumPreferenceValue {
+        ReadiumPreferenceValue(
+            id: id,
+            themeMode: themeMode,
+            fontSizePercentage: fontSizePercentage,
+            fontFamily: fontFamily,
+            lineHeight: lineHeight,
+            pageMargins: pageMargins,
+            publisherStyles: publisherStyles,
+            scroll: scroll,
+            textAlign: textAlign,
+            columnCount: columnCount,
+            fontWeight: fontWeight,
+            letterSpacing: letterSpacing,
+            wordSpacing: wordSpacing,
+            hyphens: hyphens,
+            imageFilter: imageFilter,
+            textNormalization: textNormalization,
+            typeScale: typeScale,
+            paragraphIndent: paragraphIndent,
+            paragraphSpacing: paragraphSpacing,
+            volumeKeyPaging: volumeKeyPaging,
+            verticalMargin: verticalMargin,
+            readingProgression: readingProgression,
+            fit: fit,
+            ligatures: ligatures,
+            offsetFirstPage: offsetFirstPage,
+            spread: spread,
+            verticalText: verticalText,
+            pageSpacing: pageSpacing,
+            scrollAxis: scrollAxis,
+            visibleScrollbar: visibleScrollbar
+        )
     }
 }
