@@ -596,3 +596,84 @@ final class MockFolioReaderProfileRepository: FolioReaderProfileRepositoryProtoc
         removeProfileNameParam = name
     }
 }
+
+final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sendable {
+    var cache: [String: LibraryCategoryResult] = [:]
+
+    var invalidateCategoryCacheCalled = false
+    var invalidateCategoryCacheParams: [(libraryId: String, categoryName: String)] = []
+
+    var observeCategorySummariesCalled = false
+    let observeCategorySummariesSubject = PassthroughSubject<[CategoryCacheSummary], Never>()
+
+    var observeCategoryCacheUpdatesCalled = false
+    var observeCategoryCacheUpdatesCategoryNameParam: String?
+    var observeCategoryCacheUpdatesSubjects: [String: PassthroughSubject<Void, Never>] = [:]
+
+    func fetchLibraryCategoryResult(libraryId: String, categoryName: String) throws -> LibraryCategoryResult? {
+        cache["\(libraryId)-\(categoryName)"]
+    }
+
+    func saveLibraryCategoryResult(libraryId: String, categoryName: String, result: LibraryCategoryResult) throws {
+        cache["\(libraryId)-\(categoryName)"] = result
+    }
+
+    func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
+        var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
+        for result in cache.values {
+            let name = result.categoryName
+            let current = summariesByName[name] ?? (0, 0)
+            summariesByName[name] = (
+                current.itemsCount + result.items.count,
+                current.totalNumber + result.totalNumber
+            )
+        }
+        return summariesByName.map { name, stats in
+            CategoryCacheSummary(
+                categoryName: name,
+                itemsCount: stats.itemsCount,
+                totalNumber: stats.totalNumber
+            )
+        }.sorted { $0.categoryName < $1.categoryName }
+    }
+
+    func observeCategorySummaries() -> AnyPublisher<[CategoryCacheSummary], Never> {
+        observeCategorySummariesCalled = true
+        let initial = (try? fetchCategorySummaries()) ?? []
+        return observeCategorySummariesSubject.prepend(initial).eraseToAnyPublisher()
+    }
+
+    func observeCategoryCacheUpdates(categoryName: String) -> AnyPublisher<Void, Never> {
+        observeCategoryCacheUpdatesCalled = true
+        observeCategoryCacheUpdatesCategoryNameParam = categoryName
+        let subject = observeCategoryCacheUpdatesSubjects[categoryName] ?? {
+            let newSubject = PassthroughSubject<Void, Never>()
+            observeCategoryCacheUpdatesSubjects[categoryName] = newSubject
+            return newSubject
+        }()
+        return subject.eraseToAnyPublisher()
+    }
+
+    func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
+        invalidateCategoryCacheCalled = true
+        invalidateCategoryCacheParams.append((libraryId, categoryName))
+        if let result = cache["\(libraryId)-\(categoryName)"] {
+            let staleResult = LibraryCategoryResult(
+                libraryId: result.libraryId,
+                categoryName: result.categoryName,
+                items: result.items,
+                generation: Date(timeIntervalSince1970: 0),
+                totalNumber: result.totalNumber
+            )
+            cache["\(libraryId)-\(categoryName)"] = staleResult
+        }
+    }
+
+    func sendCategorySummaries(_ summaries: [CategoryCacheSummary]) {
+        observeCategorySummariesSubject.send(summaries)
+    }
+
+    func sendCategoryCacheUpdate(categoryName: String) {
+        observeCategoryCacheUpdatesSubjects[categoryName]?.send(())
+    }
+}

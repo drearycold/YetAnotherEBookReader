@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 
 protocol CategoryCacheRepository: Sendable {
     func fetchLibraryCategoryResult(
@@ -20,6 +21,10 @@ protocol CategoryCacheRepository: Sendable {
     ) throws
     
     func fetchCategorySummaries() throws -> [CategoryCacheSummary]
+
+    func observeCategorySummaries() -> AnyPublisher<[CategoryCacheSummary], Never>
+
+    func observeCategoryCacheUpdates(categoryName: String) -> AnyPublisher<Void, Never>
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws
 }

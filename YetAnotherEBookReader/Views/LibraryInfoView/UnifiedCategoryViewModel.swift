@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import Combine
-import RealmSwift
 
 @MainActor
 class UnifiedCategoryViewModel: ObservableObject {
@@ -16,26 +15,33 @@ class UnifiedCategoryViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     
     private let unifiedCategoryService: UnifiedCategoryService
+    private let categoryCacheRepository: CategoryCacheRepository
     private let modelData: ModelData
     private var mergeTask: Task<Void, Never>?
     
     private var currentCategoryName: String?
     private var currentSearchString: String = ""
-    private var databaseObserver: AnyCancellable?
+    private var cacheUpdateObserver: AnyCancellable?
+    private var observedCategoryName: String?
     
-    init(unifiedCategoryService: UnifiedCategoryService? = nil, modelData: ModelData? = nil) {
+    init(
+        unifiedCategoryService: UnifiedCategoryService? = nil,
+        categoryCacheRepository: CategoryCacheRepository? = nil,
+        modelData: ModelData? = nil
+    ) {
         guard let resolvedModelData = modelData ?? ModelData.shared else {
             fatalError("ModelData.shared must be initialized before creating UnifiedCategoryViewModel")
         }
         self.modelData = resolvedModelData
         self.unifiedCategoryService = unifiedCategoryService ?? resolvedModelData.unifiedCategoryService
+        self.categoryCacheRepository = categoryCacheRepository ?? resolvedModelData.categoryCacheRepository
     }
     
     func mergeCategory(categoryName: String, searchString: String) {
         self.currentCategoryName = categoryName
         self.currentSearchString = searchString
         
-        setupDatabaseObserver(for: categoryName)
+        setupCategoryObserver(for: categoryName)
         
         mergeTask?.cancel()
         isLoading = true
@@ -48,25 +54,14 @@ class UnifiedCategoryViewModel: ObservableObject {
         }
     }
     
-    private func setupDatabaseObserver(for categoryName: String) {
-        guard databaseObserver == nil else { return }
-        
-        databaseObserver = modelData.realm.objects(CalibreLibraryCategoryObject.self)
-            .where {
-                $0.categoryName == categoryName
-            }
-            .changesetPublisher(keyPaths: ["items"])
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] changes in
-                guard let self = self else { return }
-                switch changes {
-                case .initial(_):
-                    break
-                case .update(_, deletions: _, insertions: _, modifications: _):
-                    self.retriggerMerge()
-                case .error(_):
-                    break
-                }
+    private func setupCategoryObserver(for categoryName: String) {
+        guard observedCategoryName != categoryName || cacheUpdateObserver == nil else { return }
+
+        cacheUpdateObserver?.cancel()
+        observedCategoryName = categoryName
+        cacheUpdateObserver = categoryCacheRepository.observeCategoryCacheUpdates(categoryName: categoryName)
+            .sink { [weak self] in
+                self?.retriggerMerge()
             }
     }
     

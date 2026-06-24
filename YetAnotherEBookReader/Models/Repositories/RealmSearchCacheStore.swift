@@ -28,6 +28,26 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         conf.shouldCompactOnLaunch = nil
         return try Realm(configuration: conf)
     }
+
+    private func mapCategorySummaries<S: Sequence>(objects: S) -> [CategoryCacheSummary] where S.Element == CalibreLibraryCategoryObject {
+        var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
+        for obj in objects {
+            let name = obj.categoryName
+            let current = summariesByName[name] ?? (0, 0)
+            summariesByName[name] = (
+                current.itemsCount + obj.items.count,
+                current.totalNumber + obj.totalNumber
+            )
+        }
+
+        return summariesByName.map { name, stats in
+            CategoryCacheSummary(
+                categoryName: name,
+                itemsCount: stats.itemsCount,
+                totalNumber: stats.totalNumber
+            )
+        }.sorted { $0.categoryName < $1.categoryName }
+    }
     
     func fetchLibraryCachedResult(
         libraryId: String,
@@ -304,24 +324,49 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
         let realm = try getRealm()
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
-        
-        var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
-        for obj in objects {
-            let name = obj.categoryName
-            let current = summariesByName[name] ?? (0, 0)
-            summariesByName[name] = (
-                current.itemsCount + obj.items.count,
-                current.totalNumber + obj.totalNumber
-            )
+        return mapCategorySummaries(objects: objects)
+    }
+
+    func observeCategorySummaries() -> AnyPublisher<[CategoryCacheSummary], Never> {
+        guard let realm = try? getRealm() else {
+            return Just([]).eraseToAnyPublisher()
         }
-        
-        return summariesByName.map { name, stats in
-            CategoryCacheSummary(
-                categoryName: name,
-                itemsCount: stats.itemsCount,
-                totalNumber: stats.totalNumber
-            )
-        }.sorted { $0.categoryName < $1.categoryName }
+
+        return realm.objects(CalibreLibraryCategoryObject.self)
+            .changesetPublisher(keyPaths: ["items", "totalNumber"])
+            .map { [weak self] changes -> [CategoryCacheSummary] in
+                guard let self = self else { return [] }
+                switch changes {
+                case .initial(let objects), .update(let objects, _, _, _):
+                    return self.mapCategorySummaries(objects: objects)
+                case .error:
+                    return []
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
+
+    func observeCategoryCacheUpdates(categoryName: String) -> AnyPublisher<Void, Never> {
+        guard let realm = try? getRealm() else {
+            return Empty().eraseToAnyPublisher()
+        }
+
+        return realm.objects(CalibreLibraryCategoryObject.self)
+            .filter("categoryName == %@", categoryName)
+            .changesetPublisher(keyPaths: ["items", "totalNumber"])
+            .compactMap { changes -> Void? in
+                switch changes {
+                case .initial:
+                    return nil
+                case .update:
+                    return ()
+                case .error:
+                    return nil
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws {

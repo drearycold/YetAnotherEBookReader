@@ -4,6 +4,14 @@
 
 ## Latest Status (2026-06-24)
 
+- Phase 3b 已完成：`LibraryInfoViewModel` 和 `UnifiedCategoryViewModel` 的 category cache observe 已收口到 repository。
+  - `CategoryCacheRepository` 新增：
+    - `observeCategorySummaries()`
+    - `observeCategoryCacheUpdates(categoryName:)`
+  - `RealmSearchCacheStore` 现负责 category summary / per-category cache update 的 Realm publisher 桥接
+  - `LibraryInfoViewModel` 现订阅 repository summaries publisher
+  - `UnifiedCategoryViewModel` 现订阅 repository cache update publisher，并继续通过 `UnifiedCategoryService` 重做 merge
+  - `MockCategoryCacheRepository` 已收敛到 `TestHelpers`
 - Phase 3a 已完成：`Providers.swift` 的 FolioReader profile 持久化已收口到独立 repository。
   - 新增 `FolioReaderProfileRepositoryProtocol`
   - 新增 `RealmFolioReaderProfileRepository`
@@ -25,17 +33,15 @@
   - `ReadingPositionRepositoryProtocol.historyBook(for:bookId:)`
   - `ActivityLogRepositoryProtocol`
   - `RealmActivityLogRepository`
-- Views 层 `import RealmSwift` 当前剩 3 个文件：
-  - `LibraryInfoViewModel.swift`
-  - `UnifiedCategoryViewModel.swift`
+- Views 层 `import RealmSwift` 当前剩 1 个文件：
   - `ReadiumPreferenceAdapter.swift`
 - 当前 Phase 3 剩余范围已收敛为：
-  - category cache observe 边界（`LibraryInfoViewModel` / `UnifiedCategoryViewModel`）
   - `ReadiumPreferenceAdapter.swift` 持久化映射边界保留
 - 验证结果：
+  - focused category observe tests: 10 passed
   - focused Folio/profile tests: 7 passed
   - focused ViewModel tests: 29 passed
-  - full test suite via Xcode MCP `RunAllTests`: 267 passed
+  - full test suite via Xcode MCP `RunAllTests`: 274 passed
 > 日期: 2026-06-24
 
 ---

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 import Combine
 
 extension LibraryInfoView {
@@ -99,7 +98,7 @@ extension LibraryInfoView {
         
         @Published var availableCategories: [CategoryCacheSummary] = []
         
-        private var databaseObserver: AnyCancellable?
+        private var categoryObserver: AnyCancellable?
         
         func fetchAvailableCategories() {
             guard let modelData = ModelData.shared else { return }
@@ -109,16 +108,12 @@ extension LibraryInfoView {
             }
         }
         
-        func setupDatabaseObserver() {
-            guard let modelData = ModelData.shared, databaseObserver == nil else { return }
-            
-            fetchAvailableCategories()
-            
-            databaseObserver = modelData.realm.objects(CalibreLibraryCategoryObject.self)
-                .changesetPublisher(keyPaths: ["items"])
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in
-                    self?.fetchAvailableCategories()
+        func setupCategoryObserver() {
+            guard let modelData = ModelData.shared, categoryObserver == nil else { return }
+
+            categoryObserver = modelData.categoryCacheRepository.observeCategorySummaries()
+                .sink { [weak self] summaries in
+                    self?.availableCategories = summaries
                 }
         }
         
