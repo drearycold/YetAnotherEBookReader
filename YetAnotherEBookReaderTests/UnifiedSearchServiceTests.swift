@@ -647,6 +647,136 @@ class UnifiedSearchServiceTests: XCTestCase {
         
         XCTAssertEqual(currentB?.limitNumber, 100)
     }
+
+    func testSearchCancellation() async throws {
+        let criteria = SearchCriteria(
+            searchString: "cancellation-test",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteria)
+        
+        MockURLProtocol.requestHandler = { request in
+            Thread.sleep(forTimeInterval: 1.0)
+            throw URLError(.cancelled)
+        }
+        
+        let exp = expectation(description: "Subscription yields initial status")
+        var receivedUpdate: SearchUpdate?
+        
+        var fulfilledCancellation = false
+        let stream = await manager.search(key: key)
+        let task = Task {
+            for await update in stream {
+                receivedUpdate = update
+                if !fulfilledCancellation {
+                    fulfilledCancellation = true
+                    exp.fulfill()
+                }
+            }
+        }
+        
+        await fulfillment(of: [exp], timeout: 2.0)
+        task.cancel()
+        
+        XCTAssertNotNil(receivedUpdate)
+    }
+
+    func testSearchTimeout() async throws {
+        let criteria = SearchCriteria(
+            searchString: "timeout-test",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteria)
+        
+        MockURLProtocol.requestHandler = { request in
+            throw URLError(.timedOut)
+        }
+        
+        let exp = expectation(description: "Results received with error")
+        var lastUpdate: SearchUpdate?
+        
+        var fulfilledTimeout = false
+        let stream = await manager.search(key: key)
+        let task = Task {
+            for await update in stream {
+                lastUpdate = update
+                if let status = update.statuses[mockLibrary1.id], !status.loading && status.error != nil {
+                    if !fulfilledTimeout {
+                        fulfilledTimeout = true
+                        exp.fulfill()
+                    }
+                }
+            }
+        }
+        
+        await fulfillment(of: [exp], timeout: 2.0)
+        task.cancel()
+        
+        XCTAssertNotNil(lastUpdate)
+        let status = lastUpdate?.statuses[mockLibrary1.id]
+        XCTAssertEqual(status?.loading, false)
+        XCTAssertNotNil(status?.error)
+    }
+
+    func testSearchEmptyResults() async throws {
+        let criteria = SearchCriteria(
+            searchString: "empty-test",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteria)
+        
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let searchResultJSON = """
+            {
+                "total_num": 0,
+                "sort_order": "asc",
+                "num_books_without_search": 0,
+                "offset": 0,
+                "num": 0,
+                "sort": "title",
+                "base_url": "/ajax/search/lib1",
+                "query": "empty-test",
+                "library_id": "lib1",
+                "book_ids": [],
+                "vl": ""
+            }
+            """
+            return (response, searchResultJSON.data(using: .utf8)!)
+        }
+        
+        let exp = expectation(description: "Empty results received")
+        var finalResult: UnifiedSearchResult?
+        
+        var fulfilledEmpty = false
+        let stream = await manager.search(key: key)
+        let task = Task {
+            for await update in stream {
+                if let status = update.statuses[mockLibrary1.id], !status.loading {
+                    if !fulfilledEmpty {
+                        fulfilledEmpty = true
+                        finalResult = update.result
+                        exp.fulfill()
+                    }
+                }
+            }
+        }
+        
+        await fulfillment(of: [exp], timeout: 2.0)
+        task.cancel()
+        
+        XCTAssertNotNil(finalResult)
+        XCTAssertEqual(finalResult?.books.count, 0)
+    }
 }
 
 // Concrete Mock Repository for testing

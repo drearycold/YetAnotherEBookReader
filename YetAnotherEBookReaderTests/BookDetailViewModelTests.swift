@@ -4,6 +4,7 @@ import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+@MainActor
 class BookDetailViewModelTests: XCTestCase {
     
     var viewModel: BookDetailViewModel!
@@ -19,11 +20,39 @@ class BookDetailViewModelTests: XCTestCase {
         mockModelData = ModelData(mock: true)
         ModelData.shared = mockModelData
         viewModel = BookDetailViewModel(modelData: mockModelData)
-        
-        guard let library = mockModelData.calibreLibraries.first?.value else {
-            XCTFail("No mock library found in mockModelData")
-            return
-        }
+
+        let server = CalibreServer(
+            uuid: UUID(),
+            name: "Book Detail Test Server",
+            baseUrl: "http://localhost",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
+        mockModelData.addServer(server: server, libraries: [library])
+
+        let probeRequest = CalibreProbeServerRequest(
+            server: server,
+            isPublic: false,
+            updateLibrary: false,
+            autoUpdateOnly: false,
+            incremental: false
+        )
+        let serverInfo = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: "http://localhost")!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: library.id,
+            libraryMap: [library.id: library.name],
+            request: probeRequest
+        )
+        mockModelData.calibreServerInfoStaging = [server.uuid.uuidString: serverInfo]
         
         mockBookRealm = CalibreBookRealm()
         mockBookRealm.serverUUID = library.server.uuid.uuidString
@@ -59,6 +88,20 @@ class BookDetailViewModelTests: XCTestCase {
         mockBookRealm = nil
         mockCalibreBook = nil
         cancellables.removeAll()
+    }
+
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 3_000_000_000,
+        pollNanoseconds: UInt64 = 100_000_000,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = Date().timeIntervalSince1970 + (Double(timeoutNanoseconds) / 1_000_000_000)
+        while Date().timeIntervalSince1970 < deadline {
+            if await condition() {
+                return
+            }
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
     }
     
     private func clearReadingPositions() {
@@ -249,7 +292,7 @@ class BookDetailViewModelTests: XCTestCase {
         let helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         
-        guard let library = mockModelData.calibreLibraries.first?.value else { return }
+        guard let library = mockCalibreBook?.library else { return }
         
         try! mockModelData.realm.write {
             if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
@@ -449,6 +492,140 @@ class BookDetailViewModelTests: XCTestCase {
         formatInfo.cacheMTime = formatInfo.serverMTime.addingTimeInterval(-120)
         XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Server has update")
         XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsdown")
+    }
+
+    func testDownloadInteraction() throws {
+        var book = mockCalibreBook!
+        book.formats = ["EPUB": FormatInfo(selected: nil, filename: "book.epub", serverSize: 1024, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)]
+        
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        
+        viewModel.cancelDownload(book: book, format: .EPUB)
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+    }
+
+    func testPreviewSelection() async throws {
+        var book = mockCalibreBook!
+        book.formats = ["EPUB": FormatInfo(selected: nil, filename: "book.epub", serverSize: 1024, serverMTime: Date(), cached: true, cacheSize: 1024, cacheMTime: Date(), manifest: nil)]
+        
+        guard let savedURL = getSavedUrl(book: book, format: .EPUB) else {
+            return XCTFail("Unable to get saved URL")
+        }
+        
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(at: savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        fileManager.createFile(atPath: savedURL.path, contents: Data("mock epubs".utf8))
+        defer {
+            try? fileManager.removeItem(at: savedURL)
+        }
+        
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        
+        let calibreServerService = mockModelData.calibreServerService
+        let library = book.library
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
+                calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let manifestJson = "{\"toc\": {\"children\": [{\"title\": \"Intro\"}]}}"
+            return (response, manifestJson.data(using: .utf8)!)
+        }
+        
+        let handled = viewModel.previewAction(book: book, format: .EPUB, formatInfo: book.formats["EPUB"]!)
+        XCTAssertTrue(handled)
+        XCTAssertEqual(viewModel.previewViewModel.toc, "Initializing")
+
+        await waitUntil {
+            self.viewModel.previewViewModel.toc == "Intro\n"
+        }
+        XCTAssertEqual(viewModel.previewViewModel.toc, "Intro\n")
+    }
+
+    func testMetadataRefresh() async throws {
+        let book = mockCalibreBook!
+        
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        
+        let calibreServerService = mockModelData.calibreServerService
+        let library = book.library
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
+                calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let bookEntryJson = """
+            {
+                "123": {
+                    "authors": ["Refreshed Author"],
+                    "formats": ["epub"],
+                    "author_sort": "Author, Refreshed",
+                    "title": "Refreshed Title",
+                    "uuid": "uuid-apple",
+                    "author_sort_map": {},
+                    "identifiers": {},
+                    "languages": ["eng"],
+                    "pubdate": "",
+                    "rating": 0.0,
+                    "format_metadata": {},
+                    "category_urls": {},
+                    "tags": [],
+                    "user_metadata": {},
+                    "title_sort": "Apple",
+                    "thumbnail": "/get/thumb/123/lib1",
+                    "timestamp": "2023-07-21T07:43:05+00:00",
+                    "user_categories": {},
+                    "cover": "/get/cover/123/lib1",
+                    "last_modified": "2023-07-25T03:11:04+00:00",
+                    "application_id": 123
+                }
+            }
+            """
+            return (response, bookEntryJson.data(using: .utf8)!)
+        }
+        
+        viewModel.refresh(book: book)
+
+        await waitUntil {
+            self.viewModel.calibreBook?.title == "Refreshed Title"
+        }
+
+        mockModelData.refreshDatabase()
+        
+        guard let realm = mockModelData.realm else {
+            XCTFail("Realm is nil")
+            return
+        }
+        
+        XCTAssertEqual(viewModel.calibreBook?.title, "Refreshed Title")
+        XCTAssertEqual(viewModel.listVM?.book.title, "Refreshed Title")
+        XCTAssertEqual(
+            realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: mockBookRealm.primaryKey!)?.title,
+            "Refreshed Title"
+        )
     }
 }
 
@@ -676,4 +853,6 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
         
         wait(for: [expectation], timeout: 2.0)
     }
+
+
 }

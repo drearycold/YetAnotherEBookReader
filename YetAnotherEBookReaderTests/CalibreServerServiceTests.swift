@@ -1180,4 +1180,117 @@ final class CalibreServerServiceTests: XCTestCase {
             XCTFail("Expected failure, got success")
         }
     }
+
+    func testProbeServerReachabilitySuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "default_library": "lib1",
+                "library_map": {"lib1": "Library 1"}
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: probeRequest)
+
+        let result = await service.probeServerReachability(serverInfo: info)
+        XCTAssertTrue(result.reachable)
+        XCTAssertEqual(result.defaultLibrary, "lib1")
+        XCTAssertEqual(result.libraryMap["lib1"], "Library 1")
+        XCTAssertEqual(result.errorMsg, "Success")
+    }
+
+    func testProbeLibrarySuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "total_num": 10,
+                "sort_order": "asc",
+                "num_books_without_search": 10,
+                "offset": 0,
+                "num": 0,
+                "sort": "title",
+                "base_url": "/ajax/search/lib1",
+                "query": "",
+                "library_id": "lib1",
+                "book_ids": [],
+                "vl": ""
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let resultTask = await service.probeLibrary(library: library)
+        XCTAssertNotNil(resultTask.probeResult)
+        XCTAssertEqual(resultTask.probeResult?.total_num, 10)
+    }
+
+    func testSyncLibrarySuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "book_ids": [1, 2],
+                "data": {
+                    "last_modified": {
+                        "1": {"v": "2023-07-25T03:11:04+00:00"},
+                        "2": {"v": "2023-07-25T03:11:04+00:00"}
+                    }
+                }
+            }
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let syncReq = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: true)
+        let resultPrev = CalibreSyncLibraryResult(request: syncReq, result: [:])
+
+        let result = await service.syncLibrary(resultPrev: resultPrev)
+        XCTAssertEqual(result.list.book_ids, [1, 2])
+        XCTAssertEqual(result.errmsg, "")
+    }
+
+    func testGetLibraryCategoriesSuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            [
+                {"name": "Authors", "url": "/ajax/categories/authors", "icon": "author", "is_category": true}
+            ]
+            """
+            return (response, json.data(using: .utf8)!)
+        }
+
+        let syncReq = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
+        let resultPrev = CalibreSyncLibraryResult(request: syncReq, result: [:])
+
+        let result = await service.getLibraryCategories(resultPrev: resultPrev)
+        XCTAssertEqual(result.categories.count, 1)
+        XCTAssertEqual(result.categories.first?.name, "Authors")
+        XCTAssertEqual(result.errmsg, "")
+    }
 }

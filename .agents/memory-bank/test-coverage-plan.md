@@ -1,7 +1,20 @@
 # 测试覆盖提升计划
 
+> 状态: Phase 1-4 已完成，2026-06-24 全量验证 329/329 通过
+
 > 目标: 191 → 250+ tests, 6,829 → 10,000+ 测试代码行
 > 日期: 2026-06-23
+
+## 最新结果
+
+- 已删除占位文件 `YetAnotherEBookReaderTests.swift`
+- 已新增 `IntegrationTests.swift`
+- 已补齐：
+  - `UnifiedSearchServiceTests` 的 cancellation / timeout / empty-result
+  - `CalibreServerServiceTests` 的 discovery / probe / sync success
+  - `BookDetailViewModelTests` 的 download / preview / metadata refresh
+  - `FolioReaderProviderBookIdTests` 的 concurrent highlight / large bookmarks
+- 当前全量测试：329/329 通过
 
 ---
 

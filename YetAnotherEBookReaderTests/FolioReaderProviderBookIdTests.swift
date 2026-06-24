@@ -42,11 +42,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
         clearReadingPositions()
         clearBookmarks()
+        clearHighlights()
     }
 
     override func tearDownWithError() throws {
         clearReadingPositions()
         clearBookmarks()
+        clearHighlights()
         ModelData.shared = originalModelDataShared
         modelData = nil
         book = nil
@@ -494,6 +496,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         }
     }
 
+    private func clearHighlights() {
+        guard let realm = modelData?.realm else { return }
+        try? realm.write {
+            realm.delete(realm.objects(BookHighlightRealm.self).filter("bookId == %@", book?.bookPrefId ?? ""))
+        }
+    }
+
     func testDefaultProfileSeededAndContainsLegacyDefaults() {
         let folioReader = FolioReader()
         let repository = makeProfileRepository(id: "FolioReaderProfileTests")
@@ -655,6 +664,66 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertTrue(repository.removeProfileCalled)
         XCTAssertEqual(repository.removeProfileNameParam, "NightAvenir")
     }
+
+    @MainActor
+    func testConcurrentHighlightWriting() throws {
+        let repository = modelData.annotationRepository
+        let group = DispatchGroup()
+        
+        for i in 1...20 {
+            group.enter()
+            DispatchQueue.global().async {
+                let highlight = BookHighlight(
+                    id: "highlight-\(i)",
+                    bookId: self.book.bookPrefId,
+                    readerName: "YabrEPUB",
+                    page: 1,
+                    startOffset: 0,
+                    endOffset: 10,
+                    date: Date(),
+                    type: 0,
+                    note: nil,
+                    tocFamilyTitles: [],
+                    content: "Text \(i)",
+                    contentPost: "",
+                    contentPre: "",
+                    cfiStart: "epubcfi(/6/4[chap-2]!/4/2/10/1:\(i))",
+                    cfiEnd: nil,
+                    spineName: nil,
+                    ranges: nil,
+                    removed: false
+                )
+                repository.saveHighlight(highlight)
+                group.leave()
+            }
+        }
+        
+        let result = group.wait(timeout: .now() + 5.0)
+        XCTAssertEqual(result, .success)
+        
+        modelData.refreshDatabase()
+        
+        let retrieved = repository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false)
+        XCTAssertEqual(Set(retrieved.map(\.id)).count, 20)
+        XCTAssertEqual(retrieved.filter { $0.id.hasPrefix("highlight-") }.count, 20)
+    }
+
+    func testLargeAmountOfBookmarks() throws {
+        let provider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
+        
+        for i in 1...100 {
+            let folioBookmark = makeBookmark(
+                bookId: folioReaderBookId,
+                page: i,
+                pos: "epubcfi(/6/4[chap-2]!/4/2/10/1:\(i))"
+            )
+            provider.folioReaderBookmark(FolioReader(), added: folioBookmark) { _ in }
+        }
+        
+        let bookmarks = provider.folioReaderBookmark(FolioReader(), allByBookId: folioReaderBookId, andPage: nil)
+        XCTAssertEqual(bookmarks.count, 100)
+    }
+
 
     private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
         let config = Realm.Configuration(
