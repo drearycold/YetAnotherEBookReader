@@ -378,6 +378,8 @@
 		E71F35D42FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift */; };
 		E71F35D62FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D52FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift */; };
 		E71F35D82FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D72FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift */; };
+		E71F35DA2FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D92FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift */; };
+		E71F35DC2FEBBC10007AB0B1 /* ReadingSessionManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35DB2FEBBC10007AB0B1 /* ReadingSessionManagerTests.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -690,6 +692,8 @@
 		E71F35D32FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmBookRepositoryTests.swift; sourceTree = "<group>"; };
 		E71F35D52FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmAnnotationRepositoryTests.swift; sourceTree = "<group>"; };
 		E71F35D72FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmReadingPositionRepositoryTests.swift; sourceTree = "<group>"; };
+		E71F35D92FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookDownloadManagerTests.swift; sourceTree = "<group>"; };
+		E71F35DB2FEBBC10007AB0B1 /* ReadingSessionManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingSessionManagerTests.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1091,6 +1095,8 @@
 				E71F35D32FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift */,
 				E71F35D52FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift */,
 				E71F35D72FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift */,
+				E71F35D92FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift */,
+				E71F35DB2FEBBC10007AB0B1 /* ReadingSessionManagerTests.swift */,
 			);
 			path = YetAnotherEBookReaderTests;
 			sourceTree = "<group>";
@@ -1721,6 +1727,7 @@
 				E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */,
 				E71F35CA2FEACDBD007AB0B1 /* TestFixtures.swift in Sources */,
 				E71F35D42FEBB5F0007AB0B1 /* RealmBookRepositoryTests.swift in Sources */,
+				E71F35DA2FEBBC0D007AB0B1 /* BookDownloadManagerTests.swift in Sources */,
 				E71F35C82FEACDB3007AB0B1 /* MockDatabaseService.swift in Sources */,
 				A04D200130C0000300000009 /* V2MigrationDependencyTests.swift in Sources */,
 				E71F35CE2FEACDD9007AB0B1 /* MockManagers.swift in Sources */,
@@ -1734,6 +1741,7 @@
 				E71F35D62FEBB617007AB0B1 /* RealmAnnotationRepositoryTests.swift in Sources */,
 				A062200130D2000300000002 /* YabrReaderSettingsViewModelTests.swift in Sources */,
 				E71F35D82FEBB62D007AB0B1 /* RealmReadingPositionRepositoryTests.swift in Sources */,
+				E71F35DC2FEBBC10007AB0B1 /* ReadingSessionManagerTests.swift in Sources */,
 				A062200130D2000300000003 /* YabrReadiumReaderViewControllerTests.swift in Sources */,
 				2AC3EC3325BDBC11004A6633 /* YetAnotherEBookReaderTests.swift in Sources */,
 				E7939151261F1A47004AB101 /* MainViewModelTests.swift in Sources */,

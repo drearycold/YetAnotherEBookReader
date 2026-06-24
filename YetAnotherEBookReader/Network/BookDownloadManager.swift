@@ -44,6 +44,7 @@ class BookDownloadManager: ObservableObject {
     
     var modelData: ModelData?
     private var realmConf: Realm.Configuration?
+    var sessionConfiguration: URLSessionConfiguration = .default
 
     init(modelData: ModelData? = nil, realmConf: Realm.Configuration? = nil) {
         self.modelData = modelData
@@ -118,7 +119,7 @@ class BookDownloadManager: ObservableObject {
         
         let downloadDelegate = BookFormatDownloadDelegate(download: bookFormatDownload, manager: self)
         
-        let downloadConfiguration = URLSessionConfiguration.default
+        let downloadConfiguration = self.sessionConfiguration
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
         let downloadTask = downloadSession.downloadTask(withResumeData: resumeData)
         
@@ -173,7 +174,7 @@ class BookDownloadManager: ObservableObject {
         
         let downloadDelegate = BookFormatDownloadDelegate(download: bookFormatDownload, manager: self)
         
-        let downloadConfiguration = URLSessionConfiguration.default
+        let downloadConfiguration = self.sessionConfiguration
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
         let downloadTask = downloadSession.downloadTask(with: url)
         
