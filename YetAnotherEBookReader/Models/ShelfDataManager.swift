@@ -64,7 +64,9 @@ class YabrShelfDataModel: ObservableObject {
         self.modelData = modelData
         
         dispatchQueue.sync {
-            realmOnQueue = try! Realm(configuration: self.modelData.realmConf, queue: dispatchQueue)
+            if let realmConf = self.modelData.realmConf {
+                realmOnQueue = try? Realm(configuration: realmConf, queue: dispatchQueue)
+            }
             
             realmOnQueue.objects(CalibreBookRealm.self)
                 .changesetPublisher(keyPaths: ["inShelf"])

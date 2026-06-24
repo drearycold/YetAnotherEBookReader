@@ -64,8 +64,8 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook = CalibreBook(id: 123, library: library)
         mockCalibreBook.title = "Test Book"
         
-        try! mockModelData.realm.write {
-            mockModelData.realm.add(mockBookRealm, update: .modified)
+        try! mockModelData.realm!.write {
+            mockModelData.realm!.add(mockBookRealm, update: .modified)
         }
         
         viewModel.setup(bookId: mockBookRealm.primaryKey!)
@@ -74,8 +74,8 @@ class BookDetailViewModelTests: XCTestCase {
 
     override func tearDownWithError() throws {
         if let library = mockModelData?.calibreLibraries.first?.value {
-            try? mockModelData?.realm.write {
-                if let serverRealm = mockModelData?.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+            try? mockModelData?.realm!.write {
+                if let serverRealm = mockModelData?.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                     serverRealm.dsreaderHelper = nil
                 }
             }
@@ -137,7 +137,7 @@ class BookDetailViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
 
-        try mockModelData.realm.write {
+        try mockModelData.realm!.write {
             mockBookRealm.title = "Updated Book"
         }
 
@@ -294,8 +294,8 @@ class BookDetailViewModelTests: XCTestCase {
         
         guard let library = mockCalibreBook?.library else { return }
         
-        try! mockModelData.realm.write {
-            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockModelData.realm!.write {
+            if let serverRealm = mockModelData.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -336,8 +336,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockModelData.realm.write {
-            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockModelData.realm!.write {
+            if let serverRealm = mockModelData.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -376,8 +376,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockModelData.realm.write {
-            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockModelData.realm!.write {
+            if let serverRealm = mockModelData.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -407,8 +407,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockModelData.realm.write {
-            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockModelData.realm!.write {
+            if let serverRealm = mockModelData.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -812,8 +812,8 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     
     override func setUpWithError() throws {
         mockModelData = ModelData(mock: true)
-        try! mockModelData.realm.write {
-            mockModelData.realm.deleteAll()
+        try! mockModelData.realm!.write {
+            mockModelData.realm!.deleteAll()
         }
     }
     

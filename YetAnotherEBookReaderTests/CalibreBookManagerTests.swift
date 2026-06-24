@@ -155,7 +155,7 @@ final class CalibreBookManagerTests: XCTestCase {
     }
 
     func testConvertRealmBookToDomain() {
-        let realm = try! Realm(configuration: modelData.realmConf)
+        let realm = try! Realm(configuration: modelData.realmConf!)
         let bookRealm = CalibreBookRealm()
         bookRealm.serverUUID = library.server.uuid.uuidString
         bookRealm.libraryName = library.name

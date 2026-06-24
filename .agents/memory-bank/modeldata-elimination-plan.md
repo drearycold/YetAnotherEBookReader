@@ -56,20 +56,28 @@ graph LR
 
 ### Phase 0: 准备工作 (~0.5 天)
 
+**状态**: ✅ 已完成 (2026-06-24)
+
+**产出**:
+- `.agents/memory-bank/modeldata-baseline-2026-06-24.md` — 精确基线
+- `ModelData.swift` 中 84 个 Facade 方法/属性添加 `// FACADE: <Manager>` 标记
+- `ModelData.swift` 中 10 个非 Facade 方法添加 `// → <TargetManager>` 标记
+- 4 处 force-unwrap 已修复 (`realm`, `realmSaveBooksMetadata`, `realmConf`, `logger`)
+- `xcodebuild build` 通过；测试 2 个预存失败 (`ReadingSessionManagerTests`, `ShelfDisplayModelsTests`) 与本次改动无关
+
 #### 0a. 建立 ModelData 瘦身指标基线
 
-```bash
-# 跟踪这些指标
-wc -l YetAnotherEBookReader/Models/ModelData.swift                    # 1,061
-grep -c "func " YetAnotherEBookReader/Models/ModelData.swift          # ~50 methods
-grep -rl "@EnvironmentObject var modelData" YetAnotherEBookReader/ | wc -l  # 15
-grep -rl "ModelData" YetAnotherEBookReader/ | wc -l                   # 62
-grep -rn "ModelData.shared" YetAnotherEBookReader/ | wc -l            # 20+
-```
+**实际基线 (2026-06-24)**:
+- `ModelData.swift` 总行数: **1,073** (vs 计划估算 1,061)
+- 方法数: **82** (vs 计划估算 ~50)
+- 顶层属性数: **29** (vs 计划估算 ~80 — 计划包含 @Published 和 lazy var)
+- `ModelData.shared` 生产引用: **41** 处 (vs 计划估算 20+)
+- 测试引用: **25** 处
+- Facade 引用密度: bookManager 41, serverManager 23, libraryManager 22, sessionManager 23, downloadManager 8, fontsManager 6, logger 3
 
 #### 0b. 标记所有纯 Facade 转发
 
-在 ModelData 中用 `// FACADE:` 注释标记所有纯转发方法/属性，便于批量删除时确认安全性。
+已完成 84 个 `// FACADE: <Manager>` 标记和 10 个 `// → <TargetManager>` 标记。
 
 ---
 

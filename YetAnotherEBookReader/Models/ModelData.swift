@@ -26,42 +26,51 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
+        // FACADE: serverManager
         var calibreServers: [String: CalibreServer] {
         get { serverManager.calibreServers }
         set { serverManager.calibreServers = newValue }
     }
+    // FACADE: serverManager
     var calibreServerInfoStaging: [String: CalibreServerInfo] {
         get { serverManager.calibreServerInfoStaging }
         set { serverManager.calibreServerInfoStaging = newValue }
     }
     
+    // FACADE: libraryManager
     var calibreLibraries: [String: CalibreLibrary] {
         get { libraryManager.calibreLibraries }
         set { libraryManager.calibreLibraries = newValue }
     }
+    // FACADE: libraryManager
     var calibreLibraryInfoStaging: [String: CalibreLibraryInfo] {
         get { libraryManager.calibreLibraryInfoStaging }
         set { libraryManager.calibreLibraryInfoStaging = newValue }
     }
+    // FACADE: libraryManager
     var localLibrary: CalibreLibrary? {
         get { libraryManager.localLibrary }
         set { libraryManager.localLibrary = newValue }
     }
     
+    // FACADE: serverManager
     var documentServer: CalibreServer? {
         get { serverManager.documentServer }
         set { serverManager.documentServer = newValue }
     }
     
     //for LibraryInfoView
+    // FACADE: sessionManager
     var defaultFormat: Format {
         get { sessionManager.defaultFormat }
         set { sessionManager.defaultFormat = newValue }
     }
+    // FACADE: sessionManager
     var formatReaderMap: [Format: [ReaderType]] {
         get { sessionManager.formatReaderMap }
         set { sessionManager.formatReaderMap = newValue }
     }
+    // FACADE: sessionManager
     var formatList: [Format] {
         get { sessionManager.formatList }
         set { sessionManager.formatList = newValue }
@@ -69,10 +78,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
     
+    // FACADE: bookManager
     var booksInShelf: [String: CalibreBook] {
         get { bookManager.booksInShelf }
         set { bookManager.booksInShelf = newValue }
     }
+    // FACADE: bookManager
     var booksAnnotation: [String: CalibreBook] {
         get { bookManager.booksAnnotation }
         set { bookManager.booksAnnotation = newValue }
@@ -86,11 +97,13 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     var presentingStack = [Binding<Bool>]()
     
+    // FACADE: bookManager
     var currentBookId: String {
         get { bookManager.currentBookId }
         set { bookManager.currentBookId = newValue }
     }
 
+    // FACADE: bookManager
     var selectedBookId: String? {
         get { bookManager.selectedBookId }
         set { bookManager.selectedBookId = newValue }
@@ -103,22 +116,27 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     @Published var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(modelData: self)
 
+    // FACADE: bookManager
     var readingBookInShelfId: String? {
         get { bookManager.readingBookInShelfId }
         set { bookManager.readingBookInShelfId = newValue }
     }
+    // FACADE: bookManager
     var readingBook: CalibreBook? {
         get { bookManager.readingBook }
         set { bookManager.readingBook = newValue }
     }
+    // FACADE: sessionManager
     var readerInfo: ReaderInfo? {
         get { sessionManager.readerInfo }
         set { sessionManager.readerInfo = newValue }
     }
+    // FACADE: bookManager
     var presentingEBookReaderFromShelf: Bool {
         get { bookManager.presentingEBookReaderFromShelf }
         set { bookManager.presentingEBookReaderFromShelf = newValue }
     }
+    // FACADE: sessionManager
     var selectedPosition: String {
         get { sessionManager.selectedPosition }
         set { sessionManager.selectedPosition = newValue }
@@ -144,11 +162,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     private var defaultLog = Logger()
     
     static var RealmSchemaVersion: UInt64 = 140
-    var realm: Realm!
-    var realmSaveBooksMetadata: Realm!
-    var realmConf: Realm.Configuration!
+    var realm: Realm?
+    var realmSaveBooksMetadata: Realm?
+    var realmConf: Realm.Configuration?
     
-    var logger: CalibreActivityLogger!
+    var logger: CalibreActivityLogger?
     
     let kfImageCache = ImageCache.default
     var authResponsor = AuthResponsor()
@@ -168,7 +186,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
     lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
-    lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
+    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
     lazy var searchCacheRepository = RealmSearchCacheStore(modelData: self)
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
@@ -192,12 +210,14 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
     
+    // FACADE: libraryManager
     var librarySyncStatus: [String: CalibreSyncStatus] {
         get { libraryManager.librarySyncStatus }
         set { libraryManager.librarySyncStatus = newValue }
     }
 
     @Published var fontsManager = FontsManager()
+    // FACADE: fontsManager
     var userFontInfos: [String: FontInfo] {
         get { fontsManager.userFontInfos }
         set { fontsManager.userFontInfos = newValue }
@@ -337,7 +357,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
         ModelData.RealmSchemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
-        realmConf = Realm.Configuration(
+        var conf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 138 {
@@ -559,30 +579,30 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         )
         
         if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
-            realmConf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
+            conf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
             if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
                 let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")
                 if FileManager.default.fileExists(atPath: existingRealmURL.path) {
-                    try? FileManager.default.moveItem(at: existingRealmURL, to: realmConf.fileURL!)
+                    try? FileManager.default.moveItem(at: existingRealmURL, to: conf.fileURL!)
                 }
             }
         }
         
-        let _ = try Realm(configuration: realmConf)
-        realmConf.migrationBlock = nil
+        let _ = try Realm(configuration: conf)
+        conf.migrationBlock = nil
         
-        Realm.Configuration.defaultConfiguration = realmConf
+        Realm.Configuration.defaultConfiguration = conf
+        realmConf = conf
     }
     
     func initializeDatabase() {
-        realm = try! Realm(
-            configuration: realmConf
-        )
+        guard let realmConf = realmConf else { return }
+        realm = try? Realm(configuration: realmConf)
         logger = CalibreActivityLogger(realmConf: realmConf)
         databaseService.setup(conf: realmConf)
         downloadManager.setup(modelData: self, realmConf: realmConf)
         ModelData.SaveBooksMetadataRealmQueue.sync {
-            self.realmSaveBooksMetadata = try! Realm(
+            self.realmSaveBooksMetadata = try? Realm(
                 configuration: realmConf, queue: ModelData.SaveBooksMetadataRealmQueue
             )
         }
@@ -604,7 +624,8 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     func migrateLegacyReadPosData() {
         DispatchQueue.global(qos: .background).async {
-            guard let realm = try? Realm(configuration: self.realmConf) else {
+            guard let realmConf = self.realmConf,
+                  let realm = try? Realm(configuration: realmConf) else {
                 return
             }
             
@@ -617,7 +638,8 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             print("migrateLegacyReadPosData: Found \(bookKeysToMigrate.count) legacy reading positions to migrate.")
             
             for key in bookKeysToMigrate {
-                guard let freshRealm = try? Realm(configuration: self.realmConf),
+                guard let realmConf = self.realmConf,
+                      let freshRealm = try? Realm(configuration: realmConf),
                       let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
                       let serverUUID = bookRealm.serverUUID,
                       let libraryName = bookRealm.libraryName
@@ -638,39 +660,48 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
+    // FACADE: fontsManager
     func importCustomFonts(urls: [URL]) -> [CFArray]? {
         return fontsManager.importCustomFonts(urls: urls)
     }
     
+    // FACADE: fontsManager
     func removeCustomFonts(at offsets: IndexSet) {
         fontsManager.removeCustomFonts(at: offsets)
     }
     
+    // FACADE: fontsManager
     func reloadCustomFonts() {
         fontsManager.reloadCustomFonts()
     }
     
+    // → bookManager (Phase 2: move populateBookShelf logic here)
     func populateBookShelf() {
         bookManager.populateBookShelf()
     }
     
+    // → libraryManager (Phase 2: move populateLibraries logic here)
     func populateLibraries() {
         libraryManager.populateLibraries()
     }
     
+    // → libraryManager (Phase 2: move populateLocalLibraryBooks logic here)
     func populateLocalLibraryBooks() {
         libraryManager.populateLocalLibraryBooks()
     }
     
     // only move file when triggered by in-app importer, DO NOT MOVE FROM OTHER PLACES
+    // → bookManager (Phase 2: move onOpenURL logic here)
     func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
         bookManager.onOpenURL(url: url, doMove: doMove, doOverwrite: doOverwrite, asNew: asNew, knownBookId: knownBookId)
     }
     
+    // → bookManager (Phase 2: move calcLocalFileBookId logic here)
     func calcLocalFileBookId(for fileURL: URL) -> Int32? {
         bookManager.calcLocalFileBookId(for: fileURL)
     }
     
+    // → bookManager (Phase 2: move loadLocalLibraryBookMetadata logic here)
     func loadLocalLibraryBookMetadata(fileURL: URL, in library: CalibreLibrary, on server: CalibreServer, knownBookId: Int32? = nil) -> Int32? {
         bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: library, on: server, knownBookId: knownBookId)
     }
@@ -679,10 +710,12 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         bookManager.convert(bookRealm: bookRealm)
     }
     
+    // FACADE: bookManager
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
         bookManager.convert(library: library, bookRealm: bookRealm)
     }
     
+    // FACADE: bookManager
     func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {
         bookManager.queryLibrary(for: bookRealm)
     }
@@ -715,43 +748,53 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         return url
     }
     
+    // FACADE: sessionManager
     func getPreferredFormat() -> Format {
         sessionManager.getPreferredFormat()
     }
     
+    // FACADE: sessionManager
     func getPreferredFormat(for book: CalibreBook) -> Format? {
         sessionManager.getPreferredFormat(for: book)
     }
     
+    // FACADE: sessionManager
     func updatePreferredFormat(for format: Format) {
         sessionManager.updatePreferredFormat(for: format)
     }
     
     // user preferred -> default -> unsupported
+    // FACADE: sessionManager
     func getPreferredReader(for format: Format) -> ReaderType {
         sessionManager.getPreferredReader(for: format)
     }
     
+    // FACADE: sessionManager
     func updatePreferredReader(for format: Format, with reader: ReaderType) {
         sessionManager.updatePreferredReader(for: format, with: reader)
     }
     
+            // FACADE: libraryManager
             func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
         try libraryManager.updateLibraryRealm(library: library, realm: realm)
     }
     
+    // FACADE: libraryManager
     func hideLibrary(libraryId: String) {
         libraryManager.hideLibrary(libraryId: libraryId)
     }
     
+    // FACADE: libraryManager
     func restoreLibrary(libraryId: String) {
         libraryManager.restoreLibrary(libraryId: libraryId)
     }
     
+    // FACADE: libraryManager
     func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Realm) -> Int {
         return libraryManager.queryLibraryBookRealmCount(library: library, realm: realm)
     }
     
+    // → libraryManager + serverManager (has actual logic: updates defaultLibrary, persists Realm)
     func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
         libraryManager.updateServerLibraryInfo(serverInfo: serverInfo)
         
@@ -766,43 +809,53 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
+    // FACADE: bookManager
     func updateBook(book: CalibreBook) {
         bookManager.updateBook(book: book)
     }
     
+    // FACADE: bookManager
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
         bookManager.queryBookRealm(book: book, realm: realm)
     }
     
+    // FACADE: bookManager
     func updateBookRealm(book: CalibreBook, realm: Realm) {
         bookManager.updateBookRealm(book: book, realm: realm)
     }
     
+    // FACADE: bookManager
     func removeFromRealm(book: CalibreBook) {
         bookManager.removeFromRealm(book: book)
     }
     
+    // FACADE: bookManager
     func removeFromRealm(for primaryKey: String) {
         bookManager.removeFromRealm(for: primaryKey)
     }
     
+    // FACADE: bookManager
     func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreDSReaderHelperPrefs.Options, CalibreGoodreadsSyncPrefs.PluginPrefs)? {
         bookManager.shouldAutoUpdateGoodreads(library: library)
     }
     
+    // FACADE: bookManager
     func addToShelf(book: CalibreBook, formats: [Format]) {
         bookManager.addToShelf(book: book, formats: formats)
     }
     
+    // FACADE: bookManager
     func removeFromShelf(inShelfId: String) {
         bookManager.removeFromShelf(inShelfId: inShelfId)
     }
     
+    // FACADE: downloadManager
     func startDownloadFormatNew(book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
         return downloadManager.startDownloadNew(book, format: format, overwrite: overwrite)
     }
 
     @available(*, deprecated, message: "Use startDownloadFormatNew instead")
+    // FACADE: downloadManager (wraps startDownloadFormatNew)
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
         switch startDownloadFormatNew(book: book, format: format, overwrite: overwrite) {
         case .success:
@@ -812,14 +865,17 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
+    // FACADE: downloadManager
     func cancelDownloadFormat(book: CalibreBook, format: Format) {
         return downloadManager.cancelDownload(book, format: format)
     }
     
+    // FACADE: downloadManager
     func pauseDownloadFormat(book: CalibreBook, format: Format) {
         return downloadManager.pauseDownload(book, format: format)
     }
     
+    // → downloadManager (has actual logic: cancels on resume failure)
     func resumeDownloadFormat(book: CalibreBook, format: Format) -> Bool {
         let result = downloadManager.resumeDownload(book, format: format)
         if !result {
@@ -828,76 +884,94 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         return result
     }
     
+    // FACADE: bookManager
     func clearCache(inShelfId: String) {
         bookManager.clearCache(inShelfId: inShelfId)
     }
     
+    // FACADE: bookManager
     func addedCache(book: CalibreBook, format: Format) {
         bookManager.addedCache(book: book, format: format)
     }
     
+    // FACADE: bookManager
     func clearCache(book: CalibreBook, format: Format) {
         bookManager.clearCache(book: book, format: format)
     }
     
+    // FACADE: bookManager
     func getCacheInfo(book: CalibreBook, format: Format) -> (UInt64, Date?)? {
         bookManager.getCacheInfo(book: book, format: format)
     }
     
     
+    // FACADE: sessionManager
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         sessionManager.updateCurrentPosition(alertDelegate: alertDelegate)
     }
 
 
+    // FACADE: bookManager
     func goToPreviousBook() {
         bookManager.goToPreviousBook()
     }
     
+    // FACADE: bookManager
     func goToNextBook() {
         bookManager.goToNextBook()
     }
     
+    // FACADE: sessionManager
     func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
         sessionManager.defaultReaderForDefaultFormat(book: book)
     }
     
+    // FACADE: sessionManager
     func formatOfReader(readerName: String) -> Format? {
         sessionManager.formatOfReader(readerName: readerName)
     }
     
+    // FACADE: sessionManager
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
         sessionManager.prepareBookReading(book: book)
     }
     
+    // FACADE: sessionManager
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
         sessionManager.prepareBookReading(url: url, format: format, readerType: readerType, position: position)
     }
     
+    // FACADE: bookManager
     func removeDeleteBooksFromServer(server: CalibreServer) {
         bookManager.removeDeleteBooksFromServer(server: server)
     }
     
+    // FACADE: serverManager
         func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
         serverManager.probeServersReachability(with: serverIds, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental)
     }
     
+    // FACADE: serverManager
     func isServerReachable(server: CalibreServer) -> Bool {
         return serverManager.isServerReachable(server: server)
     }
     
+    // FACADE: serverManager
     func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
         return serverManager.isServerReachable(server: server, isPublic: isPublic)
     }
     
+    // FACADE: serverManager
     func isServerProbing(server: CalibreServer) -> Bool {
         return serverManager.isServerProbing(server: server)
     }
     
+    // FACADE: serverManager
     func getServerInfo(server: CalibreServer) -> CalibreServerInfo? {
         return serverManager.getServerInfo(server: server)
     }
     
+    // → bookManager + libraryManager (has actual logic: filters/grouping/spawning tasks)
     func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
         let libraryBooks = booksInShelf.values
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
@@ -923,46 +997,56 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
         @discardableResult
     @MainActor
+    // FACADE: serverManager
     func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
         return await serverManager.probeServer(request: request)
     }
     
+    // FACADE: serverManager
     @MainActor
     func removeServer(server: CalibreServer) async {
         await serverManager.removeServer(server: server)
     }
     
+    // FACADE: serverManager
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
         serverManager.addServer(server: server, libraries: libraries)
     }
     
+    // FACADE: serverManager
     func updateServerRealm(server: CalibreServer) throws {
         try serverManager.updateServerRealm(server: server)
     }
     
+    // FACADE: serverManager
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
         return serverManager.queryServerDSReaderHelper(server: server)
     }
     
+    // FACADE: serverManager
     func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper) {
         serverManager.updateServerDSReaderHelper(serverId: serverId, dsreaderHelper: dsreaderHelper)
     }
     
+    // FACADE: libraryManager
     @discardableResult
     @MainActor
     func probeLibrary(request: CalibreProbeLibraryRequest) async -> CalibreLibraryProbeTask {
         return await libraryManager.probeLibrary(request: request)
     }
     
+    // FACADE: libraryManager
     @MainActor
     func removeLibrary(library: CalibreLibrary) async {
         await libraryManager.removeLibrary(library: library)
     }
     
+    // FACADE: libraryManager
     func registerProbeLibraryLastModifiedCancellable() {
         libraryManager.registerProbeLibraryLastModifiedCancellable()
     }
     
+    // → serverManager (Phase 2: move registerSyncServerHelperConfigCancellable here, ~45 lines of Combine pipeline)
     func registerSyncServerHelperConfigCancellable() {
         let queue = DispatchQueue(label: "sync-server-helper", qos: .userInitiated)
         syncServerHelperConfigSubject
@@ -1009,33 +1093,42 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             .store(in: &calibreCancellables)
     }
     
+    // FACADE: libraryManager
     @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
         await libraryManager.syncLibrary(request: request)
     }
     
+    // FACADE: libraryManager
     func saveBookMetadata(metadata: CalibreSyncLibraryBooksMetadata) async {
         await libraryManager.saveBookMetadata(metadata: metadata)
     }
     
+    // FACADE: bookManager
     @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
         await bookManager.getBooksMetadata(request: request)
     }
     
+    // FACADE: logger
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
+        guard let logger = logger else { return }
         Task {
             await logger.logStartCalibreActivity(type: type, request: request, startDatetime: startDatetime, bookId: bookId, libraryId: libraryId)
         }
     }
     
+    // FACADE: logger
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String) {
+        guard let logger = logger else { return }
         Task {
             await logger.logFinishCalibreActivity(type: type, request: request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
         }
     }
     
+    // FACADE: logger
     func cleanCalibreActivities(startDatetime: Date) {
+        guard let logger = logger else { return }
         Task {
             await logger.cleanCalibreActivities(startDatetime: startDatetime)
         }
@@ -1043,30 +1136,36 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     /**
      key: inShelfId
      */
+    // FACADE: sessionManager
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String:[BookDeviceReadingPositionHistory]] {
         return sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDateAfter)
     }
     
+    // FACADE: sessionManager
     func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
         sessionManager.getReadingStatistics(list: list, limitDays: limitDays)
     }
     
+    // FACADE: bookManager
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
         bookManager.getBookRealm(forPrimaryKey: forPrimaryKey)
     }
     
+    // FACADE: bookManager
     func bookExists(forPrimaryKey: String) -> Bool {
         bookManager.bookExists(forPrimaryKey: forPrimaryKey)
     }
 }
 
 extension ModelData: LibraryResolver {
+    // FACADE: libraryManager (via calibreLibraries Facade property)
     func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
         return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
     }
 }
 
 extension ModelData: ServerResolver {
+    // FACADE: serverManager (via calibreServers Facade property)
     func server(forUUID uuid: String) -> CalibreServer? {
         return calibreServers[uuid]
     }

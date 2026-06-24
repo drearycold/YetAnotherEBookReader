@@ -125,7 +125,9 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
-        guard let modelData = modelData, let realm = try? Realm(configuration: modelData.realmConf) else { return [:] }
+        guard let modelData = modelData,
+              let realmConf = modelData.realmConf,
+              let realm = try? Realm(configuration: realmConf) else { return [:] }
         
         var pred: NSPredicate?
         if let library = library, let bookId = bookId {
