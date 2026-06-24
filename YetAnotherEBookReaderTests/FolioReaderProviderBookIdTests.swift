@@ -495,14 +495,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     func testDefaultProfileSeededAndContainsLegacyDefaults() {
-        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderProfileTests")
-
         let folioReader = FolioReader()
+        let repository = makeProfileRepository(id: "FolioReaderProfileTests")
         let provider = FolioReaderDelegatePreferenceProvider(
             folioReader,
             delegate: nil,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // Assert listProfile returns ["Default"]
@@ -534,15 +533,14 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     func testCustomProfileSaveLoadListAndRemove() {
-        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderCustomProfileTests")
-
         let folioReader = FolioReader()
         let mockDelegate = MockReaderEngineDelegate()
+        let repository = makeProfileRepository(id: "FolioReaderCustomProfileTests")
         let provider = FolioReaderDelegatePreferenceProvider(
             folioReader,
             delegate: mockDelegate,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // 1. Initially lists only "Default"
@@ -570,7 +568,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             folioReader,
             delegate: mockDelegate,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // Before load: has Default profile (e.g. nightMode = false)
@@ -597,6 +595,75 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         provider2.preference(removeProfile: "Default")
         // listProfile should recreate Default via ensureDefaultProfile()
         XCTAssertEqual(provider2.preference(listProfile: nil), ["Default"])
+    }
+
+    func testProviderLoadsDefaultProfileThroughRepositoryOnInit() {
+        let folioReader = FolioReader()
+        let repository = MockFolioReaderProfileRepository()
+        repository.loadProfileReturn = FolioReaderProfileValue(
+            nightMode: true,
+            themeMode: 2,
+            currentFont: "Avenir",
+            currentFontSize: "24px",
+            currentFontWeight: "700",
+            currentScrollDirection: 1,
+            currentMarginTop: 9,
+            currentMarginBottom: 10,
+            currentMarginLeft: 11,
+            currentMarginRight: 12,
+            currentVMarginLinked: false,
+            currentHMarginLinked: false,
+            currentLetterSpacing: 3,
+            currentLineHeight: 4,
+            currentTextIndent: 5,
+            doWrapPara: true,
+            doClearClass: false
+        )
+
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: repository
+        )
+
+        XCTAssertTrue(repository.ensureDefaultProfileCalled)
+        XCTAssertEqual(repository.loadProfileNameParam, "Default")
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: false), true)
+        XCTAssertEqual(provider.preference(stringFor: "currentFont", default: ""), "Avenir")
+    }
+
+    func testProviderSaveAndRemoveDelegateToRepository() {
+        let folioReader = FolioReader()
+        let repository = MockFolioReaderProfileRepository()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: repository
+        )
+
+        provider.preference(setBool: true, for: "nightMode")
+        provider.preference(setString: "Avenir", for: "currentFont")
+        provider.preference(saveProfile: "NightAvenir")
+        provider.preference(removeProfile: "NightAvenir")
+
+        XCTAssertTrue(repository.saveProfileCalled)
+        XCTAssertEqual(repository.saveProfileNameParam, "NightAvenir")
+        XCTAssertEqual(repository.saveProfileParam?.nightMode, true)
+        XCTAssertEqual(repository.saveProfileParam?.currentFont, "Avenir")
+        XCTAssertTrue(repository.removeProfileCalled)
+        XCTAssertEqual(repository.removeProfileNameParam, "NightAvenir")
+    }
+
+    private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
+        let config = Realm.Configuration(
+            inMemoryIdentifier: id,
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in },
+            objectTypes: [FolioReaderPreferenceRealm.self]
+        )
+        return RealmFolioReaderProfileRepository(realmConfiguration: config)
     }
 }
 

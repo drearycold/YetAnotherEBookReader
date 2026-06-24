@@ -83,4 +83,46 @@ class FolioReaderPreferenceRealm: Object {
         //skipping structuralStyle
         //skipping structuralTocLevel
     }
+
+    func toValue(defaults: FolioReaderProfileValue) -> FolioReaderProfileValue {
+        FolioReaderProfileValue(
+            nightMode: nightMode,
+            themeMode: themeMode != .min ? themeMode : defaults.themeMode,
+            currentFont: currentFont ?? defaults.currentFont,
+            currentFontSize: currentFontSize ?? defaults.currentFontSize,
+            currentFontWeight: currentFontWeight ?? defaults.currentFontWeight,
+            currentScrollDirection: currentScrollDirection != .min ? currentScrollDirection : defaults.currentScrollDirection,
+            currentMarginTop: currentMarginTop != .min ? currentMarginTop : defaults.currentMarginTop,
+            currentMarginBottom: currentMarginBottom != .min ? currentMarginBottom : defaults.currentMarginBottom,
+            currentMarginLeft: currentMarginLeft != .min ? currentMarginLeft : defaults.currentMarginLeft,
+            currentMarginRight: currentMarginRight != .min ? currentMarginRight : defaults.currentMarginRight,
+            currentVMarginLinked: currentVMarginLinked,
+            currentHMarginLinked: currentHMarginLinked,
+            currentLetterSpacing: currentLetterSpacing != .min ? currentLetterSpacing : defaults.currentLetterSpacing,
+            currentLineHeight: currentLineHeight != .min ? currentLineHeight : defaults.currentLineHeight,
+            currentTextIndent: currentTextIndent != .min ? currentTextIndent : defaults.currentTextIndent,
+            doWrapPara: doWrapPara,
+            doClearClass: doClearClass
+        )
+    }
+
+    func apply(_ value: FolioReaderProfileValue) {
+        nightMode = value.nightMode
+        themeMode = value.themeMode
+        currentFont = value.currentFont
+        currentFontSize = value.currentFontSize
+        currentFontWeight = value.currentFontWeight
+        currentScrollDirection = value.currentScrollDirection
+        currentMarginTop = value.currentMarginTop
+        currentMarginBottom = value.currentMarginBottom
+        currentMarginLeft = value.currentMarginLeft
+        currentMarginRight = value.currentMarginRight
+        currentVMarginLinked = value.currentVMarginLinked
+        currentHMarginLinked = value.currentHMarginLinked
+        currentLetterSpacing = value.currentLetterSpacing
+        currentLineHeight = value.currentLineHeight
+        currentTextIndent = value.currentTextIndent
+        doWrapPara = value.doWrapPara
+        doClearClass = value.doClearClass
+    }
 }

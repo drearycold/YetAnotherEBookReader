@@ -4,6 +4,13 @@
 
 ## Latest Status (2026-06-24)
 
+- Phase 3a 已完成：`Providers.swift` 的 FolioReader profile 持久化已收口到独立 repository。
+  - 新增 `FolioReaderProfileRepositoryProtocol`
+  - 新增 `RealmFolioReaderProfileRepository`
+  - 新增 `FolioReaderProfileValue`
+  - `FolioReaderDelegatePreferenceProvider` 改为纯运行时 provider，不再持有 `Realm.Configuration` 或直接操作 `FolioReaderPreferenceRealm`
+  - `ModelData` 新增 `folioReaderProfileRepository`
+  - `FolioReaderPreferenceRealm` 新增 value bridge：`toValue(defaults:)` / `apply(_:)`
 - Phase 2 剩余的 4 个观察型/查询型 ViewModel 已完成 Realm 边界清理：
   - `BookDetailViewModel`
   - `ActivityListViewModel`
@@ -18,19 +25,18 @@
   - `ReadingPositionRepositoryProtocol.historyBook(for:bookId:)`
   - `ActivityLogRepositoryProtocol`
   - `RealmActivityLogRepository`
-- Views 层 `import RealmSwift` 已进一步降到 4 个文件：
+- Views 层 `import RealmSwift` 当前剩 3 个文件：
   - `LibraryInfoViewModel.swift`
   - `UnifiedCategoryViewModel.swift`
-  - `Providers.swift`
   - `ReadiumPreferenceAdapter.swift`
 - 当前 Phase 3 剩余范围已收敛为：
   - category cache observe 边界（`LibraryInfoViewModel` / `UnifiedCategoryViewModel`）
-  - Folio profile / provider 持久化边界（`Providers.swift`）
   - `ReadiumPreferenceAdapter.swift` 持久化映射边界保留
 - 验证结果：
+  - focused Folio/profile tests: 7 passed
   - focused ViewModel tests: 29 passed
-  - full `xcodebuild test`: 261 unit tests + 1 UI test passed
-> 日期: 2026-06-23
+  - full test suite via Xcode MCP `RunAllTests`: 267 passed
+> 日期: 2026-06-24
 
 ---
 

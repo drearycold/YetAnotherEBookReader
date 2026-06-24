@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import FolioReaderKit
 import RealmSwift
 
 protocol ReaderPreferenceRepositoryProtocol {
@@ -15,6 +16,215 @@ protocol ReaderPreferenceRepositoryProtocol {
     func saveReadiumPreferences(_ preferences: ReadiumPreferenceValue, for book: CalibreBook)
     func loadPDFPreferences(for book: CalibreBook) -> PDFPreferenceValue?
     func savePDFPreferences(_ preferences: PDFPreferenceValue, for book: CalibreBook)
+}
+
+protocol FolioReaderProfileRepositoryProtocol {
+    func ensureDefaultProfile(defaults: FolioReaderProfileValue)
+    func loadProfile(named name: String, defaults: FolioReaderProfileValue) -> FolioReaderProfileValue?
+    func saveProfile(_ profile: FolioReaderProfileValue, named name: String)
+    func listProfiles(filter: String?, defaults: FolioReaderProfileValue) -> [String]
+    func removeProfile(named name: String)
+}
+
+struct FolioReaderProfileValue: Equatable {
+    var nightMode: Bool
+    var themeMode: Int
+    var currentFont: String
+    var currentFontSize: String
+    var currentFontWeight: String
+    var currentScrollDirection: Int
+    var currentMarginTop: Int
+    var currentMarginBottom: Int
+    var currentMarginLeft: Int
+    var currentMarginRight: Int
+    var currentVMarginLinked: Bool
+    var currentHMarginLinked: Bool
+    var currentLetterSpacing: Int
+    var currentLineHeight: Int
+    var currentTextIndent: Int
+    var doWrapPara: Bool
+    var doClearClass: Bool
+
+    init(
+        nightMode: Bool,
+        themeMode: Int,
+        currentFont: String,
+        currentFontSize: String,
+        currentFontWeight: String,
+        currentScrollDirection: Int,
+        currentMarginTop: Int,
+        currentMarginBottom: Int,
+        currentMarginLeft: Int,
+        currentMarginRight: Int,
+        currentVMarginLinked: Bool,
+        currentHMarginLinked: Bool,
+        currentLetterSpacing: Int,
+        currentLineHeight: Int,
+        currentTextIndent: Int,
+        doWrapPara: Bool,
+        doClearClass: Bool
+    ) {
+        self.nightMode = nightMode
+        self.themeMode = themeMode
+        self.currentFont = currentFont
+        self.currentFontSize = currentFontSize
+        self.currentFontWeight = currentFontWeight
+        self.currentScrollDirection = currentScrollDirection
+        self.currentMarginTop = currentMarginTop
+        self.currentMarginBottom = currentMarginBottom
+        self.currentMarginLeft = currentMarginLeft
+        self.currentMarginRight = currentMarginRight
+        self.currentVMarginLinked = currentVMarginLinked
+        self.currentHMarginLinked = currentHMarginLinked
+        self.currentLetterSpacing = currentLetterSpacing
+        self.currentLineHeight = currentLineHeight
+        self.currentTextIndent = currentTextIndent
+        self.doWrapPara = doWrapPara
+        self.doClearClass = doClearClass
+    }
+
+    init(defaultsFrom folioReader: FolioReader) {
+        self.init(
+            nightMode: false,
+            themeMode: FolioReaderThemeMode.serpia.rawValue,
+            currentFont: "Georgia",
+            currentFontSize: FolioReader.DefaultFontSize,
+            currentFontWeight: FolioReader.DefaultFontWeight,
+            currentScrollDirection: folioReader.defaultScrollDirection.rawValue,
+            currentMarginTop: folioReader.defaultMarginTop,
+            currentMarginBottom: folioReader.defaultMarginBottom,
+            currentMarginLeft: folioReader.defaultMarginLeft,
+            currentMarginRight: folioReader.defaultMarginRight,
+            currentVMarginLinked: true,
+            currentHMarginLinked: true,
+            currentLetterSpacing: FolioReader.DefaultLetterSpacing,
+            currentLineHeight: FolioReader.DefaultLineHeight,
+            currentTextIndent: FolioReader.DefaultTextIndent,
+            doWrapPara: false,
+            doClearClass: true
+        )
+    }
+
+    init(values: [String: Any], folioReader: FolioReader) {
+        let defaults = FolioReaderProfileValue(defaultsFrom: folioReader)
+        self.init(
+            nightMode: values["nightMode"] as? Bool ?? defaults.nightMode,
+            themeMode: values["themeMode"] as? Int ?? defaults.themeMode,
+            currentFont: values["currentFont"] as? String ?? defaults.currentFont,
+            currentFontSize: values["currentFontSize"] as? String ?? defaults.currentFontSize,
+            currentFontWeight: values["currentFontWeight"] as? String ?? defaults.currentFontWeight,
+            currentScrollDirection: values["currentScrollDirection"] as? Int ?? defaults.currentScrollDirection,
+            currentMarginTop: values["currentMarginTop"] as? Int ?? defaults.currentMarginTop,
+            currentMarginBottom: values["currentMarginBottom"] as? Int ?? defaults.currentMarginBottom,
+            currentMarginLeft: values["currentMarginLeft"] as? Int ?? defaults.currentMarginLeft,
+            currentMarginRight: values["currentMarginRight"] as? Int ?? defaults.currentMarginRight,
+            currentVMarginLinked: values["currentVMarginLinked"] as? Bool ?? defaults.currentVMarginLinked,
+            currentHMarginLinked: values["currentHMarginLinked"] as? Bool ?? defaults.currentHMarginLinked,
+            currentLetterSpacing: values["currentLetterSpacing"] as? Int ?? defaults.currentLetterSpacing,
+            currentLineHeight: values["currentLineHeight"] as? Int ?? defaults.currentLineHeight,
+            currentTextIndent: values["currentTextIndent"] as? Int ?? defaults.currentTextIndent,
+            doWrapPara: values["doWrapPara"] as? Bool ?? defaults.doWrapPara,
+            doClearClass: values["doClearClass"] as? Bool ?? defaults.doClearClass
+        )
+    }
+
+    func apply(to values: inout [String: Any], folioReader: FolioReader) {
+        values["nightMode"] = nightMode
+        values["themeMode"] = themeMode
+        values["currentFont"] = currentFont
+        values["currentFontSize"] = currentFontSize
+        values["currentFontWeight"] = currentFontWeight
+        values["currentScrollDirection"] = currentScrollDirection
+        values["currentMarginTop"] = currentMarginTop
+        values["currentMarginBottom"] = currentMarginBottom
+        values["currentMarginLeft"] = currentMarginLeft
+        values["currentMarginRight"] = currentMarginRight
+        values["currentVMarginLinked"] = currentVMarginLinked
+        values["currentHMarginLinked"] = currentHMarginLinked
+        values["currentLetterSpacing"] = currentLetterSpacing
+        values["currentLineHeight"] = currentLineHeight
+        values["currentTextIndent"] = currentTextIndent
+        values["doWrapPara"] = doWrapPara
+        values["doClearClass"] = doClearClass
+    }
+}
+
+final class RealmFolioReaderProfileRepository: FolioReaderProfileRepositoryProtocol {
+    private let realmConfiguration: Realm.Configuration?
+
+    init(realmConfiguration: Realm.Configuration?) {
+        self.realmConfiguration = realmConfiguration
+    }
+
+    func ensureDefaultProfile(defaults: FolioReaderProfileValue) {
+        guard let realm = openRealm() else { return }
+        if realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default") != nil {
+            return
+        }
+
+        let profile = FolioReaderPreferenceRealm()
+        profile.id = "Default"
+        profile.apply(defaults)
+
+        try? realm.write {
+            realm.add(profile, update: .modified)
+        }
+    }
+
+    func loadProfile(named name: String, defaults: FolioReaderProfileValue) -> FolioReaderProfileValue? {
+        ensureDefaultProfile(defaults: defaults)
+        guard let realm = openRealm(),
+              let profile = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name) else {
+            return nil
+        }
+        return profile.toValue(defaults: defaults)
+    }
+
+    func saveProfile(_ profile: FolioReaderProfileValue, named name: String) {
+        guard let realm = openRealm() else { return }
+
+        try? realm.write {
+            let object = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name) ?? {
+                let newObject = FolioReaderPreferenceRealm()
+                newObject.id = name
+                realm.add(newObject)
+                return newObject
+            }()
+            object.apply(profile)
+        }
+    }
+
+    func listProfiles(filter: String?, defaults: FolioReaderProfileValue) -> [String] {
+        ensureDefaultProfile(defaults: defaults)
+        guard let realm = openRealm() else {
+            return ["Default"]
+        }
+
+        var names = Array(realm.objects(FolioReaderPreferenceRealm.self).map(\.id))
+        if !names.contains("Default") {
+            names.append("Default")
+        }
+        if let filter, !filter.isEmpty {
+            names = names.filter { $0.localizedCaseInsensitiveContains(filter) }
+        }
+        return names.sorted()
+    }
+
+    func removeProfile(named name: String) {
+        guard let realm = openRealm(),
+              let profile = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name) else {
+            return
+        }
+
+        try? realm.write {
+            realm.delete(profile)
+        }
+    }
+
+    private func openRealm() -> Realm? {
+        guard let realmConfiguration else { return nil }
+        return try? Realm(configuration: realmConfiguration)
+    }
 }
 
 final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol {

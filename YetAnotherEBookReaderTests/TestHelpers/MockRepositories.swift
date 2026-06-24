@@ -544,3 +544,55 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         return observeEntriesSubject.prepend(fetchEntriesReturn).eraseToAnyPublisher()
     }
 }
+
+final class MockFolioReaderProfileRepository: FolioReaderProfileRepositoryProtocol {
+    var ensureDefaultProfileCalled = false
+    var ensureDefaultProfileParam: FolioReaderProfileValue?
+
+    var loadProfileCalled = false
+    var loadProfileNameParam: String?
+    var loadProfileDefaultsParam: FolioReaderProfileValue?
+    var loadProfileReturn: FolioReaderProfileValue?
+
+    var saveProfileCalled = false
+    var saveProfileParam: FolioReaderProfileValue?
+    var saveProfileNameParam: String?
+
+    var listProfilesCalled = false
+    var listProfilesFilterParam: String?
+    var listProfilesDefaultsParam: FolioReaderProfileValue?
+    var listProfilesReturn: [String] = ["Default"]
+
+    var removeProfileCalled = false
+    var removeProfileNameParam: String?
+
+    func ensureDefaultProfile(defaults: FolioReaderProfileValue) {
+        ensureDefaultProfileCalled = true
+        ensureDefaultProfileParam = defaults
+    }
+
+    func loadProfile(named name: String, defaults: FolioReaderProfileValue) -> FolioReaderProfileValue? {
+        loadProfileCalled = true
+        loadProfileNameParam = name
+        loadProfileDefaultsParam = defaults
+        return loadProfileReturn
+    }
+
+    func saveProfile(_ profile: FolioReaderProfileValue, named name: String) {
+        saveProfileCalled = true
+        saveProfileParam = profile
+        saveProfileNameParam = name
+    }
+
+    func listProfiles(filter: String?, defaults: FolioReaderProfileValue) -> [String] {
+        listProfilesCalled = true
+        listProfilesFilterParam = filter
+        listProfilesDefaultsParam = defaults
+        return listProfilesReturn
+    }
+
+    func removeProfile(named name: String) {
+        removeProfileCalled = true
+        removeProfileNameParam = name
+    }
+}

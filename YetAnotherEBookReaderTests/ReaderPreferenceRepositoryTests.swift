@@ -6,15 +6,25 @@
 //
 
 import XCTest
+import FolioReaderKit
 import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class ReaderPreferenceRepositoryTests: XCTestCase {
     private var configByServerId: [String: Realm.Configuration]!
     private var repository: ReaderPreferenceRepositoryProtocol!
+    private var folioProfileConfig: Realm.Configuration!
+    private var folioProfileRepository: FolioReaderProfileRepositoryProtocol!
 
     override func setUpWithError() throws {
         configByServerId = [:]
+        folioProfileConfig = Realm.Configuration(
+            inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles",
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in },
+            objectTypes: [FolioReaderPreferenceRealm.self]
+        )
+        folioProfileRepository = RealmFolioReaderProfileRepository(realmConfiguration: folioProfileConfig)
         repository = RealmReaderPreferenceRepository { [unowned self] server in
             if let config = self.configByServerId[server.id] {
                 return config
@@ -41,6 +51,8 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
     override func tearDownWithError() throws {
         configByServerId = nil
         repository = nil
+        folioProfileRepository = nil
+        folioProfileConfig = nil
     }
 
     func testLoadInitialPreferencesReturnsNilWhenMissing() throws {
@@ -304,5 +316,59 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         repository.saveReadiumPreferences(preferences, for: book)
 
         XCTAssertEqual(repository.loadReadiumPreferences(for: book), preferences)
+    }
+
+    func testFolioProfileRepositoryEnsuresDefaultProfile() throws {
+        let folioReader = FolioReader()
+        let defaults = FolioReaderProfileValue(defaultsFrom: folioReader)
+
+        folioProfileRepository.ensureDefaultProfile(defaults: defaults)
+
+        let realm = try Realm(configuration: folioProfileConfig)
+        let saved = try XCTUnwrap(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default"))
+        XCTAssertEqual(saved.toValue(defaults: defaults), defaults)
+    }
+
+    func testFolioProfileRepositorySaveLoadListAndRemove() {
+        let folioReader = FolioReader()
+        let defaults = FolioReaderProfileValue(defaultsFrom: folioReader)
+        let custom = FolioReaderProfileValue(
+            nightMode: true,
+            themeMode: 2,
+            currentFont: "Avenir",
+            currentFontSize: "24px",
+            currentFontWeight: "700",
+            currentScrollDirection: 1,
+            currentMarginTop: 21,
+            currentMarginBottom: 22,
+            currentMarginLeft: 23,
+            currentMarginRight: 24,
+            currentVMarginLinked: false,
+            currentHMarginLinked: false,
+            currentLetterSpacing: 7,
+            currentLineHeight: 8,
+            currentTextIndent: 9,
+            doWrapPara: true,
+            doClearClass: false
+        )
+
+        folioProfileRepository.saveProfile(custom, named: "DarkAvenir")
+
+        XCTAssertEqual(folioProfileRepository.loadProfile(named: "DarkAvenir", defaults: defaults), custom)
+        XCTAssertEqual(folioProfileRepository.listProfiles(filter: "Dark", defaults: defaults), ["DarkAvenir"])
+        XCTAssertEqual(Set(folioProfileRepository.listProfiles(filter: nil, defaults: defaults)), Set(["Default", "DarkAvenir"]))
+
+        folioProfileRepository.removeProfile(named: "DarkAvenir")
+        XCTAssertEqual(folioProfileRepository.listProfiles(filter: nil, defaults: defaults), ["Default"])
+    }
+
+    func testFolioProfileRepositoryRecreatesDefaultAfterRemoval() {
+        let folioReader = FolioReader()
+        let defaults = FolioReaderProfileValue(defaultsFrom: folioReader)
+
+        folioProfileRepository.ensureDefaultProfile(defaults: defaults)
+        folioProfileRepository.removeProfile(named: "Default")
+
+        XCTAssertEqual(folioProfileRepository.listProfiles(filter: nil, defaults: defaults), ["Default"])
     }
 }
