@@ -6,10 +6,12 @@
 //
 
 import Foundation
+import Combine
 import RealmSwift
 
 protocol BookRepositoryProtocol {
     func getBook(id: String) -> CalibreBook?
+    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never>
     func saveBook(_ book: CalibreBook)
     func deleteBook(id: String)
     func getAllBooksInShelf() -> [CalibreBook]
@@ -18,6 +20,9 @@ protocol BookRepositoryProtocol {
     func findDeletedBookIds(serverUUID: String, libraryName: String, activeIds: [String: Any]) -> [Int32]
     func countAndNeedUpdateBooks(serverUUID: String, libraryName: String) -> (count: Int, needUpdateIds: [Int32])
     func getBookRealm(id: String) -> CalibreBookRealm? // Legacy bridge
+    #if DEBUG
+    func resetBooks(serverUUID: String, libraryName: String)
+    #endif
 }
 
 protocol LibraryResolver: AnyObject {
@@ -41,18 +46,44 @@ class RealmBookRepository: BookRepositoryProtocol {
         }
         return nil
     }
+
+    private func mapBookRealm(_ bookRealm: CalibreBookRealm) -> CalibreBook? {
+        guard let serverUUID = bookRealm.serverUUID,
+              let libraryName = bookRealm.libraryName,
+              let library = libraryResolver?.library(forServerUUID: serverUUID, libraryName: libraryName)
+        else { return nil }
+
+        return bookRealm.toDomain(library: library)
+    }
     
     func getBook(id: String) -> CalibreBook? {
         guard let realm = getRealm(),
               let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: id)
         else { return nil }
-        
-        guard let serverUUID = bookRealm.serverUUID,
-              let libraryName = bookRealm.libraryName,
-              let library = libraryResolver?.library(forServerUUID: serverUUID, libraryName: libraryName)
-        else { return nil }
-        
-        return bookRealm.toDomain(library: library)
+
+        return mapBookRealm(bookRealm)
+    }
+
+    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never> {
+        guard let realm = getRealm() else {
+            return Just(nil).eraseToAnyPublisher()
+        }
+
+        return realm.objects(CalibreBookRealm.self)
+            .filter("primaryKey == %@", id)
+            .changesetPublisher
+            .map { [weak self] change -> CalibreBook? in
+                guard let self = self else { return nil }
+                switch change {
+                case .initial(let collection), .update(let collection, _, _, _):
+                    guard let bookRealm = collection.first else { return nil }
+                    return self.mapBookRealm(bookRealm)
+                case .error:
+                    return nil
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
     
     func saveBook(_ book: CalibreBook) {
@@ -125,4 +156,19 @@ class RealmBookRepository: BookRepositoryProtocol {
             .map { $0.idInLib }
         return (count, Array(needUpdateIds))
     }
+
+    #if DEBUG
+    func resetBooks(serverUUID: String, libraryName: String) {
+        guard let realm = getRealm() else { return }
+        let books = realm.objects(CalibreBookRealm.self)
+            .filter("serverUUID == %@ AND libraryName == %@", serverUUID, libraryName)
+        try? realm.write {
+            books.forEach {
+                $0.lastModified = .init(timeIntervalSince1970: 0)
+                $0.lastSynced = .init(timeIntervalSince1970: 0)
+                $0.title = "__RESET__"
+            }
+        }
+    }
+    #endif
 }

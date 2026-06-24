@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 @testable import YetAnotherEBookReader
 
 class MockServerRepository: ServerRepositoryProtocol {
@@ -82,6 +83,20 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
     var countBooksCalled = false
     var countBooksParam: CalibreLibrary?
     var countBooksReturn: Int = 0
+
+    var getLibraryCalled = false
+    var getLibraryIdParam: String?
+    var getLibraryReturn: CalibreLibrary?
+
+    var observeLibraryCalled = false
+    var observeLibraryIdParam: String?
+    var observeLibrarySubject = PassthroughSubject<CalibreLibrary?, Never>()
+
+    var updateLibraryFlagsCalled = false
+    var updateLibraryFlagsIdParam: String?
+    var updateLibraryFlagsDiscoverableParam: Bool?
+    var updateLibraryFlagsAutoUpdateParam: Bool?
+    var updateLibraryFlagsError: Error?
     
     func getAllLibraries() -> [CalibreLibrary] {
         getAllLibrariesCalled = true
@@ -109,6 +124,28 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
         countBooksCalled = true
         countBooksParam = library
         return countBooksReturn
+    }
+
+    func getLibrary(id: String) -> CalibreLibrary? {
+        getLibraryCalled = true
+        getLibraryIdParam = id
+        return getLibraryReturn
+    }
+
+    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never> {
+        observeLibraryCalled = true
+        observeLibraryIdParam = id
+        return observeLibrarySubject.prepend(getLibraryReturn).eraseToAnyPublisher()
+    }
+
+    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws {
+        updateLibraryFlagsCalled = true
+        updateLibraryFlagsIdParam = id
+        updateLibraryFlagsDiscoverableParam = discoverable
+        updateLibraryFlagsAutoUpdateParam = autoUpdate
+        if let error = updateLibraryFlagsError {
+            throw error
+        }
     }
 }
 
@@ -147,6 +184,16 @@ class MockBookRepository: BookRepositoryProtocol {
     var getBookRealmCalled = false
     var getBookRealmIdParam: String?
     var getBookRealmReturn: CalibreBookRealm?
+
+    var observeBookCalled = false
+    var observeBookIdParam: String?
+    var observeBookSubject = PassthroughSubject<CalibreBook?, Never>()
+
+    #if DEBUG
+    var resetBooksCalled = false
+    var resetBooksServerUUIDParam: String?
+    var resetBooksLibraryNameParam: String?
+    #endif
     
     func getBook(id: String) -> CalibreBook? {
         getBookCalled = true
@@ -157,6 +204,12 @@ class MockBookRepository: BookRepositoryProtocol {
     func saveBook(_ book: CalibreBook) {
         saveBookCalled = true
         saveBookParam = book
+    }
+
+    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never> {
+        observeBookCalled = true
+        observeBookIdParam = id
+        return observeBookSubject.prepend(getBookReturn).eraseToAnyPublisher()
     }
     
     func deleteBook(id: String) {
@@ -200,6 +253,14 @@ class MockBookRepository: BookRepositoryProtocol {
         getBookRealmIdParam = id
         return getBookRealmReturn
     }
+
+    #if DEBUG
+    func resetBooks(serverUUID: String, libraryName: String) {
+        resetBooksCalled = true
+        resetBooksServerUUIDParam = serverUUID
+        resetBooksLibraryNameParam = libraryName
+    }
+    #endif
 }
 
 class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
@@ -247,6 +308,15 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var syncPositionsEntriesParam: [CalibreBookLastReadPositionEntry]?
     var syncPositionsBookIdParam: String?
     var syncPositionsReturn: [CalibreBookLastReadPositionEntry] = []
+
+    var debugPositionsCalled = false
+    var debugPositionsBookIdParam: String?
+    var debugPositionsReturn: [BookDeviceReadingPosition] = []
+
+    var historyBookCalled = false
+    var historyBookLibraryParam: CalibreLibrary?
+    var historyBookIdParam: Int32?
+    var historyBookReturn: CalibreBook?
     
     func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
         getPositionCalled = true
@@ -259,6 +329,19 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         getPositionsCalled = true
         getPositionsBookIdParam = bookId
         return getPositionsReturn
+    }
+
+    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
+        debugPositionsCalled = true
+        debugPositionsBookIdParam = bookId
+        return debugPositionsReturn
+    }
+
+    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
+        historyBookCalled = true
+        historyBookLibraryParam = library
+        historyBookIdParam = bookId
+        return historyBookReturn
     }
     
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String) {
@@ -429,5 +512,35 @@ class MockAnnotationRepository: AnnotationRepositoryProtocol {
         syncHighlightsEntriesParam = entries
         syncHighlightsBookIdParam = bookId
         return syncHighlightsReturn
+    }
+}
+
+final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
+    var fetchEntriesCalled = false
+    var fetchEntriesLibraryIdParam: String?
+    var fetchEntriesBookIdParam: Int32?
+    var fetchEntriesSinceParam: Date?
+    var fetchEntriesReturn: [ActivityLogUIEntry] = []
+
+    var observeEntriesCalled = false
+    var observeEntriesLibraryIdParam: String?
+    var observeEntriesBookIdParam: Int32?
+    var observeEntriesSinceParam: Date?
+    let observeEntriesSubject = PassthroughSubject<[ActivityLogUIEntry], Never>()
+
+    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
+        fetchEntriesCalled = true
+        fetchEntriesLibraryIdParam = libraryId
+        fetchEntriesBookIdParam = bookId
+        fetchEntriesSinceParam = since
+        return fetchEntriesReturn
+    }
+
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never> {
+        observeEntriesCalled = true
+        observeEntriesLibraryIdParam = libraryId
+        observeEntriesBookIdParam = bookId
+        observeEntriesSinceParam = since
+        return observeEntriesSubject.prepend(fetchEntriesReturn).eraseToAnyPublisher()
     }
 }

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Combine
 import RealmSwift
 
 protocol ServerResolver: AnyObject {
@@ -14,7 +15,10 @@ protocol ServerResolver: AnyObject {
 
 protocol LibraryRepositoryProtocol {
     func getAllLibraries() -> [CalibreLibrary]
+    func getLibrary(id: String) -> CalibreLibrary?
+    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never>
     func saveLibrary(_ library: CalibreLibrary) throws
+    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws
     func deleteLibrary(serverUUID: String, name: String) throws
     func countBooks(for library: CalibreLibrary) -> Int
 }
@@ -36,18 +40,50 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
         }
         return nil
     }
+
+    private func mapLibraryRealm(_ libraryRealm: CalibreLibraryRealm) -> CalibreLibrary? {
+        guard let serverUUID = libraryRealm.serverUUID,
+              let server = serverResolver?.server(forUUID: serverUUID)
+        else { return nil }
+
+        return libraryRealm.toDomain(server: server)
+    }
     
     func getAllLibraries() -> [CalibreLibrary] {
         guard let realm = getRealm() else { return [] }
         let librariesCached = realm.objects(CalibreLibraryRealm.self)
-        
-        return librariesCached.compactMap { libraryRealm -> CalibreLibrary? in
-            guard let serverUUID = libraryRealm.serverUUID,
-                  let server = serverResolver?.server(forUUID: serverUUID)
-            else { return nil }
-            
-            return libraryRealm.toDomain(server: server)
+
+        return librariesCached.compactMap(mapLibraryRealm)
+    }
+
+    func getLibrary(id: String) -> CalibreLibrary? {
+        guard let realm = getRealm(),
+              let libraryRealm = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: id)
+        else { return nil }
+
+        return mapLibraryRealm(libraryRealm)
+    }
+
+    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never> {
+        guard let realm = getRealm() else {
+            return Just(nil).eraseToAnyPublisher()
         }
+
+        return realm.objects(CalibreLibraryRealm.self)
+            .filter("primaryKey == %@", id)
+            .changesetPublisher
+            .map { [weak self] change -> CalibreLibrary? in
+                guard let self = self else { return nil }
+                switch change {
+                case .initial(let collection), .update(let collection, _, _, _):
+                    guard let libraryRealm = collection.first else { return nil }
+                    return self.mapLibraryRealm(libraryRealm)
+                case .error:
+                    return nil
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
     }
     
     func saveLibrary(_ library: CalibreLibrary) throws {
@@ -56,6 +92,17 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
         
         try realm.write {
             realm.add(libraryRealm, update: .all)
+        }
+    }
+
+    func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws {
+        guard let realm = getRealm(),
+              let libraryRealm = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: id)
+        else { return }
+
+        try realm.write {
+            libraryRealm.discoverable = discoverable
+            libraryRealm.autoUpdate = autoUpdate
         }
     }
     

@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -11,6 +12,7 @@ class BookDetailViewModelTests: XCTestCase {
     var mockCalibreBook: CalibreBook!
     
     var originalModelDataShared: ModelData?
+    var cancellables = Set<AnyCancellable>()
     
     override func setUpWithError() throws {
         originalModelDataShared = ModelData.shared
@@ -56,6 +58,7 @@ class BookDetailViewModelTests: XCTestCase {
         mockModelData = nil
         mockBookRealm = nil
         mockCalibreBook = nil
+        cancellables.removeAll()
     }
     
     private func clearReadingPositions() {
@@ -77,6 +80,27 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertNotNil(viewModel.listVM)
         XCTAssertEqual(viewModel.listVM?.book.id, 123)
         XCTAssertEqual(viewModel.listVM?.book.title, "Test Book")
+    }
+
+    func testSetupObservesBookValueTypeUpdates() throws {
+        let expectation = expectation(description: "book publisher update propagates to view model")
+        viewModel.$calibreBook
+            .compactMap { $0?.title }
+            .dropFirst()
+            .sink { title in
+                if title == "Updated Book" {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        try mockModelData.realm.write {
+            mockBookRealm.title = "Updated Book"
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(viewModel.calibreBook?.title, "Updated Book")
+        XCTAssertEqual(viewModel.listVM?.book.title, "Updated Book")
     }
     
     func testReadBookWhenNotInShelf() throws {
@@ -477,6 +501,24 @@ class ReadingPositionViewModelTests: XCTestCase {
         
         XCTAssertNotNil(historyVM.readingStatistics)
     }
+
+    func testHistoryViewModelUsesRepositoryForHistoryBookAndDebugPositions() throws {
+        let repository = MockReadingPositionRepository()
+        repository.historyBookReturn = mockBook
+        repository.debugPositionsReturn = [
+            BookDeviceReadingPosition(id: "debug-device", readerName: ReaderType.YabrEPUB.rawValue)
+        ]
+        mockModelData.readingPositionRepository = repository
+
+        let historyVM = ReadingPositionHistoryViewModel(modelData: mockModelData, library: mockBook.library, bookId: mockBook.id)
+        historyVM.loadData()
+
+        XCTAssertTrue(repository.historyBookCalled)
+        XCTAssertEqual(repository.historyBookIdParam, mockBook.id)
+        XCTAssertTrue(repository.debugPositionsCalled)
+        XCTAssertEqual(historyVM.listViewModel?.book.id, mockBook.id)
+        XCTAssertEqual(historyVM.debugReadingPositions.first?.id, "debug-device")
+    }
 }
 
 class ActivityListViewModelTests: XCTestCase {
@@ -491,8 +533,100 @@ class ActivityListViewModelTests: XCTestCase {
     }
     
     func testInitialization() throws {
-        let viewModel = ActivityListViewModel(modelData: mockModelData)
+        let repository = MockActivityLogRepository()
+        let viewModel = ActivityListViewModel(modelData: mockModelData, activityLogRepository: repository)
+        XCTAssertTrue(repository.fetchEntriesCalled)
         XCTAssertEqual(viewModel.activities.count, 0)
+    }
+
+    func testInitializationUsesRepositoryAndReceivesUpdates() throws {
+        let repository = MockActivityLogRepository()
+        let initialEntry = ActivityLogUIEntry(
+            id: "1",
+            libraryName: "Library",
+            bookTitle: "Book",
+            type: "Sync",
+            errMsg: "",
+            startDateString: "start",
+            finishDateString: "finish",
+            startDateLongString: "start long",
+            finishDateLongString: "finish long",
+            endpointURL: "http://localhost",
+            httpMethod: "GET",
+            httpBodyString: nil
+        )
+        repository.fetchEntriesReturn = [initialEntry]
+
+        let viewModel = ActivityListViewModel(
+            modelData: mockModelData,
+            libraryId: "library-id",
+            bookId: 7,
+            activityLogRepository: repository
+        )
+
+        XCTAssertTrue(repository.fetchEntriesCalled)
+        XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
+        XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
+        XCTAssertEqual(viewModel.activities, [initialEntry])
+
+        let updatedEntry = ActivityLogUIEntry(
+            id: "2",
+            libraryName: "Library 2",
+            bookTitle: "Book 2",
+            type: "Error",
+            errMsg: "boom",
+            startDateString: "s2",
+            finishDateString: "f2",
+            startDateLongString: "sl2",
+            finishDateLongString: "fl2",
+            endpointURL: "http://localhost/2",
+            httpMethod: "POST",
+            httpBodyString: "{}"
+        )
+        repository.observeEntriesSubject.send([updatedEntry])
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertEqual(viewModel.activities, [updatedEntry])
+    }
+}
+
+class LibraryViewModelTests: XCTestCase {
+    func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
+        let modelData = ModelData(mock: true)
+        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let repository = MockLibraryRepository()
+        repository.getLibraryReturn = library
+
+        let viewModel = LibraryViewModel(modelData: modelData, library: library, libraryRepository: repository)
+
+        XCTAssertTrue(repository.getLibraryCalled)
+        XCTAssertTrue(repository.observeLibraryCalled)
+
+        var updatedLibrary = library
+        updatedLibrary.discoverable = true
+        updatedLibrary.autoUpdate = true
+        repository.observeLibrarySubject.send(updatedLibrary)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(viewModel.discoverable)
+        XCTAssertTrue(viewModel.autoUpdate)
+    }
+
+    func testFlagMutationsCallUpdateLibraryFlags() throws {
+        let modelData = ModelData(mock: true)
+        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let repository = MockLibraryRepository()
+        repository.getLibraryReturn = library
+
+        let viewModel = LibraryViewModel(modelData: modelData, library: library, libraryRepository: repository)
+        repository.updateLibraryFlagsCalled = false
+
+        viewModel.discoverable = !library.discoverable
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(repository.updateLibraryFlagsCalled)
+        XCTAssertEqual(repository.updateLibraryFlagsIdParam, library.id)
+        XCTAssertEqual(repository.updateLibraryFlagsDiscoverableParam, !library.discoverable)
     }
 }
 

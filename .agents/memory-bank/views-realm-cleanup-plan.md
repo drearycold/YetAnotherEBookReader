@@ -1,6 +1,35 @@
 # Views 层 Realm 导入清理计划
 
 > 目标: Views 层 `import RealmSwift` 从 18 → ≤9 个文件
+
+## Latest Status (2026-06-24)
+
+- Phase 2 剩余的 4 个观察型/查询型 ViewModel 已完成 Realm 边界清理：
+  - `BookDetailViewModel`
+  - `ActivityListViewModel`
+  - `ReadingPositionViewModel`
+  - `LibraryViewModel`
+- 新增或扩展的 repository/value-type 边界：
+  - `BookRepositoryProtocol.observeBook(id:)`
+  - `LibraryRepositoryProtocol.getLibrary(id:)`
+  - `LibraryRepositoryProtocol.observeLibrary(id:)`
+  - `LibraryRepositoryProtocol.updateLibraryFlags(id:discoverable:autoUpdate:)`
+  - `ReadingPositionRepositoryProtocol.debugPositions(forBookId:)`
+  - `ReadingPositionRepositoryProtocol.historyBook(for:bookId:)`
+  - `ActivityLogRepositoryProtocol`
+  - `RealmActivityLogRepository`
+- Views 层 `import RealmSwift` 已进一步降到 4 个文件：
+  - `LibraryInfoViewModel.swift`
+  - `UnifiedCategoryViewModel.swift`
+  - `Providers.swift`
+  - `ReadiumPreferenceAdapter.swift`
+- 当前 Phase 3 剩余范围已收敛为：
+  - category cache observe 边界（`LibraryInfoViewModel` / `UnifiedCategoryViewModel`）
+  - Folio profile / provider 持久化边界（`Providers.swift`）
+  - `ReadiumPreferenceAdapter.swift` 持久化映射边界保留
+- 验证结果：
+  - focused ViewModel tests: 29 passed
+  - full `xcodebuild test`: 261 unit tests + 1 UI test passed
 > 日期: 2026-06-23
 
 ---
