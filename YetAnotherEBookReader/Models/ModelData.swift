@@ -536,6 +536,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         guard let realmConf = realmConf else { return }
         realm = try? Realm(configuration: realmConf)
         logger = CalibreActivityLogger(realmConf: realmConf)
+        calibreServerService.logger = logger!
         databaseService.setup(conf: realmConf)
         downloadManager.setup(modelData: self, realmConf: realmConf)
         ModelData.SaveBooksMetadataRealmQueue.sync {
