@@ -170,59 +170,14 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
 
     init(mock: Bool = false) {
         ModelData.shared = self
-        
-        // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = 140
-        let initialConf = Realm.Configuration(
-            schemaVersion: ModelData.RealmSchemaVersion,
-            migrationBlock: { _, _ in }
-        )
-        Realm.Configuration.defaultConfiguration = initialConf
-        self.realmConf = initialConf
-        
-        kfImageCache.diskStorage.config.expiration = .days(28)
-        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
-        ImageDownloader.default.authenticationChallengeResponder = authResponsor
-        
-        downloadManager.modelData = self
-        
-        fontsManager.reloadCustomFonts()
-        
-//        calibreServerService.defaultUrlSessionConfiguration.timeoutIntervalForRequest = 600
-//        calibreServerService.defaultUrlSessionConfiguration.httpMaximumConnectionsPerHost = 2
-        
-        libraryManager.registerProbeLibraryLastModifiedCancellable()
-        
-        registerRecentShelfUpdater()
-        
-        downloadManager.bookDownloadedSubject.sink { book in
-            self.calibreUpdatedSubject.send(.book(book))
-        }.store(in: &calibreCancellables)
-        
-        serverManager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
-        
-        libraryManager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
-        
-        bookManager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
-        
-        sessionManager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
-        
+
+        setupRealmDefaults()
+        setupImageCache()
+        wireCrossManagerSubscriptions()
+        wireObjectWillChangeForwarding()
+
         if mock {
-            try? tryInitializeDatabase() { _ in
-                
-            }
+            try? tryInitializeDatabase { _ in }
             initializeDatabase()
             
             let library = libraryManager.calibreLibraries.first!.value
@@ -285,6 +240,60 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
             cleanCalibreActivities(startDatetime: Date())
             logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookId: 1, libraryId: library.id)
         }
+    }
+
+    // MARK: - Init helpers
+
+    /// Pre-populate `Realm.Configuration.defaultConfiguration` with an empty
+    /// migration block so SwiftUI views using `ObservedResults` don't crash
+    /// before `tryInitializeDatabase` has produced the real configuration.
+    private func setupRealmDefaults() {
+        ModelData.RealmSchemaVersion = 140
+        let initialConf = Realm.Configuration(
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in }
+        )
+        Realm.Configuration.defaultConfiguration = initialConf
+        self.realmConf = initialConf
+    }
+
+    /// Configure the Kingfisher image cache and register the auth challenge
+    /// responder so the rest of the app can issue authenticated HTTP image
+    /// requests via `KFImage`.
+    private func setupImageCache() {
+        kfImageCache.diskStorage.config.expiration = .days(28)
+        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
+        ImageDownloader.default.authenticationChallengeResponder = authResponsor
+
+        downloadManager.modelData = self
+        fontsManager.reloadCustomFonts()
+    }
+
+    /// Wire subscriptions that cross manager boundaries (so the originating
+    /// `init` body stays focused on `objectWillChange` plumbing).
+    private func wireCrossManagerSubscriptions() {
+        libraryManager.registerProbeLibraryLastModifiedCancellable()
+        registerRecentShelfUpdater()
+
+        downloadManager.bookDownloadedSubject.sink { [weak self] book in
+            self?.calibreUpdatedSubject.send(.book(book))
+        }.store(in: &calibreCancellables)
+    }
+
+    /// Forward each manager's `objectWillChange` to our own so SwiftUI views
+    /// observing `modelData` redraw on manager-level mutations.
+    private func wireObjectWillChangeForwarding() {
+        forwardObjectWillChange(of: serverManager)
+        forwardObjectWillChange(of: libraryManager)
+        forwardObjectWillChange(of: bookManager)
+        forwardObjectWillChange(of: sessionManager)
+    }
+
+    private func forwardObjectWillChange<Manager: ObservableObject>(of manager: Manager) {
+        manager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
     }
     
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
