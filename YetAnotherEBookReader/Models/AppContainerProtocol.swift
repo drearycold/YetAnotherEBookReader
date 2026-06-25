@@ -105,7 +105,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     func refreshDatabase()
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws
-    func initializeDatabase()
+    func initializeDatabase() throws
     func migrateLegacyReadPosData()
 
     func getCustomDictViewer() -> (Bool, URL?)

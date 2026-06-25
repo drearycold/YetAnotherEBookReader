@@ -16,6 +16,8 @@ import OSLog
 /// visible and the user sees a real failure state.
 enum DatabaseBootstrapError: Error {
     case realmOpenFailed(underlying: Error)
+    case realmConfigurationMissing
+    case metadataRealmOpenFailed(underlying: Error)
 }
 
 final class DatabaseBootstrapper {
@@ -45,10 +47,15 @@ final class DatabaseBootstrapper {
         container.calibreServerService.logger = container.logger!
         container.databaseService.setup(conf: realmConf)
         container.downloadManager.setup(container: container, realmConf: realmConf)
-        AppContainer.SaveBooksMetadataRealmQueue.sync {
-            container.realmSaveBooksMetadata = try? Realm(
-                configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
-            )
+        try AppContainer.SaveBooksMetadataRealmQueue.sync {
+            do {
+                container.realmSaveBooksMetadata = try Realm(
+                    configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
+                )
+            } catch {
+                logger.error("Failed to open metadata Realm: \(error.localizedDescription)")
+                throw DatabaseBootstrapError.metadataRealmOpenFailed(underlying: error)
+            }
         }
 
         container.serverManager.populateServers()

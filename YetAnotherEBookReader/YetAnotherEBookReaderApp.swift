@@ -43,20 +43,31 @@ struct YetAnotherEBookReaderApp: App {
             case .active:
                 if container.realm == nil {
                     upgradingDatabase = true
+                    upgradingDatabaseStatus = "Initializing..."
                     DispatchQueue.global(qos: .userInitiated).async {
                         do {
                             try container.tryInitializeDatabase() { status in
                                 upgradingDatabaseStatus = status
                             }
                             DispatchQueue.main.async {
-                                container.initializeDatabase()
+                                do {
+                                    try container.initializeDatabase()
+                                } catch {
+                                    // Leave the upgrade overlay up; do not start
+                                    // the probe timer or fire the activity subject
+                                    // because the database is unusable.
+                                    upgradingDatabaseStatus = "Database failed to start: \(error.localizedDescription)"
+                                    return
+                                }
                                 upgradingDatabase = false
-                                
+
                                 enableProbeTimer()
                                 container.bookReaderActivitySubject.send(newScenePhase)
                             }
                         } catch {
-                            upgradingDatabaseStatus = error.localizedDescription
+                            DispatchQueue.main.async {
+                                upgradingDatabaseStatus = "Database initialization failed: \(error.localizedDescription)"
+                            }
                         }
                     }
                 } else {

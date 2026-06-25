@@ -187,7 +187,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
         if mock {
             try? tryInitializeDatabase { _ in }
-            initializeDatabase()
+            try? initializeDatabase()
 
             let library = libraryManager.calibreLibraries.first!.value
 
@@ -288,14 +288,16 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         realmConf = conf
     }
 
-    func initializeDatabase() {
-        guard let realmConf = realmConf else { return }
+    func initializeDatabase() throws {
+        guard let realmConf = realmConf else {
+            defaultLog.error("initializeDatabase called without a Realm configuration")
+            throw DatabaseBootstrapError.realmConfigurationMissing
+        }
         do {
             try databaseBootstrapper.bootstrap(realmConf: realmConf)
         } catch {
-            // Leave realm nil so YetAnotherEBookReaderApp keeps the upgrade UI
-            // visible. The bootstrapper already logged the underlying error.
             defaultLog.error("initializeDatabase failed: \(error.localizedDescription)")
+            throw error
         }
     }
 
