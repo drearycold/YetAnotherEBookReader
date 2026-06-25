@@ -17,8 +17,7 @@ final class BookDownloadManagerTests: XCTestCase {
     private var originalAppContainerShared: AppContainer?
     
     override func setUpWithError() throws {
-        originalAppContainerShared = AppContainer.shared
-        container = AppContainer(mock: true)
+        container = MockAppContainerFactory.makeContainer(testName: "BookDownloadManagerTests-${UUID().uuidString}")
         AppContainer.shared = container
         
         manager = BookDownloadManager(container: container, realmConf: container.realmConf)
@@ -44,7 +43,7 @@ final class BookDownloadManagerTests: XCTestCase {
             }
         }
         
-        AppContainer.shared = originalAppContainerShared
+        AppContainer.shared = nil
         manager = nil
         container = nil
         cancellables = nil

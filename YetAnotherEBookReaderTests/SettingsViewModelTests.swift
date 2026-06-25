@@ -17,7 +17,7 @@ import Combine
     var orderedEvents: [String]!
     
     override func setUpWithError() throws {
-        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SettingsViewModelTests-${UUID().uuidString}")
         mockAppContainer.calibreServers.removeAll()
         mockAppContainer.calibreLibraries.removeAll()
         mockAppContainer.booksInShelf.removeAll()

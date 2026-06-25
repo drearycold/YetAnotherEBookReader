@@ -17,7 +17,7 @@ final class CalibreBookManagerTests: XCTestCase {
     private var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
-        container = AppContainer(mock: true)
+        container = MockAppContainerFactory.makeContainer(testName: "CalibreBookManagerTests-${UUID().uuidString}")
         bookManager = container.bookManager
         library = container.libraryManager.calibreLibraries.first?.value
         cancellables = []

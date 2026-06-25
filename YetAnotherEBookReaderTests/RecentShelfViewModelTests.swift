@@ -15,7 +15,7 @@ import Combine
     var mockAppContainer: AppContainer!
     
     override func setUpWithError() throws {
-        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "RecentShelfViewModelTests-${UUID().uuidString}")
         viewModel = RecentShelfViewModel(container: mockAppContainer)
     }
     

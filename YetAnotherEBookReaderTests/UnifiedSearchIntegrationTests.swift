@@ -32,11 +32,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
 
         // Setup in-memory Realm for testing
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
-        container = AppContainer(mock: true)
-        container.realmConf = config
-
-        // Setup DatabaseService singleton
-        DatabaseService.shared.setup(conf: config)
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
 
         // Setup mock server and library
         mockServer = CalibreServer(

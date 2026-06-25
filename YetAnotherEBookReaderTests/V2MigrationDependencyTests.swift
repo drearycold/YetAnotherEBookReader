@@ -278,11 +278,7 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
     
     private func makeAppContainer() -> AppContainer {
-        let config = Realm.Configuration(inMemoryIdentifier: "V2MigrationDependencyTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-        let container = AppContainer(mock: true)
-        container.realmConf = config
-        return container
+        return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests-\(UUID().uuidString)")
     }
     
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {

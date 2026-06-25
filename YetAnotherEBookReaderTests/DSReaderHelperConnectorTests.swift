@@ -23,11 +23,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let config = Realm.Configuration(inMemoryIdentifier: "DSReaderHelperConnectorTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-
-        container = AppContainer(mock: true)
-        container.realmConf = config
+        container = MockAppContainerFactory.makeContainer(testName: "DSReaderHelperConnectorTests-{UUID().uuidString}")
         service = container.calibreServerService
 
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "user", password: "pass")

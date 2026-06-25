@@ -17,11 +17,7 @@ class SectionShelfViewModelTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         
-        let config = Realm.Configuration(inMemoryIdentifier: "SectionShelfViewModelTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-        
-        mockAppContainer = AppContainer(mock: true)
-        mockAppContainer.realmConf = config
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests-{UUID().uuidString}")
         
         viewModel = SectionShelfViewModel(container: mockAppContainer)
         cancellables = []

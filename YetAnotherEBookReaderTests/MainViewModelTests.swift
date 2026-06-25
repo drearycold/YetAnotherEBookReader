@@ -16,7 +16,7 @@ import Combine
     var cancellables: Set<AnyCancellable>!
     
     override func setUpWithError() throws {
-        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "MainViewModelTests-${UUID().uuidString}")
         viewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
         cancellables = []
     }

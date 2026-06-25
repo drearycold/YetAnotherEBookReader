@@ -20,11 +20,7 @@ final class CalibreServerManagerTests: XCTestCase {
 
     override func setUpWithError() throws {
         // Isolated in-memory Realm configuration
-        let config = Realm.Configuration(inMemoryIdentifier: "CalibreServerManagerTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-        
-        container = AppContainer(mock: true)
-        container.realmConf = config
+        container = MockAppContainerFactory.makeContainer(testName: "CalibreServerManagerTests-{UUID().uuidString}")
         
         serverManager = container.serverManager
         databaseService = container.databaseService
