@@ -27,7 +27,6 @@ enum MockAppContainerFactory {
     /// Recommended entry point: creates an `AppContainer` whose main
     /// Realm and every server-scoped sidecar Realm are in-memory and
     /// uniquely identified by `testName`.
-    @MainActor
     static func makeContainer(
         testName: String = "Test-\(UUID().uuidString)"
     ) -> AppContainer {
@@ -39,7 +38,6 @@ enum MockAppContainerFactory {
     /// configuration directly (e.g. tests that pass a custom schema
     /// version or a custom `inMemoryIdentifier`). The server-scoped
     /// provider is still in-memory.
-    @MainActor
     static func makeContainer(
         mainRealmConfiguration: Realm.Configuration,
         testName: String = "Test-\(UUID().uuidString)"

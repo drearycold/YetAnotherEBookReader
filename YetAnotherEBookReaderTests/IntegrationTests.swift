@@ -19,32 +19,18 @@ final class IntegrationTests: XCTestCase {
     }
     
     private func makeAppContainer(id: String) -> AppContainer {
-        let config = Realm.Configuration(
-            inMemoryIdentifier: id,
-            schemaVersion: 140,
-            migrationBlock: { _, _ in }
-        )
-        DatabaseService.shared.setup(conf: config)
-        let container = AppContainer(mock: true)
-        container.realmConf = config
-        return container
+        return MockAppContainerFactory.makeContainer(testName: id)
     }
-    
+
     func testDatabaseInitialization() throws {
-        let config = Realm.Configuration(
-            inMemoryIdentifier: "IntegrationTests-DBInit-\(UUID().uuidString)",
-            schemaVersion: 140,
-            migrationBlock: { _, _ in }
+        let container = MockAppContainerFactory.makeContainer(
+            testName: "IntegrationTests-DBInit-\(UUID().uuidString)"
         )
-        DatabaseService.shared.setup(conf: config)
-        
-        let container = AppContainer(mock: true)
-        container.realmConf = config
-        
+
         try container.tryInitializeDatabase { status in
             // DB init status callback
         }
-        
+
         XCTAssertTrue(container.isDatabaseReady)
         XCTAssertNotNil(container.realm)
     }
