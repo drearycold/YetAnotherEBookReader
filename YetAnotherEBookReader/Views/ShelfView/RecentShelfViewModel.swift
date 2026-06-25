@@ -64,7 +64,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
     
     func refreshShelf() {
-        modelData.refreshShelfMetadataV2(serverReachableChanged: false)
+        modelData.bookManager.refreshShelfMetadataV2(serverReachableChanged: false)
         modelData.serverManager.probeServersReachability(with: [], updateLibrary: true)
     }
 

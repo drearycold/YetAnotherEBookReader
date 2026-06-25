@@ -40,7 +40,7 @@ extension CalibreServerService {
                 self.updatingMetadataStatus = "Success"
                 self.updatingMetadata = false
 
-                if self.getBookRealm(forPrimaryKey: newbook.inShelfId) != nil {
+                if self.config?.calibreLibraries.isEmpty == false {
                     self.updateBook(book: newbook)
                 }
             }

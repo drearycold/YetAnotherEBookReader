@@ -182,7 +182,7 @@ class ReadingSessionManager: ObservableObject {
     func handleBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
         guard let modelData = modelData else { return }
         
-        modelData.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
+        modelData.bookManager.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
 
         guard let updatedReadingPosition = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
 
@@ -224,7 +224,7 @@ class ReadingSessionManager: ObservableObject {
         logger.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         logger.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
 
-        modelData?.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
+        modelData?.bookManager.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
 
         if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
            let library = modelData?.libraryManager.calibreLibraries[readingBook.library.id],

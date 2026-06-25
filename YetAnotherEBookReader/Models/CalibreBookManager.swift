@@ -316,7 +316,7 @@ class CalibreBookManager: ObservableObject {
             removeFolioCache(book: newBook, format: format)
         }
 
-        modelData?.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
+        refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
     }
 
     func clearCache(book: CalibreBook, format: Format) {
@@ -744,6 +744,37 @@ class CalibreBookManager: ObservableObject {
                     self.modelData?.librarySyncStatus[lss.key]?.msg = nil
                     self.modelData?.serverManager.probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
                 }
+            }
+        }
+    }
+
+    // MARK: - Shelf Refresh
+
+    /// Group the current shelf by library, filter by the given server / book
+    /// ids, then fetch fresh metadata for each non-empty group. If the
+    /// `serverReachableChanged` flag is set and no groups remain, send an
+    /// empty `.shelf` update so observers re-render.
+    func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
+        let libraryBooks = booksInShelf.values
+            .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
+            .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
+            .reduce(into: [CalibreLibrary: [CalibreBook]]()) { partialResult, book in
+                if partialResult[book.library] == nil {
+                    partialResult[book.library] = []
+                }
+                partialResult[book.library]?.append(book)
+            }
+
+        if serverReachableChanged && libraryBooks.isEmpty {
+            modelData?.calibreUpdatedSubject.send(.shelf)
+            return
+        }
+
+        libraryBooks.forEach { library, books in
+            Task {
+                await self.getBooksMetadata(
+                    request: .init(library: library, books: books.map { $0.id }, getAnnotations: true)
+                )
             }
         }
     }

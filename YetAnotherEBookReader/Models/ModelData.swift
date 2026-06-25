@@ -34,10 +34,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         bookManager.updateBook(book: book)
     }
 
-    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        return bookManager.getBookRealm(forPrimaryKey: forPrimaryKey)
-    }
-
     func getPreferredFormat(for book: CalibreBook) -> Format? {
         return sessionManager.getPreferredFormat(for: book)
     }
@@ -306,38 +302,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     func migrateLegacyReadPosData() {
         databaseBootstrapper.migrateLegacyReadPosData()
     }
-    
-    // → bookManager (Phase 2: move populateBookShelf logic here)
-    func populateBookShelf() {
-        bookManager.populateBookShelf()
-    }
 
-    // → libraryManager (Phase 2: move populateLibraries logic here)
-    func populateLibraries() {
-        libraryManager.populateLibraries()
-    }
-
-    // → libraryManager (Phase 2: move populateLocalLibraryBooks logic here)
-    func populateLocalLibraryBooks() {
-        libraryManager.populateLocalLibraryBooks()
-    }
-
-    // only move file when triggered by in-app importer, DO NOT MOVE FROM OTHER PLACES
-    // → bookManager (Phase 2: move onOpenURL logic here)
-    func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
-        bookManager.onOpenURL(url: url, doMove: doMove, doOverwrite: doOverwrite, asNew: asNew, knownBookId: knownBookId)
-    }
-
-    // → bookManager (Phase 2: move calcLocalFileBookId logic here)
-    func calcLocalFileBookId(for fileURL: URL) -> Int32? {
-        bookManager.calcLocalFileBookId(for: fileURL)
-    }
-
-    // → bookManager (Phase 2: move loadLocalLibraryBookMetadata logic here)
-    func loadLocalLibraryBookMetadata(fileURL: URL, in library: CalibreLibrary, on server: CalibreServer, knownBookId: Int32? = nil) -> Int32? {
-        bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: library, on: server, knownBookId: knownBookId)
-    }
-    
     func getCustomDictViewer() -> (Bool, URL?) {
         return (UserDefaults.standard.bool(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_ENABLED),
             UserDefaults.standard.url(forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
@@ -364,46 +329,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         let url = URL(string: value)
         UserDefaults.standard.set(url, forKey: Constants.KEY_DEFAULTS_MDICT_VIEWER_URL)
         return url
-    }
-    
-    // user preferred -> default -> unsupported
-    // → libraryManager + serverManager (has actual logic: updates defaultLibrary, persists Realm)
-    func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
-        libraryManager.updateServerLibraryInfo(serverInfo: serverInfo)
-        
-        guard let server = calibreServers[serverInfo.server.id] else { return }
-        if server.defaultLibrary != serverInfo.defaultLibrary {
-            calibreServers[server.id]!.defaultLibrary = serverInfo.defaultLibrary
-            do {
-                try serverManager.updateServerRealm(server: calibreServers[server.id]!)
-            } catch {
-                
-            }
-        }
-    }
-    
-    // → bookManager + libraryManager (has actual logic: filters/grouping/spawning tasks)
-    func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
-        let libraryBooks = booksInShelf.values
-            .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
-            .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
-            .reduce(into: [CalibreLibrary: [CalibreBook]]()) { partialResult, book in
-                if partialResult[book.library] == nil {
-                    partialResult[book.library] = []
-                }
-                partialResult[book.library]?.append(book)
-            }
-        
-        if serverReachableChanged && libraryBooks.isEmpty {
-            calibreUpdatedSubject.send(.shelf)
-            return
-        }
-        
-        libraryBooks.forEach { library, books in
-            Task {
-                await self.getBooksMetadata(request: .init(library: library, books: books.map { $0.id }, getAnnotations: true))
-            }
-        }
     }
 
     @discardableResult

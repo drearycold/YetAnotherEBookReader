@@ -88,7 +88,7 @@ import Combine
             populateBookShelfAction: { [weak self] in
                 self?.orderedEvents.append("populate")
                 staleRemovedBeforePopulate = self?.mockModelData.booksInShelf["stale"] == nil
-                self?.mockModelData.populateBookShelf()
+                self?.mockModelData.bookManager.populateBookShelf()
             },
             probeServersReachabilityAction: { [weak self] serverIds in
                 self?.orderedEvents.append("probe")

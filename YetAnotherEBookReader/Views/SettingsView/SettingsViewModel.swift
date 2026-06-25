@@ -30,7 +30,7 @@ final class SettingsViewModel: ObservableObject {
     ) {
         self.modelData = modelData
         self.refreshDatabaseAction = refreshDatabaseAction ?? { modelData.refreshDatabase() }
-        self.populateBookShelfAction = populateBookShelfAction ?? { modelData.populateBookShelf() }
+        self.populateBookShelfAction = populateBookShelfAction ?? { modelData.bookManager.populateBookShelf() }
         self.probeServersReachabilityAction = probeServersReachabilityAction ?? { serverIds in
             modelData.serverManager.probeServersReachability(with: serverIds)
         }

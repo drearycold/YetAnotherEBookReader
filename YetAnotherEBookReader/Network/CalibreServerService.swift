@@ -112,9 +112,6 @@ final class CalibreServerService {
     func updateBook(book: CalibreBook) {
         config?.updateBook(book: book)
     }
-    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        config?.getBookRealm(forPrimaryKey: forPrimaryKey)
-    }
     func getPreferredFormat(for book: CalibreBook) -> Format? {
         config?.getPreferredFormat(for: book)
     }

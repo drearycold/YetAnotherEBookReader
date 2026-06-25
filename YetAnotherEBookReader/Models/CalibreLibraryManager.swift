@@ -164,11 +164,11 @@ class CalibreLibraryManager: ObservableObject {
     
     func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
         guard let server = modelData?.calibreServers[serverInfo.server.id] else { return }
-        
+
         serverInfo.libraryMap.forEach { key, name in
             let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
             let libraryId = newLibrary.id
-            
+
             if calibreLibraries[libraryId] != nil {
                 calibreLibraries[libraryId]!.key = newLibrary.key
             } else {
@@ -179,6 +179,19 @@ class CalibreLibraryManager: ObservableObject {
                 try libraryRepository.saveLibrary(calibreLibraries[libraryId]!)
             } catch {
                 logger.error("Failed to update library realm in updateServerLibraryInfo: \(error.localizedDescription)")
+            }
+        }
+
+        // If the server's defaultLibrary changed, persist it on the server.
+        if let serverManager = modelData?.serverManager,
+           var mutableServer = serverManager.calibreServers[serverInfo.server.id],
+           mutableServer.defaultLibrary != serverInfo.defaultLibrary {
+            mutableServer.defaultLibrary = serverInfo.defaultLibrary
+            serverManager.calibreServers[serverInfo.server.id] = mutableServer
+            do {
+                try serverManager.updateServerRealm(server: mutableServer)
+            } catch {
+                logger.error("Failed to update server realm defaultLibrary: \(error.localizedDescription)")
             }
         }
     }

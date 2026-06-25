@@ -14,13 +14,11 @@ protocol CalibreServerConfigProvider: AnyObject {
     var calibreLibraries: [String: CalibreLibrary] { get }
     var librarySyncStatus: [String: CalibreSyncStatus] { get set }
     var calibreServerInfoStaging: [String: CalibreServerInfo] { get }
-    
+
     var updatingMetadata: Bool { get set }
     var updatingMetadataStatus: String { get set }
     var updatingMetadataSucceed: Bool { get set }
-    
+
     func updateBook(book: CalibreBook)
-    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm?
-    func refreshShelfMetadataV2(with servers: Set<String>, for books: Set<String>, serverReachableChanged: Bool)
     func getPreferredFormat(for book: CalibreBook) -> Format?
 }
