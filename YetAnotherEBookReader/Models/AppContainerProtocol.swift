@@ -115,6 +115,11 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     func cleanCalibreActivities(startDatetime: Date)
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?)
     func logFinishCalibreActivity(type: String, request: URLRequest, startDatetime: Date, finishDatetime: Date, errMsg: String)
+
+    // MARK: - CalibreServerConfigProvider surface (book/format bookkeeping)
+
+    func updateBook(book: CalibreBook)
+    func getPreferredFormat(for book: CalibreBook) -> Format?
 }
 
 // MARK: - Default `LibraryResolver` / `ServerResolver` implementations
