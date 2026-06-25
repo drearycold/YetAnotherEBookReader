@@ -41,7 +41,9 @@ extension CalibreServer {
         if let cachedRealm = Thread.current.threadDictionary[key] as? Realm {
             return cachedRealm
         }
-        let realm = try! Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(self))
+        let config = AppContainer.shared?.serverScopedRealmProvider.configuration(for: self)
+            ?? BookAnnotation.getBookPreferenceServerConfig(self)
+        let realm = try! Realm(configuration: config)
         Thread.current.threadDictionary[key] = realm
         return realm
     }

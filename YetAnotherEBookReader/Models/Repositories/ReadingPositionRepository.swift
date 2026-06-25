@@ -34,27 +34,27 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     
     private func getRealmConfiguration(forBookId bookId: String) -> Realm.Configuration? {
         let actualAppContainer = container ?? AppContainer.shared
-        
+
         // 1. If bookId is inShelfId (id^libraryName@serverUUID)
         if bookId.contains("@") && bookId.contains("^") {
             let components = bookId.components(separatedBy: "@")
             if components.count > 1 {
                 let serverUUID = components[1]
                 if let server = actualAppContainer?.calibreServers[serverUUID] {
-                    return BookAnnotation.getBookPreferenceServerConfig(server)
+                    return actualAppContainer?.serverScopedRealmProvider.configuration(for: server)
                 }
             }
         }
-        
+
         // 2. If bookId is bookPrefId (libraryKey - id)
         let components = bookId.components(separatedBy: " - ")
         if components.count > 1 {
             let libraryKey = components[0]
             if let library = actualAppContainer?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
-                return BookAnnotation.getBookPreferenceServerConfig(library.server)
+                return actualAppContainer?.serverScopedRealmProvider.configuration(for: library.server)
             }
         }
-        
+
         // Fallback
         return databaseService.realmConf
     }
