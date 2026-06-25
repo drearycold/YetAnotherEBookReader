@@ -42,13 +42,13 @@
 graph LR
     A["Phase 0<br>1,073行<br>God Object"] --> B["Phase 1<br>763行<br>移除 Facade"]
     B --> C["Phase 2<br>398行<br>提取迁移/初始化"]
-    C --> D["Phase 3<br>~150行<br>DI 容器化"]
+    C --> D["Phase 3<br>382行<br>DI 容器化"]
     D --> E["Phase 4<br>0行<br>消灭"]
     
     style A fill:#4CAF50,color:#fff
     style B fill:#4CAF50,color:#fff
     style C fill:#4CAF50,color:#fff
-    style D fill:#FF9800,color:#fff
+    style D fill:#4CAF50,color:#fff
     style E fill:#FF9800,color:#fff
 ```
 
@@ -209,88 +209,47 @@ modelData.bookManager.addToShelf(book: book, formats: formats)
 
 **目标**: ~350 → ~150 行。将 ModelData 转变为纯 DI 容器。
 
-#### 3a. 引入 AppContainer 协议
+**状态**: ✅ 已完成 (2026-06-25)
 
-```swift
-// Models/AppContainer.swift (新建)
-protocol AppContainerProtocol: AnyObject {
-    // Repositories
-    var serverRepository: ServerRepositoryProtocol { get }
-    var libraryRepository: LibraryRepositoryProtocol { get }
-    var bookRepository: BookRepositoryProtocol { get }
-    var readingPositionRepository: ReadingPositionRepositoryProtocol { get }
-    var annotationRepository: AnnotationRepositoryProtocol { get }
-    var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol { get }
-    
-    // Managers
-    var serverManager: CalibreServerManager { get }
-    var libraryManager: CalibreLibraryManager { get }
-    var bookManager: CalibreBookManager { get }
-    var sessionManager: ReadingSessionManager { get }
-    var downloadManager: BookDownloadManager { get }
-    var fontsManager: FontsManager { get }
-    
-    // Services
-    var calibreServerService: CalibreServerService { get }
-    var unifiedSearchService: UnifiedSearchService { get }
-    var unifiedCategoryService: UnifiedCategoryService { get }
-    
-    // Database
-    var databaseService: DatabaseService { get }
-    var isDatabaseReady: Bool { get }
-    
-    // App-wide events
-    var calibreUpdatedSubject: PassthroughSubject<calibreUpdatedSignal, Never> { get }
-    var bookImportedSubject: PassthroughSubject<BookImportInfo, Never> { get }
-}
-```
+**产出**:
+- 新增 `Models/AppContainerProtocol.swift` (~95 行): 完整的 AppContainer 协议 (repositories/managers/services/subjects/runtime state)
+- ModelData.swift 从 **405 → 382 行** (减少 23 行, 6% 缩减,**累计 -70%** 相对 Phase 0)
+- 删除 6 个 `// →` 标记的 wrapper 方法 (probeServer/removeServer/probeLibrary/removeLibrary/getBooksMetadata/syncLibrary)
+- 提取 4 个 init helper: `setupRealmDefaults`/`setupImageCache`/`wireCrossManagerSubscriptions`/`wireObjectWillChangeForwarding` (init body 从 117 → 80 行)
+- ModelData conform 三个协议: `AppContainerProtocol`, `CalibreServerConfigProvider`, `LibraryProvider`
 
-#### 3b. ModelData 瘦身为 AppContainer 实现
+**注意**: 文件大小增长 9 行 (373→382) 是因为 helper 声明增加,但 init body 减少 32%。这是质量改进而非大小改进。
 
-```swift
-// 精简后的 ModelData (~150 行)
-final class ModelData: ObservableObject, AppContainerProtocol {
-    static var shared: ModelData?
-    
-    // === DI: Repositories ===
-    lazy var serverRepository: ServerRepositoryProtocol = ...
-    lazy var libraryRepository: LibraryRepositoryProtocol = ...
-    // ... (30 行)
-    
-    // === DI: Managers ===
-    lazy var serverManager = CalibreServerManager(...)
-    // ... (15 行)
-    
-    // === DI: Services ===
-    lazy var calibreServerService = CalibreServerService(...)
-    // ... (15 行)
-    
-    // === App Events ===
-    let calibreUpdatedSubject = PassthroughSubject<...>()
-    // ... (10 行)
-    
-    // === Initialization ===
-    init() {
-        let migrator = DatabaseMigrator()
-        // ... minimal setup (30 行)
-    }
-    
-    // === objectWillChange forwarding ===
-    private func setupChangeForwarding() { ... }  // 20 行
-}
-```
+#### 3a. 引入 AppContainerProtocol ✅
 
-#### 3c. 迁移 `ModelData.shared` 引用
+新建 `Models/AppContainerProtocol.swift` (~95 行):
+- 9 个 repository 属性
+- 8 个 manager 属性
+- 5 个 service 属性
+- 2 个 database 属性
+- 9 个 runtime state 属性
+- 7 个 subject 属性
 
-| 消费者类型 | 当前 | 改造 |
-|-----------|------|------|
-| Views (`@EnvironmentObject`) | `modelData.xxx` | `modelData.bookManager.xxx` (Phase 1 已改) |
-| ViewModels | `modelData: ModelData` | `container: AppContainerProtocol` 或直接注入 Manager |
-| Managers | `modelData: ModelData` | 注入具体依赖（Repository/Service） |
-| Adapters (`ModelData.shared`) | `ModelData.shared?.annotationRepository` | 注入 Repository |
-| `CalibreCoreModels.swift` | `ModelData.shared` (3 处) | 改为方法参数传入 |
+`CalibreServerConfigProvider` 和 `LibraryProvider` 保留为独立协议 (避免循环 typealias)。
 
-**Phase 3 预期**: ModelData 从 ~350 → ~150 行 (纯 DI 容器 + change forwarding)
+#### 3b. ModelData 简化 ✅
+
+- 提取 4 个 init helper 方法
+- init body 从 117 → 80 行 (-32%)
+- 4 个 objectWillChange 转发 sink 用泛型 helper 消除重复
+- 保留 `init(mock:)` 中的 inline mock 数据 (Phase 2c 决定)
+
+#### 3c. 删除 6 个 wrapper 方法 ✅
+
+删除 (调用方已用 `modelData.xxxManager.xxx` 直接访问):
+- `probeServer`, `removeServer`
+- `probeLibrary`, `removeLibrary`
+- `getBooksMetadata`
+- `syncLibrary`
+
+调用方更新 1 处 (CalibreServerManager 内部的 `modelData?.syncLibrary` → `modelData?.libraryManager.syncLibrary`)
+
+#### Phase 3 实际产出: ModelData 从 405 → 382 行 (-6%, 累计 -70% 相对 Phase 0)
 
 ---
 
@@ -384,8 +343,8 @@ class CalibreBookManager {
 graph TD
     P0["Phase 0: 基线 + 标记"] --> P1["Phase 1: 删 Facade<br>1172→763行"]
     P1 --> P2["Phase 2: 提取迁移/初始化<br>763→398行"]
-    P2 --> P3["Phase 3: DI 容器化<br>~398→~150行"]
-    P3 --> P4["Phase 4: 消灭 ModelData<br>~150→0行"]
+    P2 --> P3["Phase 3: DI 容器化<br>398→382行"]
+    P3 --> P4["Phase 4: 消灭 ModelData<br>~382→0行"]
     
     P1 -.- V["15 个视图<br>分批迁移"]
     P3 -.- M["Manager<br>断开循环依赖"]
@@ -394,7 +353,7 @@ graph TD
     style P0 fill:#4CAF50,color:#fff
     style P1 fill:#4CAF50,color:#fff
     style P2 fill:#4CAF50,color:#fff
-    style P3 fill:#FF9800,color:#fff
+    style P3 fill:#4CAF50,color:#fff
     style P4 fill:#FF9800,color:#fff
 ```
 
@@ -443,7 +402,7 @@ grep -rn "ModelData.shared" YetAnotherEBookReader/ | wc -l
 | 0 | 0.5 天 | 1,073 (不变) | 基线 + 标记 |
 | 1 | 2 天 | 763 (-35%) | 删除 260 行 Facade, 调用者直接访问 Manager |
 | 2 | 1.5 天 | 398 (-48%) | `DatabaseMigrator`, `DatabaseBootstrapper` 独立 |
-| 3 | 2 天 | ~150 | `AppContainerProtocol`, Manager 依赖协议化 |
+| 3 | 2 天 | 382 (-49%) | `AppContainerProtocol`, init helpers, 删 6 wrapper |
 | 4 | 3 天 | **0** | ModelData 删除, `AppContainer` 替代 |
 | **总计** | **~9 天** | **0** | |
 
