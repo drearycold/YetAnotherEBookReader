@@ -150,9 +150,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, modelData: self)
     
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
-    
-    let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
-    
+
     var probeTimer: AnyCancellable?
     
     /// inShelfId for single book
