@@ -132,6 +132,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
+    lazy var databaseBootstrapper = DatabaseBootstrapper(modelData: self)
     lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
@@ -301,68 +302,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     func initializeDatabase() {
         guard let realmConf = realmConf else { return }
-        realm = try? Realm(configuration: realmConf)
-        logger = CalibreActivityLogger(realmConf: realmConf)
-        calibreServerService.logger = logger!
-        databaseService.setup(conf: realmConf)
-        downloadManager.setup(modelData: self, realmConf: realmConf)
-        ModelData.SaveBooksMetadataRealmQueue.sync {
-            self.realmSaveBooksMetadata = try? Realm(
-                configuration: realmConf, queue: ModelData.SaveBooksMetadataRealmQueue
-            )
-        }
-        
-        serverManager.populateServers()
-        
-        populateLibraries()
-        
-        populateBookShelf()
-        
-        populateLocalLibraryBooks()
-        
-        calibreUpdatedSubject.send(.shelf)
-        
-        cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
-        
-        migrateLegacyReadPosData()
+        databaseBootstrapper.bootstrap(realmConf: realmConf)
     }
-    
+
     func migrateLegacyReadPosData() {
-        DispatchQueue.global(qos: .background).async {
-            guard let realmConf = self.realmConf,
-                  let realm = try? Realm(configuration: realmConf) else {
-                return
-            }
-            
-            let bookKeysToMigrate = realm.objects(CalibreBookRealm.self)
-                .filter("readPosData != nil")
-                .compactMap { $0.primaryKey }
-            
-            guard !bookKeysToMigrate.isEmpty else { return }
-            
-            print("migrateLegacyReadPosData: Found \(bookKeysToMigrate.count) legacy reading positions to migrate.")
-            
-            for key in bookKeysToMigrate {
-                guard let realmConf = self.realmConf,
-                      let freshRealm = try? Realm(configuration: realmConf),
-                      let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
-                      let serverUUID = bookRealm.serverUUID,
-                      let libraryName = bookRealm.libraryName
-                else {
-                    continue
-                }
-                
-                if let library = self.library(forServerUUID: serverUUID, libraryName: libraryName) {
-                    bookRealm.migrateReadPos(library: library, repository: self.readingPositionRepository)
-                }
-                
-                try? freshRealm.write {
-                    bookRealm.readPosData = nil
-                }
-            }
-            
-            print("migrateLegacyReadPosData: Completed background migration of legacy reading positions.")
-        }
+        databaseBootstrapper.migrateLegacyReadPosData()
     }
     
     // → bookManager (Phase 2: move populateBookShelf logic here)
