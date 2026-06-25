@@ -65,16 +65,19 @@ test target or class first, then state exactly what was and was not verified.
 ### Entry And App State
 
 - `YetAnotherEBookReader/YetAnotherEBookReaderApp.swift` creates the global
-  `ModelData`, initializes Realm on scene activation, and injects shared
+  `AppContainer`, initializes Realm on scene activation, and injects shared
   environment objects.
 - `YetAnotherEBookReader/MainView.swift` owns the main tab shell:
   - `RecentShelfView`
   - `SectionShelfView`
   - `LibraryInfoView`
   - `SettingsView`
-- `YetAnotherEBookReader/Models/ModelData.swift` is still the composition root
-  and compatibility facade. It wires managers, repositories, services, download
-  handling, reading sessions, fonts, and app-wide Combine subjects.
+- `YetAnotherEBookReader/Models/AppContainer.swift` is the composition root
+  (366 lines, replaces the deleted `ModelData.swift`). It owns every repository,
+  manager, service, and runtime state, and conforms to `AppContainerProtocol`,
+  `LibraryProvider`, and (transitively) `LibraryResolver` / `ServerResolver`.
+  `YetAnotherEBookReaderApp` creates a single `AppContainer()` as `@StateObject`
+  and injects it via `.environmentObject(container)`.
 
 ### Managers
 
@@ -144,7 +147,7 @@ code.
 The modern path is value-type/actor based. Do not revive direct
 `CalibreUnifiedSearchObject` bindings in views.
 
-- `ModelData` now owns the V2 root dependencies directly:
+- `AppContainer` owns the V2 root dependencies directly:
   `searchCacheRepository`, `librarySearchService`,
   `unifiedSearchService`, `libraryCategoryService`, and
   `unifiedCategoryService`.
@@ -188,7 +191,7 @@ The modern path is value-type/actor based. Do not revive direct
 - Prefer existing patterns and local helpers over new abstractions.
 - New complex SwiftUI views should use dedicated ViewModels instead of putting
   networking, Realm queries, or mutation logic in the view.
-- Preserve the `ModelData` facade where existing callers depend on it, but place
+- Preserve the `AppContainer` composition root for new callers, but place
   new domain behavior in managers/services/repositories.
 - Do not introduce direct `RealmSwift` usage in SwiftUI views unless there is a
   strong compatibility reason. Prefer value types and observable ViewModels.
@@ -214,7 +217,7 @@ The modern path is value-type/actor based. Do not revive direct
 - Keep Realm write transactions short. Do expensive sorting, merging, network
   preparation, and value construction outside writes.
 - Schema changes require a version bump and migration handling in
-  `ModelData.tryInitializeDatabase(statusHandler:)`.
+  `AppContainer.tryInitializeDatabase(statusHandler:)`.
 
 ### Verification Checklist
 
@@ -242,7 +245,7 @@ empty-library-ids meaning of "all active libraries".
 ### Book Detail
 
 Start with `BookDetailViewModel` and `BookDetailSubviews`. Avoid reintroducing
-direct `ModelData` or Realm dependencies into `BookDetailView` subviews.
+direct `AppContainer` or Realm dependencies into `BookDetailView` subviews.
 
 ### Reader Behavior
 
@@ -271,8 +274,14 @@ Avoid growing the main controller again.
 ## Current Handoff Context
 
 The main workstream is still reader architecture modernization and large-file
-decomposition.
+decomposition. The ModelData god-object elimination plan (Phases 0-4) is now
+**complete**; `ModelData.swift` and the `CalibreServerConfigProvider` protocol
+have been deleted and replaced by `AppContainer` + `AppContainerProtocol`.
 
+- **Phase 4: ModelData Elimination (2026-06-25, complete):** `ModelData.swift` (was 1,073 lines) and `CalibreServerConfigProvider.swift` (24 lines) are fully deleted. The replacement is a 366-line `Models/AppContainer.swift` (composition root) + 130-line `Models/AppContainerProtocol.swift` (facade aggregating all repos / managers / services / subjects / runtime state). The four sub-phases:
+  - **4a+4b (commit 5f28bc9):** Created `AppContainer` as a verbatim mirror of `ModelData`; widened 11 manager / repository / init-helper `init` and `weak var` types from `ModelData` to `AppContainerProtocol`; extended `AppContainerProtocol` with the missing runtime state (`calibreLibraries`, `calibreServers`, `librarySyncStatus`, `deviceName`, etc.), sync progress (`updatingMetadata*`), database lifecycle, activity log, and `LibraryResolver` / `ServerResolver` conformances. Converted the three `ModelData` extensions in `ShelfDataManager.swift` to extensions on `AppContainerProtocol where Self: ObservableObject`. Both classes compiled and 329 tests passed.
+  - **4c (commit 23708d1):** Bulk-renamed `ModelData` → `AppContainer` and `modelData` → `container` across 36 app source files and 6 test files. The 11 init/setup parameter labels were updated to `container:` to match. `YetAnotherEBookReaderApp` now creates `AppContainer()` as the sole `@StateObject`. All 16 View files declare `@EnvironmentObject var container: AppContainer`. All 9 ViewModels + the `YabrEBookReaderNavigationController`, `EpubFolioReaderContainer`, and `FolioReaderViewController` adapters take `container: AppContainer`. 6 `ModelData.shared` access sites switched to `AppContainer.shared`. 329 tests pass.
+  - **4d (commit 0e2fa0e):** Deleted `Models/ModelData.swift` (382 lines) and `Models/CalibreServerConfigProvider.swift` (24 lines). `CalibreServerService` now takes `AppContainerProtocol` instead of `CalibreServerConfigProvider`. `AppContainerProtocol` absorbed `updateBook` / `getPreferredFormat` from the deleted protocol. Xcode project updated. 329 tests pass. The full Phase 4 is complete: ModelData 1,073 → 0 lines, replaced by 366-line AppContainer + 130-line AppContainerProtocol.
 - **Test Coverage Expansion - Phase 1d: Mock Infrastructure (2026-06-23):** Centralized mock infrastructure under a new navigator group and directory `YetAnotherEBookReaderTests/TestHelpers/`. Created reusable doubles for repositories (`MockServerRepository`, `MockLibraryRepository`, `MockBookRepository`, `MockReadingPositionRepository`, `MockAnnotationRepository`), managers (`MockServerManager`, `MockLibraryManager`, `MockBookManager`), in-memory Realm DB bootstrappers (`MockDatabaseService`), and a factory builder for domain types (`TestFixtures`). Centralized `MockURLProtocol` into `TestHelpers/` and removed its duplicate inline definition in `UnifiedSearchIntegrationTests.swift`. All 227 unit tests pass, and Catalyst build succeeds.
 - **Test Coverage Expansion - Phase 1c: CalibreServerManagerTests (2026-06-23):** Implemented `CalibreServerManagerTests.swift` covering `CalibreServerManager` server CRUD, reachability status helpers, DSReaderHelper config updates, background probing, and library auto-creation flows. Fixed an in-memory dictionary cache leak in `CalibreLibraryManager.removeLibrary(library:)` where deleted libraries were not cleaned up from the active in-memory `calibreLibraries` cache. All 9 focused test cases pass, and the unit test suite passes with 227 tests.
 - **Test Coverage Expansion - Phase 1b: CalibreLibraryManagerTests (2026-06-23):** Implemented `CalibreLibraryManagerTests.swift` covering `CalibreLibraryManager` library CRUD, visibility toggling (hide/restore), server metadata updates, probing, removed cache clearing, probe-based last-modified sync, and full Calibre server category/book syncing. Configured custom mock calibre servers to support realistic test execution against `MockURLProtocol` interceptors. All 11 focused test cases pass, and the full test suite passes with 218 tests.

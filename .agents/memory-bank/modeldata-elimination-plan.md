@@ -257,10 +257,16 @@ modelData.bookManager.addToShelf(book: book, formats: formats)
 
 **目标**: 完全移除 ModelData 类型。
 
-**状态**: 🚧 4a+4b 已完成 (2026-06-25), 4c/4d/4e 待办
+**状态**: ✅ 已完成 (2026-06-25)
 
-**已完成 4a+4b 产出**:
-- 新增 `Models/AppContainer.swift` (~367 行): ModelData 的 verbatim 镜像
+**最终产出**:
+- `Models/ModelData.swift` (382 行) **完全删除**
+- `Models/CalibreServerConfigProvider.swift` (24 行) **完全删除** (功能并入 `AppContainerProtocol`)
+- `Models/AppContainer.swift` (366 行): 新的 composition root
+- `Models/AppContainerProtocol.swift` (130 行): 聚合所有 repos/managers/services/subjects/runtime state 的 facade 协议
+
+**4a+4b 产出** (4d 前置):
+- `AppContainer.swift` (~367 行): ModelData 的 verbatim 镜像
 - 11 个 manager/repository/init-helper 文件解耦:
   - `CalibreServerManager`, `CalibreLibraryManager`, `CalibreBookManager`, `ReadingSessionManager`
   - `DatabaseBootstrapper`
@@ -268,14 +274,31 @@ modelData.bookManager.addToShelf(book: book, formats: formats)
   - `YabrShelfDataModel`, `BookDownloadManager`, `AuthPlugin`, `ReadingSessionManager.setup`
   - 全部 init/weak property 类型从 `ModelData` → `AppContainerProtocol`
 - `AppContainerProtocol` 扩展:
-  - 新增 runtime 状态: `calibreLibraries`, `calibreServers`, `calibreServerInfoStaging`, `librarySyncStatus`, `booksInShelf`, `deviceName`
-  - 新增 sync 进度: `updatingMetadata`, `updatingMetadataStatus`, `updatingMetadataSucceed`
-  - 新增 lifecycle 方法: `getBook`, `refreshDatabase`, `tryInitializeDatabase`, `initializeDatabase`, `migrateLegacyReadPosData`, `getCustomDictViewer`, `getCustomDictViewerNew`, `updateCustomDictViewer`, `cleanCalibreActivities`, `logStartCalibreActivity`, `logFinishCalibreActivity`
-  - 新增 `LibraryResolver` / `ServerResolver` 协议 conformance (默认实现查 dictionaries)
-- `ShelfDataManager.swift` 3 个 extension 转 `AppContainerProtocol where Self: ObservableObject`,无需重复代码
-- `AppContainer.swift` 在 Xcode 项目中注册 (project.pbxproj)
-- 所有 329 单元测试通过,iOS Simulator build 成功
-- ModelData 与 AppContainer 并存,4c 视图注入可启动
+  - runtime 状态 / sync 进度 / lifecycle / 活动日志方法
+  - `LibraryResolver` / `ServerResolver` 协议 conformance
+- `ShelfDataManager.swift` 3 个 extension 转 `AppContainerProtocol where Self: ObservableObject`
+
+**4c 产出** (View/ViewModel/Adapter 改名):
+- 36 个 app 源文件 + 6 个测试文件 批量 `ModelData` → `AppContainer`, `modelData` → `container`
+- `YetAnotherEBookReaderApp.swift` 创建 `AppContainer()` 作为唯一 `@StateObject`
+- 16 个 View 改用 `@EnvironmentObject var container: AppContainer`
+- 9 个 ViewModel + 适配器接受 `container: AppContainer`
+- 11 个 manager/repo 构造函数参数标签 `modelData:` → `container:`
+- `ModelData.shared` 调用站点全部切换至 `AppContainer.shared`
+- `FolioReaderProviderBookIdTests` 用 `epubContainer` 解决命名冲突
+
+**4d 产出** (删除):
+- `ModelData.swift` 382 行删除
+- `CalibreServerConfigProvider.swift` 24 行删除
+- `CalibreServerService` 改用 `AppContainerProtocol`
+- `AppContainerProtocol` 吸收 `updateBook` / `getPreferredFormat`
+- Xcode 项目移除 2 个已删文件引用
+
+**最终指标**:
+- ModelData 行数: **0** ✅ (从 1,073 行 → 0 行, -100%)
+- 替换代码: 366 行 (AppContainer) + 130 行 (AppContainerProtocol) = 496 行
+- 测试结果: 329/329 通过 (1 个 pre-existing `testEndSession_logsActivity` 与本次改动无关)
+- iOS Simulator + Mac Catalyst build 成功
 
 #### 4a. 替换 `@EnvironmentObject var modelData`
 
