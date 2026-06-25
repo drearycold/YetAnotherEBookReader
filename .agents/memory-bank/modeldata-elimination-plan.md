@@ -40,16 +40,16 @@
 
 ```mermaid
 graph LR
-    A["Phase 0<br>1,061行<br>God Object"] --> B["Phase 1<br>~600行<br>移除 Facade"]
-    B --> C["Phase 2<br>~350行<br>提取迁移/初始化"]
+    A["Phase 0<br>1,073行<br>God Object"] --> B["Phase 1<br>763行<br>移除 Facade"]
+    B --> C["Phase 2<br>398行<br>提取迁移/初始化"]
     C --> D["Phase 3<br>~150行<br>DI 容器化"]
     D --> E["Phase 4<br>0行<br>消灭"]
     
-    style A fill:#F44336,color:#fff
-    style B fill:#FF9800,color:#fff
-    style C fill:#FF9800,color:#fff
-    style D fill:#4CAF50,color:#fff
-    style E fill:#4CAF50,color:#fff
+    style A fill:#4CAF50,color:#fff
+    style B fill:#4CAF50,color:#fff
+    style C fill:#4CAF50,color:#fff
+    style D fill:#FF9800,color:#fff
+    style E fill:#FF9800,color:#fff
 ```
 
 ---
@@ -151,78 +151,57 @@ modelData.bookManager.addToShelf(book: book, formats: formats)
 
 **目标**: ~600 → ~350 行。将 Realm 相关职责独立。
 
-#### 2a. 提取 DatabaseMigrator
+**状态**: ✅ 已完成 (2026-06-25)
 
-将 `tryInitializeDatabase` 中的 220 行迁移代码提取到独立类：
+**产出**:
+- ModelData.swift 从 **763 → 398 行** (减少 365 行, 48% 缩减,累计 67% 相对 Phase 0)
+- 新增 `Models/DatabaseMigrator.swift` (~259 行): v42→v140 完整迁移历史
+- 新增 `Models/DatabaseBootstrapper.swift` (~92 行): Realm 打开 + 引导序列
+- 修复了 Phase 1 中 `registerSyncServerHelperConfigCancellable` 被误删的 bug, 并将其移到 `CalibreServerManager`
+- 删除 8 个 `// →` 转发方法,合并 `updateServerLibraryInfo` 到 `libraryManager`,合并 `refreshShelfMetadataV2` 到 `bookManager`
+- 协议清理: `CalibreServerConfigProvider` 移除未使用的 `getBookRealm` 和 `refreshShelfMetadataV2` 要求
+- `TestFixtures.populateModelDataWithMockBook` 新增 helper(供测试手动填充 mock 数据)
 
-```swift
-// Models/DatabaseMigrator.swift (新建, ~250 行)
-final class DatabaseMigrator {
-    static let currentSchemaVersion: UInt64 = 140
-    
-    func makeConfiguration(statusHandler: @escaping (String) -> Void) throws -> Realm.Configuration {
-        // 包含所有 schema v42→v140 的迁移块
-        // 包含 shouldCompactOnLaunch 逻辑
-        // 包含文件路径设置 (applicationSupportURL)
-    }
-}
-```
+#### 2a. 提取 DatabaseMigrator ✅
 
-**ModelData 改造**:
-```swift
-func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-    let migrator = DatabaseMigrator()
-    realmConf = try migrator.makeConfiguration(statusHandler: statusHandler)
-    Realm.Configuration.defaultConfiguration = realmConf
-}
-```
+新建 `Models/DatabaseMigrator.swift`:
+- 单一 API: `makeConfiguration(statusHandler:) throws -> Realm.Configuration`
+- 完整保留 v42→v140 迁移历史
+- 处理 shouldCompactOnLaunch 和 applicationSupportURL 路径迁移
+- ModelData 简化为 6 行包装
 
-#### 2b. 提取 DatabaseBootstrapper
+#### 2b. 提取 DatabaseBootstrapper ✅
 
-将 `initializeDatabase()` + `migrateLegacyReadPosData()` 提取：
+新建 `Models/DatabaseBootstrapper.swift`:
+- `bootstrap(realmConf:)` 一站式启动: 打开 Realm, 装载 logger, 初始化 server/libraries/books, 清理 activity
+- `migrateLegacyReadPosData()` 保留作为公开方法
+- ModelData 简化为 4 行 + 1 行包装
 
-```swift
-// Models/DatabaseBootstrapper.swift (新建, ~80 行)
-final class DatabaseBootstrapper {
-    func bootstrap(
-        realmConf: Realm.Configuration,
-        databaseService: DatabaseService,
-        serverManager: CalibreServerManager,
-        libraryManager: CalibreLibraryManager,
-        bookManager: CalibreBookManager,
-        downloadManager: BookDownloadManager,
-        readingPositionRepository: ReadingPositionRepositoryProtocol
-    ) -> (Realm, CalibreActivityLogger) {
-        // initializeDatabase 逻辑
-        // migrateLegacyReadPosData 逻辑
-    }
-}
-```
+#### 2c. Mock 数据 (部分)
 
-#### 2c. 删除 Mock 代码
+**决定**: 保留 `init(mock:)` 中的 inline mock 数据(65 行)。
+- 原因: TestFixtures 在 test target, 而 10 个 view previews 在 app target,需要 `modelData.bookManager.readingBook!` 来渲染
+- 添加 `TestFixtures.populateModelDataWithMockBook` 供测试手动填充使用
 
-`init(mock:)` 中的 70 行模拟数据创建可移到测试 fixture：
+#### 2d. 修复 Phase 1 误删 + 移动 sync 管道 ✅
 
-```swift
-// YetAnotherEBookReaderTests/TestHelpers/TestFixtures.swift
-extension TestFixtures {
-    static func populateModelDataWithMockBook(_ modelData: ModelData) { ... }
-}
-```
+- 恢复 `registerSyncServerHelperConfigCancellable` (45 行)
+- 移动 `syncServerHelperConfigSubject` 从 `ModelData` → `CalibreServerManager`
+- `init()` 中自动注册 (调用 `registerSyncServerHelperConfigCancellable()`)
 
-#### 2d. 移动 `registerSyncServerHelperConfigCancellable`
+#### 2e. 删除 // → 转发方法 + 整合跨 manager 逻辑 ✅
 
-这个 ~50 行的 Combine 管道属于 `CalibreServerManager` 的职责：
+删除 6 个简单转发 + 2 个跨 manager 方法:
+- `populateBookShelf`, `populateLibraries`, `populateLocalLibraryBooks`, `onOpenURL`, `calcLocalFileBookId`, `loadLocalLibraryBookMetadata` → 直接调用 `bookManager`/`libraryManager`
+- `updateServerLibraryInfo` → 合并到 `libraryManager.updateServerLibraryInfo` (包含 libraryMap 更新 + defaultLibrary 持久化)
+- `refreshShelfMetadataV2` → 移到 `bookManager.refreshShelfMetadataV2`
 
-```swift
-// CalibreServerManager 中添加
-func registerSyncServerHelperConfigCancellable(
-    syncSubject: PassthroughSubject<String, Never>,
-    calibreServerService: CalibreServerService
-) { ... }
-```
+协议清理:
+- `CalibreServerConfigProvider` 移除 `getBookRealm` 和 `refreshShelfMetadataV2` (无协议调用方)
+- `CalibreServerService.getBookRealm` (无主) 删除
+- `CalibreServerService+Metadata.swift` 改用 `config?.calibreLibraries` 替代 `getBookRealm`
 
-**Phase 2 预期**: ModelData 从 ~600 → ~350 行
+#### Phase 2 实际产出: ModelData 从 763 → 398 行 (-48%, 累计 -67% 相对 Phase 0)
 
 ---
 
@@ -403,9 +382,9 @@ class CalibreBookManager {
 
 ```mermaid
 graph TD
-    P0["Phase 0: 基线 + 标记"] --> P1["Phase 1: 删 Facade<br>1061→~600行"]
-    P1 --> P2["Phase 2: 提取迁移/初始化<br>~600→~350行"]
-    P2 --> P3["Phase 3: DI 容器化<br>~350→~150行"]
+    P0["Phase 0: 基线 + 标记"] --> P1["Phase 1: 删 Facade<br>1172→763行"]
+    P1 --> P2["Phase 2: 提取迁移/初始化<br>763→398行"]
+    P2 --> P3["Phase 3: DI 容器化<br>~398→~150行"]
     P3 --> P4["Phase 4: 消灭 ModelData<br>~150→0行"]
     
     P1 -.- V["15 个视图<br>分批迁移"]
@@ -413,10 +392,10 @@ graph TD
     P4 -.- S["20+ ModelData.shared<br>注入替换"]
     
     style P0 fill:#4CAF50,color:#fff
-    style P1 fill:#FF9800,color:#fff
-    style P2 fill:#FF9800,color:#fff
-    style P3 fill:#2196F3,color:#fff
-    style P4 fill:#9C27B0,color:#fff
+    style P1 fill:#4CAF50,color:#fff
+    style P2 fill:#4CAF50,color:#fff
+    style P3 fill:#FF9800,color:#fff
+    style P4 fill:#FF9800,color:#fff
 ```
 
 ---
@@ -461,9 +440,9 @@ grep -rn "ModelData.shared" YetAnotherEBookReader/ | wc -l
 
 | Phase | 工作量 | ModelData 行数 | 关键交付物 |
 |-------|--------|--------------|-----------|
-| 0 | 0.5 天 | 1,061 (不变) | 基线 + 标记 |
-| 1 | 2 天 | ~600 | 删除 260 行 Facade, 调用者直接访问 Manager |
-| 2 | 1.5 天 | ~350 | `DatabaseMigrator`, `DatabaseBootstrapper` 独立 |
+| 0 | 0.5 天 | 1,073 (不变) | 基线 + 标记 |
+| 1 | 2 天 | 763 (-35%) | 删除 260 行 Facade, 调用者直接访问 Manager |
+| 2 | 1.5 天 | 398 (-48%) | `DatabaseMigrator`, `DatabaseBootstrapper` 独立 |
 | 3 | 2 天 | ~150 | `AppContainerProtocol`, Manager 依赖协议化 |
 | 4 | 3 天 | **0** | ModelData 删除, `AppContainer` 替代 |
 | **总计** | **~9 天** | **0** | |
