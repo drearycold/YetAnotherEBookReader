@@ -9,18 +9,25 @@ import UIKit
 
 @available(macCatalyst 14.0, *)
 extension YabrPDFViewController {
+    private enum ChromeMetrics {
+        static let horizontalMargin: CGFloat = 16.0
+        static let horizontalPadding: CGFloat = 8.0
+        static let verticalPadding: CGFloat = 5.0
+        static let height: CGFloat = 34.0
+    }
+
     func configureReaderChrome() {
         let backgroundColor = UIColor(cgColor: pdfOptions.fillColor)
         self.navigationController?.navigationBar.barTintColor = backgroundColor
         self.navigationController?.navigationBar.backgroundColor = backgroundColor
         self.navigationController?.toolbar.barTintColor = backgroundColor
         self.navigationController?.toolbar.backgroundColor = backgroundColor
-
         self.tabBarController?.tabBar.barTintColor = backgroundColor
         self.tabBarController?.tabBar.backgroundColor = backgroundColor
 
         configurePagingControls()
         configureNavigationItems()
+        applyChromeTheme()
 
         buildTocList()
 
@@ -37,12 +44,12 @@ extension YabrPDFViewController {
 
         self.view.addSubview(pdfView)
 
+        let bottomConstraint = pdfView.bottomAnchor.constraint(equalTo: self.view.bottomAnchor)
+        self.pdfViewBottomConstraint = bottomConstraint
+
         NSLayoutConstraint.activate([
             pdfView.topAnchor.constraint(equalTo: self.view.topAnchor),
-            pdfView.bottomAnchor.constraint(
-                equalTo: self.view.bottomAnchor,
-                constant: -self.stackView.frame.height
-            ),
+            bottomConstraint,
             pdfView.leftAnchor.constraint(equalTo: self.view.leftAnchor),
             pdfView.rightAnchor.constraint(equalTo: self.view.rightAnchor)
         ])
@@ -124,6 +131,16 @@ extension YabrPDFViewController {
     }
 
     private func configurePagingControls() {
+        chromeContainerView.translatesAutoresizingMaskIntoConstraints = false
+        chromeContainerView.frame = CGRect(
+            x: 0,
+            y: 0,
+            width: max(view.bounds.width - ChromeMetrics.horizontalMargin, 0),
+            height: ChromeMetrics.height
+        )
+        chromeContainerView.clipsToBounds = false
+        chromeContainerView.layer.masksToBounds = false
+
         pageIndicator.setTitle("0 / 0", for: .normal)
         pageIndicator.addAction(UIAction(handler: { [self] _ in
             guard let curPageNum = pdfView.currentPage?.pageRef?.pageNumber,
@@ -193,9 +210,8 @@ extension YabrPDFViewController {
         }), for: .primaryActionTriggered)
 
         pageBackButton.setImage(UIImage(systemName: "arrow.uturn.left"), for: .normal)
-        let tintColor: UIColor = pdfOptions.isDark(.lightText, .darkText)
-        pageBackButton.setTitleColor(tintColor, for: .normal)
 
+        stackView.translatesAutoresizingMaskIntoConstraints = false
         stackView.distribution = .fill
         stackView.alignment = .fill
         stackView.axis = .horizontal
@@ -257,11 +273,54 @@ extension YabrPDFViewController {
         stackView.addArrangedSubview(pageNextButton)
         stackView.addArrangedSubview(pageAuxButton)
 
-        let toolbarView = UIBarButtonItem(customView: stackView)
-        setToolbarItems([toolbarView], animated: false)
+        chromeContainerView.addSubview(stackView)
+        NSLayoutConstraint.activate([
+            stackView.leadingAnchor.constraint(equalTo: chromeContainerView.leadingAnchor, constant: ChromeMetrics.horizontalPadding),
+            stackView.trailingAnchor.constraint(equalTo: chromeContainerView.trailingAnchor, constant: -ChromeMetrics.horizontalPadding),
+            stackView.topAnchor.constraint(equalTo: chromeContainerView.topAnchor, constant: ChromeMetrics.verticalPadding),
+            stackView.bottomAnchor.constraint(equalTo: chromeContainerView.bottomAnchor, constant: -ChromeMetrics.verticalPadding)
+        ])
 
-        print("stackView \(self.navigationController?.view.frame ?? .zero) \(self.navigationController?.toolbar.frame ?? .zero)")
-        stackView.frame = self.navigationController?.toolbar.frame ?? .zero
+        let widthConstraint = chromeContainerView.widthAnchor.constraint(equalToConstant: max(view.bounds.width - ChromeMetrics.horizontalMargin, 0))
+        let heightConstraint = chromeContainerView.heightAnchor.constraint(equalToConstant: ChromeMetrics.height)
+        NSLayoutConstraint.activate([widthConstraint, heightConstraint])
+        chromeContainerWidthConstraint = widthConstraint
+        chromeContainerHeightConstraint = heightConstraint
+
+        let toolbarView = UIBarButtonItem(customView: chromeContainerView)
+        setToolbarItems([toolbarView], animated: false)
+    }
+
+    func updateChromeContainerLayout() {
+        chromeContainerWidthConstraint?.constant = max(view.bounds.width - ChromeMetrics.horizontalMargin, 0)
+        chromeContainerHeightConstraint?.constant = ChromeMetrics.height
+    }
+
+    func applyChromeTheme() {
+        let tintColor = pdfOptions.isDark(UIColor.lightText, UIColor.darkText)
+        let secondaryTintColor = tintColor.withAlphaComponent(0.28)
+
+        chromeContainerView.backgroundColor = .clear
+        chromeContainerView.layer.cornerRadius = 0
+        chromeContainerView.layer.masksToBounds = false
+        chromeContainerView.clipsToBounds = false
+
+        stackView.backgroundColor = .clear
+
+        pageIndicator.setTitleColor(tintColor, for: .normal)
+        titleInfoButton.setTitleColor(tintColor, for: .normal)
+
+        pagePrevButton.tintColor = tintColor
+        pageNextButton.tintColor = tintColor
+        pageAuxButton.tintColor = tintColor
+        pageBackButton.tintColor = tintColor
+        pageBackButton.setTitleColor(tintColor, for: .normal)
+
+        pageSlider.minimumTrackTintColor = tintColor
+        pageSlider.maximumTrackTintColor = secondaryTintColor
+        pageSlider.thumbTintColor = tintColor
+
+        navigationController?.toolbar.tintColor = tintColor
     }
 
     private func configureNavigationItems() {

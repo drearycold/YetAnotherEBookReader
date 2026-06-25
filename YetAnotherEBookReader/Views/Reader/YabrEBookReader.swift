@@ -177,14 +177,6 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             )
             let ret = pdfViewController.open()
             if ret == 0 {
-                // Load and apply initial preferences for PDF
-                if let enginePrefs = modelData.readerPreferenceRepository.loadInitialPreferences(
-                    for: book,
-                    readerType: readerInfo.readerType
-                ) {
-                    pdfViewController.applyPreferences(enginePrefs)
-                }
-                
                 // Load and apply initial highlights for PDF
                 let highlights = modelData.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
                 pdfViewController.applyHighlights(highlights)
