@@ -12,11 +12,11 @@ import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
     private let customConfig: Realm.Configuration?
-    private let modelData: ModelData
-    
+    private let modelData: AppContainerProtocol
+
     var defaultLog = Logger()
-    
-    init(config: Realm.Configuration? = nil, modelData: ModelData) {
+
+    init(config: Realm.Configuration? = nil, modelData: AppContainerProtocol) {
         self.customConfig = config
         self.modelData = modelData
     }

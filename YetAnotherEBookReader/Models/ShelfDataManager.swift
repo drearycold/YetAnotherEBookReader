@@ -45,7 +45,7 @@ class YabrShelfDataModel: ObservableObject {
         
     }
     private let unifiedSearchService: UnifiedSearchService
-    private let modelData: ModelData
+    private let modelData: AppContainerProtocol
     
     @Published var categories: Set<CategoryObject> = []
     
@@ -59,7 +59,7 @@ class YabrShelfDataModel: ObservableObject {
     
     var realmOnQueue: Realm!
     
-    init(unifiedSearchService: UnifiedSearchService, modelData: ModelData) {
+    init(unifiedSearchService: UnifiedSearchService, modelData: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
         self.modelData = modelData
         
@@ -285,7 +285,7 @@ class YabrShelfDataModel: ObservableObject {
     }
 }
 
-extension ModelData {
+extension AppContainerProtocol where Self: ObservableObject {
     func registerRecentShelfUpdater() {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
         calibreUpdatedSubject.receive(on: queue)
@@ -327,7 +327,7 @@ extension ModelData {
     }
 }
 
-extension ModelData {
+extension AppContainerProtocol where Self: ObservableObject {
     private func buildShelfBookItem(entry: (key: String, value: CalibreBook, info: ReaderInfo)) -> ShelfBookItem {
         let inShelfId = entry.key
         let book = entry.value
@@ -381,7 +381,7 @@ extension ModelData {
     }
 }
 
-extension ModelData {
+extension AppContainerProtocol where Self: ObservableObject {
     static func parseShelfSectionId(sectionId: String) -> String? {
         guard let sepRange = sectionId.range(of: " || ")
         else { return nil }

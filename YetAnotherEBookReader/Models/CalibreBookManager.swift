@@ -21,7 +21,7 @@ import R2Streamer
 class CalibreBookManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreBookManager")
 
-    weak var modelData: ModelData?
+    weak var modelData: AppContainerProtocol?
     let databaseService: DatabaseService
 
     @Published var booksInShelf = [String: CalibreBook]()
@@ -62,7 +62,7 @@ class CalibreBookManager: ObservableObject {
     let annotationRepository: AnnotationRepositoryProtocol
 
     init(
-        modelData: ModelData? = nil,
+        modelData: AppContainerProtocol? = nil,
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol? = nil,
         readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,

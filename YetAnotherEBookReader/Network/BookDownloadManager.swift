@@ -42,18 +42,18 @@ class BookDownloadManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private let defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookDownloadManager")
     
-    var modelData: ModelData?
+    var modelData: AppContainerProtocol?
     private var realmConf: Realm.Configuration?
     var sessionConfiguration: URLSessionConfiguration = .default
 
-    init(modelData: ModelData? = nil, realmConf: Realm.Configuration? = nil) {
+    init(modelData: AppContainerProtocol? = nil, realmConf: Realm.Configuration? = nil) {
         self.modelData = modelData
         self.realmConf = realmConf
         
         registerBookFormatDownloadHandler()
     }
     
-    func setup(modelData: ModelData, realmConf: Realm.Configuration?) {
+    func setup(modelData: AppContainerProtocol, realmConf: Realm.Configuration?) {
         self.modelData = modelData
         self.realmConf = realmConf
     }

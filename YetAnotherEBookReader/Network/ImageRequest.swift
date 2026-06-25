@@ -9,9 +9,9 @@ import Foundation
 import Kingfisher
 
 class AuthPlugin: ImageDownloadRequestModifier {
-    let modelData: ModelData
-    
-    init(modelData: ModelData) {
+    let modelData: AppContainerProtocol
+
+    init(modelData: AppContainerProtocol) {
         self.modelData = modelData
     }
     

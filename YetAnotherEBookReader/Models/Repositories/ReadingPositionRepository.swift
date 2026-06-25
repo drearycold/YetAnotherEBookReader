@@ -25,9 +25,9 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
 
 final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
     private let databaseService: DatabaseService
-    private weak var modelData: ModelData?
-    
-    init(databaseService: DatabaseService = .shared, modelData: ModelData? = nil) {
+    private weak var modelData: AppContainerProtocol?
+
+    init(databaseService: DatabaseService = .shared, modelData: AppContainerProtocol? = nil) {
         self.databaseService = databaseService
         self.modelData = modelData
     }

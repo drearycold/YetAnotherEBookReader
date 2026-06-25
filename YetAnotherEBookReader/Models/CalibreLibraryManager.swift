@@ -13,7 +13,7 @@ import OSLog
 class CalibreLibraryManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreLibraryManager")
     
-    weak var modelData: ModelData?
+    weak var modelData: AppContainerProtocol?
     let databaseService: DatabaseService
     private let libraryRepository: LibraryRepositoryProtocol
     
@@ -28,7 +28,7 @@ class CalibreLibraryManager: ObservableObject {
     
     private var calibreCancellables = Set<AnyCancellable>()
     
-    init(modelData: ModelData, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
+    init(modelData: AppContainerProtocol, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
         self.modelData = modelData
         self.databaseService = databaseService
         self.libraryRepository = libraryRepository

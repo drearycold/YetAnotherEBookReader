@@ -19,10 +19,10 @@ enum DatabaseBootstrapError: Error {
 }
 
 final class DatabaseBootstrapper {
-    private let modelData: ModelData
+    private let modelData: AppContainerProtocol
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "DatabaseBootstrapper")
 
-    init(modelData: ModelData) {
+    init(modelData: AppContainerProtocol) {
         self.modelData = modelData
     }
 

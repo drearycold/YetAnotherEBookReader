@@ -13,7 +13,7 @@ import OSLog
 class CalibreServerManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreServerManager")
 
-    weak var modelData: ModelData?
+    weak var modelData: AppContainerProtocol?
     let databaseService: DatabaseService
     private let serverRepository: ServerRepositoryProtocol
 
@@ -32,7 +32,7 @@ class CalibreServerManager: ObservableObject {
     }
     var documentServer: CalibreServer?
 
-    init(modelData: ModelData, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
+    init(modelData: AppContainerProtocol, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
         self.modelData = modelData
         self.databaseService = databaseService
         self.serverRepository = serverRepository

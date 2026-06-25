@@ -47,10 +47,10 @@ class ReadingSessionManager: ObservableObject {
     @Published var readerInfo: ReaderInfo? = nil
     @Published var selectedPosition = ""
     
-    weak var modelData: ModelData?
+    weak var modelData: AppContainerProtocol?
     private var cancellables = Set<AnyCancellable>()
-    
-    init(modelData: ModelData? = nil) {
+
+    init(modelData: AppContainerProtocol? = nil) {
         self.modelData = modelData
         
         switch UIDevice.current.userInterfaceIdiom {
@@ -67,7 +67,7 @@ class ReadingSessionManager: ObservableObject {
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
     }
     
-    func setup(modelData: ModelData) {
+    func setup(modelData: AppContainerProtocol) {
         self.modelData = modelData
     }
     

@@ -32,12 +32,12 @@ protocol ActivityLogRepositoryProtocol {
 final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
     private let databaseService: DatabaseService
     private let bookRepository: BookRepositoryProtocol
-    private weak var modelData: ModelData?
+    private weak var modelData: AppContainerProtocol?
 
     init(
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol,
-        modelData: ModelData?
+        modelData: AppContainerProtocol?
     ) {
         self.databaseService = databaseService
         self.bookRepository = bookRepository
