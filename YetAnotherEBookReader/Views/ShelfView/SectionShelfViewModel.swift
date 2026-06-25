@@ -21,7 +21,7 @@ enum SectionShelfAlert: Identifiable {
 
 @MainActor @available(macCatalyst 14.0, *)
 final class SectionShelfViewModel: ObservableObject {
-    let modelData: ModelData
+    let container: AppContainer
     private var cancellables = Set<AnyCancellable>()
     
     private var allDisplaySections = [ShelfSectionItem]()
@@ -34,17 +34,17 @@ final class SectionShelfViewModel: ObservableObject {
     @Published var activeAlert: SectionShelfAlert? = nil
     @Published var selectionState = ShelfSelectionState()
     
-    init(modelData: ModelData) {
-        self.modelData = modelData
+    init(container: AppContainer) {
+        self.container = container
         setupSubscriptions()
         bootstrapShelfDataModelIfNeeded()
     }
     
     private func bootstrapShelfDataModelIfNeeded() {
-        guard modelData.logger != nil else { return }
+        guard container.logger != nil else { return }
         
         // Force lazy initialization of shelfDataModel and seed initial items if any
-        let initialItems = modelData.shelfDataModel.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
+        let initialItems = container.shelfDataModel.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
         if !initialItems.isEmpty {
             self.allDisplaySections = initialItems
             self.applyFiltering()
@@ -52,7 +52,7 @@ final class SectionShelfViewModel: ObservableObject {
     }
     
     private func setupSubscriptions() {
-        modelData.discoverShelfItemsSubject
+        container.discoverShelfItemsSubject
             .collect(.byTime(RunLoop.main, .seconds(1)))
             .receive(on: DispatchQueue.main)
             .sink { [weak self] displaySectionsArray in
@@ -62,13 +62,13 @@ final class SectionShelfViewModel: ObservableObject {
             }
             .store(in: &cancellables)
             
-        modelData.calibreUpdatedSubject
+        container.calibreUpdatedSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] signal in
                 guard let self = self else { return }
                 
                 // If database just finished initializing, bootstrap shelfDataModel
-                if self.modelData.logger != nil && self.allDisplaySections.isEmpty {
+                if self.container.logger != nil && self.allDisplaySections.isEmpty {
                     self.bootstrapShelfDataModelIfNeeded()
                 }
                 
@@ -82,15 +82,15 @@ final class SectionShelfViewModel: ObservableObject {
     }
     
     func refreshShelf() {
-        modelData.shelfDataModel.refresh()
+        container.shelfDataModel.refresh()
     }
     
     func downloadSelectedBooks(bookIds: Set<String>) {
         bookIds.forEach { bookId in
-            guard let book = modelData.bookManager.getBook(for: bookId),
-                  let format = modelData.sessionManager.getPreferredFormat(for: book)
+            guard let book = container.bookManager.getBook(for: bookId),
+                  let format = container.sessionManager.getPreferredFormat(for: book)
             else { return }
-            modelData.bookManager.addToShelf(book: book, formats: [format])
+            container.bookManager.addToShelf(book: book, formats: [format])
         }
     }
 
@@ -100,7 +100,7 @@ final class SectionShelfViewModel: ObservableObject {
             return
         }
 
-        guard modelData.bookManager.bookExists(forPrimaryKey: bookId) else { return }
+        guard container.bookManager.bookExists(forPrimaryKey: bookId) else { return }
         presentingBookDetailId = bookId
     }
     
@@ -129,12 +129,12 @@ final class SectionShelfViewModel: ObservableObject {
     }
     
     func refreshBookFormats(bookId: String) {
-        guard let book = modelData.bookManager.booksInShelf[bookId] else { return }
+        guard let book = container.bookManager.booksInShelf[bookId] else { return }
         book.formats.filter {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            self.modelData.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            self.container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
     
@@ -150,14 +150,14 @@ final class SectionShelfViewModel: ObservableObject {
     
     private func applyFiltering() {
         let availableLibraryIds = Set(
-            allDisplaySections.compactMap { ModelData.parseShelfSectionId(sectionId: $0.id) }
+            allDisplaySections.compactMap { AppContainer.parseShelfSectionId(sectionId: $0.id) }
         )
         pickedLibraries.formIntersection(availableLibraryIds)
         
         let librarySet = Set<CalibreLibrary>(
             allDisplaySections.compactMap { section -> CalibreLibrary? in
-                guard let libraryId = ModelData.parseShelfSectionId(sectionId: section.id) else { return nil }
-                return modelData.libraryManager.calibreLibraries[libraryId]
+                guard let libraryId = AppContainer.parseShelfSectionId(sectionId: section.id) else { return nil }
+                return container.libraryManager.calibreLibraries[libraryId]
             }
         )
         let libraryList = librarySet.sorted(by: { $0.name < $1.name })
@@ -172,7 +172,7 @@ final class SectionShelfViewModel: ObservableObject {
         }
         
         displaySections = allDisplaySections.filter { section in
-            guard let libraryId = ModelData.parseShelfSectionId(sectionId: section.id) else { return false }
+            guard let libraryId = AppContainer.parseShelfSectionId(sectionId: section.id) else { return false }
             return pickedLibraries.isEmpty || pickedLibraries.contains(libraryId)
         }
     }

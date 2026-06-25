@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct YetAnotherEBookReaderApp: App {
-    @StateObject private var modelData = ModelData()
+    @StateObject private var container = AppContainer()
     @Environment(\.scenePhase) private var scenePhase
     
     @State private var upgradingDatabase = false
@@ -18,11 +18,11 @@ struct YetAnotherEBookReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                MainView(viewModel: MainViewModel(modelData: modelData, sessionManager: modelData.sessionManager))
-                    .environmentObject(modelData)
-                    .environmentObject(modelData.downloadManager)
-                    .environmentObject(modelData.sessionManager)
-                    .environmentObject(modelData.fontsManager)
+                MainView(viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
+                    .environmentObject(container)
+                    .environmentObject(container.downloadManager)
+                    .environmentObject(container.sessionManager)
+                    .environmentObject(container.fontsManager)
                 
                 if upgradingDatabase {
                     VStack(spacing: 8) {
@@ -41,19 +41,19 @@ struct YetAnotherEBookReaderApp: App {
 
             switch(newScenePhase) {
             case .active:
-                if modelData.realm == nil {
+                if container.realm == nil {
                     upgradingDatabase = true
                     DispatchQueue.global(qos: .userInitiated).async {
                         do {
-                            try modelData.tryInitializeDatabase() { status in
+                            try container.tryInitializeDatabase() { status in
                                 upgradingDatabaseStatus = status
                             }
                             DispatchQueue.main.async {
-                                modelData.initializeDatabase()
+                                container.initializeDatabase()
                                 upgradingDatabase = false
                                 
                                 enableProbeTimer()
-                                modelData.bookReaderActivitySubject.send(newScenePhase)
+                                container.bookReaderActivitySubject.send(newScenePhase)
                             }
                         } catch {
                             upgradingDatabaseStatus = error.localizedDescription
@@ -61,13 +61,13 @@ struct YetAnotherEBookReaderApp: App {
                     }
                 } else {
                     enableProbeTimer()
-                    modelData.bookReaderActivitySubject.send(newScenePhase)
+                    container.bookReaderActivitySubject.send(newScenePhase)
                 }
             case .inactive:
                 break
             case .background:
                 disableProbeTimer()
-                modelData.bookReaderActivitySubject.send(newScenePhase)
+                container.bookReaderActivitySubject.send(newScenePhase)
                 break
             @unknown default:
                 break
@@ -76,16 +76,16 @@ struct YetAnotherEBookReaderApp: App {
     }
     
     func enableProbeTimer() {
-        modelData.serverManager.probeServersReachability(with: [], updateLibrary: true)
-        modelData.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
+        container.serverManager.probeServersReachability(with: [], updateLibrary: true)
+        container.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
             .autoconnect()
             .receive(on: DispatchQueue.main)
             .sink { timer in
-//                modelData.probeServersReachability(with: [], updateLibrary: true)
+//                container.probeServersReachability(with: [], updateLibrary: true)
             }
     }
     
     func disableProbeTimer() {
-        modelData.probeTimer?.cancel()
+        container.probeTimer?.cancel()
     }
 }

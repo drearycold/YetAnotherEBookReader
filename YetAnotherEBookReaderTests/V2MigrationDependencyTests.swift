@@ -16,55 +16,55 @@ final class V2MigrationDependencyTests: XCTestCase {
     
     override func tearDown() {
         cancellables.removeAll()
-        ModelData.shared = nil
+        AppContainer.shared = nil
         super.tearDown()
     }
     
-    func testUnifiedSearchViewModelDefaultsToModelDataUnifiedSearchService() async throws {
-        let modelData = makeModelData()
-        let unifiedSearchService = try await makeUnifiedSearchService(modelData: modelData)
-        modelData.unifiedSearchService = unifiedSearchService
+    func testUnifiedSearchViewModelDefaultsToAppContainerUnifiedSearchService() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
         
-        let viewModel = UnifiedSearchViewModel(modelData: modelData)
+        let viewModel = UnifiedSearchViewModel(container: container)
         let resolved = Mirror(reflecting: viewModel).children.first { $0.label == "searchService" }?.value as AnyObject?
         
         XCTAssertNotNil(resolved)
         XCTAssertTrue(resolved === (unifiedSearchService as AnyObject))
     }
     
-    func testUnifiedCategoryViewModelDefaultsToModelDataUnifiedCategoryService() {
-        let modelData = makeModelData()
+    func testUnifiedCategoryViewModelDefaultsToAppContainerUnifiedCategoryService() {
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
-        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
-        modelData.categoryCacheRepository = repository
-        modelData.unifiedCategoryService = unifiedCategoryService
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: container)
+        container.categoryCacheRepository = repository
+        container.unifiedCategoryService = unifiedCategoryService
         
-        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let viewModel = UnifiedCategoryViewModel(container: container)
         let resolved = Mirror(reflecting: viewModel).children.first { $0.label == "unifiedCategoryService" }?.value as AnyObject?
         
         XCTAssertNotNil(resolved)
         XCTAssertTrue(resolved === (unifiedCategoryService as AnyObject))
     }
 
-    func testUnifiedCategoryViewModelDefaultsToModelDataCategoryCacheRepository() {
-        let modelData = makeModelData()
+    func testUnifiedCategoryViewModelDefaultsToAppContainerCategoryCacheRepository() {
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
-        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
-        modelData.categoryCacheRepository = repository
-        modelData.unifiedCategoryService = unifiedCategoryService
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: container)
+        container.categoryCacheRepository = repository
+        container.unifiedCategoryService = unifiedCategoryService
 
-        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let viewModel = UnifiedCategoryViewModel(container: container)
         let resolved = Mirror(reflecting: viewModel).children.first { $0.label == "categoryCacheRepository" }?.value as AnyObject?
 
         XCTAssertNotNil(resolved)
         XCTAssertTrue(resolved === (repository as AnyObject))
     }
     
-    func testLibraryInfoViewModelFetchAvailableCategoriesUsesModelDataCategoryCacheRepository() {
-        let modelData = makeModelData()
+    func testLibraryInfoViewModelFetchAvailableCategoriesUsesAppContainerCategoryCacheRepository() {
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
-        modelData.categoryCacheRepository = repository
-        ModelData.shared = modelData
+        container.categoryCacheRepository = repository
+        AppContainer.shared = container
         
         let result = LibraryCategoryResult(
             libraryId: "library-id",
@@ -84,10 +84,10 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
 
     func testLibraryInfoViewModelSetupCategoryObserverUsesRepositoryPublisher() {
-        let modelData = makeModelData()
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
-        modelData.categoryCacheRepository = repository
-        ModelData.shared = modelData
+        container.categoryCacheRepository = repository
+        AppContainer.shared = container
 
         let initialResult = LibraryCategoryResult(
             libraryId: "library-id",
@@ -112,14 +112,14 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
 
     func testUnifiedCategoryViewModelMergeCategoryObservesRepositoryUpdates() async throws {
-        let modelData = makeModelData()
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
         let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
-        modelData.libraryManager.calibreLibraries = [library.id: library]
-        modelData.categoryCacheRepository = repository
-        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
-        modelData.unifiedCategoryService = unifiedCategoryService
-        ModelData.shared = modelData
+        container.libraryManager.calibreLibraries = [library.id: library]
+        container.categoryCacheRepository = repository
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: container)
+        container.unifiedCategoryService = unifiedCategoryService
+        AppContainer.shared = container
 
         try repository.saveLibraryCategoryResult(
             libraryId: library.id,
@@ -133,7 +133,7 @@ final class V2MigrationDependencyTests: XCTestCase {
             )
         )
 
-        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let viewModel = UnifiedCategoryViewModel(container: container)
         viewModel.mergeCategory(categoryName: "Authors", searchString: "")
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -164,14 +164,14 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
 
     func testUnifiedCategoryViewModelRebindsObserverForNewCategory() async throws {
-        let modelData = makeModelData()
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
         let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
-        modelData.libraryManager.calibreLibraries = [library.id: library]
-        modelData.categoryCacheRepository = repository
-        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
-        modelData.unifiedCategoryService = unifiedCategoryService
-        ModelData.shared = modelData
+        container.libraryManager.calibreLibraries = [library.id: library]
+        container.categoryCacheRepository = repository
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: container)
+        container.unifiedCategoryService = unifiedCategoryService
+        AppContainer.shared = container
 
         try repository.saveLibraryCategoryResult(
             libraryId: library.id,
@@ -196,7 +196,7 @@ final class V2MigrationDependencyTests: XCTestCase {
             )
         )
 
-        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let viewModel = UnifiedCategoryViewModel(container: container)
         viewModel.mergeCategory(categoryName: "Authors", searchString: "")
         try await Task.sleep(nanoseconds: 50_000_000)
         viewModel.mergeCategory(categoryName: "Tags", searchString: "")
@@ -208,21 +208,21 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
 
     func testUnifiedCategoryViewModelForceRefreshInvalidatesActiveLibraries() {
-        let modelData = makeModelData()
+        let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
         var activeLibrary = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
         var hiddenLibrary = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "hidden", name: "Hidden")
         activeLibrary.hidden = false
         hiddenLibrary.hidden = true
-        modelData.libraryManager.calibreLibraries = [
+        container.libraryManager.calibreLibraries = [
             activeLibrary.id: activeLibrary,
             hiddenLibrary.id: hiddenLibrary
         ]
-        modelData.categoryCacheRepository = repository
-        modelData.unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
-        ModelData.shared = modelData
+        container.categoryCacheRepository = repository
+        container.unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: container)
+        AppContainer.shared = container
 
-        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let viewModel = UnifiedCategoryViewModel(container: container)
         viewModel.forceRefreshCategory(categoryName: "Authors")
 
         XCTAssertTrue(repository.invalidateCategoryCacheCalled)
@@ -232,8 +232,8 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
     
     func testShelfRefreshResetsActiveUnifiedSearchLimit() async throws {
-        let modelData = makeModelData()
-        let unifiedSearchService = try await makeUnifiedSearchService(modelData: modelData)
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
         
         let server = CalibreServer(
             uuid: UUID(),
@@ -247,8 +247,8 @@ final class V2MigrationDependencyTests: XCTestCase {
         )
         let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
         
-        modelData.libraryManager.calibreLibraries = [library.id: library]
-        modelData.unifiedSearchService = unifiedSearchService
+        container.libraryManager.calibreLibraries = [library.id: library]
+        container.unifiedSearchService = unifiedSearchService
         
         let key = SearchCriteriaMergedKey(
             libraryIds: [],
@@ -268,7 +268,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let limitBeforeRefresh = await unifiedSearchService.getActiveSearch(for: key)?.limitNumber
         XCTAssertEqual(limitBeforeRefresh, 250)
         
-        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, modelData: modelData)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
         shelfDataModel.categories = [YabrShelfDataModel.CategoryObject(type: .Author, category: "Author A")]
         shelfDataModel.refresh()
         
@@ -277,19 +277,19 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(limitAfterRefresh, 100)
     }
     
-    private func makeModelData() -> ModelData {
+    private func makeAppContainer() -> AppContainer {
         let config = Realm.Configuration(inMemoryIdentifier: "V2MigrationDependencyTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
-        let modelData = ModelData(mock: true)
-        modelData.realmConf = config
-        return modelData
+        let container = AppContainer(mock: true)
+        container.realmConf = config
+        return container
     }
     
-    private func makeUnifiedSearchService(modelData: ModelData) async throws -> UnifiedSearchService {
+    private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {
         let repository = MockSearchCacheRepository()
         let libraryProvider = MockLibraryProvider()
-        let logger = CalibreActivityLogger(realmConf: modelData.realmConf ?? Realm.Configuration())
-        let service = CalibreServerService(logger: logger, config: modelData, database: DatabaseService.shared)
+        let logger = CalibreActivityLogger(realmConf: container.realmConf ?? Realm.Configuration())
+        let service = CalibreServerService(logger: logger, config: container, database: DatabaseService.shared)
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]

@@ -94,13 +94,13 @@ class LibraryInfoBookListViewModel: ObservableObject {
         !book.series.isEmpty && filterCriteriaCategory["Series"]?.contains(book.series) != true
     }
     
-    func downloadOrAddToShelfAction(book: CalibreBook, format: Format, modelData: ModelData) {
+    func downloadOrAddToShelfAction(book: CalibreBook, format: Format, container: AppContainer) {
         if book.inShelf {
-            if case .failure(let error) = modelData.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
+            if case .failure(let error) = container.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
                 Logger(subsystem: "YetAnotherEBookReader", category: "LibraryInfoBookListViewModel").error("Failed to start download: \(error.localizedDescription)")
             }
         } else {
-            modelData.bookManager.addToShelf(book: book, formats: [format])
+            container.bookManager.addToShelf(book: book, formats: [format])
         }
     }
     

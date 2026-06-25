@@ -29,8 +29,8 @@ class UnifiedCategoryServiceTests: XCTestCase {
 
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
-        let modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        let container = AppContainer(mock: true)
+        container.realmConf = config
 
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         mockLibrary1 = CalibreLibrary(server: server1, key: "lib1", name: "Library 1")
@@ -45,19 +45,19 @@ class UnifiedCategoryServiceTests: XCTestCase {
             mockLibrary2.id: mockLibrary2
         ]
 
-        // Setup reachability staging in modelData
+        // Setup reachability staging in container
         let probeRequest1 = CalibreProbeServerRequest(server: server1, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info1 = CalibreServerInfo(server: server1, isPublic: false, url: URL(string: "http://localhost/1")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: mockLibrary1.id, libraryMap: [mockLibrary1.id: "Library 1"], request: probeRequest1)
 
         let probeRequest2 = CalibreProbeServerRequest(server: server2, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info2 = CalibreServerInfo(server: server2, isPublic: false, url: URL(string: "http://localhost/2")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: mockLibrary2.id, libraryMap: [mockLibrary2.id: "Library 2"], request: probeRequest2)
 
-        modelData.calibreServerInfoStaging = [
+        container.calibreServerInfoStaging = [
             server1.uuid.uuidString: info1,
             server2.uuid.uuidString: info2
         ]
 
-        serverService = modelData.calibreServerService
+        serverService = container.calibreServerService
         mergeService = UnifiedCategoryMergeService()
 
         libraryCategoryService = LibraryCategoryService(service: serverService, repository: repository)
@@ -337,7 +337,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
     }
 
     func testRealmSearchCacheStoreObserveCategorySummariesPublishesInitialAndUpdatedSnapshots() throws {
-        let (modelData, store) = makeRealmSearchCacheStore()
+        let (container, store) = makeRealmSearchCacheStore()
 
         let initialResult = LibraryCategoryResult(
             libraryId: mockLibrary1.id,
@@ -383,7 +383,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(received.last?.first?.categoryName, "Authors")
         XCTAssertEqual(received.last?.first?.itemsCount, 3)
         XCTAssertEqual(received.last?.first?.totalNumber, 3)
-        _ = modelData
+        _ = container
     }
 
     func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() throws {
@@ -421,15 +421,15 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(updateCount, 1)
     }
 
-    private func makeRealmSearchCacheStore() -> (ModelData, RealmSearchCacheStore) {
+    private func makeRealmSearchCacheStore() -> (AppContainer, RealmSearchCacheStore) {
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-RealmStore-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
-        let modelData = ModelData(mock: true)
-        modelData.realmConf = config
-        modelData.libraryManager.calibreLibraries = [
+        let container = AppContainer(mock: true)
+        container.realmConf = config
+        container.libraryManager.calibreLibraries = [
             mockLibrary1.id: mockLibrary1,
             mockLibrary2.id: mockLibrary2
         ]
-        return (modelData, RealmSearchCacheStore(config: config, modelData: modelData))
+        return (container, RealmSearchCacheStore(config: config, container: container))
     }
 }

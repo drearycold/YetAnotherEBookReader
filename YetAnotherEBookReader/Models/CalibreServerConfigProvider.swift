@@ -4,7 +4,7 @@
 //
 //  Split from CalibreData.swift on 2026/6/18.
 //  Zero-behavior-change move: the CalibreServerConfigProvider protocol used to
-//  bridge managers/services with the ModelData facade.
+//  bridge managers/services with the AppContainer facade.
 //
 
 import Foundation

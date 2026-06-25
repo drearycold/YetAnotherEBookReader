@@ -11,7 +11,7 @@ import RealmSwift
 @MainActor
 class LibraryInfoBookListViewModelTests: XCTestCase {
     var listViewModel: LibraryInfoBookListViewModel!
-    var modelData: ModelData!
+    var container: AppContainer!
     var libraryInfoViewModel: LibraryInfoView.ViewModel!
     var searchViewModel: UnifiedSearchViewModel!
     var cancellables: Set<AnyCancellable>!
@@ -22,11 +22,11 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "LibraryInfoBookListViewModelTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
         
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        container = AppContainer(mock: true)
+        container.realmConf = config
         
         libraryInfoViewModel = LibraryInfoView.ViewModel()
-        searchViewModel = UnifiedSearchViewModel(modelData: modelData)
+        searchViewModel = UnifiedSearchViewModel(container: container)
         listViewModel = LibraryInfoBookListViewModel()
         cancellables = []
     }
@@ -35,7 +35,7 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         listViewModel = nil
         libraryInfoViewModel = nil
         searchViewModel = nil
-        modelData = nil
+        container = nil
         cancellables = nil
         try super.tearDownWithError()
     }

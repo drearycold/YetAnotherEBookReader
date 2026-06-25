@@ -257,6 +257,26 @@ modelData.bookManager.addToShelf(book: book, formats: formats)
 
 **目标**: 完全移除 ModelData 类型。
 
+**状态**: 🚧 4a+4b 已完成 (2026-06-25), 4c/4d/4e 待办
+
+**已完成 4a+4b 产出**:
+- 新增 `Models/AppContainer.swift` (~367 行): ModelData 的 verbatim 镜像
+- 11 个 manager/repository/init-helper 文件解耦:
+  - `CalibreServerManager`, `CalibreLibraryManager`, `CalibreBookManager`, `ReadingSessionManager`
+  - `DatabaseBootstrapper`
+  - `RealmReadingPositionRepository`, `RealmActivityLogRepository`, `RealmSearchCacheStore`
+  - `YabrShelfDataModel`, `BookDownloadManager`, `AuthPlugin`, `ReadingSessionManager.setup`
+  - 全部 init/weak property 类型从 `ModelData` → `AppContainerProtocol`
+- `AppContainerProtocol` 扩展:
+  - 新增 runtime 状态: `calibreLibraries`, `calibreServers`, `calibreServerInfoStaging`, `librarySyncStatus`, `booksInShelf`, `deviceName`
+  - 新增 sync 进度: `updatingMetadata`, `updatingMetadataStatus`, `updatingMetadataSucceed`
+  - 新增 lifecycle 方法: `getBook`, `refreshDatabase`, `tryInitializeDatabase`, `initializeDatabase`, `migrateLegacyReadPosData`, `getCustomDictViewer`, `getCustomDictViewerNew`, `updateCustomDictViewer`, `cleanCalibreActivities`, `logStartCalibreActivity`, `logFinishCalibreActivity`
+  - 新增 `LibraryResolver` / `ServerResolver` 协议 conformance (默认实现查 dictionaries)
+- `ShelfDataManager.swift` 3 个 extension 转 `AppContainerProtocol where Self: ObservableObject`,无需重复代码
+- `AppContainer.swift` 在 Xcode 项目中注册 (project.pbxproj)
+- 所有 329 单元测试通过,iOS Simulator build 成功
+- ModelData 与 AppContainer 并存,4c 视图注入可启动
+
 #### 4a. 替换 `@EnvironmentObject var modelData`
 
 **方案 A (iOS 15 兼容)**: 用 `@EnvironmentObject var container: AppContainer` 替换

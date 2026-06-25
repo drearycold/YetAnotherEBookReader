@@ -148,7 +148,7 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
     }
     
     func testReadingPositionThreading() throws {
-        // Use a bookId that does not contain '@' or '^' to avoid accessing actor-isolated ModelData.shared from background thread
+        // Use a bookId that does not contain '@' or '^' to avoid accessing actor-isolated AppContainer.shared from background thread
         let bookId = "thread_test_book"
         let repo = repository!
         

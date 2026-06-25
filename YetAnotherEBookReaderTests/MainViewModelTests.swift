@@ -12,18 +12,18 @@ import Combine
 
 @MainActor class MainViewModelTests: XCTestCase {
     var viewModel: MainViewModel!
-    var mockModelData: ModelData!
+    var mockAppContainer: AppContainer!
     var cancellables: Set<AnyCancellable>!
     
     override func setUpWithError() throws {
-        mockModelData = ModelData(mock: true)
-        viewModel = MainViewModel(modelData: mockModelData, sessionManager: mockModelData.sessionManager)
+        mockAppContainer = AppContainer(mock: true)
+        viewModel = MainViewModel(container: mockAppContainer, sessionManager: mockAppContainer.sessionManager)
         cancellables = []
     }
     
     override func tearDownWithError() throws {
         viewModel = nil
-        mockModelData = nil
+        mockAppContainer = nil
         cancellables = nil
     }
     
@@ -68,15 +68,15 @@ import Combine
     }
 
     func testShowWelcomeIsFalseWhenDatabaseIsNotReady() throws {
-        mockModelData.databaseService.realm = nil
-        mockModelData.booksInShelf.removeAll()
+        mockAppContainer.databaseService.realm = nil
+        mockAppContainer.booksInShelf.removeAll()
 
         XCTAssertFalse(viewModel.showWelcome)
     }
 
     func testShowWelcomeIsTrueWhenDatabaseIsReadyAndShelfIsEmpty() throws {
-        XCTAssertTrue(mockModelData.isDatabaseReady)
-        mockModelData.booksInShelf.removeAll()
+        XCTAssertTrue(mockAppContainer.isDatabaseReady)
+        mockAppContainer.booksInShelf.removeAll()
 
         XCTAssertTrue(viewModel.showWelcome)
     }

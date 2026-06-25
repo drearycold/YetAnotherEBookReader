@@ -84,7 +84,7 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
     var calibreCancellables = Set<AnyCancellable>()
 
     @Published var downloadManager = BookDownloadManager()
-    lazy var sessionManager = ReadingSessionManager(modelData: self)
+    lazy var sessionManager = ReadingSessionManager(container: self)
     
     @Published var updatingMetadata = false {
         didSet {
@@ -120,19 +120,19 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
     lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
     lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
     lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
-    lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, modelData: self)
+    lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, container: self)
     lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
-    lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, modelData: self)
+    lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, container: self)
     lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository()
     lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.realmConf)
     
-    lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
-    lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
-    lazy var databaseBootstrapper = DatabaseBootstrapper(modelData: self)
-    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
+    lazy var serverManager = CalibreServerManager(container: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
+    lazy var libraryManager = CalibreLibraryManager(container: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
+    lazy var databaseBootstrapper = DatabaseBootstrapper(container: self)
+    lazy var bookManager = CalibreBookManager(container: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
-    lazy var searchCacheRepository = RealmSearchCacheStore(modelData: self)
+    lazy var searchCacheRepository = RealmSearchCacheStore(container: self)
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
@@ -143,7 +143,7 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
     lazy var libraryCategoryService = LibraryCategoryService(service: self.calibreServerService, repository: self.categoryCacheRepository)
     lazy var unifiedCategoryService = UnifiedCategoryService(repository: self.categoryCacheRepository, libraryProvider: self)
     
-    lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, modelData: self)
+    lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
     
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
 
@@ -262,10 +262,10 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
     /// requests via `KFImage`.
     private func setupImageCache() {
         kfImageCache.diskStorage.config.expiration = .days(28)
-        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
+        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(container: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
 
-        downloadManager.modelData = self
+        downloadManager.container = self
         fontsManager.reloadCustomFonts()
     }
 

@@ -2,8 +2,8 @@
 //  DatabaseBootstrapper.swift
 //  YetAnotherEBookReader
 //
-//  Extracted from ModelData.initializeDatabase() and
-//  ModelData.migrateLegacyReadPosData() on 2026-06-24.
+//  Extracted from AppContainer.initializeDatabase() and
+//  AppContainer.migrateLegacyReadPosData() on 2026-06-24.
 //
 
 import Foundation
@@ -19,11 +19,11 @@ enum DatabaseBootstrapError: Error {
 }
 
 final class DatabaseBootstrapper {
-    private let modelData: AppContainerProtocol
+    private let container: AppContainerProtocol
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "DatabaseBootstrapper")
 
-    init(modelData: AppContainerProtocol) {
-        self.modelData = modelData
+    init(container: AppContainerProtocol) {
+        self.container = container
     }
 
     /// Boot the database after migration: open the Realm on the main thread,
@@ -32,32 +32,32 @@ final class DatabaseBootstrapper {
     /// servers/libraries/books and clean stale activity entries.
     ///
     /// Throws `DatabaseBootstrapError.realmOpenFailed` if the main Realm
-    /// cannot be opened. On throw, the caller should leave `ModelData.realm`
+    /// cannot be opened. On throw, the caller should leave `AppContainer.realm`
     /// nil so the upgrade UI stays visible.
     func bootstrap(realmConf: Realm.Configuration) throws {
         do {
-            modelData.realm = try Realm(configuration: realmConf)
+            container.realm = try Realm(configuration: realmConf)
         } catch {
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
-        modelData.logger = CalibreActivityLogger(realmConf: realmConf)
-        modelData.calibreServerService.logger = modelData.logger!
-        modelData.databaseService.setup(conf: realmConf)
-        modelData.downloadManager.setup(modelData: modelData, realmConf: realmConf)
-        ModelData.SaveBooksMetadataRealmQueue.sync {
-            modelData.realmSaveBooksMetadata = try? Realm(
-                configuration: realmConf, queue: ModelData.SaveBooksMetadataRealmQueue
+        container.logger = CalibreActivityLogger(realmConf: realmConf)
+        container.calibreServerService.logger = container.logger!
+        container.databaseService.setup(conf: realmConf)
+        container.downloadManager.setup(container: container, realmConf: realmConf)
+        AppContainer.SaveBooksMetadataRealmQueue.sync {
+            container.realmSaveBooksMetadata = try? Realm(
+                configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
             )
         }
 
-        modelData.serverManager.populateServers()
-        modelData.libraryManager.populateLibraries()
-        modelData.bookManager.populateBookShelf()
-        modelData.libraryManager.populateLocalLibraryBooks()
+        container.serverManager.populateServers()
+        container.libraryManager.populateLibraries()
+        container.bookManager.populateBookShelf()
+        container.libraryManager.populateLocalLibraryBooks()
 
-        modelData.calibreUpdatedSubject.send(.shelf)
-        modelData.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+        container.calibreUpdatedSubject.send(.shelf)
+        container.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
 
         migrateLegacyReadPosData()
     }
@@ -65,10 +65,10 @@ final class DatabaseBootstrapper {
     /// Background-task that copies legacy readPosData out of CalibreBookRealm
     /// into the ReadingPositionRepository, then nulls out the legacy field.
     func migrateLegacyReadPosData() {
-        let modelData = self.modelData
+        let container = self.container
         let logger = self.logger
         DispatchQueue.global(qos: .background).async {
-            guard let realmConf = modelData.realmConf,
+            guard let realmConf = container.realmConf,
                   let realm = try? Realm(configuration: realmConf) else {
                 return
             }
@@ -81,10 +81,10 @@ final class DatabaseBootstrapper {
 
             logger.info("migrateLegacyReadPosData: Found \(bookKeysToMigrate.count) legacy reading positions to migrate.")
 
-            let readingPositionRepository = modelData.readingPositionRepository
+            let readingPositionRepository = container.readingPositionRepository
 
             for key in bookKeysToMigrate {
-                guard let realmConf = modelData.realmConf,
+                guard let realmConf = container.realmConf,
                       let freshRealm = try? Realm(configuration: realmConf),
                       let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
                       let serverUUID = bookRealm.serverUUID,
@@ -93,7 +93,7 @@ final class DatabaseBootstrapper {
                     continue
                 }
 
-                if let library = modelData.library(forServerUUID: serverUUID, libraryName: libraryName) {
+                if let library = container.library(forServerUUID: serverUUID, libraryName: libraryName) {
                     bookRealm.migrateReadPos(library: library, repository: readingPositionRepository)
                 }
 

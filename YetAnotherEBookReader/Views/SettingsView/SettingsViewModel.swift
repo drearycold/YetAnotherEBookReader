@@ -10,7 +10,7 @@ import Combine
 
 @MainActor @available(macCatalyst 14.0, *)
 final class SettingsViewModel: ObservableObject {
-    let modelData: ModelData
+    let container: AppContainer
     private var cancellables = Set<AnyCancellable>()
     private let refreshDatabaseAction: () -> Void
     private let populateBookShelfAction: () -> Void
@@ -23,23 +23,23 @@ final class SettingsViewModel: ObservableObject {
     @Published var alertItem: AlertItem?
     
     init(
-        modelData: ModelData,
+        container: AppContainer,
         refreshDatabaseAction: (() -> Void)? = nil,
         populateBookShelfAction: (() -> Void)? = nil,
         probeServersReachabilityAction: ((Set<String>) -> Void)? = nil
     ) {
-        self.modelData = modelData
-        self.refreshDatabaseAction = refreshDatabaseAction ?? { modelData.refreshDatabase() }
-        self.populateBookShelfAction = populateBookShelfAction ?? { modelData.bookManager.populateBookShelf() }
+        self.container = container
+        self.refreshDatabaseAction = refreshDatabaseAction ?? { container.refreshDatabase() }
+        self.populateBookShelfAction = populateBookShelfAction ?? { container.bookManager.populateBookShelf() }
         self.probeServersReachabilityAction = probeServersReachabilityAction ?? { serverIds in
-            modelData.serverManager.probeServersReachability(with: serverIds)
+            container.serverManager.probeServersReachability(with: serverIds)
         }
         setupSubscriptions()
     }
     
     private func setupSubscriptions() {
         // Observe changes to serverManager's calibreServers to keep our list updated and sorted
-        modelData.serverManager.$calibreServers
+        container.serverManager.$calibreServers
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateServerList()
@@ -55,11 +55,11 @@ final class SettingsViewModel: ObservableObject {
     }
 
     var isRefreshing: Bool {
-        modelData.serverManager.calibreServerInfoStaging.allSatisfy { $1.probing == false } == false
+        container.serverManager.calibreServerInfoStaging.allSatisfy { $1.probing == false } == false
     }
 
     func updateServerList() {
-        serverList = modelData.serverManager.calibreServers
+        serverList = container.serverManager.calibreServers
             .filter { $1.isLocal == false && $1.id != serverListDelete?.id && $1.removed == false }
             .map { $0.value }
         sortServerList()
@@ -76,7 +76,7 @@ final class SettingsViewModel: ObservableObject {
     }
     
     func refreshServers() {
-        modelData.serverManager.probeServersReachability(with: [], updateLibrary: true)
+        container.serverManager.probeServersReachability(with: [], updateLibrary: true)
     }
 
     func stageServerDeletion(at index: Int) {
@@ -92,49 +92,49 @@ final class SettingsViewModel: ObservableObject {
     func confirmDeleteServer() {
         guard let server = serverListDelete else { return }
 
-        modelData.serverManager.calibreServers[server.id]?.removed = true
-        if let updatedServer = modelData.serverManager.calibreServers[server.id] {
-            try? modelData.serverManager.updateServerRealm(server: updatedServer)
+        container.serverManager.calibreServers[server.id]?.removed = true
+        if let updatedServer = container.serverManager.calibreServers[server.id] {
+            try? container.serverManager.updateServerRealm(server: updatedServer)
         }
         Task {
-            await self.modelData.serverManager.removeServer(server: server)
+            await self.container.serverManager.removeServer(server: server)
         }
         serverListDelete = nil
     }
 
     func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
         if oldServer.id == newServer.id {
-            modelData.serverManager.calibreServers[newServer.id] = newServer
-            try? modelData.serverManager.updateServerRealm(server: newServer)
+            container.serverManager.calibreServers[newServer.id] = newServer
+            try? container.serverManager.updateServerRealm(server: newServer)
             if let index = serverList.firstIndex(where: { $0.id == newServer.id }) {
                 serverList[index] = newServer
             }
-            for libraryId in modelData.libraryManager.calibreLibraries.filter({ $0.value.server.id == newServer.id }).map({ $0.key }) {
-                modelData.libraryManager.calibreLibraries[libraryId]?.server = newServer
+            for libraryId in container.libraryManager.calibreLibraries.filter({ $0.value.server.id == newServer.id }).map({ $0.key }) {
+                container.libraryManager.calibreLibraries[libraryId]?.server = newServer
             }
             return
         }
 
         serverListDelete = oldServer
 
-        let newServerLibraries = modelData.libraryManager.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
+        let newServerLibraries = container.libraryManager.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
             var newLibrary = library
             newLibrary.server = newServer
-            if var syncStat = modelData.libraryManager.librarySyncStatus[library.id] {
+            if var syncStat = container.libraryManager.librarySyncStatus[library.id] {
                 syncStat.library = newLibrary
-                modelData.libraryManager.librarySyncStatus[newLibrary.id] = syncStat
+                container.libraryManager.librarySyncStatus[newLibrary.id] = syncStat
             }
             return newLibrary
         }
 
-        modelData.serverManager.addServer(server: newServer, libraries: newServerLibraries)
+        container.serverManager.addServer(server: newServer, libraries: newServerLibraries)
         selectedServer = nil
 
         DispatchQueue(label: "data").async { [weak self] in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 self.refreshDatabaseAction()
-                self.modelData.bookManager.booksInShelf.removeAll(keepingCapacity: true)
+                self.container.bookManager.booksInShelf.removeAll(keepingCapacity: true)
                 self.populateBookShelfAction()
                 self.serverListDelete = nil
                 self.probeServersReachabilityAction([newServer.id])
@@ -155,11 +155,11 @@ final class SettingsViewModel: ObservableObject {
     }
     
     func rowState(for server: CalibreServer) -> ServerRowState {
-        let hasHelper = (modelData.serverManager.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0) > 0
-        let isLocalReachable = modelData.serverManager.isServerReachable(server: server, isPublic: false)
-        let isPublicReachable = modelData.serverManager.isServerReachable(server: server, isPublic: true)
+        let hasHelper = (container.serverManager.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0) > 0
+        let isLocalReachable = container.serverManager.isServerReachable(server: server, isPublic: false)
+        let isPublicReachable = container.serverManager.isServerReachable(server: server, isPublic: true)
 
-        let libraryCount = modelData.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }.count
+        let libraryCount = container.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }.count
 
         let locationString: String
         if server.isLocal {
@@ -170,11 +170,11 @@ final class SettingsViewModel: ObservableObject {
             locationString = "\(server.username) @ \(server.baseUrl)"
         }
 
-        let processingCount = modelData.libraryManager.librarySyncStatus.filter { $0.value.isSync && modelData.libraryManager.calibreLibraries[$0.key]?.server.id == server.id }.count
+        let processingCount = container.libraryManager.librarySyncStatus.filter { $0.value.isSync && container.libraryManager.calibreLibraries[$0.key]?.server.id == server.id }.count
 
         var serverInfoText: String? = nil
         var isServerError = false
-        if let serverInfo = modelData.serverManager.getServerInfo(server: server) {
+        if let serverInfo = container.serverManager.getServerInfo(server: server) {
             if serverInfo.reachable {
                 serverInfoText = "Server has \(serverInfo.libraryMap.count) libraries"
             } else {

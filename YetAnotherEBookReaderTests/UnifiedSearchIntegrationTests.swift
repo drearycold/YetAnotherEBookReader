@@ -16,7 +16,7 @@ func debugLog(_ message: String) {
 
 class UnifiedSearchIntegrationTests: XCTestCase {
 
-    var modelData: ModelData!
+    var container: AppContainer!
     var unifiedSearchService: UnifiedSearchService!
     var mockServer: CalibreServer!
     var mockLibrary: CalibreLibrary!
@@ -32,8 +32,8 @@ class UnifiedSearchIntegrationTests: XCTestCase {
 
         // Setup in-memory Realm for testing
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        container = AppContainer(mock: true)
+        container.realmConf = config
 
         // Setup DatabaseService singleton
         DatabaseService.shared.setup(conf: config)
@@ -51,8 +51,8 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         )
         mockLibrary = CalibreLibrary(server: mockServer, key: "lib1", name: "Library 1")
 
-        // Inject library into ModelData using library.id as the key
-        modelData.libraryManager.calibreLibraries = [mockLibrary.id: mockLibrary]
+        // Inject library into AppContainer using library.id as the key
+        container.libraryManager.calibreLibraries = [mockLibrary.id: mockLibrary]
 
         // Mock server reachability staging
         let probeRequest = CalibreProbeServerRequest(
@@ -73,7 +73,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             libraryMap: [mockLibrary.id: "Library 1"],
             request: probeRequest
         )
-        modelData.calibreServerInfoStaging = [mockServer.uuid.uuidString: serverInfo]
+        container.calibreServerInfoStaging = [mockServer.uuid.uuidString: serverInfo]
 
         // Setup ephemeral URLSession with MockURLProtocol
         let sessionConfig = URLSessionConfiguration.ephemeral
@@ -84,7 +84,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         let logger = CalibreActivityLogger(realmConf: config)
         let service = CalibreServerService(
             logger: logger,
-            config: modelData,
+            config: container,
             database: DatabaseService.shared
         )
 
@@ -98,21 +98,21 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             keyUtility: mockSession
         ]
 
-        let cacheRepository = RealmSearchCacheStore(config: config, modelData: modelData)
+        let cacheRepository = RealmSearchCacheStore(config: config, container: container)
         let librarySearchService = LibrarySearchService(service: service, repository: cacheRepository)
         let unifiedSearchService = UnifiedSearchService(
             repository: cacheRepository,
             librarySearchService: librarySearchService,
-            libraryProvider: modelData
+            libraryProvider: container
         )
 
-        modelData.calibreServerService = service
-        modelData.searchCacheRepository = cacheRepository
-        modelData.librarySearchService = librarySearchService
-        modelData.unifiedSearchService = unifiedSearchService
-        modelData.categoryCacheRepository = cacheRepository
-        modelData.libraryCategoryService = LibraryCategoryService(service: service, repository: cacheRepository)
-        modelData.unifiedCategoryService = UnifiedCategoryService(repository: cacheRepository, libraryProvider: modelData)
+        container.calibreServerService = service
+        container.searchCacheRepository = cacheRepository
+        container.librarySearchService = librarySearchService
+        container.unifiedSearchService = unifiedSearchService
+        container.categoryCacheRepository = cacheRepository
+        container.libraryCategoryService = LibraryCategoryService(service: service, repository: cacheRepository)
+        container.unifiedCategoryService = UnifiedCategoryService(repository: cacheRepository, libraryProvider: container)
 
         self.unifiedSearchService = unifiedSearchService
         debugLog("setUpWithError finished")
@@ -121,7 +121,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
     override func tearDownWithError() throws {
         cancellables = nil
         unifiedSearchService = nil
-        modelData = nil
+        container = nil
         mockServer = nil
         mockLibrary = nil
         try super.tearDownWithError()

@@ -90,7 +90,7 @@ struct ReadingPositionHistoryView: View {
                                 header: HStack {
                                     Text("On \(deviceId)")
                                     Spacer()
-                                    if deviceId == viewModel.modelData.deviceName {
+                                    if deviceId == viewModel.container.deviceName {
                                         Text("This Device").foregroundColor(.red)
                                     }
                                 }
@@ -99,7 +99,7 @@ struct ReadingPositionHistoryView: View {
                                     NavigationLink(
                                         destination: ReadingPositionDetailView(
                                             viewModel: ReadingPositionDetailViewModel(
-                                                modelData: viewModel.modelData,
+                                                container: viewModel.container,
                                                 listModel: listVM,
                                                 position: position)
                                         )
@@ -137,7 +137,7 @@ struct ReadingPositionHistoryView: View {
                                     NavigationLink(
                                         destination: ReadingPositionDetailView(
                                             viewModel: ReadingPositionDetailViewModel(
-                                                modelData: viewModel.modelData,
+                                                container: viewModel.container,
                                                 listModel: listVM,
                                                 position: endPos)
                                         )
@@ -208,17 +208,17 @@ struct ReadingPositionHistoryView: View {
 }
 
 struct ReadingPositionHistoryView_Previews: PreviewProvider {
-    static private var modelData = ModelData(mock: true)
+    static private var container = AppContainer(mock: true)
 
     @State static private var presenting = true
     
     static var previews: some View {
-        if let book = modelData.bookManager.readingBook {
+        if let book = container.bookManager.readingBook {
             NavigationView {
                 ReadingPositionHistoryView(presenting: $presenting, library: book.library, bookId: book.id)
             }
             .navigationViewStyle(.stack)
-            .environmentObject(modelData)
+            .environmentObject(container)
         }
     }
 }

@@ -13,13 +13,13 @@ import OSLog
 class CalibreLibraryManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreLibraryManager")
     
-    weak var modelData: AppContainerProtocol?
+    weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
     private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var calibreLibraries = [String: CalibreLibrary]() {
         didSet {
-            modelData?.calibreServerService.updateCalibreLibraries(calibreLibraries)
+            container?.calibreServerService.updateCalibreLibraries(calibreLibraries)
         }
     }
     @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
@@ -28,8 +28,8 @@ class CalibreLibraryManager: ObservableObject {
     
     private var calibreCancellables = Set<AnyCancellable>()
     
-    init(modelData: AppContainerProtocol, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
-        self.modelData = modelData
+    init(container: AppContainerProtocol, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
+        self.container = container
         self.databaseService = databaseService
         self.libraryRepository = libraryRepository
     }
@@ -49,14 +49,14 @@ class CalibreLibraryManager: ObservableObject {
         }
 
         let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        guard let modelData = self.modelData else { return }
+        guard let container = self.container else { return }
 
-        modelData.serverManager.documentServer = modelData.serverManager.calibreServers[tmpServer.id]
-        if modelData.serverManager.documentServer == nil || modelData.serverManager.documentServer?.name != tmpServer.name {
-            modelData.serverManager.calibreServers[tmpServer.id] = tmpServer
-            modelData.serverManager.documentServer = modelData.serverManager.calibreServers[tmpServer.id]
+        container.serverManager.documentServer = container.serverManager.calibreServers[tmpServer.id]
+        if container.serverManager.documentServer == nil || container.serverManager.documentServer?.name != tmpServer.name {
+            container.serverManager.calibreServers[tmpServer.id] = tmpServer
+            container.serverManager.documentServer = container.serverManager.calibreServers[tmpServer.id]
             do {
-                try modelData.serverManager.updateServerRealm(server: modelData.serverManager.documentServer!)
+                try container.serverManager.updateServerRealm(server: container.serverManager.documentServer!)
             } catch {
                 logger.error("Failed to update server realm for document folder: \(error.localizedDescription)")
             }
@@ -73,7 +73,7 @@ class CalibreLibraryManager: ObservableObject {
         }
         
         let tmpLibrary = CalibreLibrary(
-            server: modelData.serverManager.documentServer!,
+            server: container.serverManager.documentServer!,
             key: localLibraryURL.lastPathComponent,
             name: localLibraryURL.lastPathComponent)
         localLibrary = calibreLibraries[tmpLibrary.id]
@@ -103,12 +103,12 @@ class CalibreLibraryManager: ObservableObject {
             if fileName.hasSuffix(".mx") { return }
 
             print("populateLocalLibraryBooks \(fileName)")
-            let fileURL = modelData.serverManager.documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+            let fileURL = container.serverManager.documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
 
-            modelData.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: modelData.serverManager.documentServer!)
+            container.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: container.serverManager.documentServer!)
         }
 
-        let removedBooks: [CalibreBook] = modelData.bookManager.booksInShelf.values.compactMap { (book: CalibreBook) -> CalibreBook? in
+        let removedBooks: [CalibreBook] = container.bookManager.booksInShelf.values.compactMap { (book: CalibreBook) -> CalibreBook? in
             guard book.library.server.isLocal else { return nil }
             let existingFormats: [String] = book.formats.compactMap {
                 guard let format = Format(rawValue: $0.key),
@@ -133,7 +133,7 @@ class CalibreLibraryManager: ObservableObject {
         }
 
         removedBooks.forEach {
-            modelData.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
+            container.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
             print("populateLocalLibraryBooks removeFromShelf \($0)")
         }
     }
@@ -163,7 +163,7 @@ class CalibreLibraryManager: ObservableObject {
     }
     
     func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
-        guard let server = modelData?.calibreServers[serverInfo.server.id] else { return }
+        guard let server = container?.calibreServers[serverInfo.server.id] else { return }
 
         serverInfo.libraryMap.forEach { key, name in
             let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
@@ -183,7 +183,7 @@ class CalibreLibraryManager: ObservableObject {
         }
 
         // If the server's defaultLibrary changed, persist it on the server.
-        if let serverManager = modelData?.serverManager,
+        if let serverManager = container?.serverManager,
            var mutableServer = serverManager.calibreServers[serverInfo.server.id],
            mutableServer.defaultLibrary != serverInfo.defaultLibrary {
             mutableServer.defaultLibrary = serverInfo.defaultLibrary
@@ -199,7 +199,7 @@ class CalibreLibraryManager: ObservableObject {
     @discardableResult
     @MainActor
     func probeLibrary(request: CalibreProbeLibraryRequest) async -> CalibreLibraryProbeTask {
-        guard let calibreServerService = modelData?.calibreServerService else {
+        guard let calibreServerService = container?.calibreServerService else {
             fatalError("calibreServerService not found")
         }
         let task = await calibreServerService.probeLibrary(library: request.library)
@@ -215,7 +215,7 @@ class CalibreLibraryManager: ObservableObject {
     
     @MainActor
     func removeLibrary(library: CalibreLibrary) async {
-        guard let modelData = self.modelData else { return }
+        guard let container = self.container else { return }
         if librarySyncStatus[library.id] != nil {
             librarySyncStatus[library.id]?.isSync = true
         } else {
@@ -223,12 +223,12 @@ class CalibreLibraryManager: ObservableObject {
         }
         
         //remove cached book files
-        let libraryBooksInShelf = modelData.bookManager.booksInShelf.filter {
+        let libraryBooksInShelf = container.bookManager.booksInShelf.filter {
             $0.value.library.id == library.id
         }
         libraryBooksInShelf.forEach {
-            modelData.bookManager.clearCache(inShelfId: $0.key)
-            modelData.bookManager.removeFromShelf(inShelfId: $0.key)     //just in case
+            container.bookManager.clearCache(inShelfId: $0.key)
+            container.bookManager.removeFromShelf(inShelfId: $0.key)     //just in case
         }
         
         let serverUUIDString = library.server.uuid.uuidString
@@ -245,10 +245,10 @@ class CalibreLibraryManager: ObservableObject {
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
         
         let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
-        guard let modelData = self.modelData else { return }
-        modelData.probeLibraryLastModifiedSubject.receive(on: queue)
+        guard let container = self.container else { return }
+        container.probeLibraryLastModifiedSubject.receive(on: queue)
             .flatMap { [weak self] request -> AnyPublisher<Result<CalibreSyncLibraryResult, CalibreAPIError>, Never> in
-                guard let self = self, let calibreServerService = self.modelData?.calibreServerService else {
+                guard let self = self, let calibreServerService = self.container?.calibreServerService else {
                     return Empty().eraseToAnyPublisher()
                 }
                 return calibreServerService.syncLibraryPublisher(
@@ -278,7 +278,7 @@ class CalibreLibraryManager: ObservableObject {
                         try? self.libraryRepository.saveLibrary(library)
                     }
 
-                    self.modelData?.calibreUpdatedSubject.send(.library(library))
+                    self.container?.calibreUpdatedSubject.send(.library(library))
                 case .failure(let error):
                     self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                 }
@@ -287,8 +287,8 @@ class CalibreLibraryManager: ObservableObject {
     }
     
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
-        guard let modelData = self.modelData else { return }
-        let calibreServerService = modelData.calibreServerService
+        guard let container = self.container else { return }
+        let calibreServerService = container.calibreServerService
         let libraryId = request.library.id
         guard (self.librarySyncStatus[libraryId]?.isSync ?? false) == false else {
             return
@@ -333,7 +333,7 @@ class CalibreLibraryManager: ObservableObject {
                 let serverUUID = library.server.uuid.uuidString
                 
                 await withCheckedContinuation { continuation in
-                    ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
+                    AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
                         guard let self = self else {
                             continuation.resume()
                             return
@@ -346,7 +346,7 @@ class CalibreLibraryManager: ObservableObject {
                 result.categories.filter { $0.is_category }.forEach { category in
                     Task {
                         do {
-                            _ = try await modelData.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                            _ = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
                         } catch {
                             logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
                         }
@@ -388,9 +388,9 @@ class CalibreLibraryManager: ObservableObject {
                 
                 await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
                 
-                if modelData.serverManager.isServerReachable(server: library.server) {
-                    modelData.calibreUpdatedSubject.send(.server(library.server))
-                    modelData.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+                if container.serverManager.isServerReachable(server: library.server) {
+                    container.calibreUpdatedSubject.send(.server(library.server))
+                    container.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
         } else {
@@ -404,7 +404,7 @@ class CalibreLibraryManager: ObservableObject {
                 result.categories.filter { $0.is_category }.forEach { category in
                     Task {
                         do {
-                            _ = try await modelData.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                            _ = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
                         } catch {
                             logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
                         }
@@ -413,8 +413,8 @@ class CalibreLibraryManager: ObservableObject {
                 
                 self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
                 
-                if modelData.serverManager.isServerReachable(server: library.server) {
-                    modelData.calibreUpdatedSubject.send(.server(library.server))
+                if container.serverManager.isServerReachable(server: library.server) {
+                    container.calibreUpdatedSubject.send(.server(library.server))
                 }
             } else {
                 self.librarySyncStatus[libraryId]?.msg = result.errmsg
@@ -424,14 +424,14 @@ class CalibreLibraryManager: ObservableObject {
     
     @MainActor
     func saveBookMetadata(metadata: CalibreSyncLibraryBooksMetadata) async {
-        guard let modelData = self.modelData else { return }
+        guard let container = self.container else { return }
         self.librarySyncStatus[metadata.library.id]?.msg = metadata.preMsg
         
         var metadataResult = metadata
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
-                guard let self = self, let bookRepository = self.modelData?.bookRepository else {
+            AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
+                guard let self = self, let bookRepository = self.container?.bookRepository else {
                     continuation.resume()
                     return
                 }
@@ -482,7 +482,7 @@ class CalibreLibraryManager: ObservableObject {
             if let libraryUpdated = libraryUpdated {
                 self.calibreLibraries[library.id] = libraryUpdated
                 await withCheckedContinuation { continuation in
-                    ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
+                    AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
                         guard let self = self else {
                             continuation.resume()
                             return
@@ -503,7 +503,7 @@ class CalibreLibraryManager: ObservableObject {
             
             bookToUpdate.chunks(size: 256).forEach { chunk in
                 Task {
-                    await modelData.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
+                    await container.bookManager.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
                 }
             }
         case .updateDeleted:
@@ -512,7 +512,7 @@ class CalibreLibraryManager: ObservableObject {
             let bookIds = list.compactMap { $0["idInLib"] as? Int32 }
             bookIds.chunks(size: 256).forEach { chunk in
                 Task {
-                    await modelData.bookManager.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
+                    await container.bookManager.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
                 }
             }
         }

@@ -9,7 +9,7 @@ import SwiftUI
 import OSLog
 
 struct AddModServerView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
@@ -19,8 +19,8 @@ struct AddModServerView: View {
     
     @State private var localLibraryImportBooksPicked = [URL]()
     @State private var localLibraryImportPresenting = false {
-        willSet { if newValue { modelData.presentingStack.append($localLibraryImportPresenting) } }
-        didSet { if oldValue { _ = modelData.presentingStack.popLast() } }
+        willSet { if newValue { container.presentingStack.append($localLibraryImportPresenting) } }
+        didSet { if oldValue { _ = container.presentingStack.popLast() } }
     }
     
     var body: some View {
@@ -79,20 +79,20 @@ struct AddModServerView: View {
                     
                     Spacer()
                     
-                    if let server = server, modelData.serverManager.isServerProbing(server: server) {
+                    if let server = server, container.serverManager.isServerProbing(server: server) {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle())
                     } else {
                         Text(viewModel.calibreServerInfo?.errorMsg ?? "Unknown")
                     }
 
-                    if let server = server, let reachable = modelData.serverManager.isServerReachable(server: server, isPublic: false) {
+                    if let server = server, let reachable = container.serverManager.isServerReachable(server: server, isPublic: false) {
                         Image(
                             systemName: reachable ? "flag.circle" : "flag.slash.circle"
                         ).foregroundColor(reachable ? .green : .red)
                     }
 
-                    if let server = server, let reachable = modelData.serverManager.isServerReachable(server: server, isPublic: true) {
+                    if let server = server, let reachable = container.serverManager.isServerReachable(server: server, isPublic: true) {
                         Image(
                             systemName: reachable ? "flag" : "flag.slash"
                         ).foregroundColor(reachable ? .green : .red)
@@ -146,7 +146,7 @@ struct AddModServerView: View {
                         Image(systemName: "square.and.arrow.down")
                     }
                 }
-                .disabled(viewModel.isProbing || (server != nil && modelData.serverManager.isServerProbing(server: server!)))
+                .disabled(viewModel.isProbing || (server != nil && container.serverManager.isServerProbing(server: server!)))
             }
             ToolbarItem(placement: .cancellationAction) {
                 Button(action:{
@@ -154,7 +154,7 @@ struct AddModServerView: View {
                 }) {
                     Image(systemName: "arrow.counterclockwise")
                 }
-                .disabled(viewModel.isProbing || (server != nil && modelData.serverManager.isServerProbing(server: server!)))
+                .disabled(viewModel.isProbing || (server != nil && container.serverManager.isServerProbing(server: server!)))
             }
         }
     }
@@ -211,7 +211,7 @@ struct AddModServerView: View {
                         HStack {
                             Text(libraryEntry.value)
                             Spacer()
-                            if let info = self.modelData.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
+                            if let info = self.container.libraryManager.calibreLibraryInfoStaging[CalibreLibrary(server: serverInfo.server, key: libraryEntry.key, name: libraryEntry.value).id] {
                                 Text(info.errorMessage == "Success" ? "\(info.totalNumber) books" : info.errorMessage)
                             } else {
                                 Text("Probing")
@@ -277,21 +277,21 @@ struct AddModServerView: View {
 }
 
 struct AddModServerView_Previews: PreviewProvider {
-    static private var modelData = ModelData(mock: true)
+    static private var container = AppContainer(mock: true)
     
     @State static private var server: CalibreServer? = CalibreServer(uuid: .init(), name: "TestName", baseUrl: "TestBase", hasPublicUrl: true, publicUrl: "TestPublic", hasAuth: true, username: "TestUser", password: "TestPswd")
     @State static private var addServerActive = false
 
     static var previews: some View {
-        let viewModel = ServerViewModel(modelData: modelData, server: server)
+        let viewModel = ServerViewModel(container: container, server: server)
         NavigationView {
             AddModServerView(viewModel: viewModel, server: $server, isActive: $addServerActive)
-                .environmentObject(modelData)
+                .environmentObject(container)
                 .onAppear() {
                     if let server = server {
-                        modelData.serverManager.calibreServers[server.id] = server
+                        container.serverManager.calibreServers[server.id] = server
                         let library = CalibreLibrary(server: server, key: "TestKey", name: "TestName")
-                        modelData.libraryManager.calibreLibraries[library.id] = library
+                        container.libraryManager.calibreLibraries[library.id] = library
                     }
                 }
         }.navigationViewStyle(StackNavigationViewStyle())

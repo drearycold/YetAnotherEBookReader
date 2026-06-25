@@ -69,27 +69,27 @@ class BookDetailViewModel: ObservableObject {
         didSet { if oldValue { popPresenting() } }
     }
     
-    private weak var modelData: ModelData?
+    private weak var container: AppContainer?
     private var fetchTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var readerInfo: ReaderInfo? {
-        return modelData?.sessionManager.readerInfo
+        return container?.sessionManager.readerInfo
     }
 
     var deviceName: String {
-        return modelData?.deviceName ?? ""
+        return container?.deviceName ?? ""
     }
 
     var updatingMetadataStatus: String {
-        return modelData?.updatingMetadataStatus ?? ""
+        return container?.updatingMetadataStatus ?? ""
     }
     
-    var sharedModelData: ModelData? {
-        return modelData
+    var sharedAppContainer: AppContainer? {
+        return container
     }
     
-    init(modelData: ModelData? = ModelData.shared) {
-        self.modelData = modelData
+    init(container: AppContainer? = AppContainer.shared) {
+        self.container = container
         print("BookDetailViewModel INIT")
     }
     
@@ -98,14 +98,14 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func setup(bookId: String) {
-        guard let modelData = self.modelData else {
-            print("Warning: BookDetailViewModel setup called before modelData was set")
+        guard let container = self.container else {
+            print("Warning: BookDetailViewModel setup called before container was set")
             return
         }
         
-        modelData.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
+        container.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
         
-        guard let calibreBook = modelData.bookRepository.getBook(id: bookId) else {
+        guard let calibreBook = container.bookRepository.getBook(id: bookId) else {
             print("Error: CalibreBook not found for primary key \(bookId)")
             return
         }
@@ -113,27 +113,27 @@ class BookDetailViewModel: ObservableObject {
         
         if self.listVM == nil {
             self.listVM = ReadingPositionListViewModel(
-                modelData: modelData, book: calibreBook, positions: modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
+                container: container, book: calibreBook, positions: container.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
             )
         } else {
             self.listVM?.book = calibreBook
-            self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
+            self.listVM?.positions = container.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
         }
         
-        bookObserverToken = modelData.bookRepository.observeBook(id: bookId)
+        bookObserverToken = container.bookRepository.observeBook(id: bookId)
             .sink { [weak self] updatedCalibreBook in
-                guard let self = self, let modelData = self.modelData, let updatedCalibreBook = updatedCalibreBook else { return }
+                guard let self = self, let container = self.container, let updatedCalibreBook = updatedCalibreBook else { return }
                 self.calibreBook = updatedCalibreBook
                 self.listVM?.book = updatedCalibreBook
-                self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
+                self.listVM?.positions = container.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
             }
     }
     
     func fetchMetadata(book: CalibreBook) {
-        guard let modelData = modelData else { return }
+        guard let container = container else { return }
         fetchTask?.cancel()
         fetchTask = Task {
-            await modelData.bookManager.getBooksMetadata(
+            await container.bookManager.getBooksMetadata(
                 request: .init(
                     library: book.library,
                     books: [book.id],
@@ -144,24 +144,24 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func refresh(book: CalibreBook) {
-        guard let modelData = modelData else { return }
-        if modelData.updatingMetadata {
+        guard let container = container else { return }
+        if container.updatingMetadata {
             // TODO cancel logic if needed
         } else {
             if let coverUrl = book.coverURL {
-                modelData.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
+                container.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
             }
             fetchMetadata(book: book)
         }
     }
     
     func downloadOrClearCache(book: CalibreBook) {
-        guard let modelData = modelData else { return }
+        guard let container = container else { return }
         if book.inShelf {
-            modelData.bookManager.clearCache(inShelfId: book.inShelfId)
-        } else if modelData.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty {
-            if let downloadFormat = modelData.sessionManager.getPreferredFormat(for: book) {
-                modelData.bookManager.addToShelf(book: book, formats: [downloadFormat])
+            container.bookManager.clearCache(inShelfId: book.inShelfId)
+        } else if container.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty {
+            if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
+                container.bookManager.addToShelf(book: book, formats: [downloadFormat])
             } else {
                 alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             }
@@ -169,14 +169,14 @@ class BookDetailViewModel: ObservableObject {
     }
 
     func readBook(book: CalibreBook) {
-        guard let modelData = modelData else { return }
-        guard modelData.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
+        guard let container = container else { return }
+        guard container.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
 
         if book.inShelf {
-            modelData.sessionManager.readerInfo = modelData.sessionManager.prepareBookReading(book: book)
+            container.sessionManager.readerInfo = container.sessionManager.prepareBookReading(book: book)
         } else {
-            if let downloadFormat = modelData.sessionManager.getPreferredFormat(for: book) {
-                modelData.bookManager.addToShelf(book: book, formats: [downloadFormat])
+            if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
+                container.bookManager.addToShelf(book: book, formats: [downloadFormat])
             } else {
                 alertItem = AlertItem(id: "Error Download Book", msg: "Sorry, there's no supported book format")
             }
@@ -184,65 +184,65 @@ class BookDetailViewModel: ObservableObject {
     }
 
     func cacheFormat(book: CalibreBook, format: Format) {
-        guard let modelData = modelData else { return }
+        guard let container = container else { return }
         if book.inShelf {
-            switch modelData.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
+            switch container.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
             case .success:
                 break
             case .failure(let error):
                 alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
             }
         } else {
-            modelData.bookManager.addToShelf(book: book, formats: [format])
+            container.bookManager.addToShelf(book: book, formats: [format])
         }
     }
 
     func pauseDownload(book: CalibreBook, format: Format) {
-        modelData?.downloadManager.pauseDownload(book, format: format)
+        container?.downloadManager.pauseDownload(book, format: format)
     }
 
     func resumeDownload(book: CalibreBook, format: Format) {
-        modelData?.downloadManager.resumeDownload(book, format: format)
+        container?.downloadManager.resumeDownload(book, format: format)
     }
 
     func cancelDownload(book: CalibreBook, format: Format) {
-        modelData?.downloadManager.cancelDownload(book, format: format)
+        container?.downloadManager.cancelDownload(book, format: format)
     }
 
     func clearFormat(book: CalibreBook, format: Format) {
-        modelData?.bookManager.clearCache(book: book, format: format)
+        container?.bookManager.clearCache(book: book, format: format)
     }
     
     func prepareReadingPositionHistory(book: CalibreBook) {
-        guard let modelData = modelData else { return }
+        guard let container = container else { return }
         if listVM == nil {
             listVM = ReadingPositionListViewModel(
-                modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+                container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
             )
         } else {
             listVM?.book = book
-            listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            listVM?.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
         }
     }
     
     func previewAction(book: CalibreBook, format: Format, formatInfo: FormatInfo) -> Bool {
-        guard let modelData = modelData else { return false }
-        guard let reader = modelData.sessionManager.formatReaderMap[format]?.first else { return false }
+        guard let container = container else { return false }
+        guard let reader = container.sessionManager.formatReaderMap[format]?.first else { return false }
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
             alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
             return false
         }
 
-        let readPosition = modelData.readingPositionRepository.createInitial(deviceName: modelData.deviceName, reader: reader)
+        let readPosition = container.readingPositionRepository.createInitial(deviceName: container.deviceName, reader: reader)
 
-        modelData.sessionManager.prepareBookReading(
+        container.sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: reader,
             position: readPosition
         )
         
-        previewViewModel.modelData = modelData
+        previewViewModel.container = container
         previewViewModel.book = book
         previewViewModel.url = bookFileUrl
         previewViewModel.format = format
@@ -251,7 +251,7 @@ class BookDetailViewModel: ObservableObject {
         
         Task { [weak self] in
             do {
-                let data = try await modelData.calibreServerService.getBookManifest(book: book, format: format)
+                let data = try await container.calibreServerService.getBookManifest(book: book, format: format)
                 await MainActor.run {
                     self?.parseManifestToTOC(json: data)
                 }
@@ -287,23 +287,23 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func handlePreviewDismiss(book: CalibreBook) {
-        modelData?.sessionManager.readerInfo = modelData?.sessionManager.prepareBookReading(book: book)
+        container?.sessionManager.readerInfo = container?.sessionManager.prepareBookReading(book: book)
     }
 
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-        return modelData?.bookManager.convert(bookRealm: bookRealm)
+        return container?.bookManager.convert(bookRealm: bookRealm)
     }
 
     var updatingMetadata: Bool {
-        return modelData?.updatingMetadata ?? false
+        return container?.updatingMetadata ?? false
     }
 
     func pushPresenting(_ binding: Binding<Bool>) {
-        modelData?.presentingStack.append(binding)
+        container?.presentingStack.append(binding)
     }
 
     func popPresenting() {
-        _ = modelData?.presentingStack.popLast()
+        _ = container?.presentingStack.popLast()
     }
 
     func parseTOCNode(node: NSDictionary, level: Int) -> String {
@@ -328,7 +328,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func getReadingProgressSummary(for book: CalibreBook) -> ReadingProgressSummary? {
-        guard let repository = modelData?.readingPositionRepository else { return nil }
+        guard let repository = container?.readingPositionRepository else { return nil }
         
         if let readDateGR = book.readDateGRByLocale {
             return .goodreadsReadDate(readDateGR)
@@ -342,7 +342,7 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func hasReadingHistory(for book: CalibreBook) -> Bool {
-        guard let repository = modelData?.readingPositionRepository else { return false }
+        guard let repository = container?.readingPositionRepository else { return false }
         return !repository.getPositions(forBookId: book.bookPrefId).isEmpty
     }
     

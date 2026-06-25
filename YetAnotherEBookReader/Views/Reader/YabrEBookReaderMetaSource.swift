@@ -30,7 +30,7 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
         self.book = book
         self.readerInfo = readerInfo
         self.preferenceRepository = preferenceRepository
-            ?? ModelData.shared?.readerPreferenceRepository
+            ?? AppContainer.shared?.readerPreferenceRepository
             ?? RealmReaderPreferenceRepository()
         if let savedPreferences = self.preferenceRepository.loadPDFPreferences(for: book) {
             self.pdfPreferences = savedPreferences
@@ -103,43 +103,43 @@ class YabrEBookReaderPDFMetaSource: YabrPDFMetaSource {
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?) -> [PDFBookmark] {
-        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFBookmark() }
+        return (AppContainer.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFBookmark() }
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, update bookmark: PDFBookmark) {
         guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
-        _ = ModelData.shared?.annotationRepository.saveBookmark(bookBookmark)
+        _ = AppContainer.shared?.annotationRepository.saveBookmark(bookBookmark)
     }
     
     func yabrPDFBookmarks(_ view: YabrPDFView?, remove bookmark: PDFBookmark) {
         guard let bookBookmark = BookBookmark(bookId: book.bookPrefId, pdfBookmark: bookmark)
         else { return }
         
-        ModelData.shared?.annotationRepository.removeBookmark(pos: bookBookmark.pos, bookId: book.bookPrefId)
+        AppContainer.shared?.annotationRepository.removeBookmark(pos: bookBookmark.pos, bookId: book.bookPrefId)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?) -> [PDFHighlight] {
-        return (ModelData.shared?.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFHighlight() }
+        return (AppContainer.shared?.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toPDFHighlight() }
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, getById highlightId: UUID) -> PDFHighlight? {
-        return ModelData.shared?.annotationRepository.getHighlight(byId: highlightId.uuidString)?.toPDFHighlight()
+        return AppContainer.shared?.annotationRepository.getHighlight(byId: highlightId.uuidString)?.toPDFHighlight()
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, update highlight: PDFHighlight) {
         guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         
-        ModelData.shared?.annotationRepository.saveHighlight(bookHighlight)
+        AppContainer.shared?.annotationRepository.saveHighlight(bookHighlight)
     }
     
     func yabrPDFHighlights(_ view: YabrPDFView?, remove highlight: PDFHighlight) {
         guard let bookHighlight = BookHighlight(bookId: book.bookPrefId, pdfHighlight: highlight)
         else { return }
         
-        ModelData.shared?.annotationRepository.removeHighlight(id: bookHighlight.id)
+        AppContainer.shared?.annotationRepository.removeHighlight(id: bookHighlight.id)
         view?.removeHighlight(highlight: highlight)
     }
     

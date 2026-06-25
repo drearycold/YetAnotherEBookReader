@@ -10,7 +10,7 @@ struct LibraryInfoBookListContent: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var modelData: ModelData
+    @ObservedObject var container: AppContainer
     let geometry: GeometryProxy
     
     var body: some View {
@@ -22,7 +22,7 @@ struct LibraryInfoBookListContent: View {
                 
                 let books = viewModel.unifiedSearchResult?.books ?? []
                 if books.isEmpty {
-                    Text(libraryInfoViewModel.getLibraryLoadingCount(modelData: modelData, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
+                    Text(libraryInfoViewModel.getLibraryLoadingCount(container: container, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
                 } else {
                     let sections = listViewModel.buildSections(books: books, sectionedBy: libraryInfoViewModel.sectionedBy)
                     ForEach(sections) { section in
@@ -71,11 +71,11 @@ struct LibraryInfoBookListContent: View {
     @ViewBuilder
     private func listEntryView(book: CalibreBook, index: Int) -> some View {
         Group {
-            if modelData.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
+            if container.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
                 NavigationLink (
                     destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
                     tag: book.inShelfId,
-                    selection: $modelData.bookManager.selectedBookId
+                    selection: $container.bookManager.selectedBookId
                 ) {
                     LibraryInfoBookRow(book: book, index: index) {
                         onRowAppear(index: index)
@@ -88,7 +88,7 @@ struct LibraryInfoBookListContent: View {
                         listViewModel: listViewModel,
                         libraryInfoViewModel: libraryInfoViewModel,
                         viewModel: viewModel,
-                        modelData: modelData
+                        container: container
                     )
                 }
             } else {
@@ -101,7 +101,7 @@ struct LibraryInfoBookListContent: View {
                         listViewModel: listViewModel,
                         libraryInfoViewModel: libraryInfoViewModel,
                         viewModel: viewModel,
-                        modelData: modelData
+                        container: container
                     )
                 }
             }
@@ -136,7 +136,7 @@ struct LibraryInfoBookListContent: View {
                     }
                 }
                 
-                ForEach(modelData.libraryManager.calibreLibraries
+                ForEach(container.libraryManager.calibreLibraries
                     .sorted(by: { $0.key < $1.key })
                     .filter({
                         $0.value.hidden == false

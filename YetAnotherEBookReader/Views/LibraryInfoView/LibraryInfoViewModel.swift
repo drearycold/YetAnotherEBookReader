@@ -101,17 +101,17 @@ extension LibraryInfoView {
         private var categoryObserver: AnyCancellable?
         
         func fetchAvailableCategories() {
-            guard let modelData = ModelData.shared else { return }
-            let repository = modelData.categoryCacheRepository
+            guard let container = AppContainer.shared else { return }
+            let repository = container.categoryCacheRepository
             if let summaries = try? repository.fetchCategorySummaries() {
                 self.availableCategories = summaries
             }
         }
         
         func setupCategoryObserver() {
-            guard let modelData = ModelData.shared, categoryObserver == nil else { return }
+            guard let container = AppContainer.shared, categoryObserver == nil else { return }
 
-            categoryObserver = modelData.categoryCacheRepository.observeCategorySummaries()
+            categoryObserver = container.categoryCacheRepository.observeCategorySummaries()
                 .sink { [weak self] summaries in
                     self?.availableCategories = summaries
                 }
@@ -119,9 +119,9 @@ extension LibraryInfoView {
         
         private var cancellables = Set<AnyCancellable>()
         
-        func getLibraryLoadingCount(modelData: ModelData, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
+        func getLibraryLoadingCount(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
             guard let result = searchResult else { return 0 }
-            return modelData.libraryManager.calibreLibraries
+            return container.libraryManager.calibreLibraries
                 .filter({
                     $0.value.hidden == false
                     &&
@@ -143,8 +143,8 @@ extension LibraryInfoView {
                 })
         }
         
-        func getLibrarySearchingText(modelData: ModelData, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> String {
-            let librariesLoading = getLibraryLoadingCount(modelData: modelData, searchResult: searchResult, libraryStatuses: libraryStatuses)
+        func getLibrarySearchingText(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> String {
+            let librariesLoading = getLibraryLoadingCount(container: container, searchResult: searchResult, libraryStatuses: libraryStatuses)
             
             guard let result = searchResult else { return "Preparing Book List" }
             

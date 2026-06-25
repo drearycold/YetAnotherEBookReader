@@ -18,14 +18,14 @@ class ActivityListViewModel: ObservableObject {
     private let activityLogRepository: ActivityLogRepositoryProtocol
     
     init(
-        modelData: ModelData,
+        container: AppContainer,
         libraryId: String? = nil,
         bookId: Int32? = nil,
         activityLogRepository: ActivityLogRepositoryProtocol? = nil
     ) {
         self.libraryId = libraryId
         self.bookId = bookId
-        self.activityLogRepository = activityLogRepository ?? modelData.activityLogRepository
+        self.activityLogRepository = activityLogRepository ?? container.activityLogRepository
         
         loadActivities()
     }

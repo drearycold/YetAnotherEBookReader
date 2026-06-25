@@ -10,7 +10,7 @@ import Combine
 
 @MainActor @available(macCatalyst 14.0, *)
 final class MainViewModel: ObservableObject {
-    private let modelData: ModelData
+    private let container: AppContainer
     private let sessionManager: ReadingSessionManager
     private var cancellables = Set<AnyCancellable>()
     
@@ -29,17 +29,17 @@ final class MainViewModel: ObservableObject {
     let recentShelfViewModel: RecentShelfViewModel
     let sectionShelfViewModel: SectionShelfViewModel
     
-    init(modelData: ModelData, sessionManager: ReadingSessionManager) {
-        self.modelData = modelData
+    init(container: AppContainer, sessionManager: ReadingSessionManager) {
+        self.container = container
         self.sessionManager = sessionManager
-        self.recentShelfViewModel = RecentShelfViewModel(modelData: modelData)
-        self.sectionShelfViewModel = SectionShelfViewModel(modelData: modelData)
+        self.recentShelfViewModel = RecentShelfViewModel(container: container)
+        self.sectionShelfViewModel = SectionShelfViewModel(container: container)
         
         setupSubscriptions()
     }
     
     private func setupSubscriptions() {
-        modelData.dismissAllSubject
+        container.dismissAllSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
@@ -47,7 +47,7 @@ final class MainViewModel: ObservableObject {
             }
             .store(in: &cancellables)
             
-        modelData.bookImportedSubject
+        container.bookImportedSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] bookImportInfo in
                 guard let self = self else { return }
@@ -58,7 +58,7 @@ final class MainViewModel: ObservableObject {
     }
     
     var showWelcome: Bool {
-        activeTab < 1 && modelData.isDatabaseReady && modelData.bookManager.booksInShelf.isEmpty
+        activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty
     }
 
     var presentingEBookReaderFromShelf: Bool {
@@ -96,14 +96,14 @@ final class MainViewModel: ObservableObject {
     func handleImportedBook(_ info: BookImportInfo) {
         dismissAll { [weak self] in
             guard let self = self else { return }
-            self.modelData.dismissAllSubject.send("")
+            self.container.dismissAllSubject.send("")
             self.activeTab = 0
             self.bookImportActionSheetPresenting = false
 
-            if let localLibrary = self.modelData.libraryManager.localLibrary,
+            if let localLibrary = self.container.libraryManager.localLibrary,
                let bookId = info.bookId,
-               let book = self.modelData.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-                self.modelData.calibreUpdatedSubject.send(.book(book))
+               let book = self.container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
+                self.container.calibreUpdatedSubject.send(.book(book))
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
@@ -113,20 +113,20 @@ final class MainViewModel: ObservableObject {
     }
 
     func importBookAsNew(url: URL, bookId: Int32?) {
-        let result = modelData.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
-        modelData.bookImportedSubject.send(result)
+        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
+        container.bookImportedSubject.send(result)
     }
 
     func importBookOverwrite(url: URL, bookId: Int32?) {
-        let result = modelData.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
-        modelData.bookImportedSubject.send(result)
+        let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
+        container.bookImportedSubject.send(result)
     }
 
     func openImportedBook() {
         guard let bookId = bookImportInfo?.bookId,
-              let localLibrary = modelData.libraryManager.localLibrary else { return }
+              let localLibrary = container.libraryManager.localLibrary else { return }
         let book = CalibreBook(id: bookId, library: localLibrary)
-        modelData.bookManager.readingBookInShelfId = book.inShelfId
+        container.bookManager.readingBookInShelfId = book.inShelfId
         guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
         sessionManager.presentingEBookReaderFromShelf = true
     }
@@ -140,18 +140,18 @@ final class MainViewModel: ObservableObject {
     }
 
     func updateCurrentPosition() {
-        modelData.sessionManager.updateCurrentPosition(alertDelegate: self)
+        container.sessionManager.updateCurrentPosition(alertDelegate: self)
     }
     
     func dismissAll(completion: @escaping () -> Void) {
-        if let latest = modelData.presentingStack.last {
+        if let latest = container.presentingStack.last {
             if latest.wrappedValue == true {
                 latest.wrappedValue = false
                 DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) { [weak self] in
                     self?.dismissAll(completion: completion)
                 }
             } else {
-                _ = modelData.presentingStack.popLast()
+                _ = container.presentingStack.popLast()
                 dismissAll(completion: completion)
             }
         } else {

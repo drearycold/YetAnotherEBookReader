@@ -10,7 +10,7 @@ import KingfisherSwiftUI
 import OSLog
 
 struct LibraryInfoBookListView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @EnvironmentObject var downloadManager: BookDownloadManager
     @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
@@ -57,7 +57,7 @@ struct LibraryInfoBookListView: View {
             listViewModel: listViewModel,
             libraryInfoViewModel: libraryInfoViewModel,
             viewModel: viewModel,
-            modelData: modelData,
+            container: container,
             geometry: geometry
         )
     }
@@ -68,7 +68,7 @@ struct LibraryInfoBookListView: View {
             listViewModel: listViewModel,
             libraryInfoViewModel: libraryInfoViewModel,
             viewModel: viewModel,
-            modelData: modelData,
+            container: container,
             geometry: geometry
         )
     }

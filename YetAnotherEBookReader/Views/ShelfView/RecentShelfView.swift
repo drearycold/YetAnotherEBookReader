@@ -189,8 +189,8 @@ struct RecentShelfView: View {
             )) { detailId in
                 NavigationView {
                     BookDetailView(bookId: detailId.value, viewMode: .SHELF)
-                        .environmentObject(viewModel.modelData)
-                        .environmentObject(viewModel.modelData.downloadManager)
+                        .environmentObject(viewModel.container)
+                        .environmentObject(viewModel.container.downloadManager)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
@@ -205,7 +205,7 @@ struct RecentShelfView: View {
                 get: { viewModel.presentingHistoryBookId.map { IdentifiableString(value: $0) } },
                 set: { viewModel.presentingHistoryBookId = $0?.value }
             )) { historyId in
-                if let book = viewModel.modelData.bookManager.booksInShelf[historyId.value] {
+                if let book = viewModel.container.bookManager.booksInShelf[historyId.value] {
                     NavigationView {
                         ReadingPositionHistoryView(
                             presenting: Binding<Bool>(
@@ -219,7 +219,7 @@ struct RecentShelfView: View {
                             library: book.library,
                             bookId: book.id
                         )
-                        .environmentObject(viewModel.modelData)
+                        .environmentObject(viewModel.container)
                         .environment(\.realmConfiguration, book.library.server.realmPerf.configuration)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {

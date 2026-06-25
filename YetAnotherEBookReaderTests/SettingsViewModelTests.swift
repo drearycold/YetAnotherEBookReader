@@ -12,23 +12,23 @@ import Combine
 
 @MainActor class SettingsViewModelTests: XCTestCase {
     var viewModel: SettingsViewModel!
-    var mockModelData: ModelData!
+    var mockAppContainer: AppContainer!
     var cancellables: Set<AnyCancellable>!
     var orderedEvents: [String]!
     
     override func setUpWithError() throws {
-        mockModelData = ModelData(mock: true)
-        mockModelData.calibreServers.removeAll()
-        mockModelData.calibreLibraries.removeAll()
-        mockModelData.booksInShelf.removeAll()
+        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer.calibreServers.removeAll()
+        mockAppContainer.calibreLibraries.removeAll()
+        mockAppContainer.booksInShelf.removeAll()
         orderedEvents = []
-        viewModel = SettingsViewModel(modelData: mockModelData)
+        viewModel = SettingsViewModel(container: mockAppContainer)
         cancellables = []
     }
     
     override func tearDownWithError() throws {
         viewModel = nil
-        mockModelData = nil
+        mockAppContainer = nil
         cancellables = nil
         orderedEvents = nil
     }
@@ -43,7 +43,7 @@ import Combine
     
     func testUpdateServerList() throws {
         let server = CalibreServer(uuid: UUID(), name: "Test Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        mockModelData.calibreServers[server.id] = server
+        mockAppContainer.calibreServers[server.id] = server
         
         viewModel.updateServerList()
         
@@ -53,7 +53,7 @@ import Combine
     
     func testStageServerDeletion() throws {
         let server = CalibreServer(uuid: UUID(), name: "Test Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        mockModelData.calibreServers[server.id] = server
+        mockAppContainer.calibreServers[server.id] = server
         viewModel.updateServerList()
         
         viewModel.stageServerDeletion(at: 0)
@@ -74,25 +74,25 @@ import Combine
     func testUpdateServerTriggersRefreshPopulateAndProbeInOrder() throws {
         let oldServer = CalibreServer(uuid: UUID(), name: "Old Server", baseUrl: "http://localhost/old", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let newServer = CalibreServer(uuid: UUID(), name: "New Server", baseUrl: "http://localhost/new", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        mockModelData.calibreServers[oldServer.id] = oldServer
-        mockModelData.booksInShelf["stale"] = TestFixtures.makeBook()
+        mockAppContainer.calibreServers[oldServer.id] = oldServer
+        mockAppContainer.booksInShelf["stale"] = TestFixtures.makeBook()
         var staleRemovedBeforePopulate = false
 
         let expectation = expectation(description: "refresh pipeline")
         viewModel = SettingsViewModel(
-            modelData: mockModelData,
+            container: mockAppContainer,
             refreshDatabaseAction: { [weak self] in
                 self?.orderedEvents.append("refresh")
-                self?.mockModelData.refreshDatabase()
+                self?.mockAppContainer.refreshDatabase()
             },
             populateBookShelfAction: { [weak self] in
                 self?.orderedEvents.append("populate")
-                staleRemovedBeforePopulate = self?.mockModelData.booksInShelf["stale"] == nil
-                self?.mockModelData.bookManager.populateBookShelf()
+                staleRemovedBeforePopulate = self?.mockAppContainer.booksInShelf["stale"] == nil
+                self?.mockAppContainer.bookManager.populateBookShelf()
             },
             probeServersReachabilityAction: { [weak self] serverIds in
                 self?.orderedEvents.append("probe")
-                self?.mockModelData.serverManager.probeServersReachability(with: serverIds)
+                self?.mockAppContainer.serverManager.probeServersReachability(with: serverIds)
                 expectation.fulfill()
             }
         )
@@ -105,7 +105,7 @@ import Combine
     }
 
     func testServerViewModelProcessInputNormalizesURLAndAllowsBlankPublicURL() {
-        let viewModel = ServerViewModel(modelData: mockModelData, server: nil)
+        let viewModel = ServerViewModel(container: mockAppContainer, server: nil)
         viewModel.calibreServerUrl = "example.com"
         viewModel.calibreServerUrlPublic = ""
 

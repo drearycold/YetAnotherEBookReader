@@ -32,16 +32,16 @@ protocol ActivityLogRepositoryProtocol {
 final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
     private let databaseService: DatabaseService
     private let bookRepository: BookRepositoryProtocol
-    private weak var modelData: AppContainerProtocol?
+    private weak var container: AppContainerProtocol?
 
     init(
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol,
-        modelData: AppContainerProtocol?
+        container: AppContainerProtocol?
     ) {
         self.databaseService = databaseService
         self.bookRepository = bookRepository
-        self.modelData = modelData
+        self.container = container
     }
 
     private func getRealm() -> Realm? {
@@ -83,7 +83,7 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
         var bookTitle = ""
 
         if let libraryId = obj.libraryId,
-           let library = modelData?.calibreLibraries[libraryId] {
+           let library = container?.calibreLibraries[libraryId] {
             libraryName = library.name
             let primaryKey = CalibreBookRealm.PrimaryKey(
                 serverUUID: library.server.uuid.uuidString,

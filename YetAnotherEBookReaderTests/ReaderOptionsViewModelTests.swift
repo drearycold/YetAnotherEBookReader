@@ -12,18 +12,18 @@ import Combine
 
 class ReaderOptionsViewModelTests: XCTestCase {
     var viewModel: ReaderOptionsViewModel!
-    var mockModelData: ModelData!
+    var mockAppContainer: AppContainer!
     var cancellables: Set<AnyCancellable>!
     
     override func setUpWithError() throws {
-        mockModelData = ModelData(mock: true)
-        viewModel = ReaderOptionsViewModel(modelData: mockModelData, fontsManager: mockModelData.fontsManager)
+        mockAppContainer = AppContainer(mock: true)
+        viewModel = ReaderOptionsViewModel(container: mockAppContainer, fontsManager: mockAppContainer.fontsManager)
         cancellables = []
     }
     
     override func tearDownWithError() throws {
         viewModel = nil
-        mockModelData = nil
+        mockAppContainer = nil
         cancellables = nil
     }
     
@@ -50,7 +50,7 @@ class ReaderOptionsViewModelTests: XCTestCase {
         let expectation = XCTestExpectation(description: "Wait for dismiss publisher")
         
         // Trigger dismiss
-        mockModelData.dismissAllSubject.send("")
+        mockAppContainer.dismissAllSubject.send("")
         
         DispatchQueue.main.async {
             XCTAssertFalse(self.viewModel.optionsHelpFormat)
@@ -65,6 +65,6 @@ class ReaderOptionsViewModelTests: XCTestCase {
         let binding = viewModel.preferredFormatBinding
         binding.wrappedValue = .EPUB
         XCTAssertEqual(binding.wrappedValue, .EPUB)
-        XCTAssertEqual(mockModelData.sessionManager.getPreferredFormat(), .EPUB)
+        XCTAssertEqual(mockAppContainer.sessionManager.getPreferredFormat(), .EPUB)
     }
 }

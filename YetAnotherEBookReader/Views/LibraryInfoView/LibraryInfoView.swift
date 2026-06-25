@@ -13,7 +13,7 @@ import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     
     @StateObject var viewModel = ViewModel()
     @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
@@ -68,15 +68,15 @@ struct LibraryInfoView: View {
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
         .onAppear {
-            viewModel.calibreLibraries = modelData.libraryManager.calibreLibraries
+            viewModel.calibreLibraries = container.libraryManager.calibreLibraries
             viewModel.setupCategoryObserver()
 
-            libraryList = modelData.libraryManager.calibreLibraries.values
+            libraryList = container.libraryManager.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
 
             dismissAllCancellable?.cancel()
-            dismissAllCancellable = modelData.dismissAllSubject.sink { _ in
+            dismissAllCancellable = container.dismissAllSubject.sink { _ in
                 batchDownloadSheetPresenting = false
             }
         }
@@ -178,9 +178,9 @@ extension LibraryInfoView : AlertDelegate {
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView_Previews: PreviewProvider {
-    static private var modelData = ModelData()
+    static private var container = AppContainer()
     static var previews: some View {
         LibraryInfoView()
-            .environmentObject(ModelData())
+            .environmentObject(AppContainer())
     }
 }

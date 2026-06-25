@@ -10,7 +10,7 @@ struct LibraryInfoBookContextMenu: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var modelData: ModelData
+    @ObservedObject var container: AppContainer
     
     var body: some View {
         let authors = listViewModel.filterableAuthors(for: book, filterCriteriaCategory: libraryInfoViewModel.filterCriteriaCategory)
@@ -64,7 +64,7 @@ struct LibraryInfoBookContextMenu: View {
         Menu("Download ...") {
             ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
                 Button {
-                    listViewModel.downloadOrAddToShelfAction(book: book, format: format, modelData: modelData)
+                    listViewModel.downloadOrAddToShelfAction(book: book, format: format, container: container)
                 } label: {
                     Text(
                         format.rawValue

@@ -9,7 +9,7 @@ import SwiftUI
 import KingfisherSwiftUI
 
 struct LibraryInfoBookRow: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @EnvironmentObject var downloadManager: BookDownloadManager
     
     let book: CalibreBook
@@ -172,15 +172,15 @@ struct LibraryInfoBookRow: View {
     }
 
 //struct LibraryInfoBookRow_Previews: PreviewProvider {
-//    static private var modelData = ModelData(mock: true)
+//    static private var container = AppContainer(mock: true)
 //
 //    static var previews: some View {
 //        List{
 //            LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
-//                modelData.booksInShelf.first!.value
+//                container.booksInShelf.first!.value
 //            }, set: { _ in
 //
 //            }))
-//        }.environmentObject(modelData)
+//        }.environmentObject(container)
 //    }
 //}

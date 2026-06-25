@@ -2,7 +2,7 @@
 //  DatabaseMigrator.swift
 //  YetAnotherEBookReader
 //
-//  Extracted from ModelData.tryInitializeDatabase() on 2026-06-24.
+//  Extracted from AppContainer.tryInitializeDatabase() on 2026-06-24.
 //  Owns the Realm schema v42→v140 migration history.
 //
 

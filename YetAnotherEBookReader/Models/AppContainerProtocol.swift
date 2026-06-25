@@ -2,11 +2,11 @@
 //  AppContainerProtocol.swift
 //  YetAnotherEBookReader
 //
-//  Phase 3 of the ModelData elimination plan: a single facade protocol
+//  Phase 3 of the AppContainer elimination plan: a single facade protocol
 //  that aggregates all repositories, managers, services, and runtime
-//  state so that future phases can swap the concrete `ModelData` for a
-//  lighter container. Today, both `ModelData` and `AppContainer`
-//  conform to it side-by-side during Phase 4; Phase 4e drops `ModelData`.
+//  state so that future phases can swap the concrete `AppContainer` for a
+//  lighter container. Today, both `AppContainer` and `AppContainer`
+//  conform to it side-by-side during Phase 4; Phase 4e drops `AppContainer`.
 //
 //  `CalibreServerConfigProvider` and `LibraryProvider` continue to exist
 //  as their own narrow protocols; `AppContainerProtocol` is independent
@@ -97,7 +97,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which
     // take a weak `AppContainerProtocol`) can be reused by both the legacy
-    // `ModelData` and the new `AppContainer` during Phase 4.
+    // `AppContainer` and the new `AppContainer` during Phase 4.
 
     func getBook(for primaryKey: String) -> CalibreBook?
 
@@ -119,7 +119,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
 
 // MARK: - Default `LibraryResolver` / `ServerResolver` implementations
 //
-// Both `ModelData` and `AppContainer` use the cached dictionaries
+// Both `AppContainer` and `AppContainer` use the cached dictionaries
 // (`calibreLibraries`, `calibreServers`) as the single source of truth for
 // these lookups. The default extension lets them share one implementation
 // while keeping `LibraryResolver` / `ServerResolver` as separate narrow

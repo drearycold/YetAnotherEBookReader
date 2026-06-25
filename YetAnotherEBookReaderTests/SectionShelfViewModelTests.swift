@@ -11,7 +11,7 @@ import RealmSwift
 @MainActor
 class SectionShelfViewModelTests: XCTestCase {
     var viewModel: SectionShelfViewModel!
-    var mockModelData: ModelData!
+    var mockAppContainer: AppContainer!
     var cancellables: Set<AnyCancellable>!
     
     override func setUpWithError() throws {
@@ -20,16 +20,16 @@ class SectionShelfViewModelTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "SectionShelfViewModelTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
         
-        mockModelData = ModelData(mock: true)
-        mockModelData.realmConf = config
+        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer.realmConf = config
         
-        viewModel = SectionShelfViewModel(modelData: mockModelData)
+        viewModel = SectionShelfViewModel(container: mockAppContainer)
         cancellables = []
     }
     
     override func tearDownWithError() throws {
         viewModel = nil
-        mockModelData = nil
+        mockAppContainer = nil
         cancellables = nil
         try super.tearDownWithError()
     }
@@ -52,7 +52,7 @@ class SectionShelfViewModelTests: XCTestCase {
         let uuid = UUID()
         let server = CalibreServer(uuid: uuid, name: "Mock Server", baseUrl: "http://localhost:8080", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "libId", name: "MockLibrary")
-        mockModelData.calibreLibraries[library.id] = library
+        mockAppContainer.calibreLibraries[library.id] = library
         
         let section = ShelfSectionItem(
             id: "\(library.id) || testSection",
@@ -71,7 +71,7 @@ class SectionShelfViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
         
-        mockModelData.discoverShelfItemsSubject.send([section])
+        mockAppContainer.discoverShelfItemsSubject.send([section])
         
         await fulfillment(of: [expectation], timeout: 3.0)
         
@@ -102,7 +102,7 @@ class SectionShelfViewModelTests: XCTestCase {
     
     func testCalibreUpdatedDeletionDismissal() throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
-        mockModelData.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
+        mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
         
         let expectation = XCTestExpectation(description: "Detail dismissed")
         DispatchQueue.main.async {

@@ -11,21 +11,21 @@ import Combine
 @testable import YetAnotherEBookReader
 
 final class CalibreBookManagerTests: XCTestCase {
-    private var modelData: ModelData!
+    private var container: AppContainer!
     private var bookManager: CalibreBookManager!
     private var library: CalibreLibrary!
     private var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
-        modelData = ModelData(mock: true)
-        bookManager = modelData.bookManager
-        library = modelData.libraryManager.calibreLibraries.first?.value
+        container = AppContainer(mock: true)
+        bookManager = container.bookManager
+        library = container.libraryManager.calibreLibraries.first?.value
         cancellables = []
         XCTAssertNotNil(library, "Mock library should be populated")
     }
 
     override func tearDownWithError() throws {
-        modelData = nil
+        container = nil
         bookManager = nil
         library = nil
         cancellables = nil
@@ -155,7 +155,7 @@ final class CalibreBookManagerTests: XCTestCase {
     }
 
     func testConvertRealmBookToDomain() {
-        let realm = try! Realm(configuration: modelData.realmConf!)
+        let realm = try! Realm(configuration: container.realmConf!)
         let bookRealm = CalibreBookRealm()
         bookRealm.serverUUID = library.server.uuid.uuidString
         bookRealm.libraryName = library.name

@@ -10,8 +10,8 @@ import SwiftUI
 struct LibraryDetailView: View {
     @StateObject private var viewModel: LibraryViewModel
 
-    init(modelData: ModelData, library: CalibreLibrary) {
-        _viewModel = StateObject(wrappedValue: LibraryViewModel(modelData: modelData, library: library))
+    init(container: AppContainer, library: CalibreLibrary) {
+        _viewModel = StateObject(wrappedValue: LibraryViewModel(container: container, library: library))
     }
 
     var body: some View {
@@ -24,7 +24,7 @@ struct LibraryDetailView: View {
             
             Section(header: Text("Troubleshooting")) {
                 NavigationLink(
-                    destination: ActivityList(viewModel: ActivityListViewModel(modelData: viewModel.modelData, libraryId: viewModel.library.id, bookId: nil), presenting: Binding<Bool>(get: { false }, set:{_ in }))
+                    destination: ActivityList(viewModel: ActivityListViewModel(container: viewModel.container, libraryId: viewModel.library.id, bookId: nil), presenting: Binding<Bool>(get: { false }, set:{_ in }))
                 ) {
                     Text("Activity Logs")
                 }
@@ -93,14 +93,14 @@ struct LibraryDetailView: View {
 }
 
 struct LibraryDetailView_Previews: PreviewProvider {
-    static private var modelData = ModelData(mock: true)
+    static private var container = AppContainer(mock: true)
 
-    @State static private var library = modelData.libraryManager.calibreLibraries.values.first ?? .init(server: .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default"), key: "Default", name: "Default")
+    @State static private var library = container.libraryManager.calibreLibraries.values.first ?? .init(server: .init(uuid: .init(), name: "default", baseUrl: "default", hasPublicUrl: true, publicUrl: "default", hasAuth: true, username: "default", password: "default"), key: "Default", name: "Default")
 
     static var previews: some View {
         return NavigationView {
             LibraryDetailView(
-                modelData: modelData,
+                container: container,
                 library: library
             )
         }

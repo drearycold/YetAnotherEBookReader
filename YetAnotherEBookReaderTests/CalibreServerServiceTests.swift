@@ -12,7 +12,7 @@ import RealmSwift
 
 @MainActor
 final class CalibreServerServiceTests: XCTestCase {
-    var modelData: ModelData!
+    var container: AppContainer!
     var service: CalibreServerService!
     var server: CalibreServer!
     var library: CalibreLibrary!
@@ -24,9 +24,9 @@ final class CalibreServerServiceTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "CalibreServerServiceTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
 
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
-        service = modelData.calibreServerService
+        container = AppContainer(mock: true)
+        container.realmConf = config
+        service = container.calibreServerService
         cancellables = []
 
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -34,7 +34,7 @@ final class CalibreServerServiceTests: XCTestCase {
 
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
 
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -53,8 +53,8 @@ final class CalibreServerServiceTests: XCTestCase {
         library = nil
         server = nil
         service = nil
-        modelData = nil
-        ModelData.shared = nil
+        container = nil
+        AppContainer.shared = nil
         try await super.tearDown()
     }
 
@@ -1147,7 +1147,7 @@ final class CalibreServerServiceTests: XCTestCase {
         book.authors = ["Author 1"]
         book.formats = [:] // no EPUB format
 
-        let result = modelData.downloadManager.startDownloadNew(book, format: .EPUB)
+        let result = container.downloadManager.startDownloadNew(book, format: .EPUB)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.missingFormatInfo)
         } else {
@@ -1173,7 +1173,7 @@ final class CalibreServerServiceTests: XCTestCase {
             try? fileManager.removeItem(at: savedURL)
         }
 
-        let result = modelData.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: false)
+        let result = container.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: false)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.fileAlreadyExists)
         } else {

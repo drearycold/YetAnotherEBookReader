@@ -149,12 +149,12 @@ enum TestFixtures {
         )
     }
 
-    /// Populate a ModelData (already initialized with `ModelData(mock: true)`)
+    /// Populate a AppContainer (already initialized with `AppContainer(mock: true)`)
     /// with a single mock book and a matching reading position. Extracted from
-    /// the previous `ModelData.init(mock:)` body so it can be reused by tests
+    /// the previous `AppContainer.init(mock:)` body so it can be reused by tests
     /// and previews without keeping ~65 lines of fixture construction inline.
-    static func populateModelDataWithMockBook(_ modelData: ModelData) {
-        let library = modelData.libraryManager.calibreLibraries.first!.value
+    static func populateAppContainerWithMockBook(_ container: AppContainer) {
+        let library = container.libraryManager.calibreLibraries.first!.value
 
         var book = CalibreBook(id: 1, library: library)
         book.title = "Mock Book Title"
@@ -174,7 +174,7 @@ enum TestFixtures {
         }
 
         var position = BookDeviceReadingPosition(
-            id: modelData.deviceName,
+            id: container.deviceName,
             readerName: ReaderType.YabrEPUB.rawValue,
             maxPage: 99,
             lastReadPage: 1,
@@ -187,8 +187,8 @@ enum TestFixtures {
         )
         position.epoch = 1645495322
 
-        modelData.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
-        modelData.bookManager.readingBook = book
-        modelData.bookManager.booksInShelf[book.inShelfId] = book
+        container.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+        container.bookManager.readingBook = book
+        container.bookManager.booksInShelf[book.inShelfId] = book
     }
 }

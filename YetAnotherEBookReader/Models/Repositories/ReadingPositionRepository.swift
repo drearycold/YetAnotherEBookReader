@@ -25,22 +25,22 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
 
 final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
     private let databaseService: DatabaseService
-    private weak var modelData: AppContainerProtocol?
+    private weak var container: AppContainerProtocol?
 
-    init(databaseService: DatabaseService = .shared, modelData: AppContainerProtocol? = nil) {
+    init(databaseService: DatabaseService = .shared, container: AppContainerProtocol? = nil) {
         self.databaseService = databaseService
-        self.modelData = modelData
+        self.container = container
     }
     
     private func getRealmConfiguration(forBookId bookId: String) -> Realm.Configuration? {
-        let actualModelData = modelData ?? ModelData.shared
+        let actualAppContainer = container ?? AppContainer.shared
         
         // 1. If bookId is inShelfId (id^libraryName@serverUUID)
         if bookId.contains("@") && bookId.contains("^") {
             let components = bookId.components(separatedBy: "@")
             if components.count > 1 {
                 let serverUUID = components[1]
-                if let server = actualModelData?.calibreServers[serverUUID] {
+                if let server = actualAppContainer?.calibreServers[serverUUID] {
                     return BookAnnotation.getBookPreferenceServerConfig(server)
                 }
             }
@@ -50,7 +50,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         let components = bookId.components(separatedBy: " - ")
         if components.count > 1 {
             let libraryKey = components[0]
-            if let library = actualModelData?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
+            if let library = actualAppContainer?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
                 return BookAnnotation.getBookPreferenceServerConfig(library.server)
             }
         }

@@ -45,7 +45,7 @@ class YabrShelfDataModel: ObservableObject {
         
     }
     private let unifiedSearchService: UnifiedSearchService
-    private let modelData: AppContainerProtocol
+    private let container: AppContainerProtocol
     
     @Published var categories: Set<CategoryObject> = []
     
@@ -59,12 +59,12 @@ class YabrShelfDataModel: ObservableObject {
     
     var realmOnQueue: Realm!
     
-    init(unifiedSearchService: UnifiedSearchService, modelData: AppContainerProtocol) {
+    init(unifiedSearchService: UnifiedSearchService, container: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
-        self.modelData = modelData
+        self.container = container
         
         dispatchQueue.sync {
-            guard let realmConf = self.modelData.realmConf,
+            guard let realmConf = self.container.realmConf,
                   let realmOnQueue = try? Realm(configuration: realmConf, queue: dispatchQueue) else {
                 return
             }
@@ -106,7 +106,7 @@ class YabrShelfDataModel: ObservableObject {
                 }.store(in: &cancellables)
         }
         
-//        service.modelData.$booksInShelf
+//        service.container.$booksInShelf
 //            .receive(on: DispatchQueue.main)
 //            .sink { books in
 //                books.forEach {
@@ -115,7 +115,7 @@ class YabrShelfDataModel: ObservableObject {
 //            }
 //            .store(in: &cancellables)
         
-//        service.modelData.booksInShelf.forEach {
+//        service.container.booksInShelf.forEach {
 //            self.addToShelf(book: $0.value)
 //        }
         
@@ -263,7 +263,7 @@ class YabrShelfDataModel: ObservableObject {
     @MainActor
     private func notifyDiscoverShelfChanged() {
         let displaySections = self.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
-        self.modelData.discoverShelfItemsSubject.send(displaySections)
+        self.container.discoverShelfItemsSubject.send(displaySections)
     }
     
     func refresh() {

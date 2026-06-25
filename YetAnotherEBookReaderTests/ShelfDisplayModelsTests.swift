@@ -13,8 +13,8 @@ import Combine
     
     
     func testRecentShelfViewModelMapping() async throws {
-        let mockModelData = ModelData(mock: true)
-        let viewModel = RecentShelfViewModel(modelData: mockModelData)
+        let mockAppContainer = AppContainer(mock: true)
+        let viewModel = RecentShelfViewModel(container: mockAppContainer)
         
         let item = ShelfBookItem(
             id: "test-id",
@@ -24,7 +24,7 @@ import Combine
             status: .ready
         )
         
-        mockModelData.recentShelfItemsSubject.send([item])
+        mockAppContainer.recentShelfItemsSubject.send([item])
         
         // Wait briefly for Combine
         try await Task.sleep(nanoseconds: 100_000_000)
@@ -35,16 +35,16 @@ import Combine
     }
     
     func testSectionShelfViewModelMappingAndFilters() async throws {
-        let mockModelData = ModelData(mock: true)
+        let mockAppContainer = AppContainer(mock: true)
         
-        // Setup library config in mockModelData
+        // Setup library config in mockAppContainer
         let uuid = UUID()
         let mockServer = CalibreServer(uuid: uuid, name: "Test Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let mockLibrary = CalibreLibrary(server: mockServer, key: "testLibrary", name: "Test Library")
         let libraryId = mockLibrary.id
-        mockModelData.calibreLibraries[libraryId] = mockLibrary
+        mockAppContainer.calibreLibraries[libraryId] = mockLibrary
         
-        let viewModel = SectionShelfViewModel(modelData: mockModelData)
+        let viewModel = SectionShelfViewModel(container: mockAppContainer)
         
         let bookItem = ShelfBookItem(
             id: "test-id",
@@ -60,7 +60,7 @@ import Combine
             books: [bookItem]
         )
         
-        mockModelData.discoverShelfItemsSubject.send([section])
+        mockAppContainer.discoverShelfItemsSubject.send([section])
         
         // Wait for collect(.byTime(RunLoop.main, .seconds(1))) which has 1s latency
         try await Task.sleep(nanoseconds: 1_200_000_000)

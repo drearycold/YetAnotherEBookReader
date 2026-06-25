@@ -21,7 +21,7 @@ import R2Streamer
 class CalibreBookManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreBookManager")
 
-    weak var modelData: AppContainerProtocol?
+    weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
 
     @Published var booksInShelf = [String: CalibreBook]()
@@ -43,18 +43,18 @@ class CalibreBookManager: ObservableObject {
     }
 
     var readingBookInShelfId: String? {
-        get { modelData?.sessionManager.readingBookInShelfId }
-        set { modelData?.sessionManager.readingBookInShelfId = newValue }
+        get { container?.sessionManager.readingBookInShelfId }
+        set { container?.sessionManager.readingBookInShelfId = newValue }
     }
 
     var readingBook: CalibreBook? {
-        get { modelData?.sessionManager.readingBook }
-        set { modelData?.sessionManager.readingBook = newValue }
+        get { container?.sessionManager.readingBook }
+        set { container?.sessionManager.readingBook = newValue }
     }
 
     var presentingEBookReaderFromShelf: Bool {
-        get { modelData?.sessionManager.presentingEBookReaderFromShelf ?? false }
-        set { modelData?.sessionManager.presentingEBookReaderFromShelf = newValue }
+        get { container?.sessionManager.presentingEBookReaderFromShelf ?? false }
+        set { container?.sessionManager.presentingEBookReaderFromShelf = newValue }
     }
 
     let bookRepository: BookRepositoryProtocol
@@ -62,19 +62,19 @@ class CalibreBookManager: ObservableObject {
     let annotationRepository: AnnotationRepositoryProtocol
 
     init(
-        modelData: AppContainerProtocol? = nil,
+        container: AppContainerProtocol? = nil,
         databaseService: DatabaseService = .shared,
         bookRepository: BookRepositoryProtocol? = nil,
         readingPositionRepository: ReadingPositionRepositoryProtocol? = nil,
         annotationRepository: AnnotationRepositoryProtocol? = nil
     ) {
-        self.modelData = modelData
+        self.container = container
         self.databaseService = databaseService
 
         if let repo = bookRepository {
             self.bookRepository = repo
         } else {
-            guard let resolver = modelData ?? ModelData.shared else {
+            guard let resolver = container ?? AppContainer.shared else {
                 fatalError("LibraryResolver must be available if no repository is provided")
             }
             self.bookRepository = RealmBookRepository(databaseService: databaseService, libraryResolver: resolver)
@@ -83,7 +83,7 @@ class CalibreBookManager: ObservableObject {
         if let repo = readingPositionRepository {
             self.readingPositionRepository = repo
         } else {
-            self.readingPositionRepository = RealmReadingPositionRepository(databaseService: databaseService, modelData: modelData)
+            self.readingPositionRepository = RealmReadingPositionRepository(databaseService: databaseService, container: container)
         }
 
         if let repo = annotationRepository {
@@ -151,7 +151,7 @@ class CalibreBookManager: ObservableObject {
               let libraryName = bookRealm.libraryName
         else { return nil }
 
-        return modelData?.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+        return container?.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
     }
 
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
@@ -192,7 +192,7 @@ class CalibreBookManager: ObservableObject {
     // MARK: - Shelf Management
 
     func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreDSReaderHelperPrefs.Options, CalibreGoodreadsSyncPrefs.PluginPrefs)? {
-        guard let serverManager = modelData?.serverManager else { return nil }
+        guard let serverManager = container?.serverManager else { return nil }
 
         // must have dsreader helper info and enabled by server
         guard let dsreaderHelperServer = serverManager.queryServerDSReaderHelper(server: library.server), dsreaderHelperServer.port > 0 else { return nil }
@@ -218,8 +218,8 @@ class CalibreBookManager: ObservableObject {
         }
         updateBook(book: book)
 
-        if let calibreServerService = modelData?.calibreServerService,
-           let library = modelData?.calibreLibraries[book.library.id],
+        if let calibreServerService = container?.calibreServerService,
+           let library = container?.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
            let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf {
@@ -233,7 +233,7 @@ class CalibreBookManager: ObservableObject {
             }
         }
 
-        modelData?.calibreUpdatedSubject.send(.book(book))
+        container?.calibreUpdatedSubject.send(.book(book))
     }
 
     func removeFromShelf(inShelfId: String) {
@@ -249,9 +249,9 @@ class CalibreBookManager: ObservableObject {
 
         booksInShelf.removeValue(forKey: inShelfId)
 
-        if readingPositionRepository.getPositions(forBookId: book.bookPrefId).first?.id == modelData?.deviceName,
-           let calibreServerService = modelData?.calibreServerService,
-           let library = modelData?.calibreLibraries[book.library.id],
+        if readingPositionRepository.getPositions(forBookId: book.bookPrefId).first?.id == container?.deviceName,
+           let calibreServerService = container?.calibreServerService,
+           let library = container?.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
            let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf {
@@ -263,7 +263,7 @@ class CalibreBookManager: ObservableObject {
                     logger.error("Failed to remove book \(book.title) from Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
 
-                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData?.deviceName ?? ""), position.lastProgress > 99 {
+                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container?.deviceName ?? ""), position.lastProgress > 99 {
                     do {
                         try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
                     } catch {
@@ -273,7 +273,7 @@ class CalibreBookManager: ObservableObject {
             }
         }
 
-        modelData?.calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        container?.calibreUpdatedSubject.send(.deleted(book.inShelfId))
     }
 
     // MARK: - Cache Management
@@ -364,8 +364,8 @@ class CalibreBookManager: ObservableObject {
     func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
         var bookImportInfo = BookImportInfo(url: url, bookId: nil, error: nil)
 
-        guard let documentServer = modelData?.serverManager.documentServer,
-              let localLibrary = modelData?.libraryManager.localLibrary,
+        guard let documentServer = container?.serverManager.documentServer,
+              let localLibrary = container?.libraryManager.localLibrary,
               let localBaseUrl = documentServer.localBaseUrl else {
             return bookImportInfo.with(error: .libraryAbsent)
         }
@@ -505,7 +505,7 @@ class CalibreBookManager: ObservableObject {
             }
 
             book.title = publication.metadata.title
-            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL, let kfImageCache = modelData?.kfImageCache {
+            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL, let kfImageCache = container?.kfImageCache {
                 kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
             }
 
@@ -518,7 +518,7 @@ class CalibreBookManager: ObservableObject {
     // MARK: - Reading Prep & Navigation
 
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        guard let sessionManager = modelData?.sessionManager else {
+        guard let sessionManager = container?.sessionManager else {
             fatalError("sessionManager is missing")
         }
         return sessionManager.prepareBookReading(book: book)
@@ -536,7 +536,7 @@ class CalibreBookManager: ObservableObject {
 
     @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
-        modelData?.librarySyncStatus[request.library.id]?.isUpd = true
+        container?.librarySyncStatus[request.library.id]?.isUpd = true
 
         let books = request.books.map { bookId -> CalibreBook in
             let book = CalibreBook(id: bookId, library: request.library)
@@ -553,7 +553,7 @@ class CalibreBookManager: ObservableObject {
             return book
         }
 
-        guard let calibreServerService = modelData?.calibreServerService else { return }
+        guard let calibreServerService = container?.calibreServerService else { return }
 
         var task = calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) ?? CalibreBooksTask(request: request)
 
@@ -564,10 +564,10 @@ class CalibreBookManager: ObservableObject {
         }
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            ModelData.SaveBooksMetadataRealmQueue.async {
+            AppContainer.SaveBooksMetadataRealmQueue.async {
                 guard let entries = task.booksMetadataEntry,
                       let json = task.booksMetadataJSON,
-                      let realmSaveBooksMetadata = self.modelData?.realmSaveBooksMetadata else {
+                      let realmSaveBooksMetadata = self.container?.realmSaveBooksMetadata else {
                     continuation.resume()
                     return
                 }
@@ -608,7 +608,7 @@ class CalibreBookManager: ObservableObject {
 
         task.booksInShelf.forEach { newBook in
             self.booksInShelf[newBook.inShelfId] = newBook
-            modelData?.calibreUpdatedSubject.send(.book(newBook))
+            container?.calibreUpdatedSubject.send(.book(newBook))
         }
         task.booksAnnotation.forEach { newBook in
             self.booksAnnotation[newBook.inShelfId] = newBook
@@ -667,11 +667,11 @@ class CalibreBookManager: ObservableObject {
 
         let booksHandled = task.booksUpdated.union(task.booksError).union(task.booksDeleted)
 
-        modelData?.librarySyncStatus[task.library.id]?.upd.subtract(booksHandled)
+        container?.librarySyncStatus[task.library.id]?.upd.subtract(booksHandled)
 
         if task.booksError.isEmpty == false {
-            modelData?.librarySyncStatus[task.library.id]?.err.formUnion(task.booksError)
-            modelData?.librarySyncStatus[task.library.id]?.del.formUnion(task.booksDeleted)
+            container?.librarySyncStatus[task.library.id]?.err.formUnion(task.booksError)
+            container?.librarySyncStatus[task.library.id]?.del.formUnion(task.booksDeleted)
             let booksRetry = task.books.filter { booksHandled.contains($0) == false }
 
             if booksRetry.isEmpty == false {
@@ -683,7 +683,7 @@ class CalibreBookManager: ObservableObject {
             }
         }
 
-        modelData?.librarySyncStatus[task.library.id]?.isUpd = false
+        container?.librarySyncStatus[task.library.id]?.isUpd = false
 
         if request.books.count == 1,
            let book = self.getBook(
@@ -693,7 +693,7 @@ class CalibreBookManager: ObservableObject {
                 id: task.request.books.first!.description
             )
            ) {
-            modelData?.calibreUpdatedSubject.send(.book(book))
+            container?.calibreUpdatedSubject.send(.book(book))
         }
     }
 
@@ -706,12 +706,12 @@ class CalibreBookManager: ObservableObject {
     }
 
     func removeDeleteBooksFromServer(server: CalibreServer) {
-        guard let librarySyncStatus = modelData?.librarySyncStatus else { return }
+        guard let librarySyncStatus = container?.librarySyncStatus else { return }
 
         librarySyncStatus.filter {
              $0.value.library.server.id == server.id && $0.value.del.count > 0
         }.forEach { lss in
-            modelData?.librarySyncStatus[lss.key]?.isSync = true
+            container?.librarySyncStatus[lss.key]?.isSync = true
             var progress = 0
             let total = lss.value.del.count
             DispatchQueue.global(qos: .userInitiated).async {
@@ -722,7 +722,7 @@ class CalibreBookManager: ObservableObject {
                     lss.value.del.forEach { id in
                         if progress % 100 == 0 {
                             DispatchQueue.main.async {
-                                self.modelData?.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
+                                self.container?.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
                             }
                         }
 
@@ -739,10 +739,10 @@ class CalibreBookManager: ObservableObject {
                 }
 
                 DispatchQueue.main.async {
-                    self.modelData?.librarySyncStatus[lss.key]?.del.removeAll()
-                    self.modelData?.librarySyncStatus[lss.key]?.isSync = false
-                    self.modelData?.librarySyncStatus[lss.key]?.msg = nil
-                    self.modelData?.serverManager.probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
+                    self.container?.librarySyncStatus[lss.key]?.del.removeAll()
+                    self.container?.librarySyncStatus[lss.key]?.isSync = false
+                    self.container?.librarySyncStatus[lss.key]?.msg = nil
+                    self.container?.serverManager.probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
                 }
             }
         }
@@ -766,7 +766,7 @@ class CalibreBookManager: ObservableObject {
             }
 
         if serverReachableChanged && libraryBooks.isEmpty {
-            modelData?.calibreUpdatedSubject.send(.shelf)
+            container?.calibreUpdatedSubject.send(.shelf)
             return
         }
 

@@ -11,17 +11,17 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class BookDownloadManagerTests: XCTestCase {
-    private var modelData: ModelData!
+    private var container: AppContainer!
     private var manager: BookDownloadManager!
     private var cancellables: Set<AnyCancellable>!
-    private var originalModelDataShared: ModelData?
+    private var originalAppContainerShared: AppContainer?
     
     override func setUpWithError() throws {
-        originalModelDataShared = ModelData.shared
-        modelData = ModelData(mock: true)
-        ModelData.shared = modelData
+        originalAppContainerShared = AppContainer.shared
+        container = AppContainer(mock: true)
+        AppContainer.shared = container
         
-        manager = BookDownloadManager(modelData: modelData, realmConf: modelData.realmConf)
+        manager = BookDownloadManager(container: container, realmConf: container.realmConf)
         
         let testConfiguration = URLSessionConfiguration.ephemeral
         testConfiguration.protocolClasses = [MockURLProtocol.self]
@@ -37,22 +37,22 @@ final class BookDownloadManagerTests: XCTestCase {
     
     override func tearDownWithError() throws {
         // Clean up any downloaded books from Document Directory
-        if let library = modelData?.calibreLibraries.first?.value {
+        if let library = container?.calibreLibraries.first?.value {
             let mockBook = CalibreBook(id: 999, library: library)
             if let savedUrl = getSavedUrl(book: mockBook, format: .EPUB) {
                 try? FileManager.default.removeItem(at: savedUrl)
             }
         }
         
-        ModelData.shared = originalModelDataShared
+        AppContainer.shared = originalAppContainerShared
         manager = nil
-        modelData = nil
+        container = nil
         cancellables = nil
         MockURLProtocol.requestHandler = nil
     }
     
     func testStartDownload_addsToActiveDownloads() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.title = "Start Download Test"
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
@@ -78,7 +78,7 @@ final class BookDownloadManagerTests: XCTestCase {
     }
     
     func testCancelDownload_removesFromActive() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         
@@ -93,7 +93,7 @@ final class BookDownloadManagerTests: XCTestCase {
     }
     
     func testDownloadProgress_publishesUpdates() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 999, library: library)
         let url = URL(string: "http://localhost/download")!
         let savedUrl = URL(fileURLWithPath: "/tmp/mock_saved_file")
@@ -129,7 +129,7 @@ final class BookDownloadManagerTests: XCTestCase {
     }
     
     func testDownloadCompletion_updatesState() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         
@@ -191,7 +191,7 @@ final class BookDownloadManagerTests: XCTestCase {
     }
     
     func testDownloadFailure_setsErrorState() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         
@@ -229,7 +229,7 @@ final class BookDownloadManagerTests: XCTestCase {
     }
     
     func testIsFormatDownloaded_checksLocalFile() throws {
-        let library = try XCTUnwrap(modelData.libraryManager.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         

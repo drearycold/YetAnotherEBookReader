@@ -8,7 +8,7 @@
 import Foundation
 
 class BookPreviewViewModel: ObservableObject {
-    var modelData: ModelData!
+    var container: AppContainer!
     @Published var book: CalibreBook!
     @Published var url: URL!
     @Published var format = Format.UNKNOWN
@@ -18,8 +18,8 @@ class BookPreviewViewModel: ObservableObject {
     init() {
     }
     
-    init (modelData: ModelData, book: CalibreBook, url: URL, format: Format, reader: ReaderType) {
-        self.modelData = modelData
+    init (container: AppContainer, book: CalibreBook, url: URL, format: Format, reader: ReaderType) {
+        self.container = container
         self.book = book
         self.url = url
         self.format = format
