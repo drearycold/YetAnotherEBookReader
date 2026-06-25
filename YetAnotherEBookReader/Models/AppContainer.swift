@@ -208,7 +208,15 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         }
 
         if mock {
-            try? tryInitializeDatabase { _ in }
+            // In the test path the in-memory main Realm is already
+            // wired; skip tryInitializeDatabase so the production
+            // DatabaseMigrator does not overwrite realmConf with a
+            // file-backed configuration. initializeDatabase() still
+            // runs so the bootstrap opens the (in-memory) Realm and
+            // populates the libraries.
+            if testRealmEnvironment == nil {
+                try? tryInitializeDatabase { _ in }
+            }
             try? initializeDatabase()
 
             let library = libraryManager.calibreLibraries.first!.value
