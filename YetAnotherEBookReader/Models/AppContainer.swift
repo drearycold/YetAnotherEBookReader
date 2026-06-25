@@ -140,6 +140,8 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     lazy var databaseBootstrapper = DatabaseBootstrapper(container: self)
     lazy var bookManager = CalibreBookManager(container: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
 
+    var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
+
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
     lazy var searchCacheRepository = RealmSearchCacheStore(container: self)
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
