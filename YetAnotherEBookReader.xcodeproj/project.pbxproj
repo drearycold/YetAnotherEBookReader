@@ -391,6 +391,9 @@
 		E7226E242FED5410009D3BB3 /* DefaultServerScopedRealmConfigurationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E222FED5410009D3BB3 /* DefaultServerScopedRealmConfigurationProvider.swift */; };
 		E7226E262FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E252FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift */; };
 		E7226E272FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E252FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift */; };
+		E7226E2A2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */; };
+		E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */; };
+		E7226E2D2FED56CB009D3BB3 /* MockAppContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E2C2FED56CB009D3BB3 /* MockAppContainerFactory.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -711,6 +714,8 @@
 		E7226E1F2FED5410009D3BB3 /* ServerScopedRealmConfigurationProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerScopedRealmConfigurationProviding.swift; sourceTree = "<group>"; };
 		E7226E222FED5410009D3BB3 /* DefaultServerScopedRealmConfigurationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DefaultServerScopedRealmConfigurationProvider.swift; sourceTree = "<group>"; };
 		E7226E252FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InMemoryServerScopedRealmConfigurationProvider.swift; sourceTree = "<group>"; };
+		E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestRealmEnvironment.swift; sourceTree = "<group>"; };
+		E7226E2C2FED56CB009D3BB3 /* MockAppContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppContainerFactory.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1168,6 +1173,7 @@
 				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
 				E71F35392FE4F2F8007AB0B1 /* Realm */,
 				E7226E1A2FED26E5009D3BB3 /* AppContainer.swift */,
+				E7226E282FED5677009D3BB3 /* Testing */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1298,8 +1304,17 @@
 				E71F35C92FEACDBD007AB0B1 /* TestFixtures.swift */,
 				E71F35CB2FEACDCD007AB0B1 /* MockRepositories.swift */,
 				E71F35CD2FEACDD9007AB0B1 /* MockManagers.swift */,
+				E7226E2C2FED56CB009D3BB3 /* MockAppContainerFactory.swift */,
 			);
 			path = TestHelpers;
+			sourceTree = "<group>";
+		};
+		E7226E282FED5677009D3BB3 /* Testing */ = {
+			isa = PBXGroup;
+			children = (
+				E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */,
+			);
+			path = Testing;
 			sourceTree = "<group>";
 		};
 		E730405628E8652B0013BA01 /* Reader */ = {
@@ -1630,6 +1645,7 @@
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
 				E71F34EE2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,
+				E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
 				E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
 				E71F35652FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
 				E71F34BC2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
@@ -1778,6 +1794,7 @@
 				E7939151261F1A47004AB103 /* SettingsViewModelTests.swift in Sources */,
 				E7939151261F1A47004AB105 /* SupportInfoViewModelTests.swift in Sources */,
 				E7939151261F1A47004AB107 /* RecentShelfViewModelTests.swift in Sources */,
+				E7226E2D2FED56CB009D3BB3 /* MockAppContainerFactory.swift in Sources */,
 				E71F34BA2FDA51BE007AB0B1 /* UnifiedSearchIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -1893,6 +1910,7 @@
 				E7939151261F1A47004AB022 /* SupportInfoViewModel.swift in Sources */,
 				6E7B80FF28FBA7AD008B075C /* MDictViewUIVC.swift in Sources */,
 				E71F34D22FDBD78E007AB0B1 /* UnifiedCategoryService.swift in Sources */,
+				E7226E2A2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
 				6E7B810028FBA7AD008B075C /* CalibreDateParser.swift in Sources */,
 				E71F34ED2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */,
 				E70A25CE2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,

@@ -182,13 +182,30 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         databaseService.realm?.refresh()
     }
 
-    init(mock: Bool = false) {
+    init(
+        mock: Bool = false,
+        testRealmEnvironment: TestRealmEnvironment? = nil
+    ) {
         AppContainer.shared = self
 
         setupRealmDefaults()
         setupImageCache()
         wireCrossManagerSubscriptions()
         wireObjectWillChangeForwarding()
+
+        if let env = testRealmEnvironment {
+            // Test path: install the in-memory main Realm + in-memory
+            // server-scoped provider before any of the mock population
+            // runs, so repositories and managers observe consistent
+            // test-only Realm configurations from the very first
+            // access. The mock block below calls populateLibraries()
+            // and initializeDatabase(), both of which need this to
+            // already be wired.
+            Realm.Configuration.defaultConfiguration = env.mainRealmConfiguration
+            self.realmConf = env.mainRealmConfiguration
+            DatabaseService.shared.setup(conf: env.mainRealmConfiguration)
+            self.serverScopedRealmProvider = env.serverScopedRealmProvider
+        }
 
         if mock {
             try? tryInitializeDatabase { _ in }
