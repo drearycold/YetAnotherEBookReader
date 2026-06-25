@@ -13,7 +13,7 @@ import OSLog
 import Kingfisher
 import CryptoSwift
 
-final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryProvider {
+final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConfigProvider, LibraryProvider {
     static var shared: ModelData?
 
     func getLibraries() -> [String: CalibreLibrary] {
