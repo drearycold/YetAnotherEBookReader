@@ -338,38 +338,6 @@ final class ModelData: ObservableObject, AppContainerProtocol, CalibreServerConf
         return url
     }
 
-    @discardableResult
-    @MainActor
-    func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
-        return await serverManager.probeServer(request: request)
-    }
-
-    @MainActor
-    func removeServer(server: CalibreServer) async {
-        await serverManager.removeServer(server: server)
-    }
-
-    @discardableResult
-    @MainActor
-    func probeLibrary(request: CalibreProbeLibraryRequest) async -> CalibreLibraryProbeTask {
-        return await libraryManager.probeLibrary(request: request)
-    }
-
-    @MainActor
-    func removeLibrary(library: CalibreLibrary) async {
-        await libraryManager.removeLibrary(library: library)
-    }
-
-    @MainActor
-    func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
-        await bookManager.getBooksMetadata(request: request)
-    }
-
-    @MainActor
-    func syncLibrary(request: CalibreSyncLibraryRequest) async {
-        await libraryManager.syncLibrary(request: request)
-    }
-
     func cleanCalibreActivities(startDatetime: Date) {
         guard let logger = logger else { return }
         Task {

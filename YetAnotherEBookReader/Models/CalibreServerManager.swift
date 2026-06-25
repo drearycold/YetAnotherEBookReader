@@ -205,7 +205,7 @@ class CalibreServerManager: ObservableObject {
                 $0.value.server.id == serverInfo.server.id
             }.forEach { id, library in
                 Task {
-                    await modelData?.syncLibrary(
+                    await modelData?.libraryManager.syncLibrary(
                         request: .init(
                             library: library,
                             autoUpdateOnly: serverInfo.request.autoUpdateOnly,
