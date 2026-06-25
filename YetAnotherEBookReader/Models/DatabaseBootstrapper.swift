@@ -11,6 +11,13 @@ import RealmSwift
 import Combine
 import OSLog
 
+/// Errors thrown by `DatabaseBootstrapper.bootstrap` when the database cannot
+/// be initialized. Surfaced to the caller so the upgrade UI can remain
+/// visible and the user sees a real failure state.
+enum DatabaseBootstrapError: Error {
+    case realmOpenFailed(underlying: Error)
+}
+
 final class DatabaseBootstrapper {
     private let modelData: ModelData
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "DatabaseBootstrapper")
@@ -23,8 +30,17 @@ final class DatabaseBootstrapper {
     /// install the activity logger, wire up the DownloadManager and the
     /// background-save Realm, then trigger initial population of
     /// servers/libraries/books and clean stale activity entries.
-    func bootstrap(realmConf: Realm.Configuration) {
-        modelData.realm = try? Realm(configuration: realmConf)
+    ///
+    /// Throws `DatabaseBootstrapError.realmOpenFailed` if the main Realm
+    /// cannot be opened. On throw, the caller should leave `ModelData.realm`
+    /// nil so the upgrade UI stays visible.
+    func bootstrap(realmConf: Realm.Configuration) throws {
+        do {
+            modelData.realm = try Realm(configuration: realmConf)
+        } catch {
+            logger.error("Failed to open main Realm: \(error.localizedDescription)")
+            throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
+        }
         modelData.logger = CalibreActivityLogger(realmConf: realmConf)
         modelData.calibreServerService.logger = modelData.logger!
         modelData.databaseService.setup(conf: realmConf)

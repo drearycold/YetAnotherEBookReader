@@ -288,15 +288,22 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-        ModelData.RealmSchemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
-        let conf = try DatabaseMigrator().makeConfiguration(statusHandler: statusHandler)
+        let schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
+        ModelData.RealmSchemaVersion = schemaVersion
+        let conf = try DatabaseMigrator().makeConfiguration(schemaVersion: schemaVersion, statusHandler: statusHandler)
         Realm.Configuration.defaultConfiguration = conf
         realmConf = conf
     }
     
     func initializeDatabase() {
         guard let realmConf = realmConf else { return }
-        databaseBootstrapper.bootstrap(realmConf: realmConf)
+        do {
+            try databaseBootstrapper.bootstrap(realmConf: realmConf)
+        } catch {
+            // Leave realm nil so YetAnotherEBookReaderApp keeps the upgrade UI
+            // visible. The bootstrapper already logged the underlying error.
+            defaultLog.error("initializeDatabase failed: \(error.localizedDescription)")
+        }
     }
 
     func migrateLegacyReadPosData() {

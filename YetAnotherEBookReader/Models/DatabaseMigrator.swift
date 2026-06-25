@@ -10,15 +10,15 @@ import Foundation
 import RealmSwift
 
 final class DatabaseMigrator {
-    static let currentSchemaVersion: UInt64 = 140
-
     /// Build a fully-configured Realm.Configuration with all v42→v140 migration
     /// blocks and the application-support file path. The supplied `statusHandler`
     /// receives human-readable progress updates (currently only emitted from the
-    /// v90 server-id migration).
-    func makeConfiguration(statusHandler: @escaping (String) -> Void) throws -> Realm.Configuration {
+    /// v90 server-id migration). The `schemaVersion` is supplied by the caller so
+    /// there is a single source of truth (typically derived from
+    /// `YabrAppInfo.shared.build`).
+    func makeConfiguration(schemaVersion: UInt64, statusHandler: @escaping (String) -> Void) throws -> Realm.Configuration {
         var conf = Realm.Configuration(
-            schemaVersion: DatabaseMigrator.currentSchemaVersion,
+            schemaVersion: schemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 138 {
                     migration.deleteData(forType: "CalibreUnifiedSearchObject")
