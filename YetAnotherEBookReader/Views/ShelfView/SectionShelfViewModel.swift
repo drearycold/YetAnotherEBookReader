@@ -53,11 +53,9 @@ final class SectionShelfViewModel: ObservableObject {
     
     private func setupSubscriptions() {
         container.discoverShelfItemsSubject
-            .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] displaySectionsArray in
-                guard let self = self, let displaySections = displaySectionsArray.last else { return }
-                self.allDisplaySections = displaySections
+            .sink { [weak self] sections in
+                guard let self = self else { return }
+                self.allDisplaySections = sections
                 self.applyFiltering()
             }
             .store(in: &cancellables)

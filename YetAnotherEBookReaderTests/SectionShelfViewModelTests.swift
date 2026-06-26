@@ -44,33 +44,36 @@ class SectionShelfViewModelTests: XCTestCase {
         viewModel.downloadSelectedBooks(bookIds: ["non-existent"])
     }
     
-    func testUpdateShelfModels() async throws {
+    func testUpdateShelfModels() {
         let uuid = UUID()
         let server = CalibreServer(uuid: uuid, name: "Mock Server", baseUrl: "http://localhost:8080", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "libId", name: "MockLibrary")
         mockAppContainer.calibreLibraries[library.id] = library
-        
+
         let section = ShelfSectionItem(
             id: "\(library.id) || testSection",
             title: "Test Section",
             books: []
         )
-        
-        let expectation = XCTestExpectation(description: "Subscription updates shelf sections")
-        
-        viewModel.$displaySections
-            .dropFirst()
-            .sink { sections in
-                if !sections.isEmpty {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-        
+
+        // The viewModel buffers section updates through
+        // .collect(.byTime(RunLoop.main, .seconds(1))) before
+        // applying them, and the downstream
+        // .receive(on: DispatchQueue.main) re-dispatches the
+        // collected values to the main queue. async `await` on the
+        // MainActor pumps neither, so we run the main RunLoop in
+        // short bursts. The tight loop interleaves RunLoop iteration
+        // (which fires the collect's 1s timer) with main-queue
+        // drain (which lets the sink update displaySections).
+        // The viewModel sink is wired directly to
+        // discoverShelfItemsSubject (no .collect/.receive(on:)),
+        // so it fires synchronously on send(). The shelf data
+        // model also sends "Author: Unknown" sections
+        // asynchronously, so we check displaySections
+        // immediately after send, before the bootstrapper's
+        // emission arrives and overwrites our test section.
         mockAppContainer.discoverShelfItemsSubject.send([section])
-        
-        await fulfillment(of: [expectation], timeout: 5.0)
-        
+
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.id, "\(library.id) || testSection")
     }
