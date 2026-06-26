@@ -8,15 +8,12 @@
 import SwiftUI
 import OSLog
 import Combine
-import RealmSwift
 //import struct Kingfisher.KFImage
 import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
-    
-    @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
     @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
@@ -57,7 +54,7 @@ struct LibraryInfoView: View {
             List {
                 combinedListView()
                 
-                if unifiedCategories.isEmpty == false {
+                if viewModel.availableCategories.isEmpty == false {
                     LibraryInfoCategoryListView()
                 }
                 
@@ -72,6 +69,7 @@ struct LibraryInfoView: View {
         .listStyle(PlainListStyle())
         .onAppear {
             viewModel.calibreLibraries = modelData.calibreLibraries
+            viewModel.setupDatabaseObserver()
             
             libraryList = modelData.calibreLibraries.values
                 .filter { $0.hidden == false }
@@ -145,6 +143,7 @@ struct LibraryInfoView: View {
             if unifiedSearchViewModel.unifiedSearchResult != nil {
                 LibraryInfoBookListView()
                     .environmentObject(unifiedSearchViewModel)
+                    .environmentObject(viewModel)
             } else {
                 Text("Preparing Book List")
             }

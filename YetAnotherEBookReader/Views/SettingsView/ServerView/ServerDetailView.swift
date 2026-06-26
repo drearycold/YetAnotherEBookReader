@@ -7,33 +7,27 @@
 
 import SwiftUI
 import Combine
-import RealmSwift
 
 struct ServerDetailView: View {
     @EnvironmentObject var modelData: ModelData
 
     @Binding var server: CalibreServer
-    @State private var selectedLibrary: String? = nil
+    @StateObject private var viewModel: ServerViewModel
     
     @State private var modServerActive = false
     @State private var dshelperActive = false
-    
-    @State private var libraryList = [String]()
-
-    @State private var syncingLibrary = false
-    @State private var syncLibraryColumnsCancellable: AnyCancellable? = nil
-    
     @State private var updater = 0
     
-    @State private var libraryRestoreListActive = false
-    @State private var libraryRestoreListEditMode = EditMode.active
-    @State private var libraryRestoreListSelection = Set<String>()
+    init(server: Binding<CalibreServer>) {
+        self._server = server
+        self._viewModel = StateObject(wrappedValue: ServerViewModel(modelData: ModelData.shared ?? ModelData(), server: server.wrappedValue))
+    }
     
     var body: some View {
         Form {
             Section(header: Text("Options")) {
                 NavigationLink(
-                    destination: AddModServerView(server: $server, isActive: $modServerActive)
+                    destination: AddModServerView(viewModel: viewModel, server: $server, isActive: $modServerActive)
                         .navigationTitle("Modify: \(server.name)"),
                     isActive: $modServerActive,
                     label: {
@@ -43,7 +37,7 @@ struct ServerDetailView: View {
                 .isDetailLink(false)
                 
                 NavigationLink(
-                    destination: ServerOptionsDSReaderHelper(server: $server, updater: $updater),
+                    destination: ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater),
                     isActive: $dshelperActive,
                     label: {
                         Text("DSReader Helper")
@@ -53,36 +47,21 @@ struct ServerDetailView: View {
             }
             
             Section(header: librarySectionHeader()) {
-                ForEach(libraryList.compactMap { modelData.calibreLibraries[$0] }, id: \.self) { library in
+                ForEach(viewModel.libraryList.compactMap { modelData.calibreLibraries[$0] }, id: \.self) { library in
                     NavigationLink(
                         destination: libraryEntryDestination(library: library),
                         tag: library.id,
-                        selection: $selectedLibrary) {
+                        selection: $viewModel.selectedLibrary) {
                         libraryRowBuilder(library: library)
                     }
                 }.onDelete(perform: { indexSet in
-                    let deletedLibraryIds = indexSet.map { libraryList[$0] }
-                    deletedLibraryIds.forEach { libraryId in
-                        self.modelData.hideLibrary(libraryId: libraryId)
-                        
-                        guard self.modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
-                        
-                        guard let library = self.modelData.calibreLibraries[libraryId]
-                        else { return }
-                        
-                        self.modelData.calibreUpdatedSubject.send(.library(library))
-                        
-                        Task {
-                            await self.modelData.removeLibrary(library: library)
-                        }
-                    }
-                    updateLibraryList()
+                    viewModel.deleteLibrary(at: indexSet)
                 })
             }
             
             NavigationLink(
                 destination: libraryRestoreHiddenView(),
-                isActive: $libraryRestoreListActive,
+                isActive: $viewModel.libraryRestoreListActive,
                 label: {
                     Text("Restore Hidden Libraries")
                 }
@@ -94,15 +73,15 @@ struct ServerDetailView: View {
         }
         .navigationTitle(server.name)
         .onAppear() {
-            updateLibraryList()
+            viewModel.updateLibraryList()
         }
-        .onChange(of: modelData.calibreLibraries, perform: { value in
-            updateLibraryList()
+        .onChange(of: modelData.calibreLibraries, perform: { _ in
+            viewModel.updateLibraryList()
         })
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
-                    modelData.removeDeleteBooksFromServer(server: server)
+                    viewModel.removeDeleteBooksFromServer(server: server)
                 }) {
                     Image(systemName: "xmark.bin")
                 }.disabled(
@@ -113,14 +92,11 @@ struct ServerDetailView: View {
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(action: {
-                    modelData.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: true, incremental: false)
+                    viewModel.probeReachability(server: server)
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                }.disabled(syncingLibrary)
+                }.disabled(viewModel.syncingLibrary)
             }
-        }
-        .onDisappear() {
-            syncLibraryColumnsCancellable?.cancel()
         }
     }
 
@@ -139,19 +115,15 @@ struct ServerDetailView: View {
     
     @ViewBuilder
     private func libraryEntryDestination(library: CalibreLibrary) -> some View {
-        if let libraryRealm = modelData.realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) {
-            LibraryDetailView(
-                library: library,
-                libraryRealm: libraryRealm
-            ).navigationTitle(library.name)
-        } else {
-            Text("Library not found in database.")
-        }
+        LibraryDetailView(
+            modelData: modelData,
+            library: library
+        ).navigationTitle(library.name)
     }
     
     @ViewBuilder
     private func libraryRestoreHiddenView() -> some View {
-        List(selection: $libraryRestoreListSelection) {
+        List(selection: $viewModel.libraryRestoreListSelection) {
             ForEach(
                 modelData.calibreLibraries.filter { $0.value.hidden && $0.value.server.id == server.id }.map{$0.value}.sorted{$0.id < $1.id},
                 id: \.id
@@ -161,26 +133,18 @@ struct ServerDetailView: View {
             }
         }
         .navigationTitle(Text("Restore Hidden Libraries"))
-        .environment(\.editMode, $libraryRestoreListEditMode)
+        .environment(\.editMode, .constant(.active))
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
-                    libraryRestoreListSelection.forEach {
-                        modelData.restoreLibrary(libraryId: $0)
-                        if let library =  self.modelData.calibreLibraries[$0],
-                           library.discoverable {
-                            self.modelData.calibreUpdatedSubject.send(.library(library))
-                        }
-                    }
-                    updater += 1
-                    libraryRestoreListActive.toggle()
+                    viewModel.restoreSelectedLibraries(updater: $updater)
                 }) {
                     Image(systemName: "checkmark.circle")
-                }.disabled(libraryRestoreListSelection.isEmpty)
+                }.disabled(viewModel.libraryRestoreListSelection.isEmpty)
             }
         }
         .onAppear {
-            libraryRestoreListSelection.removeAll()
+            viewModel.libraryRestoreListSelection.removeAll()
         }
     }
     
@@ -206,29 +170,35 @@ struct ServerDetailView: View {
             
             Spacer()
             VStack(alignment: .trailing) {
-                if let cnt = modelData.librarySyncStatus[library.id]?.cnt {
-                    Text("\(cnt) books")
-                } else if let msg = modelData.librarySyncStatus[library.id]?.msg {
-                    Text("processing\n\(msg)")
-                } else if modelData.librarySyncStatus[library.id]?.isSync == true {
-                    Text("processing ...")
-                }
-                if modelData.librarySyncStatus[library.id]?.isError == true {
-                    Text(modelData.librarySyncStatus[library.id]?.msg ?? "Status Unknown")
-                } else if let cnt = modelData.librarySyncStatus[library.id]?.cnt,
-                          let upd = modelData.librarySyncStatus[library.id]?.upd {
-                    if upd.count > 0, cnt > upd.count {
-                        if modelData.librarySyncStatus[library.id]?.isUpd == true {
-                            Text("Pulling book info, \(upd.count) to go")
+                if let status = modelData.librarySyncStatus[library.id] {
+                    if status.isSync {
+                        if let msg = status.msg {
+                            Text("processing\n\(msg)")
                         } else {
-                            Text("\(upd.count) entries not up to date")
+                            Text("processing ...")
                         }
-                    } else if let del = modelData.librarySyncStatus[library.id]?.del, del.count > 0 {
-                        Text("\(del.count) entries deleted from server")
-                            .foregroundColor(.red)
+                    } else if status.isError {
+                        Text(status.msg ?? "Status Unknown")
+                    } else {
+                        // Success state or finished syncing
+                        if let cnt = status.cnt {
+                            Text("\(cnt) books")
+                        } else if let msg = status.msg {
+                            Text(msg)
+                        }
+                        
+                        if status.isUpd && status.upd.count > 0 {
+                            Text("Pulling book info, \(status.upd.count) to go")
+                        } else if status.upd.count > 0 {
+                            Text("\(status.upd.count) entries not up to date")
+                        }
+                        
+                        if status.del.count > 0 {
+                            Text("\(status.del.count) entries deleted from server")
+                                .foregroundColor(.red)
+                        }
                     }
-                }
-                else if modelData.librarySyncStatus[library.id]?.isSync == false {
+                } else {
                     Text("Insufficient Info")
                 }
             }.font(.caption2)
@@ -266,16 +236,6 @@ struct ServerDetailView: View {
             }
         }
     }
-
-    private func updateLibraryList() {
-        libraryList = modelData.calibreLibraries.values.filter{ library in
-            library.server.id == server.id && library.hidden == false
-        }
-        .sorted{ $0.name < $1.name }
-        .map { $0.id }
-        
-    }
-    
 }
 
 struct ServerDetailView_Previews: PreviewProvider {

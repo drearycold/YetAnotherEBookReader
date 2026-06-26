@@ -8,10 +8,13 @@
 import Foundation
 import Combine
 import SwiftUI
+import RealmSwift
 
 class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
     @Published var previewViewModel = BookPreviewViewModel()
+    @Published var calibreBook: CalibreBook?
+    private var bookObserverToken: AnyCancellable?
     
     @Published var alertItem: AlertItem?
     
@@ -96,9 +99,7 @@ class BookDetailViewModel: ObservableObject {
         fetchTask?.cancel()
     }
     
-    func setup(book: CalibreBookRealm, calibreBook: CalibreBook) {
-        self.book = book
-        
+    func setup(bookId: String) {
         guard let modelData = self.modelData else {
             print("Warning: BookDetailViewModel setup called before modelData was set")
             return
@@ -106,14 +107,36 @@ class BookDetailViewModel: ObservableObject {
         
         modelData.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
         
+        guard let bookRealm = modelData.realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId) else {
+            print("Error: CalibreBookRealm not found for primary key \(bookId)")
+            return
+        }
+        self.book = bookRealm
+        
+        let calibreBook = modelData.convert(bookRealm: bookRealm)
+        self.calibreBook = calibreBook
+        
         if self.listVM == nil {
-            self.listVM = ReadingPositionListViewModel(
-                modelData: modelData, book: calibreBook, positions: calibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
-            )
-        } else {
+            if let calibreBook = calibreBook {
+                self.listVM = ReadingPositionListViewModel(
+                    modelData: modelData, book: calibreBook, positions: calibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+                )
+            }
+        } else if let calibreBook = calibreBook {
             self.listVM?.book = calibreBook
             self.listVM?.positions = calibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
         }
+        
+        bookObserverToken = bookRealm.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self = self, let b = self.book, let modelData = self.modelData else { return }
+                if let updatedCalibreBook = modelData.convert(bookRealm: b) {
+                    self.calibreBook = updatedCalibreBook
+                    self.listVM?.book = updatedCalibreBook
+                    self.listVM?.positions = updatedCalibreBook.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+                }
+            }
     }
     
     func fetchMetadata(book: CalibreBook) {

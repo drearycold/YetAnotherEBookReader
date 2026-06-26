@@ -1,5 +1,5 @@
 //
-//  LibraryOptionsDSReaderHelper.swift
+//  ServerOptionsDSReaderHelper.swift
 //  YetAnotherEBookReader
 //
 //  Created by 京太郎 on 2021/11/22.
@@ -12,28 +12,14 @@ struct ServerOptionsDSReaderHelper: View {
     @EnvironmentObject var modelData: ModelData
     @Environment(\.openURL) var openURL
 
+    @ObservedObject var viewModel: ServerViewModel
     @Binding var server: CalibreServer
-    @State var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
     
-    @State private var portStr = ""
-    @State private var configurationData: Data? = nil
-    @State private var configuration: CalibreDSReaderHelperConfiguration? = nil
-    
-    @State private var refreshCancellable: AnyCancellable? = nil
-
-    @State private var helperStatus: String? = nil
-    
-    @State private var configAlertItem: AlertItem?
-
     @State private var dictionaryViewerDetails = false
     @State private var countPagesDetails = false
     @State private var goodreadsSyncDetails = false
     
-    @State private var dsreaderHelperInstructionPresenting = false
-
     @Binding var updater: Int
-    
-    @State private var serverAddedCancellable: AnyCancellable?
     
     var body: some View {
         ZStack {
@@ -44,29 +30,14 @@ struct ServerOptionsDSReaderHelper: View {
                         
                         Spacer()
                         
-                        TextField("Plugin Service Port", text: $portStr)
+                        TextField("Plugin Service Port", text: $viewModel.portStr)
                             .frame(idealWidth: 80, maxWidth: 80)
                             .multilineTextAlignment(.center)
                             .keyboardType(.numberPad)
-                            .onReceive(Just(portStr)) { newValue in
-                                let filtered = newValue.filter { "0123456789".contains($0) }
-                                if let num = Int(filtered), num != dsreaderHelperServer.port {
-                                    if num > 65535 {
-                                        dsreaderHelperServer.port = 65535
-                                    } else if num < 1024 {
-                                        dsreaderHelperServer.port = 1024
-                                    } else {
-                                        dsreaderHelperServer.port = num
-                                    }
-                                }
-                            }
-                            .onChange(of: dsreaderHelperServer.port, perform: { value in
-                                portStr = value.description
-                            })
                         
                         Button(action:{
-                            if dsreaderHelperServer.port > 1024 {
-                                portStr = (dsreaderHelperServer.port-1).description
+                            if viewModel.dsreaderHelperServer.port > 1024 {
+                                viewModel.portStr = (viewModel.dsreaderHelperServer.port - 1).description
                             }
                         }) {
                             Image(systemName: "minus")
@@ -74,8 +45,8 @@ struct ServerOptionsDSReaderHelper: View {
                         .buttonStyle(.borderless)
                         
                         Button(action:{
-                            if dsreaderHelperServer.port < 65535 {
-                                portStr = (dsreaderHelperServer.port+1).description
+                            if viewModel.dsreaderHelperServer.port < 65535 {
+                                viewModel.portStr = (viewModel.dsreaderHelperServer.port + 1).description
                             }
                         }) {
                             Image(systemName: "plus")
@@ -88,7 +59,7 @@ struct ServerOptionsDSReaderHelper: View {
                     NavigationLink(
                         destination: List {
                             ForEach (
-                                configuration?.count_pages_prefs?.library_config?.map {
+                                viewModel.configuration?.count_pages_prefs?.library_config?.map {
                                     (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
                             ) { key, value in
                                 Section(header: Text("Library \(key)")) {
@@ -108,7 +79,7 @@ struct ServerOptionsDSReaderHelper: View {
                         HStack {
                             Text("Count Pages")
                             Spacer()
-                            if configuration?.count_pages_prefs?.library_config?.count ?? 0 > 0 {
+                            if viewModel.configuration?.count_pages_prefs?.library_config?.count ?? 0 > 0 {
                                 Text("detected")
                             } else {
                                 Text("missing")
@@ -119,7 +90,7 @@ struct ServerOptionsDSReaderHelper: View {
                     NavigationLink(
                         destination: List{
                             ForEach (
-                                configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
+                                viewModel.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.map {
                                     (key: $0.key, value: $0.value) }.sorted { $0.key < $1.key } ?? [], id: \.key
                             ) { user_entry in
                                 Section(header: Text("Profile \(user_entry.key)")) {
@@ -133,7 +104,7 @@ struct ServerOptionsDSReaderHelper: View {
                         HStack {
                             Text("Goodreads Sync")
                             Spacer()
-                            if configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
+                            if viewModel.configuration?.goodreads_sync_prefs?.plugin_prefs.Users.count ?? 0 > 0 {
                                 Text("detected")
                             } else {
                                 Text("missing")
@@ -145,7 +116,7 @@ struct ServerOptionsDSReaderHelper: View {
                     HStack {
                         Text("Dictionary Viewer")
                         Spacer()
-                        if let options = configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
+                        if let options = viewModel.configuration?.dsreader_helper_prefs?.plugin_prefs.Options,
                            options.dictViewerEnabled,
                            options.dictViewerLibraryName.count > 0 {
                             Text("Enabled\nUsing Library \(options.dictViewerLibraryName)")
@@ -158,9 +129,9 @@ struct ServerOptionsDSReaderHelper: View {
                     }
                 }
             }
-            .disabled(helperStatus != nil)
+            .disabled(viewModel.helperStatus != nil)
             
-            if let helperStatus = helperStatus {
+            if let helperStatus = viewModel.helperStatus {
                 VStack {
                     Text(helperStatus)
                         .padding()
@@ -171,35 +142,37 @@ struct ServerOptionsDSReaderHelper: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
-                    connect()
+                    viewModel.connectDSReader(server: server)
                 }) {
                     Image(systemName: "square.and.arrow.down")
                 }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button(action:{
-                    dsreaderHelperInstructionPresenting = true
+                    viewModel.dsreaderHelperInstructionPresenting = true
                 }) {
                     Image(systemName: "questionmark.circle")
                 }
             }
         }
         .onAppear() {
-            setStates()
+            viewModel.setDSReaderStates(server: server)
         }
         .onChange(of: updater) { _ in
-            setStates()
+            viewModel.setDSReaderStates(server: server)
         }
-        .alert(item: $configAlertItem) { item in
+        .alert(item: $viewModel.configAlertItem) { item in
             if item.id == "updateConfigAlert" {
                 return Alert(
                     title: Text("Use DSReader Helper Config?"),
                     message: Text("Successfully downloaded helper plugin configurations from server, update local settings?"),
-                    primaryButton: .default(Text("Update"), action: update),
+                    primaryButton: .default(Text("Update"), action: {
+                        viewModel.updateDSReaderHelperConfig(server: server)
+                    }),
                     secondaryButton: .cancel({
-                        dsreaderHelperServer.configuration = nil
-                        dsreaderHelperServer.configurationData = nil
-                        helperStatus = nil
+                        viewModel.dsreaderHelperServer.configuration = nil
+                        viewModel.dsreaderHelperServer.configurationData = nil
+                        viewModel.helperStatus = nil
                     }))
             }
             if item.id == "failedParseConfigAlert" {
@@ -211,133 +184,28 @@ struct ServerOptionsDSReaderHelper: View {
             }
             if item.id == "failedConnectConfigAlert" {
                 return Alert(
-                    title: Text("DSReader Helper Unavaiable"),
-                    message: Text("Have you installed DSReader Helper plugin on calibre server?\nThe plugin will greatly enhance this App's abilty to interact with services provided by your favorite calibre plugins. We highly recommend you look into it."),
+                    title: Text("DSReader Helper Unavailable"),
+                    message: Text("Have you installed DSReader Helper plugin on calibre server?\nThe plugin will greatly enhance this App's ability to interact with services provided by your favorite calibre plugins. We highly recommend you look into it."),
                     primaryButton: .default(Text("Great, show me")) {
-                        dsreaderHelperInstructionPresenting = true
-                        helperStatus = nil
+                        viewModel.dsreaderHelperInstructionPresenting = true
+                        viewModel.helperStatus = nil
                     },
                     secondaryButton: .cancel(Text("Maybe Later")) {
-                        helperStatus = nil
+                        viewModel.helperStatus = nil
                     }
                 )
             }
             return Alert(
                 title: Text("Unexpected"),
                 dismissButton: .cancel(Text("Dismiss")) {
-                    helperStatus = nil
+                    viewModel.helperStatus = nil
                 }
             )
         }
-        .sheet(isPresented: $dsreaderHelperInstructionPresenting, content: {
+        .sheet(isPresented: $viewModel.dsreaderHelperInstructionPresenting, content: {
             instructions()
                 .padding()
         })
-    }
-    
-    private func setStates() {
-        let dsreaderHelperServer = modelData.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
-            if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
-                dsreaderHelper.port = (url.port ?? -1) + 1
-            }
-            return dsreaderHelper
-        }()
-        
-        configurationData = dsreaderHelperServer.configurationData
-        configuration = dsreaderHelperServer.configuration
-        
-        self.dsreaderHelperServer = dsreaderHelperServer
-        portStr = dsreaderHelperServer.port.description
-    }
-    
-    private func connect() {
-        refreshCancellable?.cancel()
-        configurationData = nil
-        configuration = nil
-        helperStatus = "Connecting..."
-
-        let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
-        
-        Task {
-            do {
-                let (config, data) = try await connector.refreshConfiguration("_")
-                guard config.dsreader_helper_prefs != nil else {
-                    throw URLError(.badServerResponse)
-                }
-                configuration = config
-                configurationData = data
-                helperStatus = "Connected"
-
-                if configuration?.count_pages_prefs != nil {
-                    helperStatus = "Pulling Library-Specific Configurations..."
-                    var libraryConfigs:[String: CalibreCountPagesPrefs.LibraryConfig] = [:]
-                    
-                    try await withThrowingTaskGroup(of: (String, CalibreDSReaderHelperConfiguration).self) { group in
-                        for libraryKey in modelData.calibreLibraries.filter({ $0.value.server.uuid == server.uuid
-                            &&
-                            $0.value.hidden == false
-                        }).map ({ $0.value.key }) {
-                            group.addTask {
-                                return (libraryKey, try await connector.refreshConfiguration(libraryKey).0)
-                            }
-                        }
-                        
-                        for try await (libraryKey, config) in group {
-                            if let libraryConfig = config.count_pages_prefs?.library_config?[libraryKey] {
-                                libraryConfigs[libraryKey] = libraryConfig
-                            }
-                        }
-                    }
-                    configuration?.count_pages_prefs?.library_config = libraryConfigs
-                    configurationData = try JSONEncoder().encode(configuration!)
-                }
-                
-                configAlertItem = AlertItem(id: "updateConfigAlert")
-            } catch {
-                refreshCancellable = connector.refreshConfiguration()?
-                    .receive(on: DispatchQueue.main)
-                    .sink(receiveCompletion: { complete in
-                        print("receiveCompletion \(complete)")
-                        switch(complete) {
-                        case .finished:
-                            break
-                        default:
-                            helperStatus = "Failed to Connect"
-                            configAlertItem = AlertItem(id: "failedConnectConfigAlert")
-                        }
-                    }, receiveValue: { data in
-                        let decoder = JSONDecoder()
-                        var config: CalibreDSReaderHelperConfiguration? = nil
-                        do {
-                            config = try decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data.data)
-                        } catch {
-                            print(error)
-                        }
-                        if let config = config, config.dsreader_helper_prefs != nil {
-                            configuration = config
-                            configurationData = data.data
-                            helperStatus = "Connected"
-
-                            configAlertItem = AlertItem(id: "updateConfigAlert")
-                        } else {
-                            helperStatus = "Failed"
-        //                    failedParseConfigAlertPresenting = true
-                            configAlertItem = AlertItem(id: "failedParseConfigAlert")
-                        }
-                    })
-            }
-        }
-    }
-    
-    private func update() {
-        guard let configuration = configuration else { return }
-        dsreaderHelperServer.configuration = configuration
-        dsreaderHelperServer.configurationData = configurationData
-        
-        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
-        
-        helperStatus = nil
     }
     
     @ViewBuilder
@@ -397,19 +265,17 @@ struct ServerOptionsDSReaderHelper: View {
             }
         }
     }
-    
 }
 
 struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
     static private var modelData = ModelData()
 
     @State static private var server = CalibreServer(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-
-    @State static private var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 1234)
     @State static private var updater = 0
     static var previews: some View {
+        let viewModel = ServerViewModel(modelData: modelData, server: server)
         NavigationView {
-            ServerOptionsDSReaderHelper(server: $server, dsreaderHelperServer: dsreaderHelperServer, updater: $updater)
+            ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater)
                 .environmentObject(modelData)
         }
         .navigationViewStyle(StackNavigationViewStyle())

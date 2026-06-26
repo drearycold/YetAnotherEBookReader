@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import RealmSwift
 
 struct LibraryInfoBookListInfoView: View {
     @EnvironmentObject var modelData: ModelData

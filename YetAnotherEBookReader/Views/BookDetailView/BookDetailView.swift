@@ -1,5 +1,5 @@
 //
-//  BookView.swift
+//  BookDetailView.swift
 //  YetAnotherEBookReader
 //
 //  Created by 京太郎 on 2021/1/25.
@@ -8,17 +8,13 @@
 import Foundation
 import OSLog
 import SwiftUI
-import RealmSwift
-//import struct Kingfisher.KFImage
 import KingfisherSwiftUI
 
 struct BookDetailView: View {
     @Environment(\.horizontalSizeClass) var sizeClass
     @Environment(\.openURL) var openURL
     
-    @ObservedRealmObject var book: CalibreBookRealm
-    
-    @ObservedResults(BookDeviceReadingPositionRealm.self, configuration: ModelData.shared?.realmConf) var readingPositions
+    let bookId: String
     
     var viewMode: Mode
     
@@ -26,21 +22,15 @@ struct BookDetailView: View {
     
     var defaultLog = Logger()
     
-
     @StateObject private var _viewModel = BookDetailViewModel()
     
     var body: some View {
-        
         ScrollView {
-            Text(book.title)
-            if let calibreBook = _viewModel.convert(bookRealm: book) {
+            if let calibreBook = _viewModel.calibreBook {
+                Text(calibreBook.title)
                 viewContent(book: calibreBook, isCompat: sizeClass == .compact)
-                    .onAppear() {
-                        _viewModel.setup(book: book, calibreBook: calibreBook)
-                        _viewModel.fetchMetadata(book: calibreBook)
-                    }
                     .padding(EdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10))
-                    .navigationTitle(Text(book.title))
+                    .navigationTitle(Text(calibreBook.title))
                     .toolbar {
                         toolbarContent(book: calibreBook)
                     }
@@ -48,7 +38,15 @@ struct BookDetailView: View {
                         return Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
                     }
             } else {
-                EmptyView()
+                Text("Loading book details...")
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding()
+            }
+        }
+        .onAppear() {
+            _viewModel.setup(bookId: bookId)
+            if let calibreBook = _viewModel.calibreBook {
+                _viewModel.fetchMetadata(book: calibreBook)
             }
         }
     }

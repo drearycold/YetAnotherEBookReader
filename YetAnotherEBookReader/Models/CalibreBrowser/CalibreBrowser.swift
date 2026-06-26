@@ -174,6 +174,9 @@ class CalibreLibrarySearchManager: ObservableObject {
 
     private let searchRuntimeLock = NSRecursiveLock()
     private(set) var unifiedSearchService: UnifiedSearchService!
+    private(set) var libraryCategoryService: LibraryCategoryService!
+    private(set) var unifiedCategoryService: UnifiedCategoryService!
+    private(set) var categoryCacheRepository: CategoryCacheRepository!
     
     private var cacheCategoryLibraryObjects: [CalibreLibraryCategoryKey: CalibreLibraryCategoryObject] = [:]
     private var cacheCategoryUnifiedObjects: [CalibreUnifiedCategoryKey: CalibreUnifiedCategoryObject] = [:]
@@ -210,10 +213,19 @@ class CalibreLibrarySearchManager: ObservableObject {
         self.cacheRealmConf = modelData.realmConf
         
         let cacheRepository = RealmSearchCacheStore(config: modelData.realmConf, modelData: modelData)
+        self.categoryCacheRepository = cacheRepository
         let librarySearch = LibrarySearchService(service: service, repository: cacheRepository)
         self.unifiedSearchService = UnifiedSearchService(
             repository: cacheRepository,
             librarySearchService: librarySearch,
+            libraryProvider: modelData
+        )
+        self.libraryCategoryService = LibraryCategoryService(
+            service: service,
+            repository: cacheRepository
+        )
+        self.unifiedCategoryService = UnifiedCategoryService(
+            repository: cacheRepository,
             libraryProvider: modelData
         )
         
@@ -243,10 +255,6 @@ class CalibreLibrarySearchManager: ObservableObject {
             registerSearchRefreshReceiver()
             registerSearchRequestReceiver()
             registerMetadataRequestReceiver()
-            
-
-            registerCategoryRefreshReceiver()
-            registerCategoryMergeReceiver()
             
             registerLibraryUpdateReceiver()
         }
@@ -311,60 +319,6 @@ class CalibreLibrarySearchManager: ObservableObject {
         
 
         
-        cacheRealm.objects(CalibreLibraryCategoryObject.self).forEach { cacheObj in
-            let categoryKey = CalibreLibraryCategoryKey(libraryId: cacheObj.libraryId, categoryName: cacheObj.categoryName)
-            
-            cacheCategoryLibraryObjects[categoryKey] = cacheObj
-            
-            registerCacheCategoryLibraryChangeReceiver(cacheObj: cacheObj)
-        }
-        
-        try! cacheRealm.write {
-            cacheRealm.delete(
-                cacheRealm.objects(CalibreUnifiedCategoryObject.self)
-                    .where({ $0.categoryName == "" })
-            )
-        }
-        
-        cacheRealm.objects(CalibreUnifiedCategoryObject.self).changesetPublisher
-            .receive(on: cacheRealmQueue)
-            .sink { [self] changes in
-                switch changes {
-                case .initial(let result):
-                    result.forEach { cacheObj in
-                        cacheCategoryUnifiedObjects[cacheObj.key] = cacheObj
-                        
-                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
-                        
-                        if cacheObj.itemsCount == 0,
-                           cacheObj.totalNumber < 999 {
-                            refreshUnifiedCategoryResult(cacheObj.key)
-                        }
-                    }
-                case .update(let result, deletions: _, insertions: let insertions, modifications: _):
-                    insertions.forEach {
-                        let cacheObj = result[$0]
-                        
-                        cacheCategoryUnifiedObjects[cacheObj.key] = cacheObj
-                        
-                        registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
-                        
-                        if cacheObj.itemsCount == 0,
-                           cacheObj.totalNumber < 999 {
-                            refreshUnifiedCategoryResult(cacheObj.key)
-                        }
-                    }
-                case .error(_):
-                    break
-                }
-            }
-            .store(in: &cancellables)
-        
-//        cacheRealm.objects(CalibreUnifiedCategoryObject.self).forEach { cacheObj in
-//            cacheCategoryUnifiedObjects[cacheObj.categoryName] = cacheObj
-//
-//            registerCacheCategoryUnifiedChangeReceiver(cacheObj: cacheObj)
-//        }
     }
     
     func initCacheSearchObject(searchKey: LibrarySearchKey) -> CalibreLibrarySearchObject {
@@ -410,23 +364,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     
 
     
-    private func initCacheLibraryCategoryObject(categoryKey: CalibreLibraryCategoryKey) -> CalibreLibraryCategoryObject {
-        let cacheObj = CalibreLibraryCategoryObject()
-        
-        cacheObj.libraryId = categoryKey.libraryId
-        cacheObj.categoryName = categoryKey.categoryName
-        cacheObj.generation = .distantPast
-        
-        try! cacheRealm.write {
-            cacheRealm.add(cacheObj)
-        }
-        
-        cacheCategoryLibraryObjects[categoryKey] = cacheObj
-        
-        registerCacheCategoryLibraryChangeReceiver(cacheObj: cacheObj)
-        
-        return cacheObj
-    }
+
     
     func registerCacheSearchValueChangeReceiver(librarySearchKey: LibrarySearchKey, cacheObj: CalibreLibrarySearchObject, sourceObj: CalibreLibrarySearchValueObject) {
         sourceObj.bookIds.changesetPublisher
@@ -551,55 +489,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     
 
     
-    func registerCacheCategoryLibraryChangeReceiver(cacheObj: CalibreLibraryCategoryObject) {
-        cacheObj.items.changesetPublisher
-            .subscribe(on: cacheRealmQueue)
-            .collect(.byTime(cacheRealmQueue, .seconds(2)))
-            .sink { changesList in
-                var initialCount = 0
-                var updateCount = 0
-                changesList.forEach { changes in
-                    switch changes {
-                    case .error(_):
-                        break
-                    case .initial(_):
-                        initialCount += cacheObj.items.count
-                        break
-                    case .update(_, deletions: let deletions, insertions: let insertions, modifications: let modifications):
-                        print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) deletion count=\(deletions.count)")
-                        print("\(#function) \(cacheObj.libraryId) \(cacheObj.categoryName) insertions count=\(insertions.count)")
-                        
-                        updateCount += deletions.count + insertions.count + modifications.count
-                    }
-                }
-                
-                if updateCount > 0 {
-                    self.categoryMergerHandlerSubject.send(.init(categoryName: cacheObj.categoryName, search: ""))
-                }
-                else if initialCount > 0 {
-                    self.categoryMergerRequestSubject.send(.init(categoryName: cacheObj.categoryName, search: ""))
-                }
-            }
-            .store(in: &cancellables)
-    }
-    
-    func registerCacheCategoryUnifiedChangeReceiver(cacheObj: CalibreUnifiedCategoryObject) {
-        cacheObj.items.changesetPublisher
-            .subscribe(on: cacheRealmQueue)
-            .sink { changes in
-                switch changes {
-                case .error(_):
-                    break
-                case .initial(_):
-                    break
-                case .update(_, deletions: let deletions, insertions: let insertions, modifications: _):
-                    print("\(#function) \(cacheObj.categoryName) deletion count=\(deletions.count)")
-                    print("\(#function) \(cacheObj.categoryName) insertions count=\(insertions.count)")
-                    break
-                }
-            }
-            .store(in: &cancellables)
-    }
+
     
     func registerSearchRefreshReceiver() {
         searchRefreshSubject.receive(on: cacheRealmQueue)
@@ -870,213 +760,7 @@ class CalibreLibrarySearchManager: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func registerCategoryRefreshReceiver() {
-        categoryRequestSubject
-            .receive(on: cacheRealmQueue)
-            .flatMap { request -> AnyPublisher<LibraryCategoryList, Never> in
-                var justRequest = request
-                justRequest.retries = 0
-                
-                let just = Just(justRequest).setFailureType(to: Never.self).eraseToAnyPublisher()
-                
-                guard let serverUrl = self.service.getServerUrlByReachability(server: request.library.server)
-                else { return just }
-                
-                if let object = self.cacheCategoryLibraryObjects[.init(libraryId: request.library.id, categoryName: request.category.name)] {
-                    guard object.generation < request.library.lastModified
-                    else {
-                        return just
-                    }
-                }
-                
-                var urlComponents = URLComponents(string: request.category.url)
-                urlComponents?.queryItems = [
-                    URLQueryItem(name: "num", value: request.num.description),
-                    URLQueryItem(name: "offset", value: request.items.count.description)
-                ]
-                guard let url = urlComponents?.url(relativeTo: serverUrl)
-                else { return just }
-                
-                return self.service.urlSession(server: request.library.server, qos: .background).dataTaskPublisher(for: url)
-                    .map {
-                        $0.data
-                    }
-                    .decode(type: LibraryCategoryListResult.self, decoder: JSONDecoder())
-                    .map { result -> LibraryCategoryList in
-                        var request = request
-                        request.result = result
-                        return request
-                    }
-                    .replaceError(with: request)
-                    .eraseToAnyPublisher()
-            }
-            .receive(on: cacheRealmQueue)
-            .sink { [self] categoryList in
-                let categoryKey = CalibreLibraryCategoryKey(libraryId: categoryList.library.id, categoryName: categoryList.category.name)
-                
-                
-                // retry request
-                guard let result = categoryList.result else {
-                    if categoryList.retries > 0 {
-                        var categoryList = categoryList
-                        categoryList.retries -= 1
-                        cacheWorkerQueue.asyncAfter(deadline: .now() + 60.0) {
-                            self.categoryRequestSubject.send(categoryList)
-                        }
-                    }
-                    
-                    return
-                }
-                
-                if let cacheObj = cacheCategoryLibraryObjects[categoryKey] {
-                    guard result.total_num != cacheObj.items.count ||
-                        categoryList.library.lastModified > cacheObj.generation
-                    else {
-                        print("\(#function) skipping update for \(categoryKey)")
-                        return
-                    }
-                }
-                
-                
-                var categoryList = categoryList
-                
-                try! cacheRealm.write({
-                    result.items.forEach { item in
-                        let itemObj = cacheRealm
-                            .objects(CalibreLibraryCategoryItemObject.self)
-                            .where({ $0.url == item.url })
-                            .first ?? CalibreLibraryCategoryItemObject()
-                        
-                        if itemObj.realm == nil {
-                            itemObj.name = item.name
-                            itemObj.averageRating = item.average_rating
-                            itemObj.count = item.count
-                            itemObj.url = item.url
-                            cacheRealm.add(itemObj)
-                        } else {
-                            if itemObj.name != item.name {
-                                itemObj.name = item.name
-                            }
-                            if itemObj.averageRating != item.average_rating {
-                                itemObj.averageRating = item.average_rating
-                            }
-                            if itemObj.count != item.count {
-                                itemObj.count = item.count
-                            }
-                        }
-                        
-                        categoryList.items.append(itemObj)
-                    }
-                })
-                
-                if categoryList.items.count < result.total_num {
-                    // request more items if total_num is not reached
-                    categoryList.retries = 9
-                    categoryList.num = min(result.total_num - categoryList.items.count, 10000)
-                    categoryRequestSubject.send(categoryList)
-                } else {
-                    let cacheObj = cacheCategoryLibraryObjects[categoryKey] ?? initCacheLibraryCategoryObject(categoryKey: categoryKey)
-                    
-                    try? cacheRealm.write {
-                        cacheObj.items.removeAll()
-                        cacheObj.items.append(objectsIn: categoryList.items)
-                        cacheObj.generation = categoryList.library.lastModified
-                        cacheObj.totalNumber = result.total_num
-                    }
-                }
-            }
-            .store(in: &cancellables)
-    }
-    
-    fileprivate func registerCategoryMergeReceiver() {
-        self.categoryMergerRequestSubject
-            .collect(.byTime(RunLoop.main, .seconds(1)))
-            .sink { categoryKeys in
-                Set(categoryKeys).forEach {
-                    self.categoryMergerHandlerSubject.send($0)
-                }
-            }
-            .store(in: &cancellables)
-        
-        self.categoryMergerHandlerSubject.receive(on: cacheRealmQueue)
-            .map { categoryKey -> (CalibreUnifiedCategoryKey, [String: [CalibreLibraryCategoryItemObject]]) in
-                let nameItems = self.cacheCategoryLibraryObjects.filter {
-                    $0.key.categoryName == categoryKey.categoryName
-                }.filter {
-                    guard let library = self.modelData.calibreLibraries[$0.key.libraryId],
-                          library.hidden == false,
-                          library.server.removed == false
-                    else {
-                        return false
-                    }
-                    
-                    return true
-                }.reduce(into: [String: [CalibreLibraryCategoryItemObject]]()) { partialResult, libraryCategoryEntry in
-                    
-                    libraryCategoryEntry.value.items
-                        .filter({
-                            categoryKey.search.isEmpty
-                            ||
-                            $0.name.localizedCaseInsensitiveContains(categoryKey.search)
-                        })
-                        .forEach { categoryItem in
-                        
-                        if partialResult[categoryItem.name] == nil {
-                            partialResult[categoryItem.name] = [categoryItem]
-                        } else {
-                            partialResult[categoryItem.name]?.append(categoryItem)
-                        }
-                    }
-                }
-                
-                return (categoryKey, nameItems)
-            }
-            .sink { categoryKey, nameItems in
-                let cacheObj = self.retrieveUnifiedCategoryObject(categoryKey.categoryName, categoryKey.search, self.cacheRealm.objects(CalibreUnifiedCategoryObject.self))
-                
-                try! self.cacheRealm.write {
-                    if cacheObj.realm == nil {
-                        self.cacheRealm.add(cacheObj)
-                    } else {
-                        cacheObj.items.removeAll()
-                        cacheObj.itemsCount = 0
-                        cacheObj.totalNumber = 0
-                    }
-                    
-                    guard nameItems.count < 1000
-                    else {
-                        nameItems.forEach {
-                            cacheObj.totalNumber += $0.value.reduce(0, { partialResult, itemObj in
-                                partialResult + itemObj.count
-                            })
-                        }
-                        cacheObj.itemsCount = nameItems.count
-                        
-                        return
-                    }
-                    
-                    nameItems
-                        .sorted { $0.key < $1.key }
-                        .forEach { nameItemEntry in
-                            let unifiedItemObj = self.getOrCreateUnifiedCategoryItem(categoryName: categoryKey.categoryName, name: nameItemEntry.key)
-                            
-                            unifiedItemObj.items.removeAll()
-                            unifiedItemObj.items.insert(objectsIn: nameItemEntry.value)
-                            
-                            let stats = unifiedItemObj.items.reduce((0, 0.0)) { partialResult, itemObj in
-                                (partialResult.0 + itemObj.count, partialResult.1 + itemObj.averageRating * Double(itemObj.count))
-                            }
-                            unifiedItemObj.count = stats.0
-                            unifiedItemObj.averageRating = stats.1 / Double(stats.0)
-                            
-                            cacheObj.items.append(unifiedItemObj)
-                            cacheObj.itemsCount += 1
-                            cacheObj.totalNumber += stats.0
-                        }
-                }
-            }
-            .store(in: &cancellables)
-    }
+
     
     func registerLibraryUpdateReceiver() {
         return;
@@ -1195,22 +879,7 @@ class CalibreLibrarySearchManager: ObservableObject {
         }
     }
     
-    func getOrCreateUnifiedCategoryItem(categoryName: String, name: String) -> CalibreUnifiedCategoryItemObject {
-        if let obj = cacheRealm.objects(CalibreUnifiedCategoryItemObject.self).where({
-            $0.categoryName == categoryName && $0.name == name
-        }).first {
-            return obj
-        } else {
-            let obj = CalibreUnifiedCategoryItemObject()
-            
-            obj.categoryName = categoryName
-            obj.name = name
-            
-            cacheRealm.add(obj)
-            
-            return obj
-        }
-    }
+
     
     func getOrCreateLibrarySearchValueObject(librarySearchKey: LibrarySearchKey, cacheObj: CalibreLibrarySearchObject, serverUrl: String) -> CalibreLibrarySearchValueObject {
         if let sourceObjOpt = cacheObj.sources[serverUrl],
@@ -1290,30 +959,7 @@ class CalibreLibrarySearchManager: ObservableObject {
     
 
     
-    func retrieveUnifiedCategoryObject(_ categoryName: String, _ filter: String, _ unifiedCategories: Results<CalibreUnifiedCategoryObject>) -> CalibreUnifiedCategoryObject {
-        if let object = unifiedCategories.where({
-            $0.categoryName == categoryName
-            &&
-            $0.search == filter
-        }).first {
-            return object
-        }
-        
-        let object = CalibreUnifiedCategoryObject()
-        object.categoryName = categoryName
-        object.search = filter
-        object.totalNumber = 0
-        
-        return object
-    }
-    
-    func refreshUnifiedCategoryResult(_ categoryKey: CalibreUnifiedCategoryKey) {
-        self.categoryMergerHandlerSubject.send(categoryKey)
-    }
-    
-    func refreshLibraryCategory(library: CalibreLibrary, category: CalibreLibraryCategory) {
-        self.categoryRequestSubject.send(.init(library: library, category: category, reqId: 0, offset: 0, num: 0))
-    }
+
     
     private func cleanDuplicateLibrarySearchObjects() {
         let allObjs = cacheRealm.objects(CalibreLibrarySearchObject.self)

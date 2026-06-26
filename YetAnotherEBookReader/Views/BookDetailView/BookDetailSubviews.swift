@@ -1,6 +1,5 @@
 import SwiftUI
 import KingfisherSwiftUI
-import RealmSwift
 
 struct BookCoverView: View {
     @ObservedObject var viewModel: BookDetailViewModel

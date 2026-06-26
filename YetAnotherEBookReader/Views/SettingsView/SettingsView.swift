@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Combine
-import RealmSwift
 
 struct SettingsView: View {
     @EnvironmentObject var modelData: ModelData
@@ -41,6 +40,7 @@ struct SettingsView: View {
             }) {
                 NavigationLink(
                     destination: AddModServerView(
+                        viewModel: ServerViewModel(modelData: modelData, server: nil),
                         server: Binding<CalibreServer>(
                             get: {
                                 .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -266,7 +266,7 @@ struct SettingsView: View {
         print("\(#function) addServer finished")
         
         DispatchQueue(label: "data").async {
-            let realm = try! Realm(configuration: modelData.realmConf)
+//            let realm = try! Realm(configuration: modelData.realmConf)
 
             //update books
 //            let booksCached = realm.objects(CalibreBookRealm.self)

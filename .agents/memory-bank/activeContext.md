@@ -44,8 +44,22 @@ The primary focus is the Modernization of the Unified Search Subsystem (`Calibre
 - [x] 27. Decoupled `libraryStatuses` from `UnifiedSearchResult` by updating `UnifiedSearchService` to stream `SearchUpdate` value types and `UnifiedSearchViewModel` to publish statuses separately.
 - [x] 28. Refactored search criteria and UI preferences to `LibraryInfoView.ViewModel`, removing criteria properties from `UnifiedSearchViewModel` and passing `SearchCriteriaMergedKey` to `startSearch(key:)` explicitly.
 - [x] 29. Fixed the Combine bridge task leak in `publisher(for:)` by wrapping the subscription block inside `Deferred`.
+- [x] 30. Bypassed the autoUpdate check in category fetching inside `ModelData.syncLibrary(request:)` to ensure calibre library categories are synced and populated on startup/probes even when autoUpdate ("Available when Offline") is disabled.
+- [x] 31. Decoupled `LibraryInfoCategoryListView` and `LibraryInfoView` completely from `RealmSwift` by introducing `CategoryCacheSummary` value types and querying summaries via `CategoryCacheRepository` reactively inside the `LibraryInfoView.ViewModel`.
+- [x] 32. Decoupled `LibraryInfoCategoryItemsView` completely from `RealmSwift` by implementing cache invalidation in the repository layer and exposing `forceRefreshCategory` in the `UnifiedCategoryViewModel`.
+- [x] 33. Decoupled `BookDetailView` completely from `RealmSwift` by shifting Realm database queries and reactive observations to `BookDetailViewModel`.
+- [x] 34. Fixed EnvironmentObject propagation crash in `LibraryInfoCategoryItemsView` and `LibraryInfoView` by explicitly injecting the `libraryInfoViewModel` environment object to `LibraryInfoBookListView`.
+- [x] 35. Refactored ServerView components (`AddModServerView`, `ServerDetailView`, `ServerOptionsDSReaderHelper`, `LibraryDetailView`) to MVVM using two view models (`ServerViewModel` and `LibraryViewModel`), completely decoupling `LibraryDetailView` from Realm.
+- [x] 36. Fixed `libraryRowBuilder` sync status UI in `ServerDetailView.swift` to display mutually exclusive status text instead of overlapping states.
+- [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
+
+## Active Tasks
+- [x] Decouple category views completely from RealmSwift.
+- [x] Decouple BookDetailView completely from RealmSwift.
+- [x] Refactor ServerView components to MVVM.
+- [x] Fix libraryRowBuilder sync status UI representation.
+- [x] Refactor ReaderOptionsView to MVVM and register project files.
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.
 - **Decoupling Goal:** Views should minimize direct dependency on `ModelData` for network operations; logic should reside in dedicated ViewModels.
-
