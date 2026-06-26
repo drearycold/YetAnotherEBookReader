@@ -14,7 +14,7 @@ import RealmSwift
 
 @MainActor
 final class DSReaderHelperConnectorTests: XCTestCase {
-    var modelData: ModelData!
+    var container: AppContainer!
     var service: CalibreServerService!
     var server: CalibreServer!
     var library: CalibreLibrary!
@@ -26,16 +26,16 @@ final class DSReaderHelperConnectorTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "DSReaderHelperConnectorTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
 
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
-        service = modelData.calibreServerService
+        container = AppContainer(mock: true)
+        container.realmConf = config
+        service = container.calibreServerService
 
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "user", password: "pass")
         library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
 
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
 
         dsreaderHelperServer = CalibreServerDSReaderHelper(port: 8080)
 
@@ -56,8 +56,8 @@ final class DSReaderHelperConnectorTests: XCTestCase {
         library = nil
         server = nil
         service = nil
-        modelData = nil
-        ModelData.shared = nil
+        container = nil
+        AppContainer.shared = nil
         try await super.tearDown()
     }
 

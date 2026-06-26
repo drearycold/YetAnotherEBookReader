@@ -17,7 +17,7 @@ import GoogleMobileAds
 @available(macCatalyst 14.0, *)
 class EpubFolioReaderContainer: FolioReaderContainer {
 //    var savedPositionObserver: NSKeyValueObservation?
-    var modelData: ModelData?
+    var container: AppContainer?
     weak var readerEngineDelegate: ReaderEngineDelegate?
     
     var yabrFolioReaderPageDelegate: YabrFolioReaderPageDelegate!

@@ -10,7 +10,7 @@ import Combine
 import SwiftUI
 
 class ReaderOptionsViewModel: ObservableObject {
-    let modelData: ModelData
+    let container: AppContainer
     let fontsManager: FontsManager
     
     // Help & Sheet presentation state
@@ -26,8 +26,8 @@ class ReaderOptionsViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
-    init(modelData: ModelData, fontsManager: FontsManager) {
-        self.modelData = modelData
+    init(container: AppContainer, fontsManager: FontsManager) {
+        self.container = container
         self.fontsManager = fontsManager
         
         setupBindings()
@@ -35,7 +35,7 @@ class ReaderOptionsViewModel: ObservableObject {
     
     private func setupBindings() {
         // Observe dismissAllSubject to dismiss sheets/popovers
-        modelData.dismissAllSubject
+        container.dismissAllSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
@@ -58,25 +58,25 @@ class ReaderOptionsViewModel: ObservableObject {
     }
     
     // MARK: - Format / Reader Preference Bindings
-    
+
     var preferredFormatBinding: Binding<Format> {
         Binding(
             get: { [weak self] in
-                self?.modelData.getPreferredFormat() ?? .EPUB
+                self?.container.sessionManager.getPreferredFormat() ?? .EPUB
             },
             set: { [weak self] in
-                self?.modelData.updatePreferredFormat(for: $0)
+                self?.container.sessionManager.updatePreferredFormat(for: $0)
             }
         )
     }
-    
+
     func preferredReaderBinding(for format: Format) -> Binding<ReaderType> {
         Binding(
             get: { [weak self] in
-                self?.modelData.getPreferredReader(for: format) ?? .YabrEPUB
+                self?.container.sessionManager.getPreferredReader(for: format) ?? .YabrEPUB
             },
             set: { [weak self] in
-                self?.modelData.updatePreferredReader(for: format, with: $0)
+                self?.container.sessionManager.updatePreferredReader(for: format, with: $0)
             }
         )
     }

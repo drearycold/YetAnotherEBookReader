@@ -16,7 +16,7 @@ class UnifiedCategoryViewModel: ObservableObject {
     
     private let unifiedCategoryService: UnifiedCategoryService
     private let categoryCacheRepository: CategoryCacheRepository
-    private let modelData: ModelData
+    private let container: AppContainer
     private var mergeTask: Task<Void, Never>?
     
     private var currentCategoryName: String?
@@ -27,14 +27,14 @@ class UnifiedCategoryViewModel: ObservableObject {
     init(
         unifiedCategoryService: UnifiedCategoryService? = nil,
         categoryCacheRepository: CategoryCacheRepository? = nil,
-        modelData: ModelData? = nil
+        container: AppContainer? = nil
     ) {
-        guard let resolvedModelData = modelData ?? ModelData.shared else {
-            fatalError("ModelData.shared must be initialized before creating UnifiedCategoryViewModel")
+        guard let resolvedAppContainer = container ?? AppContainer.shared else {
+            fatalError("AppContainer.shared must be initialized before creating UnifiedCategoryViewModel")
         }
-        self.modelData = resolvedModelData
-        self.unifiedCategoryService = unifiedCategoryService ?? resolvedModelData.unifiedCategoryService
-        self.categoryCacheRepository = categoryCacheRepository ?? resolvedModelData.categoryCacheRepository
+        self.container = resolvedAppContainer
+        self.unifiedCategoryService = unifiedCategoryService ?? resolvedAppContainer.unifiedCategoryService
+        self.categoryCacheRepository = categoryCacheRepository ?? resolvedAppContainer.categoryCacheRepository
     }
     
     func mergeCategory(categoryName: String, searchString: String) {
@@ -76,15 +76,15 @@ class UnifiedCategoryViewModel: ObservableObject {
     }
     
     func forceRefreshCategory(categoryName: String) {
-        let calibreLibraries = modelData.calibreLibraries.values
+        let calibreLibraries = container.libraryManager.calibreLibraries.values
         let activeLibraries = calibreLibraries.filter { !$0.hidden && !$0.server.removed }
-        let repository = modelData.categoryCacheRepository
-        
+        let repository = container.categoryCacheRepository
+
         for library in activeLibraries {
             try? repository.invalidateCategoryCache(libraryId: library.id, categoryName: categoryName)
-            
+
             Task {
-                await modelData.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
+                await container.libraryManager.syncLibrary(request: .init(library: library, autoUpdateOnly: true, incremental: true))
             }
         }
     }

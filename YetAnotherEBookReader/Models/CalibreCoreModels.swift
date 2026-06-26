@@ -104,8 +104,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
     
     var pluginDSReaderHelperWithDefault: CalibreDSReaderHelperPrefs.Options {
-        guard let modelData = ModelData.shared,
-              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+        guard let container = AppContainer.shared,
+              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
               let prefs = configuration.dsreader_helper_prefs?.plugin_prefs
         else { return .init() }
         
@@ -117,8 +117,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     }
     
     var pluginGoodreadsSyncWithDefault: CalibreGoodreadsSyncPrefs.PluginPrefs {
-        guard let modelData = ModelData.shared,
-              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+        guard let container = AppContainer.shared,
+              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
               let grsync_plugin_prefs = configuration.goodreads_sync_prefs?.plugin_prefs
         else {
             return .init(Goodreads: .init(), Users: [:])
@@ -128,8 +128,8 @@ struct CalibreLibrary: Hashable, Identifiable {
     }
     
     var pluginCountPagesWithDefault: CalibreCountPagesPrefs.LibraryConfig {
-        guard let modelData = ModelData.shared,
-              let configuration = modelData.queryServerDSReaderHelper(server: server)?.configuration,
+        guard let container = AppContainer.shared,
+              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
               let library_config = configuration.count_pages_prefs?.library_config?[name]
         else { return .init() }
         

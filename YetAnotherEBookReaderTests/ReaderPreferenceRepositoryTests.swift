@@ -20,7 +20,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         configByServerId = [:]
         folioProfileConfig = Realm.Configuration(
             inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles",
-            schemaVersion: ModelData.RealmSchemaVersion,
+            schemaVersion: AppContainer.RealmSchemaVersion,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]
         )
@@ -31,7 +31,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
             }
             let config = Realm.Configuration(
                 inMemoryIdentifier: "ReaderPreferenceRepositoryTests-\(server.id)",
-                schemaVersion: ModelData.RealmSchemaVersion,
+                schemaVersion: AppContainer.RealmSchemaVersion,
                 migrationBlock: { _, _ in },
                 objectTypes: [
                     BookDeviceReadingPositionRealm.self,

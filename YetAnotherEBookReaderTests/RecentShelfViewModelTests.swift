@@ -12,16 +12,16 @@ import Combine
 
 @MainActor class RecentShelfViewModelTests: XCTestCase {
     var viewModel: RecentShelfViewModel!
-    var mockModelData: ModelData!
+    var mockAppContainer: AppContainer!
     
     override func setUpWithError() throws {
-        mockModelData = ModelData(mock: true)
-        viewModel = RecentShelfViewModel(modelData: mockModelData)
+        mockAppContainer = AppContainer(mock: true)
+        viewModel = RecentShelfViewModel(container: mockAppContainer)
     }
     
     override func tearDownWithError() throws {
         viewModel = nil
-        mockModelData = nil
+        mockAppContainer = nil
     }
     
     func testInitialization() throws {
@@ -41,7 +41,7 @@ import Combine
         let readerInfoNil = viewModel.prepareReading(bookId: "non-existent")
         XCTAssertNil(readerInfoNil)
         
-        if let mockBook = mockModelData.readingBook {
+        if let mockBook = mockAppContainer.bookManager.readingBook {
             let readerInfo = viewModel.prepareReading(bookId: mockBook.inShelfId)
             XCTAssertNotNil(readerInfo)
         }
@@ -51,8 +51,8 @@ import Combine
         viewModel.tapBook(bookId: "non-existent")
         XCTAssertNil(viewModel.activeAlert)
         
-        if let mockBook = mockModelData.readingBook {
-            mockModelData.booksInShelf[mockBook.inShelfId] = mockBook
+        if let mockBook = mockAppContainer.bookManager.readingBook {
+            mockAppContainer.booksInShelf[mockBook.inShelfId] = mockBook
             
             viewModel.selectionState.isEditing = true
             XCTAssertFalse(viewModel.selectionState.selectedBookIds.contains(mockBook.inShelfId))
@@ -69,15 +69,15 @@ import Combine
     }
     
     func testRefreshBookFormats() throws {
-        if let mockBook = mockModelData.readingBook {
-            mockModelData.booksInShelf[mockBook.inShelfId] = mockBook
+        if let mockBook = mockAppContainer.bookManager.readingBook {
+            mockAppContainer.booksInShelf[mockBook.inShelfId] = mockBook
             viewModel.refreshBookFormats(bookId: mockBook.inShelfId)
         }
     }
     
     func testCalibreUpdatedDeletionDismissal() throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
-        mockModelData.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
+        mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
         
         let expectation = XCTestExpectation(description: "Detail dismissed")
         DispatchQueue.main.async {

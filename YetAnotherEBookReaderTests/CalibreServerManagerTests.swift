@@ -12,7 +12,7 @@ import Combine
 
 @MainActor
 final class CalibreServerManagerTests: XCTestCase {
-    private var modelData: ModelData!
+    private var container: AppContainer!
     private var serverManager: CalibreServerManager!
     private var databaseService: DatabaseService!
     private var serverRepository: ServerRepositoryProtocol!
@@ -23,22 +23,22 @@ final class CalibreServerManagerTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "CalibreServerManagerTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
         
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        container = AppContainer(mock: true)
+        container.realmConf = config
         
-        serverManager = modelData.serverManager
-        databaseService = modelData.databaseService
-        serverRepository = modelData.serverRepository
+        serverManager = container.serverManager
+        databaseService = container.databaseService
+        serverRepository = container.serverRepository
         cancellables = []
     }
 
     override func tearDownWithError() throws {
-        modelData = nil
+        container = nil
         serverManager = nil
         databaseService = nil
         serverRepository = nil
         cancellables = nil
-        ModelData.shared = nil
+        AppContainer.shared = nil
     }
 
     func testPopulateServers() throws {
@@ -75,8 +75,8 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(allServers.contains(where: { $0.id == newServer.id }))
         
         // Verify library was added
-        XCTAssertNotNil(modelData.calibreLibraries[newLib.id])
-        let allLibs = modelData.libraryRepository.getAllLibraries()
+        XCTAssertNotNil(container.libraryManager.calibreLibraries[newLib.id])
+        let allLibs = container.libraryRepository.getAllLibraries()
         XCTAssertTrue(allLibs.contains(where: { $0.id == newLib.id }))
     }
 
@@ -90,27 +90,27 @@ final class CalibreServerManagerTests: XCTestCase {
 
     func testRemoveServer() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Delete Server", baseUrl: "http://localhost/del", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        container.serverManager.calibreServers[server.id] = server
         try serverRepository.saveServer(server)
         
         let library = CalibreLibrary(server: server, key: "del_lib", name: "Delete Library")
-        modelData.calibreLibraries[library.id] = library
-        try modelData.libraryRepository.saveLibrary(library)
+        container.libraryManager.calibreLibraries[library.id] = library
+        try container.libraryRepository.saveLibrary(library)
         
         // Verify library exists in repository before deletion
-        XCTAssertNotNil(modelData.libraryRepository.getAllLibraries().first { $0.id == library.id })
+        XCTAssertNotNil(container.libraryRepository.getAllLibraries().first { $0.id == library.id })
         
         // Remove server
         await serverManager.removeServer(server: server)
         
         // Verify libraries associated with server are deleted from repository
-        XCTAssertNil(modelData.libraryRepository.getAllLibraries().first { $0.id == library.id })
-        XCTAssertNil(modelData.calibreLibraries[library.id])
+        XCTAssertNil(container.libraryRepository.getAllLibraries().first { $0.id == library.id })
+        XCTAssertNil(container.libraryManager.calibreLibraries[library.id])
     }
 
     func testDSReaderHelperOperations() throws {
         let server = CalibreServer(uuid: UUID(), name: "Server DSR", baseUrl: "http://localhost/dsr", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        container.serverManager.calibreServers[server.id] = server
         try serverRepository.saveServer(server)
         
         let helperConfig = CalibreServerDSReaderHelper(port: 9090)
@@ -167,7 +167,7 @@ final class CalibreServerManagerTests: XCTestCase {
 
     func testProbeServerSuccess() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Success", baseUrl: "http://localhost/probe_success", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        container.serverManager.calibreServers[server.id] = server
         
         // Mock session mapping for CalibreServerService
         let sessionConfig = URLSessionConfiguration.ephemeral
@@ -176,7 +176,7 @@ final class CalibreServerManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         
@@ -236,15 +236,15 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertTrue(staged?.reachable ?? false)
         XCTAssertEqual(staged?.errorMsg, "Success")
         
-        // Verify library was auto-created in modelData.calibreLibraries and saved to repository
+        // Verify library was auto-created in container.libraryManager.calibreLibraries and saved to repository
         let autoLibId = CalibreLibrary(server: server, key: "lib_other", name: "Other Library").id
-        XCTAssertNotNil(modelData.calibreLibraries[autoLibId])
-        XCTAssertNotNil(modelData.libraryRepository.getAllLibraries().first { $0.id == autoLibId })
+        XCTAssertNotNil(container.libraryManager.calibreLibraries[autoLibId])
+        XCTAssertNotNil(container.libraryRepository.getAllLibraries().first { $0.id == autoLibId })
     }
 
     func testProbeServerFailure() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Failure", baseUrl: "http://localhost/probe_failure", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        modelData.calibreServers[server.id] = server
+        container.serverManager.calibreServers[server.id] = server
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -252,7 +252,7 @@ final class CalibreServerManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         

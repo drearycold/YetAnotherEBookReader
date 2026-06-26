@@ -12,17 +12,17 @@ import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
     private let customConfig: Realm.Configuration?
-    private let modelData: ModelData
-    
+    private let container: AppContainerProtocol
+
     var defaultLog = Logger()
-    
-    init(config: Realm.Configuration? = nil, modelData: ModelData) {
+
+    init(config: Realm.Configuration? = nil, container: AppContainerProtocol) {
         self.customConfig = config
-        self.modelData = modelData
+        self.container = container
     }
     
     private func getRealm() throws -> Realm {
-        var conf = customConfig ?? modelData.realmConf ?? Realm.Configuration()
+        var conf = customConfig ?? container.realmConf ?? Realm.Configuration()
         // Strip closures to prevent EXC_BAD_ACCESS in swift_retain when copying on concurrent queues
         conf.migrationBlock = nil
         conf.shouldCompactOnLaunch = nil
@@ -203,7 +203,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     
     private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
         let libraryId = searchObj.libraryId
-        let library = modelData.calibreLibraries[libraryId]
+        let library = container.calibreLibraries[libraryId]
         
         var sources: [String: LibrarySourceSearchResult] = [:]
         for sourceEntry in searchObj.sources {

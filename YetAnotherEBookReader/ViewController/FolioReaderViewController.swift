@@ -43,7 +43,7 @@ class FolioReaderViewController: UIViewController {
         
         var bookReadingPosition: BookDeviceReadingPosition? = nil
         if let book = bookDetailView?.book {
-            bookReadingPosition = ModelData.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: UIDevice().name)
+            bookReadingPosition = AppContainer.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: UIDevice().name)
         }
         if let bookReadingPosition = bookReadingPosition {
             var position = [String: Any]()

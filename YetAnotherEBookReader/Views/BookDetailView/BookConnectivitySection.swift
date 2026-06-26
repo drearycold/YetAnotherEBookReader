@@ -56,9 +56,9 @@ struct BookConnectivitySection: View {
                 }.sheet(isPresented: $viewModel.activityListViewPresenting, onDismiss: {
                 }, content: {
                     NavigationView {
-                        if let modelData = viewModel.sharedModelData {
+                        if let container = viewModel.sharedAppContainer {
                             ActivityList(
-                                viewModel: ActivityListViewModel(modelData: modelData, libraryId: book.library.id, bookId: book.id),
+                                viewModel: ActivityListViewModel(container: container, libraryId: book.library.id, bookId: book.id),
                                 presenting: $viewModel.activityListViewPresenting
                             )
                         }

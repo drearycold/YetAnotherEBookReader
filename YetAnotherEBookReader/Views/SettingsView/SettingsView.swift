@@ -9,13 +9,13 @@ import SwiftUI
 import Combine
 
 struct SettingsView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @StateObject var viewModel: SettingsViewModel
     @StateObject private var addServerViewModel: ServerViewModel
     
     init(viewModel: SettingsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
-        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(modelData: viewModel.modelData, server: nil))
+        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: viewModel.container, server: nil))
     }
     
     var body: some View {
@@ -93,7 +93,7 @@ struct SettingsView: View {
             Section(header: Text("More")) {
                 NavigationLink("Readers Options", destination: ReaderOptionsView())
                 NavigationLink("Reading Statistics", destination: LazyView(ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: nil, bookId: nil)))
-                NavigationLink("Activity Logs", destination: LazyView(ActivityList(viewModel: ActivityListViewModel(modelData: modelData), presenting: Binding<Bool>(get: { false }, set: { _ in } ))))
+                NavigationLink("Activity Logs", destination: LazyView(ActivityList(viewModel: ActivityListViewModel(container: container), presenting: Binding<Bool>(get: { false }, set: { _ in } ))))
             }
             
             Section(
@@ -182,13 +182,13 @@ struct SettingsView: View {
 }
 
 struct SettingsView_Previews: PreviewProvider {
-    static private var modelData = ModelData()
+    static private var container = AppContainer()
 
     static var previews: some View {
         NavigationView {
-            SettingsView(viewModel: SettingsViewModel(modelData: modelData))
+            SettingsView(viewModel: SettingsViewModel(container: container))
         }
         .navigationViewStyle(StackNavigationViewStyle())
-        .environmentObject(modelData)
+        .environmentObject(container)
     }
 }

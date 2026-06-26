@@ -14,7 +14,7 @@ import UserMessagingPlatform
 
 struct SupportInfoView: View {
     @Environment(\.openURL) var openURL
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @StateObject private var viewModel = SupportInfoViewModel()
 
     var body: some View {
@@ -143,11 +143,11 @@ struct SupportInfoView: View {
 }
 
 struct SupportInfoView_Previews: PreviewProvider {
-    static let modelData = ModelData(mock: true)
+    static let container = AppContainer(mock: true)
     
     static var previews: some View {
         SupportInfoView()
-            .environmentObject(modelData)
+            .environmentObject(container)
     }
 }
 

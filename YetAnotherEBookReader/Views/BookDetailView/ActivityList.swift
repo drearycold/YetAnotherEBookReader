@@ -134,13 +134,13 @@ struct ActivityDetailView: View {
 }
 
 struct ActivityList_Previews: PreviewProvider {
-    static private var modelData = ModelData(mock: true)
+    static private var container = AppContainer(mock: true)
     
     @State static private var presenting = false
     static var previews: some View {
         NavigationView {
             ActivityList(
-                viewModel: ActivityListViewModel(modelData: modelData),
+                viewModel: ActivityListViewModel(container: container),
                 presenting: $presenting
             )
         }

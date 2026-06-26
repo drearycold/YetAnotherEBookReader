@@ -13,7 +13,7 @@ import SwiftUICharts
 #endif
 
 class ReadingPositionListViewModel: ObservableObject {
-    @Published var modelData: ModelData
+    @Published var container: AppContainer
     @Published var book: CalibreBook
     
     @Published var positions: [BookDeviceReadingPosition]
@@ -23,10 +23,10 @@ class ReadingPositionListViewModel: ObservableObject {
     
     var modified = false
     
-    init(modelData: ModelData, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
-        self.modelData = modelData
+    init(container: AppContainer, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
+        self.container = container
         self.book = book
-        self.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        self.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
         
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1
@@ -58,13 +58,13 @@ class ReadingPositionListViewModel: ObservableObject {
     }
     
     func removePosition(_ deviceName: String) {
-        modelData.readingPositionRepository.removePosition(deviceName: deviceName, forBookId: book.bookPrefId)
+        container.readingPositionRepository.removePosition(deviceName: deviceName, forBookId: book.bookPrefId)
         modified = true
     }
 }
 
 class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
-    @Published var modelData: ModelData
+    @Published var container: AppContainer
     @Published var listModel: ReadingPositionListViewModel
     @Published var position: BookDeviceReadingPosition
     
@@ -80,56 +80,56 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
                     get: { [weak self] in self?.presentingReadSheet ?? false },
                     set: { [weak self] in self?.presentingReadSheet = $0 }
                 )
-                modelData.presentingStack.append(binding)
+                container.presentingStack.append(binding)
             }
         }
         didSet {
             if oldValue {
-                _ = modelData.presentingStack.popLast()
+                _ = container.presentingStack.popLast()
             }
         }
     }
-    
+
     let percentFormatter = NumberFormatter()
     let dateFormatter = DateFormatter()
-    
-    init (modelData: ModelData, listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
-        self.modelData = modelData
+
+    init (container: AppContainer, listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
+        self.container = container
         self.listModel = listModel
         self.position = position
-        
-        if let format = modelData.formatOfReader(readerName: position.readerName) {
+
+        if let format = container.sessionManager.formatOfReader(readerName: position.readerName) {
             self.selectedFormat = format
         }
         if let reader = ReaderType(rawValue: position.readerName) {
             self.selectedFormatReader = reader
         }
-        
+
         startPage = position.lastReadPage.description
-        
+
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1
-        
+
         dateFormatter.doesRelativeDateFormatting = true
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .medium
         dateFormatter.timeZone = .current
     }
-    
+
     func alert(alertItem: AlertItem) {
         self.alertItem = alertItem
     }
-    
+
     var availableReaders: [ReaderType] {
-        return modelData.formatReaderMap[selectedFormat] ?? []
+        return container.sessionManager.formatReaderMap[selectedFormat] ?? []
     }
-    
+
     var readingBook: CalibreBook? {
-        return modelData.readingBook
+        return container.bookManager.readingBook
     }
-    
+
     var readerInfo: ReaderInfo? {
-        return modelData.readerInfo
+        return container.sessionManager.readerInfo
     }
     
     var isSelectedFormatCached: Bool {
@@ -144,29 +144,29 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
             alertItem = AlertItem(id: "Selected Format Not Cached", msg: "Please download \(format.rawValue) first")
             return
         }
-        
+
         guard let bookFileUrl = getSavedUrl(book: book, format: format) else {
             alertItem = AlertItem(id: "Cannot locate book file", msg: "Please re-download \(format.rawValue)")
             return
         }
-        
-        modelData.prepareBookReading(
+
+        container.sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: selectedFormatReader,
             position: position
         )
-        
+
         presentingReadSheet = true
     }
 
     func updatePosition() {
-        modelData.updateCurrentPosition(alertDelegate: self)
-        
-        if let book = modelData.readingBook {
+        container.sessionManager.updateCurrentPosition(alertDelegate: self)
+
+        if let book = container.bookManager.readingBook {
             listModel.book = book
-            listModel.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
-            if let position = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: self.position.id) {
+            listModel.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: self.position.id) {
                 self.position = position
             }
         }
@@ -181,7 +181,7 @@ struct BookHistoryItem: Identifiable {
 }
 
 class ReadingPositionHistoryViewModel: ObservableObject {
-    @Published var modelData: ModelData
+    @Published var container: AppContainer
     let library: CalibreLibrary?
     let bookId: Int32?
     
@@ -199,8 +199,8 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     
     let minutesFormatter = NumberFormatter()
     
-    init(modelData: ModelData = ModelData.shared ?? ModelData(mock: true), library: CalibreLibrary?, bookId: Int32?) {
-        self.modelData = modelData
+    init(container: AppContainer = AppContainer.shared ?? AppContainer(mock: true), library: CalibreLibrary?, bookId: Int32?) {
+        self.container = container
         self.library = library
         self.bookId = bookId
         
@@ -211,13 +211,13 @@ class ReadingPositionHistoryViewModel: ObservableObject {
     func loadData() {
         let limitDays = 7
         let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
-        
-        let readingHistoryList = modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDate)
-        
-        readingStatistics = modelData.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
+
+        let readingHistoryList = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDate)
+
+        readingStatistics = container.sessionManager.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
         maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
         avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
-        
+
         #if canImport(SwiftUICharts)
         barChartData = .init(
             dataSets: .init(
@@ -232,20 +232,20 @@ class ReadingPositionHistoryViewModel: ObservableObject {
             )
         )
         #endif
-        
+
         print("\(#function) readingStatistics=\(readingStatistics)")
-        
+
         if let library = library, let bookId = bookId {
-            localActivities = modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
-            
-            if let book = modelData.readingPositionRepository.historyBook(for: library, bookId: bookId) {
-                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
-            } else if let book = modelData.readingBook {
-                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
+            localActivities = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
+
+            if let book = container.readingPositionRepository.historyBook(for: library, bookId: bookId) {
+                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
+            } else if let book = container.bookManager.readingBook {
+                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
             }
-            
+
             let prefix = BookAnnotation.PrefId(library: library, id: bookId)
-            self.debugReadingPositions = modelData.readingPositionRepository.debugPositions(forBookId: prefix)
+            self.debugReadingPositions = container.readingPositionRepository.debugPositions(forBookId: prefix)
         } else {
             let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in
                 let inShelfId = entry.key
@@ -257,9 +257,9 @@ class ReadingPositionHistoryViewModel: ObservableObject {
                     }
                 }
             })
-            
+
             self.booksHistoryItems = computedHistory.sorted(by: { $0.value > $1.value }).compactMap { entry -> BookHistoryItem? in
-                guard let book = modelData.booksInShelf[entry.key],
+                guard let book = container.bookManager.booksInShelf[entry.key],
                       let minutesText = minutesFormatter.string(from: NSNumber(value: entry.value)) else {
                     return nil
                 }

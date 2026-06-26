@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LibraryInfoBookListInfoView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
@@ -24,7 +24,7 @@ struct LibraryInfoBookListInfoView: View {
                             .map({ unifiedOffset in
                                 (
                                     unifiedOffset,
-                                    modelData.calibreLibraries[unifiedOffset.key]
+                                    container.libraryManager.calibreLibraries[unifiedOffset.key]
                                 )
                             }), id: \.0.key) { searchResult in
                                 if let library = searchResult.1 {

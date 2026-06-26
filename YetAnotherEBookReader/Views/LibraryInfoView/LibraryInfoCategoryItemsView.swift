@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LibraryInfoCategoryItemsView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel

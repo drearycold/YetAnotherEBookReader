@@ -24,7 +24,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let logger = Logger()
     
     var historyMenu = UIMenu(title: "History", children: [])
+    var pdfViewBottomConstraint: NSLayoutConstraint?
+    var chromeContainerWidthConstraint: NSLayoutConstraint?
+    var chromeContainerHeightConstraint: NSLayoutConstraint?
     
+    let chromeContainerView = UIView()
     let stackView = UIStackView()
     
     let pageSlider = UISlider()
@@ -68,13 +72,9 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             self.navigationController?.navigationBar.backgroundColor = backgroundColor
             self.navigationController?.toolbar.barTintColor = backgroundColor
             self.navigationController?.toolbar.backgroundColor = backgroundColor
-
             self.tabBarController?.tabBar.barTintColor = backgroundColor
             self.tabBarController?.tabBar.backgroundColor = backgroundColor
-            
-            let tintColor: UIColor = pdfOptions.isDark(.lightText, .darkText)
-            pageIndicator.setTitleColor(tintColor, for: .normal)
-            titleInfoButton.setTitleColor(tintColor, for: .normal)
+            applyChromeTheme()
             
             self.pdfView.backgroundColor = backgroundColor
             
@@ -244,6 +244,11 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
                 pdfView.pageTapDisable()
             }
         }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateChromeContainerLayout()
     }
     
     func addBlankSubView(page: PDFPage?) {

@@ -11,10 +11,10 @@ import Combine
 struct ReaderOptionsView: View {
     @StateObject private var viewModel: ReaderOptionsViewModel
     
-    init(modelData: ModelData? = nil, fontsManager: FontsManager? = nil) {
-        let resolvedModel = modelData ?? ModelData.shared ?? ModelData()
+    init(container: AppContainer? = nil, fontsManager: FontsManager? = nil) {
+        let resolvedModel = container ?? AppContainer.shared ?? AppContainer()
         let resolvedFonts = fontsManager ?? resolvedModel.fontsManager
-        self._viewModel = StateObject(wrappedValue: ReaderOptionsViewModel(modelData: resolvedModel, fontsManager: resolvedFonts))
+        self._viewModel = StateObject(wrappedValue: ReaderOptionsViewModel(container: resolvedModel, fontsManager: resolvedFonts))
     }
 
     var body: some View {
@@ -42,13 +42,13 @@ struct ReaderOptionsView: View {
             
             Section {
                 VStack {
-                    ForEach(Format.allCases.filter { (viewModel.modelData.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
+                    ForEach(Format.allCases.filter { (viewModel.container.sessionManager.formatReaderMap[$0]?.count ?? 0) > 0 }, id: \.self) { format in
                         HStack {
                             Text(format.rawValue)
                                 .frame(minWidth: 64, alignment: .leading)
                                 .padding([.leading], 8)
                             Picker("Prefered", selection: viewModel.preferredReaderBinding(for: format)) {
-                                ForEach(viewModel.modelData.formatReaderMap[format]!, id: \.self) { reader in
+                                ForEach(viewModel.container.sessionManager.formatReaderMap[format]!, id: \.self) { reader in
                                     Text(reader.rawValue).tag(reader)
                                 }
                             }.pickerStyle(SegmentedPickerStyle())
@@ -197,9 +197,9 @@ struct ReaderOptionsView: View {
 
 struct ReaderOptionsView_Previews: PreviewProvider {
     static var previews: some View {
-        let modelData = ModelData()
+        let container = AppContainer()
         NavigationView {
-            ReaderOptionsView(modelData: modelData, fontsManager: modelData.fontsManager)
+            ReaderOptionsView(container: container, fontsManager: container.fontsManager)
         }.navigationViewStyle(StackNavigationViewStyle())
     }
 }

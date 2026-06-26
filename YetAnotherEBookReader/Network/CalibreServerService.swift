@@ -11,7 +11,7 @@ import Combine
 
 final class CalibreServerService {
     var logger: CalibreActivityLogger
-    weak var config: CalibreServerConfigProvider?
+    weak var config: AppContainerProtocol?
     var database: DatabaseService
     var defaultLog = Logger(subsystem: "io.github.dsreader", category: "CalibreServerService")
     var metadataSessions = [CalibreServerURLSessionKey: URLSession]()
@@ -29,7 +29,7 @@ final class CalibreServerService {
     private var _localCalibreLibraries = [String: CalibreLibrary]()
     private var _localCalibreServerInfoStaging = [String: CalibreServerInfo]()
     
-    init(logger: CalibreActivityLogger, config: CalibreServerConfigProvider, database: DatabaseService) {
+    init(logger: CalibreActivityLogger, config: AppContainerProtocol, database: DatabaseService) {
         self.logger = logger
         self.config = config
         self.database = database
@@ -111,9 +111,6 @@ final class CalibreServerService {
     // Mapping methods
     func updateBook(book: CalibreBook) {
         config?.updateBook(book: book)
-    }
-    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        config?.getBookRealm(forPrimaryKey: forPrimaryKey)
     }
     func getPreferredFormat(for book: CalibreBook) -> Format? {
         config?.getPreferredFormat(for: book)

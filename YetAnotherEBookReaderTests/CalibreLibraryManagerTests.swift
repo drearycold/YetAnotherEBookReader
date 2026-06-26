@@ -11,7 +11,7 @@ import Combine
 @testable import YetAnotherEBookReader
 
 final class CalibreLibraryManagerTests: XCTestCase {
-    private var modelData: ModelData!
+    private var container: AppContainer!
     private var libraryManager: CalibreLibraryManager!
     private var library: CalibreLibrary!
     private var server: CalibreServer!
@@ -24,12 +24,12 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let config = Realm.Configuration(inMemoryIdentifier: "CalibreLibraryManagerTests-\(UUID().uuidString)")
         DatabaseService.shared.setup(conf: config)
         
-        modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        container = AppContainer(mock: true)
+        container.realmConf = config
         
-        libraryManager = modelData.libraryManager
-        databaseService = modelData.databaseService
-        libraryRepository = modelData.libraryRepository
+        libraryManager = container.libraryManager
+        databaseService = container.databaseService
+        libraryRepository = container.libraryRepository
         
         server = CalibreServer(
             uuid: UUID(),
@@ -41,8 +41,8 @@ final class CalibreLibraryManagerTests: XCTestCase {
             username: "",
             password: ""
         )
-        modelData.calibreServers[server.id] = server
-        try? modelData.serverManager.updateServerRealm(server: server)
+        container.serverManager.calibreServers[server.id] = server
+        try? container.serverManager.updateServerRealm(server: server)
         
         library = CalibreLibrary(server: server, key: "test_lib", name: "Test Library")
         libraryManager.calibreLibraries[library.id] = library
@@ -55,14 +55,14 @@ final class CalibreLibraryManagerTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        modelData = nil
+        container = nil
         libraryManager = nil
         library = nil
         server = nil
         cancellables = nil
         databaseService = nil
         libraryRepository = nil
-        ModelData.shared = nil
+        AppContainer.shared = nil
     }
 
     func testPopulateLibraries() throws {
@@ -120,7 +120,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
 
     func testQueryLibraryBookRealmCount() throws {
         let book = CalibreBook(id: 999, library: library)
-        modelData.bookManager.updateBook(book: book)
+        container.bookManager.updateBook(book: book)
         
         let count = libraryManager.queryLibraryBookRealmCount(library: library)
         XCTAssertGreaterThanOrEqual(count, 1)
@@ -162,7 +162,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     func testProbeLibrarySuccess() async throws {
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -171,7 +171,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         
@@ -210,7 +210,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     func testProbeLibraryFailure() async throws {
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -219,7 +219,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         
@@ -242,8 +242,8 @@ final class CalibreLibraryManagerTests: XCTestCase {
     func testRemoveLibrary() async throws {
         var book = CalibreBook(id: 777, library: library)
         book.inShelf = true
-        modelData.bookManager.updateBook(book: book)
-        modelData.booksInShelf[book.inShelfId] = book
+        container.bookManager.updateBook(book: book)
+        container.bookManager.booksInShelf[book.inShelfId] = book
         
         try libraryRepository.saveLibrary(library)
         
@@ -255,7 +255,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let dbLibAfter = libraryRepository.getAllLibraries().first { $0.id == library.id }
         XCTAssertNil(dbLibAfter)
         
-        XCTAssertNil(modelData.booksInShelf[book.inShelfId])
+        XCTAssertNil(container.bookManager.booksInShelf[book.inShelfId])
         XCTAssertFalse(libraryManager.librarySyncStatus[library.id]?.isSync ?? true)
     }
 
@@ -264,7 +264,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -272,7 +272,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         
@@ -299,7 +299,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager.calibreLibraries[localLib.id] = localLib
         try libraryRepository.saveLibrary(localLib)
         
-        modelData.calibreUpdatedSubject
+        container.calibreUpdatedSubject
             .receive(on: DispatchQueue.main)
             .sink { update in
                 if case .library(let updatedLib) = update {
@@ -311,7 +311,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
             }
             .store(in: &cancellables)
             
-        modelData.probeLibraryLastModifiedSubject.send(.init(library: localLib, autoUpdateOnly: false, incremental: false))
+        container.probeLibraryLastModifiedSubject.send(.init(library: localLib, autoUpdateOnly: false, incremental: false))
         
         wait(for: [expectation], timeout: 5.0)
     }
@@ -319,7 +319,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     func testSyncLibraryAndSaveBookMetadata() async throws {
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
         let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: true, probing: false, errorMsg: "Success", defaultLibrary: library.id, libraryMap: [library.id: library.name], request: probeRequest)
-        modelData.calibreServerInfoStaging = [server.uuid.uuidString: info]
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -327,7 +327,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         for timeout in [10.0, 600.0] {
             for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
                 let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
-                modelData.calibreServerService.metadataSessions[key] = mockSession
+                container.calibreServerService.metadataSessions[key] = mockSession
             }
         }
         

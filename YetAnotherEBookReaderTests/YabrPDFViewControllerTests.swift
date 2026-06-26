@@ -41,6 +41,18 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(controller.pageViewPositionHistory[2]?.scaler, CGFloat(options.lastScale))
     }
 
+    func testOpenPreservesNonTriStateThemeModeFromMetaSource() throws {
+        let pdfURL = try makePDFURL(name: "open-preserves-forest-theme", pageCount: 1)
+        let options = PDFPreferenceValue(themeMode: .forest, pageMode: .Page, readingDirection: .LtR_TtB)
+
+        let controller = SpyYabrPDFViewController()
+        controller.yabrPDFMetaSource = MockYabrPDFMetaSource(pdfURL: pdfURL, options: options)
+
+        XCTAssertEqual(controller.open(), 0)
+        XCTAssertEqual(controller.pdfOptions.themeMode, .forest)
+        XCTAssertEqual(PDFPageWithBackground.fillColor, options.fillColor)
+    }
+
     func testApplyPreferencesMapsReaderEnginePreferencesToPDFOptions() {
         let controller = SpyYabrPDFViewController()
         let preferences = ReaderEnginePreferences(themeMode: 2, scroll: true, scrollDirection: 1)

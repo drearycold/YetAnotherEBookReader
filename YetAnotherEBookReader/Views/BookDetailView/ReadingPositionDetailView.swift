@@ -106,7 +106,7 @@ struct ReadingPositionDetailView: View {
         .fullScreenCover(isPresented: $_VM.presentingReadSheet) {
             if let book = _VM.readingBook, let readerInfo = _VM.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
-                    .environmentObject(_VM.modelData)
+                    .environmentObject(_VM.container)
             } else {
                 Text("Nil Book")
             }
@@ -118,15 +118,15 @@ struct ReadingPositionDetailView: View {
 }
 
 struct ReadingPositionDetailView_Previews: PreviewProvider {
-    @StateObject static var modelData = ModelData(mock: true)
+    @StateObject static var container = AppContainer(mock: true)
 
     static var previews: some View {
-        let listModel = ReadingPositionListViewModel(modelData: modelData, book: modelData.readingBook!, positions: modelData.readingPositionRepository.getPositions(forBookId: modelData.readingBook!.bookPrefId))
+        let listModel = ReadingPositionListViewModel(container: container, book: container.bookManager.readingBook!, positions: container.readingPositionRepository.getPositions(forBookId: container.bookManager.readingBook!.bookPrefId))
         ReadingPositionDetailView(
             viewModel: ReadingPositionDetailViewModel(
-                modelData: modelData,
+                container: container,
                 listModel: listModel,
-                position: modelData.readingPositionRepository.getPositions(forBookId: modelData.readingBook!.bookPrefId).first!
+                position: container.readingPositionRepository.getPositions(forBookId: container.bookManager.readingBook!.bookPrefId).first!
             )
         )
     }

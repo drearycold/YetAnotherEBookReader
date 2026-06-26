@@ -98,13 +98,13 @@ struct SelectedFormatInfo {
 }
 
 struct LibraryInfoBatchDownloadSheet_Previews: PreviewProvider {
-    static private var modelData = ModelData(mock: true)
+    static private var container = AppContainer(mock: true)
 
     @State static private var presenting = true
     @State static private var downloadBookList = [CalibreBook]()
     
     static var previews: some View {
         LibraryInfoBatchDownloadSheet(presenting: $presenting, downloadBookList: $downloadBookList)
-            .environmentObject(modelData.downloadManager)
+            .environmentObject(container.downloadManager)
     }
 }

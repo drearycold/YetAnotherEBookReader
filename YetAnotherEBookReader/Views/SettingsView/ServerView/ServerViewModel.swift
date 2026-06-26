@@ -11,7 +11,7 @@ import SwiftUI
 
 @MainActor
 class ServerViewModel: ObservableObject {
-    let modelData: ModelData
+    let container: AppContainer
     private var serverId: String? // nil if adding a new server
     
     // Binding fields for server editing (AddModServerView)
@@ -50,8 +50,8 @@ class ServerViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var refreshCancellable: AnyCancellable?
     
-    init(modelData: ModelData, server: CalibreServer?) {
-        self.modelData = modelData
+    init(container: AppContainer, server: CalibreServer?) {
+        self.container = container
         
         if let server = server {
             self.serverId = server.id
@@ -75,7 +75,7 @@ class ServerViewModel: ObservableObject {
     
     func setupBindings() {
         // Observe calibreLibraries to keep libraryList updated
-        modelData.libraryManager.$calibreLibraries
+        container.libraryManager.$calibreLibraries
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self else { return }
@@ -163,8 +163,8 @@ class ServerViewModel: ObservableObject {
                 calibreServerName = "Unnamed"
             }
         }
-        
-        if let existingServer = modelData.calibreServers.values.first(where: { server in
+
+        if let existingServer = container.serverManager.calibreServers.values.first(where: { server in
             server.baseUrl == calibreServerUrl
             && server.username == calibreUsername
             && server.removed == false
@@ -190,10 +190,10 @@ class ServerViewModel: ObservableObject {
     
     func addServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>) {
         guard let serverInfo = calibreServerInfo else { return }
-        
+
         var newServer = serverInfo.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
-        
+
         let libraries: [CalibreLibrary] = serverInfo.libraryMap
             .sorted { $0.key < $1.key }
             .map {
@@ -205,25 +205,25 @@ class ServerViewModel: ObservableObject {
                     discoverable: true
                 )
             }
-        
-        modelData.addServer(server: newServer, libraries: libraries)
+
+        container.serverManager.addServer(server: newServer, libraries: libraries)
         if let url = URL(string: newServer.baseUrl) {
-            modelData.updateServerDSReaderHelper(
+            container.serverManager.updateServerDSReaderHelper(
                 serverId: newServer.id,
                 dsreaderHelper: CalibreServerDSReaderHelper(
                     port: (url.port ?? -1) + 1
                 )
             )
         }
-        
-        modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
-        
+
+        container.serverManager.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
+
         serverBinding.wrappedValue = newServer
         isActiveBinding.wrappedValue = false
     }
-    
+
     private func modServerConfirmButtonAction(completion: @escaping () -> Void) {
-        guard let serverId = serverId, let server = modelData.calibreServers[serverId] else { return }
+        guard let serverId = serverId, let server = container.serverManager.calibreServers[serverId] else { return }
         calibreServerUUID = server.uuid
         let newServer = CalibreServer(
             uuid: calibreServerUUID,
@@ -235,8 +235,8 @@ class ServerViewModel: ObservableObject {
             username: calibreUsername,
             password: calibrePassword
         )
-        
-        if let existingServer = modelData.calibreServers.values.first(where: { s in
+
+        if let existingServer = container.serverManager.calibreServers.values.first(where: { s in
             s.uuid != newServer.uuid
             && s.baseUrl == newServer.baseUrl
             && s.username == newServer.username
@@ -245,7 +245,7 @@ class ServerViewModel: ObservableObject {
             alertItem = AlertItem(id: "Exist", msg: "Conflict with \"\(existingServer.name)\"\nA server with the same address and username already exists")
             return
         }
-        
+
         performProbeServer(server: newServer, isAdd: false, completion: completion)
     }
     
@@ -266,12 +266,12 @@ class ServerViewModel: ObservableObject {
     private func performProbeServer(server: CalibreServer, isAdd: Bool, completion: @escaping () -> Void) {
         isProbing = true
         Task {
-            let serverInfo = await modelData.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
-            
+            let serverInfo = await container.serverManager.probeServer(request: .init(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true))
+
             self.calibreServerInfo = serverInfo
             if let serverInfo = serverInfo {
                 for (key, name) in serverInfo.libraryMap {
-                    await modelData.probeLibrary(request: .init(library: .init(server: serverInfo.request.server, key: key, name: name)))
+                    await container.libraryManager.probeLibrary(request: .init(library: .init(server: serverInfo.request.server, key: key, name: name)))
                 }
             }
             self.isProbing = false
@@ -285,78 +285,78 @@ class ServerViewModel: ObservableObject {
     }
     
     // MARK: - Server Details actions (ServerDetailView)
-    
+
     func updateLibraryList() {
         guard let serverId = serverId else { return }
-        libraryList = modelData.calibreLibraries.values.filter { library in
+        libraryList = container.libraryManager.calibreLibraries.values.filter { library in
             library.server.id == serverId && library.hidden == false
         }
         .sorted { $0.name < $1.name }
         .map { $0.id }
     }
-    
+
     func deleteLibrary(at offsets: IndexSet) {
         let deletedLibraryIds = offsets.map { libraryList[$0] }
         deletedLibraryIds.forEach { libraryId in
-            self.modelData.hideLibrary(libraryId: libraryId)
-            
-            guard self.modelData.librarySyncStatus[libraryId]?.isSync != true else { return }
-            
-            guard let library = self.modelData.calibreLibraries[libraryId] else { return }
-            
-            self.modelData.calibreUpdatedSubject.send(.library(library))
-            
+            self.container.libraryManager.hideLibrary(libraryId: libraryId)
+
+            guard self.container.libraryManager.librarySyncStatus[libraryId]?.isSync != true else { return }
+
+            guard let library = self.container.libraryManager.calibreLibraries[libraryId] else { return }
+
+            self.container.calibreUpdatedSubject.send(.library(library))
+
             Task {
-                await self.modelData.removeLibrary(library: library)
+                await self.container.libraryManager.removeLibrary(library: library)
             }
         }
         updateLibraryList()
     }
-    
+
     func restoreSelectedLibraries(updater: Binding<Int>) {
         libraryRestoreListSelection.forEach { libId in
-            modelData.restoreLibrary(libraryId: libId)
-            if let library = self.modelData.calibreLibraries[libId], library.discoverable {
-                self.modelData.calibreUpdatedSubject.send(.library(library))
+            container.libraryManager.restoreLibrary(libraryId: libId)
+            if let library = self.container.libraryManager.calibreLibraries[libId], library.discoverable {
+                self.container.calibreUpdatedSubject.send(.library(library))
             }
         }
         updater.wrappedValue += 1
         libraryRestoreListActive.toggle()
     }
-    
+
     func removeDeleteBooksFromServer(server: CalibreServer) {
-        modelData.removeDeleteBooksFromServer(server: server)
+        container.bookManager.removeDeleteBooksFromServer(server: server)
     }
-    
+
     func probeReachability(server: CalibreServer) {
-        modelData.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: true, incremental: false)
+        container.serverManager.probeServersReachability(with: [server.id], updateLibrary: true, autoUpdateOnly: true, incremental: false)
     }
-    
+
     // MARK: - DSReader Helper actions (ServerOptionsDSReaderHelper)
-    
+
     func setDSReaderStates(server: CalibreServer) {
-        let dsHelper = modelData.queryServerDSReaderHelper(server: server) ?? {
+        let dsHelper = container.serverManager.queryServerDSReaderHelper(server: server) ?? {
             var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
-            if let url = modelData.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
+            if let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }
             return dsreaderHelper
         }()
-        
+
         configurationData = dsHelper.configurationData
         configuration = dsHelper.configuration
         self.dsreaderHelperServer = dsHelper
         portStr = dsHelper.port.description
     }
-    
+
     func connectDSReader(server: CalibreServer) {
         refreshCancellable?.cancel()
         configurationData = nil
         configuration = nil
         helperStatus = "Connecting..."
 
-        let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
-        
+        let connector = DSReaderHelperConnector(calibreServerService: container.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)
+
         Task {
             do {
                 let (config, data) = try await connector.refreshConfiguration("_")
@@ -365,22 +365,22 @@ class ServerViewModel: ObservableObject {
                 }
                 var updatedConfig = config
                 var updatedData = data
-                
+
                 if config.count_pages_prefs != nil {
                     self.helperStatus = "Pulling Library-Specific Configurations..."
                     var libraryConfigs: [String: CalibreCountPagesPrefs.LibraryConfig] = [:]
-                    
+
                     try await withThrowingTaskGroup(of: (String, CalibreDSReaderHelperConfiguration).self) { group in
-                        let activeLibraries = modelData.calibreLibraries.filter {
+                        let activeLibraries = container.libraryManager.calibreLibraries.filter {
                             $0.value.server.uuid == server.uuid && !$0.value.hidden
                         }.map { $0.value.key }
-                        
+
                         for libraryKey in activeLibraries {
                             group.addTask {
                                 return (libraryKey, try await connector.refreshConfiguration(libraryKey).0)
                             }
                         }
-                        
+
                         for try await (libraryKey, libConfig) in group {
                             if let libraryConfig = libConfig.count_pages_prefs?.library_config?[libraryKey] {
                                 libraryConfigs[libraryKey] = libraryConfig
@@ -390,7 +390,7 @@ class ServerViewModel: ObservableObject {
                     updatedConfig.count_pages_prefs?.library_config = libraryConfigs
                     updatedData = try JSONEncoder().encode(updatedConfig)
                 }
-                
+
                 self.configuration = updatedConfig
                 self.configurationData = updatedData
                 self.helperStatus = "Connected"
@@ -424,13 +424,13 @@ class ServerViewModel: ObservableObject {
             }
         }
     }
-    
+
     func updateDSReaderHelperConfig(server: CalibreServer) {
         guard let configuration = configuration else { return }
         dsreaderHelperServer.configuration = configuration
         dsreaderHelperServer.configurationData = configurationData
-        
-        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
+
+        container.serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
         helperStatus = nil
     }
 }

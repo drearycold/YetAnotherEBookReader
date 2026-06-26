@@ -34,7 +34,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
     
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book
@@ -44,8 +44,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        let nav = YabrEBookReaderNavigationController(modelData: modelData, book: book, readerInfo: readerInfo)
-        nav.modelData = modelData
+        let nav = YabrEBookReaderNavigationController(container: container, book: book, readerInfo: readerInfo)
+        nav.container = container
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         nav.navigationBar.isTranslucent = true
 
@@ -63,7 +63,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                 assetRetriever: assetRetriever,
                 httpServer: httpServer,
                 book: self.book,
-                readerPreferenceRepository: self.modelData.readerPreferenceRepository
+                readerPreferenceRepository: self.container.readerPreferenceRepository
             )
             
             let publicationOpener = PublicationOpener(
@@ -113,7 +113,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                     readerVC.readerEngineDelegate = context.coordinator
                     
                     // Load and apply initial preferences
-                    if let enginePrefs = self.modelData.readerPreferenceRepository.loadInitialPreferences(
+                    if let enginePrefs = self.container.readerPreferenceRepository.loadInitialPreferences(
                         for: self.book,
                         readerType: self.readerInfo.readerType
                     ) {
@@ -144,8 +144,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
 //        #endif
         
         if readerInfo.format == Format.PDF {
-            let dictViewer = modelData.getCustomDictViewerNew(library: book.library)
-            _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
+            let dictViewer = container.getCustomDictViewerNew(library: book.library)
+            _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             let pdfViewController = YabrPDFViewController()
             let metaSource = YabrEBookReaderPDFMetaSource(book: book, readerInfo: readerInfo)
@@ -177,16 +177,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             )
             let ret = pdfViewController.open()
             if ret == 0 {
-                // Load and apply initial preferences for PDF
-                if let enginePrefs = modelData.readerPreferenceRepository.loadInitialPreferences(
-                    for: book,
-                    readerType: readerInfo.readerType
-                ) {
-                    pdfViewController.applyPreferences(enginePrefs)
-                }
-                
                 // Load and apply initial highlights for PDF
-                let highlights = modelData.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
+                let highlights = container.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
                 pdfViewController.applyHighlights(highlights)
                 
                 nav.pushViewController(pdfViewController, animated: false)
@@ -202,11 +194,11 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         if readerInfo.format == Format.EPUB {
             let readerConfiguration = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
 
-            let dictViewer = modelData.getCustomDictViewerNew(library: book.library)
-            _ = modelData.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
+            let dictViewer = container.getCustomDictViewerNew(library: book.library)
+            _ = container.updateCustomDictViewer(enabled: dictViewer.0, value: dictViewer.1?.absoluteString)
             
             readerConfiguration.enableMDictViewer = dictViewer.0
-            readerConfiguration.userFontDescriptors = modelData.userFontInfos.mapValues { $0.descriptor }
+            readerConfiguration.userFontDescriptors = container.fontsManager.userFontInfos.mapValues { $0.descriptor }
             
 //            readerConfiguration.hideBars = true
 //            readerConfiguration.hidePageIndicator = true
@@ -221,13 +213,13 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
 
-            epubReaderContainer.modelData = modelData
+            epubReaderContainer.container = container
             epubReaderContainer.readerEngineDelegate = context.coordinator
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
             // Load and apply initial preferences for FolioReader
-            if let enginePrefs = modelData.readerPreferenceRepository.loadInitialPreferences(
+            if let enginePrefs = container.readerPreferenceRepository.loadInitialPreferences(
                 for: book,
                 readerType: readerInfo.readerType
             ) {
@@ -235,7 +227,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             }
 
             // Load and apply initial highlights for FolioReader
-            let highlights = modelData.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
+            let highlights = container.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toReaderEngineHighlight() }
             epubReaderContainer.applyHighlights(highlights)
             
             nav.pushViewController(epubReaderContainer, animated: false)
@@ -290,20 +282,20 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             
             dbPosition.epoch = Date().timeIntervalSince1970
             
-            parent.modelData.readingPositionRepository.savePosition(dbPosition, forBookId: parent.book.bookPrefId)
+            parent.container.readingPositionRepository.savePosition(dbPosition, forBookId: parent.book.bookPrefId)
         }
         
         func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {
             let bookHighlight = highlight.toBookHighlight()
-            parent.modelData.annotationRepository.saveHighlight(bookHighlight)
+            parent.container.annotationRepository.saveHighlight(bookHighlight)
         }
         
         func readerEngine(_ engine: AnyObject, didRemoveHighlight highlightId: String) {
-            parent.modelData.annotationRepository.removeHighlight(id: highlightId)
+            parent.container.annotationRepository.removeHighlight(id: highlightId)
         }
         
         func readerEngine(_ engine: AnyObject, didUpdatePreferences prefs: ReaderEnginePreferences) {
-            parent.modelData.readerPreferenceRepository.savePreferences(
+            parent.container.readerPreferenceRepository.savePreferences(
                 prefs,
                 for: parent.book,
                 readerType: parent.readerInfo.readerType

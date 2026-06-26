@@ -9,7 +9,7 @@ struct LibraryInfoBookListFooter: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var modelData: ModelData
+    @ObservedObject var container: AppContainer
     let geometry: GeometryProxy
     
     var body: some View {
@@ -25,7 +25,7 @@ struct LibraryInfoBookListFooter: View {
             }
             .padding([.leading, .trailing], 4)
 
-            Text(libraryInfoViewModel.getLibrarySearchingText(modelData: modelData, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses))
+            Text(libraryInfoViewModel.getLibrarySearchingText(container: container, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses))
             
             if viewModel.isSearchLoading {
                 ProgressView()

@@ -9,14 +9,14 @@ import Foundation
 import Combine
 
 class LibraryViewModel: ObservableObject {
-    let modelData: ModelData
+    let container: AppContainer
     let library: CalibreLibrary
     private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var discoverable: Bool = false
     @Published var autoUpdate: Bool = false
     
-    // UI state derived from modelData.librarySyncStatus
+    // UI state derived from container.librarySyncStatus
     @Published var isSync = false
     @Published var isUpd = false
     @Published var isError = false
@@ -34,10 +34,10 @@ class LibraryViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
-    init(modelData: ModelData, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
-        self.modelData = modelData
+    init(container: AppContainer, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
+        self.container = container
         self.library = library
-        self.libraryRepository = libraryRepository ?? modelData.libraryRepository
+        self.libraryRepository = libraryRepository ?? container.libraryRepository
         
         setupBindings()
     }
@@ -83,8 +83,8 @@ class LibraryViewModel: ObservableObject {
             }
             .store(in: &cancellables)
             
-        // Observe modelData.librarySyncStatus
-        modelData.libraryManager.$librarySyncStatus
+        // Observe container.librarySyncStatus
+        container.libraryManager.$librarySyncStatus
             .receive(on: DispatchQueue.main)
             .sink { [weak self] statusMap in
                 guard let self = self else { return }
@@ -109,20 +109,20 @@ class LibraryViewModel: ObservableObject {
     private func resolveBookTitles() {
         let serverUUID = library.server.uuid.uuidString
         let libraryName = library.name
-        
+
         var tempFailed: [Int32: String] = [:]
         for bookId in failedBookIds {
             let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = modelData.getBook(for: primaryKey) {
+            if let book = container.bookManager.getBook(for: primaryKey) {
                 tempFailed[bookId] = book.title
             }
         }
         self.failedBookTitles = tempFailed
-        
+
         var tempDeleted: [Int32: String] = [:]
         for bookId in deletedBookIds {
             let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = modelData.getBook(for: primaryKey) {
+            if let book = container.bookManager.getBook(for: primaryKey) {
                 tempDeleted[bookId] = book.title
             }
         }
@@ -131,7 +131,7 @@ class LibraryViewModel: ObservableObject {
 
     #if DEBUG
     func resetBooks() {
-        modelData.bookRepository.resetBooks(
+        container.bookRepository.resetBooks(
             serverUUID: library.server.uuid.uuidString,
             libraryName: library.name
         )

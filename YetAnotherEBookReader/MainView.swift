@@ -17,7 +17,7 @@ import UserMessagingPlatform
 
 @available(macCatalyst 14.0, *)
 struct MainView: View {
-    @EnvironmentObject var modelData: ModelData
+    @EnvironmentObject var container: AppContainer
     @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
 
@@ -31,7 +31,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            if let realmConf = modelData.realmConf {
+            if let realmConf = container.realmConf {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .tabItem {
@@ -40,7 +40,7 @@ struct MainView: View {
                         }
                         .tag(0)
                         .onAppear {
-                            modelData.calibreUpdatedSubject.send(.shelf)
+                            container.calibreUpdatedSubject.send(.shelf)
                         }
                         
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
@@ -59,7 +59,7 @@ struct MainView: View {
                         .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
-                        SettingsView(viewModel: SettingsViewModel(modelData: modelData))
+                        SettingsView(viewModel: SettingsViewModel(container: container))
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
@@ -255,8 +255,8 @@ struct MainView: View {
         .font(.headline)
         .onOpenURL { url in
             print("onOpenURL \(url)")
-            let result = modelData.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)            
-            modelData.bookImportedSubject.send(result)
+            let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
+            container.bookImportedSubject.send(result)
         }.onAppear {
             viewModel.onAppear()
         }
@@ -328,11 +328,11 @@ struct MainView: View {
 
 @available(macCatalyst 14.0, *)
 struct MainView_Previews: PreviewProvider {
-    static private var modelData = ModelData()
+    static private var container = AppContainer()
     
     static var previews: some View {
-        MainView(viewModel: MainViewModel(modelData: modelData, sessionManager: modelData.sessionManager))
-            .environmentObject(modelData)
-            .environmentObject(modelData.sessionManager)
+        MainView(viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
+            .environmentObject(container)
+            .environmentObject(container.sessionManager)
     }
 }

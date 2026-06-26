@@ -26,7 +26,7 @@ class ReadingSessionManager: ObservableObject {
                 return
             }
             if readingBook?.inShelfId != readingBookInShelfId {
-                readingBook = modelData?.booksInShelf[readingBookInShelfId] ?? modelData?.getBook(for: readingBookInShelfId)
+                readingBook = container?.bookManager.booksInShelf[readingBookInShelfId] ?? container?.bookManager.getBook(for: readingBookInShelfId)
             }
         }
     }
@@ -40,18 +40,18 @@ class ReadingSessionManager: ObservableObject {
             }
             
             readerInfo = prepareBookReading(book: readingBook)
-            self.selectedPosition = readerInfo?.position.id ?? modelData?.deviceName ?? ""
+            self.selectedPosition = readerInfo?.position.id ?? container?.deviceName ?? ""
         }
     }
     
     @Published var readerInfo: ReaderInfo? = nil
     @Published var selectedPosition = ""
     
-    weak var modelData: ModelData?
+    weak var container: AppContainerProtocol?
     private var cancellables = Set<AnyCancellable>()
-    
-    init(modelData: ModelData? = nil) {
-        self.modelData = modelData
+
+    init(container: AppContainerProtocol? = nil) {
+        self.container = container
         
         switch UIDevice.current.userInterfaceIdiom {
             case .phone:
@@ -67,8 +67,8 @@ class ReadingSessionManager: ObservableObject {
         formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
     }
     
-    func setup(modelData: ModelData) {
-        self.modelData = modelData
+    func setup(container: AppContainerProtocol) {
+        self.container = container
     }
     
     func onBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
@@ -76,24 +76,24 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        guard let modelData = modelData else {
+        guard let container = container else {
             return ReaderInfo(deviceName: "", url: URL(fileURLWithPath: "/invalid"), missing: true, format: .UNKNOWN, readerType: .UNSUPPORTED, position: .init(readerName: ReaderType.UNSUPPORTED.id))
         }
         
         var candidatePositions = [BookDeviceReadingPosition]()
 
         //preference: device, latest, selected, any
-        if let position = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData.deviceName) {
+        if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName) {
             candidatePositions.append(position)
         }
-        if let position = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
+        if let position = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
             candidatePositions.append(position)
         }
-        if let format = modelData.getPreferredFormat(for: book) {
+        if let format = self.getPreferredFormat(for: book) {
             candidatePositions.append(
-                modelData.readingPositionRepository.createInitial(
-                    deviceName: modelData.deviceName,
-                    reader: modelData.getPreferredReader(for: format)
+                container.readingPositionRepository.createInitial(
+                    deviceName: container.deviceName,
+                    reader: self.getPreferredReader(for: format)
                 )
             )
         }
@@ -109,12 +109,12 @@ class ReadingSessionManager: ObservableObject {
         let savedURL = getSavedUrl(book: book, format: formatReaderPair.0) ?? URL(fileURLWithPath: "/invalid")
         let urlMissing = !FileManager.default.fileExists(atPath: savedURL.path)
         
-        return ReaderInfo(deviceName: modelData.deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
+        return ReaderInfo(deviceName: container.deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
         let readerInfo = ReaderInfo(
-            deviceName: modelData?.deviceName ?? "",
+            deviceName: container?.deviceName ?? "",
             url: url,
             missing: false,
             format: format,
@@ -125,7 +125,9 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
-        guard let modelData = modelData, let realm = try? Realm(configuration: modelData.realmConf) else { return [:] }
+        guard let container = container,
+              let realmConf = container.realmConf,
+              let realm = try? Realm(configuration: realmConf) else { return [:] }
         
         var pred: NSPredicate?
         if let library = library, let bookId = bookId {
@@ -153,16 +155,16 @@ class ReadingSessionManager: ObservableObject {
         
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
-            if let book = modelData.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: startDateAfter))
+            if let book = container.bookManager.booksInShelf[bookInShelfId] {
+                historyList.append(contentsOf: container.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: startDateAfter))
             }
         } else {
-            modelData.booksInShelf.forEach {
-                historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: $0.value.bookPrefId, list: startDateAfter))
+            container.bookManager.booksInShelf.forEach {
+                historyList.append(contentsOf: container.readingPositionRepository.sessions(forBookId: $0.value.bookPrefId, list: startDateAfter))
             }
         }
         
-        let idMap = modelData.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
+        let idMap = container.bookManager.booksInShelf.reduce(into: [String: String]()) { partialResult, entry in
             partialResult["\(entry.value.library.key) - \(entry.value.id)"] = entry.value.inShelfId
         }
         
@@ -178,19 +180,19 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func handleBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
-        guard let modelData = modelData else { return }
+        guard let container = container else { return }
         
-        modelData.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
+        container.bookManager.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
 
-        guard let updatedReadingPosition = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
+        guard let updatedReadingPosition = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
 
         if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
-           let library = modelData.calibreLibraries[book.library.id],
+           let library = container.libraryManager.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData.shouldAutoUpdateGoodreads(library: library),
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = container.bookManager.shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
             
-            let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+            let connector = DSReaderHelperConnector(calibreServerService: container.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             
             do {
                 try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
@@ -200,7 +202,7 @@ class ReadingSessionManager: ObservableObject {
 
             if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
                 do {
-                    try await modelData.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
+                    try await container.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
                         [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
                     ])
                 } catch {
@@ -212,7 +214,7 @@ class ReadingSessionManager: ObservableObject {
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard let readingBook = self.readingBook,
-              let updatedReadingPosition = modelData?.readingPositionRepository.getPositions(forBookId: readingBook.bookPrefId).first,
+              let updatedReadingPosition = container?.readingPositionRepository.getPositions(forBookId: readingBook.bookPrefId).first,
               let readerInfo = self.readerInfo
         else {
             return
@@ -222,14 +224,14 @@ class ReadingSessionManager: ObservableObject {
         logger.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
         logger.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
 
-        modelData?.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
+        container?.bookManager.refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
 
         if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
-           let library = modelData?.calibreLibraries[readingBook.library.id],
+           let library = container?.libraryManager.calibreLibraries[readingBook.library.id],
            let goodreadsId = readingBook.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData?.shouldAutoUpdateGoodreads(library: library),
+           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = container?.bookManager.shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
-            let connector = DSReaderHelperConnector(calibreServerService: modelData!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
+            let connector = DSReaderHelperConnector(calibreServerService: container!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             Task {
                 do {
                     try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
@@ -239,7 +241,7 @@ class ReadingSessionManager: ObservableObject {
 
                 if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
                     do {
-                        try await modelData?.calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
+                        try await container?.calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
                             [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
                         ])
                     } catch {

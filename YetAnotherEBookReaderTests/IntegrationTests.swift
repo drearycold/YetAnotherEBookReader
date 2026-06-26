@@ -14,20 +14,20 @@ final class IntegrationTests: XCTestCase {
     
     override func tearDown() async throws {
         cancellables.removeAll()
-        ModelData.shared = nil
+        AppContainer.shared = nil
         try await super.tearDown()
     }
     
-    private func makeModelData(id: String) -> ModelData {
+    private func makeAppContainer(id: String) -> AppContainer {
         let config = Realm.Configuration(
             inMemoryIdentifier: id,
             schemaVersion: 140,
             migrationBlock: { _, _ in }
         )
         DatabaseService.shared.setup(conf: config)
-        let modelData = ModelData(mock: true)
-        modelData.realmConf = config
-        return modelData
+        let container = AppContainer(mock: true)
+        container.realmConf = config
+        return container
     }
     
     func testDatabaseInitialization() throws {
@@ -38,30 +38,30 @@ final class IntegrationTests: XCTestCase {
         )
         DatabaseService.shared.setup(conf: config)
         
-        let modelData = ModelData(mock: true)
-        modelData.realmConf = config
+        let container = AppContainer(mock: true)
+        container.realmConf = config
         
-        try modelData.tryInitializeDatabase { status in
+        try container.tryInitializeDatabase { status in
             // DB init status callback
         }
         
-        XCTAssertTrue(modelData.isDatabaseReady)
-        XCTAssertNotNil(modelData.realm)
+        XCTAssertTrue(container.isDatabaseReady)
+        XCTAssertNotNil(container.realm)
     }
     
     func testFullReadingFlow() async throws {
-        let modelData = makeModelData(id: "IntegrationTests-ReadingFlow-\(UUID().uuidString)")
+        let container = makeAppContainer(id: "IntegrationTests-ReadingFlow-\(UUID().uuidString)")
         
         let server = CalibreServer(uuid: UUID(), name: "Read Server", baseUrl: "http://read-server", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "read_lib", name: "Read Lib")
-        modelData.serverManager.addServer(server: server, libraries: [library])
+        container.serverManager.addServer(server: server, libraries: [library])
         
         var book = CalibreBook(id: 789, library: library)
         book.title = "Read Flow Book"
-        modelData.bookRepository.saveBook(book)
+        container.bookRepository.saveBook(book)
         
         let initialPos = BookDeviceReadingPosition(
-            id: modelData.deviceName,
+            id: container.deviceName,
             readerName: ReaderType.YabrEPUB.rawValue,
             maxPage: 100,
             lastReadPage: 1,
@@ -76,7 +76,7 @@ final class IntegrationTests: XCTestCase {
         )
         
         let readerInfo = ReaderInfo(
-            deviceName: modelData.deviceName,
+            deviceName: container.deviceName,
             url: URL(fileURLWithPath: "/tmp/book.epub"),
             missing: false,
             format: .EPUB,
@@ -85,13 +85,13 @@ final class IntegrationTests: XCTestCase {
         )
         
         // Start reading session
-        modelData.sessionManager.readingBook = book
-        modelData.sessionManager.readerInfo = readerInfo
-        XCTAssertEqual(modelData.sessionManager.readingBook?.id, book.id)
+        container.sessionManager.readingBook = book
+        container.sessionManager.readerInfo = readerInfo
+        XCTAssertEqual(container.sessionManager.readingBook?.id, book.id)
         
         // Update reading position
         let updatedPos = BookDeviceReadingPosition(
-            id: modelData.deviceName,
+            id: container.deviceName,
             readerName: ReaderType.YabrEPUB.rawValue,
             maxPage: 100,
             lastReadPage: 12,
@@ -104,27 +104,27 @@ final class IntegrationTests: XCTestCase {
             cfi: "cfi-12",
             epoch: Date().timeIntervalSince1970
         )
-        modelData.readingPositionRepository.savePosition(updatedPos, forBookId: book.bookPrefId)
-        modelData.sessionManager.updateCurrentPosition(alertDelegate: nil)
+        container.readingPositionRepository.savePosition(updatedPos, forBookId: book.bookPrefId)
+        container.sessionManager.updateCurrentPosition(alertDelegate: nil)
         
         // End reading session
-        await modelData.sessionManager.handleBookReaderClosed(book: book, lastPosition: initialPos)
-        modelData.sessionManager.readingBook = nil
-        XCTAssertNil(modelData.sessionManager.readingBook)
+        await container.sessionManager.handleBookReaderClosed(book: book, lastPosition: initialPos)
+        container.sessionManager.readingBook = nil
+        XCTAssertNil(container.sessionManager.readingBook)
         
         // Retrieve and assert saved position
-        let retrieved = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData.deviceName)
+        let retrieved = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName)
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.lastReadPage, 12)
         XCTAssertEqual(retrieved?.cfi, "cfi-12")
     }
     
     func testSearchToDownloadFlow() async throws {
-        let modelData = makeModelData(id: "IntegrationTests-SearchDownload-\(UUID().uuidString)")
+        let container = makeAppContainer(id: "IntegrationTests-SearchDownload-\(UUID().uuidString)")
         
         let server = CalibreServer(uuid: UUID(), name: "Search Server", baseUrl: "http://search-server", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "search_lib", name: "Search Lib")
-        modelData.serverManager.addServer(server: server, libraries: [library])
+        container.serverManager.addServer(server: server, libraries: [library])
         
         var book = CalibreBook(id: 456, library: library)
         book.title = "Search Download Book"
@@ -133,7 +133,7 @@ final class IntegrationTests: XCTestCase {
         // Setup URL session stubbing for download
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
-        modelData.downloadManager.sessionConfiguration = sessionConfig
+        container.downloadManager.sessionConfiguration = sessionConfig
         
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
@@ -152,7 +152,7 @@ final class IntegrationTests: XCTestCase {
             try? FileManager.default.removeItem(at: savedURL)
         }
         
-        let result = modelData.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: true)
+        let result = container.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: true)
         switch result {
         case .success:
             break
@@ -167,20 +167,20 @@ final class IntegrationTests: XCTestCase {
     }
     
     func testServerSetupAndLibrarySync() async throws {
-        let modelData = makeModelData(id: "IntegrationTests-Sync-\(UUID().uuidString)")
+        let container = makeAppContainer(id: "IntegrationTests-Sync-\(UUID().uuidString)")
         
         let server = CalibreServer(uuid: UUID(), name: "Setup Server", baseUrl: "http://setup-server", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "setup_lib", name: "Setup Lib")
         
         // Add server and library
-        modelData.serverManager.addServer(server: server, libraries: [library])
+        container.serverManager.addServer(server: server, libraries: [library])
         
         // Assert they are in repository / Realm
-        let savedServer = modelData.serverRepository.getAllServers().first(where: { $0.id == server.id })
+        let savedServer = container.serverRepository.getAllServers().first(where: { $0.id == server.id })
         XCTAssertNotNil(savedServer)
         XCTAssertEqual(savedServer?.name, "Setup Server")
         
-        let savedLib = modelData.libraryRepository.getLibrary(id: library.id)
+        let savedLib = container.libraryRepository.getLibrary(id: library.id)
         XCTAssertNotNil(savedLib)
         XCTAssertEqual(savedLib?.name, "Setup Lib")
     }

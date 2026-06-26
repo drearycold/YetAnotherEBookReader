@@ -16,17 +16,17 @@ class UnifiedSearchViewModel: ObservableObject {
     @Published private(set) var isSearchLoading = false
     
     private let searchService: UnifiedSearchService
-    private let modelData: ModelData
+    private let container: AppContainer
     private var searchTask: Task<Void, Never>?
     
     private var currentSearchKey: SearchCriteriaMergedKey?
     
-    init(searchService: UnifiedSearchService? = nil, modelData: ModelData? = nil) {
-        guard let resolvedModelData = modelData ?? ModelData.shared else {
-            fatalError("ModelData.shared must be initialized before creating UnifiedSearchViewModel")
+    init(searchService: UnifiedSearchService? = nil, container: AppContainer? = nil) {
+        guard let resolvedAppContainer = container ?? AppContainer.shared else {
+            fatalError("AppContainer.shared must be initialized before creating UnifiedSearchViewModel")
         }
-        self.modelData = resolvedModelData
-        self.searchService = searchService ?? resolvedModelData.unifiedSearchService
+        self.container = resolvedAppContainer
+        self.searchService = searchService ?? resolvedAppContainer.unifiedSearchService
     }
     
     func startSearch(key: SearchCriteriaMergedKey) {

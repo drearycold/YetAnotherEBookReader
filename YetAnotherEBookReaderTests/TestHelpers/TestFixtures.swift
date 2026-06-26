@@ -148,4 +148,47 @@ enum TestFixtures {
             removed: removed
         )
     }
+
+    /// Populate a AppContainer (already initialized with `AppContainer(mock: true)`)
+    /// with a single mock book and a matching reading position. Extracted from
+    /// the previous `AppContainer.init(mock:)` body so it can be reused by tests
+    /// and previews without keeping ~65 lines of fixture construction inline.
+    static func populateAppContainerWithMockBook(_ container: AppContainer) {
+        let library = container.libraryManager.calibreLibraries.first!.value
+
+        var book = CalibreBook(id: 1, library: library)
+        book.title = "Mock Book Title"
+
+        book.formats[Format.EPUB.rawValue] = .init(
+            filename: book.title + ".epub",
+            serverSize: 1024000,
+            serverMTime: Date(timeIntervalSince1970: 1645495322),
+            cached: true,
+            cacheSize: 1024000,
+            cacheMTime: Date(timeIntervalSince1970: 1645495322),
+            manifest: nil
+        )
+        if let bookSavedUrl = getSavedUrl(book: book, format: Format.EPUB),
+           FileManager.default.fileExists(atPath: bookSavedUrl.path) == false {
+            FileManager.default.createFile(atPath: bookSavedUrl.path, contents: String("EPUB").data(using: .utf8), attributes: nil)
+        }
+
+        var position = BookDeviceReadingPosition(
+            id: container.deviceName,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            maxPage: 99,
+            lastReadPage: 1,
+            lastReadChapter: "Mock Last Chapter",
+            lastChapterProgress: 5,
+            lastProgress: 1,
+            furthestReadPage: 98,
+            furthestReadChapter: "Mock Furthest Chapter",
+            lastPosition: [1, 1, 1]
+        )
+        position.epoch = 1645495322
+
+        container.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+        container.bookManager.readingBook = book
+        container.bookManager.booksInShelf[book.inShelfId] = book
+    }
 }

@@ -11,24 +11,24 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class ReadingSessionManagerTests: XCTestCase {
-    private var modelData: ModelData!
+    private var container: AppContainer!
     private var manager: ReadingSessionManager!
     private var cancellables: Set<AnyCancellable>!
-    private var originalModelDataShared: ModelData?
+    private var originalAppContainerShared: AppContainer?
     
     override func setUpWithError() throws {
-        originalModelDataShared = ModelData.shared
-        modelData = ModelData(mock: true)
-        ModelData.shared = modelData
+        originalAppContainerShared = AppContainer.shared
+        container = AppContainer(mock: true)
+        AppContainer.shared = container
         
-        manager = ReadingSessionManager(modelData: modelData)
+        manager = ReadingSessionManager(container: container)
         cancellables = []
     }
     
     override func tearDownWithError() throws {
-        ModelData.shared = originalModelDataShared
+        AppContainer.shared = originalAppContainerShared
         manager = nil
-        modelData = nil
+        container = nil
         cancellables = nil
     }
     
@@ -55,7 +55,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testSelectedReadingBook_publishesChange() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.title = "Session Reading Book"
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
@@ -73,41 +73,41 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testStartSession_recordsTimestamp() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 777, library: library)
         let pos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 12, epoch: 500.0)
         
-        let startResult = modelData.readingPositionRepository.session(start: pos, forBookId: book.bookPrefId)
+        let startResult = container.readingPositionRepository.session(start: pos, forBookId: book.bookPrefId)
         XCTAssertNotNil(startResult)
     }
     
     func testEndSession_logsActivity() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 777, library: library)
         let startPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 5, epoch: 500.0)
         let endPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 15, epoch: 1500.0)
         
-        _ = modelData.readingPositionRepository.session(start: startPos, forBookId: book.bookPrefId)
-        modelData.readingPositionRepository.session(end: endPos, forBookId: book.bookPrefId)
+        _ = container.readingPositionRepository.session(start: startPos, forBookId: book.bookPrefId)
+        container.readingPositionRepository.session(end: endPos, forBookId: book.bookPrefId)
         
-        let sessions = modelData.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: nil)
+        let sessions = container.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: nil)
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.startPosition?.lastReadPage, 5)
         XCTAssertEqual(sessions.first?.endPosition?.lastReadPage, 15)
     }
     
     func testUpdateCurrentPosition_savesViaRepository() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.title = "Update Current Position Book"
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         
-        let position = TestFixtures.makeReadingPosition(id: modelData.deviceName, lastReadPage: 25, epoch: 1200.0)
-        modelData.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+        let position = TestFixtures.makeReadingPosition(id: container.deviceName, lastReadPage: 25, epoch: 1200.0)
+        container.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
         
         manager.readingBook = book
         manager.readerInfo = ReaderInfo(
-            deviceName: modelData.deviceName,
+            deviceName: container.deviceName,
             url: URL(fileURLWithPath: "/tmp/mock_file.epub"),
             missing: false,
             format: .EPUB,
@@ -120,7 +120,7 @@ final class ReadingSessionManagerTests: XCTestCase {
     }
     
     func testFormatList_orderedByPreference() throws {
-        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 777, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
         book.formats[Format.PDF.rawValue] = FormatInfo(selected: nil, filename: "test.pdf", serverSize: 2000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)

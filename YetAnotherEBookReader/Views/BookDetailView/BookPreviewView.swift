@@ -32,12 +32,12 @@ struct BookPreviewView: View {
                 YabrEBookReader(
                     book: _VM.book,
                     readerInfo: ReaderInfo(
-                        deviceName: _VM.modelData.deviceName,
+                        deviceName: _VM.container.deviceName,
                         url: _VM.url,
                         missing: false,
                         format: _VM.format,
                         readerType: _VM.reader,
-                        position: _VM.modelData.readingPositionRepository.createInitial(deviceName: _VM.modelData.deviceName, reader: _VM.reader)                        
+                        position: _VM.container.readingPositionRepository.createInitial(deviceName: _VM.container.deviceName, reader: _VM.reader)                        
                     )
                 )
             }
@@ -52,15 +52,15 @@ struct BookPreviewView: View {
 }
 
 struct BookPreviewView_Previews: PreviewProvider {
-    @StateObject static var modelData = ModelData(mock: true)
+    @StateObject static var container = AppContainer(mock: true)
 
     static var previews: some View {
-        if let book = modelData.booksInShelf.first?.value,
-           let formatReaderPair: (Format, ReaderType) = modelData.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
+        if let book = container.bookManager.booksInShelf.first?.value,
+           let formatReaderPair: (Format, ReaderType) = container.sessionManager.defaultReaderForDefaultFormat(book: book) as (Format, ReaderType)?,
            let savedUrl = getSavedUrl(book: book, format: formatReaderPair.0) {
             BookPreviewView(
                 viewModel: BookPreviewViewModel(
-                    modelData: modelData,
+                    container: container,
                     book: book,
                     url: savedUrl,
                     format: formatReaderPair.0,

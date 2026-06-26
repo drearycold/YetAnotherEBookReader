@@ -13,18 +13,18 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class FolioReaderProviderBookIdTests: XCTestCase {
-    private var originalModelDataShared: ModelData?
-    private var modelData: ModelData!
+    private var originalAppContainerShared: AppContainer?
+    private var container: AppContainer!
     private var book: CalibreBook!
     private var readerInfo: ReaderInfo!
     private let folioReaderBookId = "Runtime File Name"
 
     override func setUpWithError() throws {
-        originalModelDataShared = ModelData.shared
-        modelData = ModelData(mock: true)
-        ModelData.shared = modelData
+        originalAppContainerShared = AppContainer.shared
+        container = AppContainer(mock: true)
+        AppContainer.shared = container
 
-        guard let library = modelData.calibreLibraries.first?.value else {
+        guard let library = container.libraryManager.calibreLibraries.first?.value else {
             XCTFail("No mock library available")
             return
         }
@@ -32,7 +32,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         book = CalibreBook(id: 901, library: library)
         book.title = "Canonical Test Book"
         readerInfo = ReaderInfo(
-            deviceName: modelData.deviceName,
+            deviceName: container.deviceName,
             url: URL(fileURLWithPath: "/tmp/\(folioReaderBookId).epub"),
             missing: false,
             format: .EPUB,
@@ -49,8 +49,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         clearReadingPositions()
         clearBookmarks()
         clearHighlights()
-        ModelData.shared = originalModelDataShared
-        modelData = nil
+        AppContainer.shared = originalAppContainerShared
+        container = nil
         book = nil
         readerInfo = nil
     }
@@ -68,7 +68,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     func testReadPositionProviderRestoresCanonicalPositionWithFolioReaderRuntimeId() {
         let savedPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
-        modelData.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
 
         let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)
@@ -82,10 +82,10 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let oldPosition = makePosition(page: 4, offsetX: 1, offsetY: 2, cfi: "epubcfi(/6/8)", epoch: 1_000)
         let newPosition = makePosition(page: 17, offsetX: 33, offsetY: 44, cfi: "epubcfi(/6/34)", epoch: 2_000)
 
-        modelData.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
-        modelData.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
 
-        let restored = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData.deviceName)
+        let restored = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName)
         XCTAssertEqual(restored?.lastReadPage, 17)
         XCTAssertEqual(restored?.lastPosition, [17, 33, 44])
         XCTAssertEqual(restored?.cfi, "epubcfi(/6/34)")
@@ -100,8 +100,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let newPosition = makePosition(page: 18, offsetX: 9, offsetY: 10, cfi: "epubcfi(/6/36)", epoch: 2_000)
         let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
 
-        modelData.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
-        modelData.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
 
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId)
         XCTAssertNotNil(restored)
@@ -120,7 +120,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             }
         }
 
-        let repository = modelData.readingPositionRepository
+        let repository = container.readingPositionRepository
         let newPosition = makePosition(page: 19, cfi: "epubcfi(/6/38)", epoch: seedEpoch + 1)
         let writerStarted = DispatchSemaphore(value: 0)
         let stateLock = NSLock()
@@ -142,7 +142,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         DispatchQueue.global(qos: .userInitiated).async {
             writerStarted.wait()
             while true {
-                if repository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.modelData.deviceName) == nil {
+                if repository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) == nil {
                     stateLock.lock()
                     sawEmptyPosition = true
                     stateLock.unlock()
@@ -168,7 +168,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     func testReadPositionProviderRejectsUnrelatedId() {
         let savedPosition = makePosition(page: 8)
-        modelData.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
 
         let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
 
@@ -236,13 +236,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             completionCalled = true
         }
 
-        let stored = modelData.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true)
+        let stored = container.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true)
         let runtimeResults = provider.folioReaderBookmark(FolioReader(), allByBookId: folioReaderBookId, andPage: nil)
 
         XCTAssertTrue(completionCalled)
         XCTAssertEqual(stored.count, 1)
         XCTAssertEqual(stored.first?.bookId, book.bookPrefId)
-        XCTAssertTrue(modelData.annotationRepository.getBookmarks(forBookId: folioReaderBookId, excludeRemoved: true).isEmpty)
+        XCTAssertTrue(container.annotationRepository.getBookmarks(forBookId: folioReaderBookId, excludeRemoved: true).isEmpty)
         XCTAssertEqual(runtimeResults.first?.bookId, book.bookPrefId)
     }
 
@@ -313,7 +313,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     func testCombinedPositionAndHighlightRestoreViaFolioReaderRuntimeId() throws {
         // 1. Save a canonical reading position
         let savedPosition = makePosition(page: 21, offsetX: 5, offsetY: 7, cfi: "epubcfi(/6/42[chap03ref])")
-        modelData.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
 
         // 2. Save a canonical highlight via the annotation repository
         let highlight = BookHighlight(
@@ -336,7 +336,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             ranges: nil,
             removed: false
         )
-        modelData.annotationRepository.saveHighlight(highlight)
+        container.annotationRepository.saveHighlight(highlight)
 
         // 3. Simulate the FolioReaderKit runtime restore path:
         //    the container creates its provider and FolioReaderKit queries by runtime book id
@@ -373,7 +373,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let config = FolioReaderConfig(withIdentifier: "TEST-\(UUID().uuidString)")
         let folioReader = FolioReader()
         let webServer = ReadiumGCDWebServer()
-        let container = EpubFolioReaderContainer(
+        let epubContainer = EpubFolioReaderContainer(
             withConfig: config,
             folioReader: folioReader,
             epubPath: "/dev/null/non-existent-\(UUID().uuidString).epub",
@@ -381,13 +381,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         )
         // Ensure the provider factory can build a real FolioReaderDelegateHighlightProvider
         // instead of falling back to FolioReaderDummyHighlightProvider.
-        modelData.sessionManager.readingBook = book
-        modelData.sessionManager.readerInfo = readerInfo
-        container.modelData = modelData
-        container.readerEngineDelegate = nil
+        container.sessionManager.readingBook = book
+        container.sessionManager.readerInfo = readerInfo
+        epubContainer.container = container
+        epubContainer.readerEngineDelegate = nil
         // Sanity: the provider must not exist before the fix runs
-        container.folioReaderHighlightProvider = nil
-        return container
+        epubContainer.folioReaderHighlightProvider = nil
+        return epubContainer
     }
 
     private func makePosition(
@@ -398,7 +398,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         epoch: Double = Date().timeIntervalSince1970
     ) -> BookDeviceReadingPosition {
         BookDeviceReadingPosition(
-            id: modelData.deviceName,
+            id: container.deviceName,
             readerName: ReaderType.YabrEPUB.rawValue,
             maxPage: 120,
             lastReadPage: page,
@@ -460,7 +460,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         guard let book = book else { return }
         let components = book.bookPrefId.components(separatedBy: " - ")
         guard components.count > 1,
-              let library = modelData?.calibreLibraries.values.first(where: { $0.key == components[0] }),
+              let library = container?.calibreLibraries.values.first(where: { $0.key == components[0] }),
               let realm = try? Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server)) else {
             return
         }
@@ -471,7 +471,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     private func readingPositionRealm() throws -> Realm {
         let components = book.bookPrefId.components(separatedBy: " - ")
-        let library = try XCTUnwrap(modelData.calibreLibraries.values.first(where: { $0.key == components[0] }))
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.values.first(where: { $0.key == components[0] }))
         return try Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server))
     }
 
@@ -490,14 +490,14 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     private func clearBookmarks() {
-        guard let realm = modelData?.realm else { return }
+        guard let realm = container?.realm else { return }
         try? realm.write {
             realm.delete(realm.objects(BookBookmarkRealm.self).filter("bookId IN %@", [book?.bookPrefId ?? "", folioReaderBookId]))
         }
     }
 
     private func clearHighlights() {
-        guard let realm = modelData?.realm else { return }
+        guard let realm = container?.realm else { return }
         try? realm.write {
             realm.delete(realm.objects(BookHighlightRealm.self).filter("bookId == %@", book?.bookPrefId ?? ""))
         }
@@ -667,7 +667,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     @MainActor
     func testConcurrentHighlightWriting() throws {
-        let repository = modelData.annotationRepository
+        let repository = container.annotationRepository
         let group = DispatchGroup()
         
         for i in 1...20 {
@@ -701,7 +701,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let result = group.wait(timeout: .now() + 5.0)
         XCTAssertEqual(result, .success)
         
-        modelData.refreshDatabase()
+        container.refreshDatabase()
         
         let retrieved = repository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false)
         XCTAssertEqual(Set(retrieved.map(\.id)).count, 20)
@@ -728,7 +728,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
         let config = Realm.Configuration(
             inMemoryIdentifier: id,
-            schemaVersion: ModelData.RealmSchemaVersion,
+            schemaVersion: AppContainer.RealmSchemaVersion,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]
         )

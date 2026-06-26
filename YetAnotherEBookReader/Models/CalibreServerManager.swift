@@ -12,23 +12,31 @@ import OSLog
 
 class CalibreServerManager: ObservableObject {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreServerManager")
-    
-    weak var modelData: ModelData?
+
+    weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
     private let serverRepository: ServerRepositoryProtocol
-    
+
+    /// Internal subject emitted whenever a new full server probe completes.
+    /// Consumed by `registerSyncServerHelperConfigCancellable()` to refresh
+    /// each server's DSReader Helper configuration.
+    let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
+
+    private var syncServerHelperConfigCancellable: AnyCancellable?
+
     @Published var calibreServers = [String: CalibreServer]()
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
         didSet {
-            modelData?.calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
+            container?.calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
         }
     }
     var documentServer: CalibreServer?
-    
-    init(modelData: ModelData, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
-        self.modelData = modelData
+
+    init(container: AppContainerProtocol, databaseService: DatabaseService, serverRepository: ServerRepositoryProtocol) {
+        self.container = container
         self.databaseService = databaseService
         self.serverRepository = serverRepository
+        registerSyncServerHelperConfigCancellable()
     }
     
     // MARK: - Migrated Methods
@@ -77,8 +85,8 @@ class CalibreServerManager: ObservableObject {
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
         libraries.forEach {
             do {
-                try modelData?.libraryRepository.saveLibrary($0)
-                modelData?.calibreLibraries[$0.id] = $0
+                try container?.libraryRepository.saveLibrary($0)
+                container?.calibreLibraries[$0.id] = $0
             } catch {
                 logger.error("Failed to update library realm: \(error.localizedDescription)")
             }
@@ -98,14 +106,14 @@ class CalibreServerManager: ObservableObject {
     
     @MainActor
     func removeServer(server: CalibreServer) async {
-        guard let modelData = self.modelData else { return }
-        let librariesToRemove = modelData.calibreLibraries.filter { $0.value.server.id == server.id }
+        guard let container = self.container else { return }
+        let librariesToRemove = container.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }
         for (_, library) in librariesToRemove {
-            modelData.hideLibrary(libraryId: library.id)
-            await modelData.removeLibrary(library: library)
+            container.libraryManager.hideLibrary(libraryId: library.id)
+            await container.libraryManager.removeLibrary(library: library)
         }
         
-        modelData.calibreUpdatedSubject.send(.shelf)
+        container.calibreUpdatedSubject.send(.shelf)
     }
     
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
@@ -160,7 +168,7 @@ class CalibreServerManager: ObservableObject {
         
         guard let info = self.calibreServerInfoStaging[request.id] else { return nil }
         
-        guard let calibreServerService = modelData?.calibreServerService else { return nil }
+        guard let calibreServerService = container?.calibreServerService else { return nil }
         let newServerInfo = await calibreServerService.probeServerReachability(serverInfo: info)
         
         guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return nil }
@@ -182,22 +190,22 @@ class CalibreServerManager: ObservableObject {
         if serverInfo.server.isLocal == false && serverInfo.request.updateLibrary {
             serverInfo.libraryMap.forEach { key, name in
                 let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-                if modelData?.calibreLibraries[newLibrary.id] == nil {
-                    modelData?.calibreLibraries[newLibrary.id] = newLibrary
-                    try? modelData?.libraryRepository.saveLibrary(newLibrary)
+                if container?.calibreLibraries[newLibrary.id] == nil {
+                    container?.calibreLibraries[newLibrary.id] = newLibrary
+                    try? container?.libraryRepository.saveLibrary(newLibrary)
                 }
             }
             
             if serverInfo.request.autoUpdateOnly == false {
-                modelData?.syncServerHelperConfigSubject.send(serverInfo.server.id)
+                syncServerHelperConfigSubject.send(serverInfo.server.id)
             }
             
             // TODO: replace sync library with library search
-            modelData?.calibreLibraries.filter {
+            container?.calibreLibraries.filter {
                 $0.value.server.id == serverInfo.server.id
             }.forEach { id, library in
                 Task {
-                    await modelData?.syncLibrary(
+                    await container?.libraryManager.syncLibrary(
                         request: .init(
                             library: library,
                             autoUpdateOnly: serverInfo.request.autoUpdateOnly,
@@ -208,12 +216,12 @@ class CalibreServerManager: ObservableObject {
             }
             
             if serverInfo.reachable {
-                modelData?.calibreUpdatedSubject.send(.server(serverInfo.server))
+                container?.calibreUpdatedSubject.send(.server(serverInfo.server))
                 
-                modelData?.calibreLibraries.filter {
+                container?.calibreLibraries.filter {
                     $0.value.server.id == serverInfo.server.id
                 }.forEach { id, library in
-                    modelData?.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+                    container?.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
         }
@@ -252,5 +260,61 @@ class CalibreServerManager: ObservableObject {
             }
         }
         return serverInfos.first?.value
+    }
+
+    // MARK: - DSReader Helper Config Sync
+
+    /// Subscribe to `syncServerHelperConfigSubject` and, for every server id
+    /// emitted, fetch the latest DSReader Helper configuration from the helper
+    /// endpoint and persist it back into the server Realm.
+    private func registerSyncServerHelperConfigCancellable() {
+        let queue = DispatchQueue(label: "sync-server-helper", qos: .userInitiated)
+        syncServerHelperConfigCancellable = syncServerHelperConfigSubject
+            .receive(on: queue)
+            .flatMap { [weak self] serverId -> AnyPublisher<Result<(id: String, port: Int, data: Data), URLError>, Never> in
+                guard let self = self,
+                      let container = self.container,
+                      let server = self.calibreServers[serverId],
+                      let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
+                      let publisher = DSReaderHelperConnector(
+                        calibreServerService: container.calibreServerService,
+                        server: server,
+                        dsreaderHelperServer: dsreaderHelperServer,
+                        goodreadsSync: nil
+                      ).refreshConfiguration()
+                else {
+                    return Just(Result.failure(URLError(.unknown))).eraseToAnyPublisher()
+                }
+                return publisher
+                    .map { Result.success($0) }
+                    .catch { Just(Result.failure($0)) }
+                    .eraseToAnyPublisher()
+            }
+            .map { result -> (id: String, port: Int, data: Data, config: CalibreDSReaderHelperConfiguration?, error: URLError?) in
+                switch result {
+                case .success(let task):
+                    return (
+                        id: task.id,
+                        port: task.port,
+                        data: task.data,
+                        config: try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data),
+                        error: nil
+                    )
+                case .failure(let error):
+                    return (id: "", port: 0, data: Data(), config: nil, error: error)
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] task in
+                if let error = task.error {
+                    self?.logger.error("Failed to sync server helper configuration: \(error.localizedDescription)")
+                    return
+                }
+                if let config = task.config, config.dsreader_helper_prefs != nil {
+                    let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
+                    dsreaderHelper.configurationData = task.data
+                    self?.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
+                }
+            }
     }
 }
