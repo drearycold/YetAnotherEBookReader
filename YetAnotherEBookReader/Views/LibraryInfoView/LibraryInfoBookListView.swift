@@ -13,12 +13,11 @@ import KingfisherSwiftUI
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
+    @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     
-    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
-    @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
-    
-    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
+
 
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
@@ -44,7 +43,7 @@ struct LibraryInfoBookListView: View {
                     footerView(geometry: geometry)
                 }
                 
-                if unifiedSearchObject.loading {
+                if viewModel.isSearchLoading {
                     ProgressView()
                         .scaleEffect(4, anchor: .center)
                         .progressViewStyle(CircularProgressViewStyle())
@@ -58,7 +57,7 @@ struct LibraryInfoBookListView: View {
         ZStack {
             TextField("Search Title & Authors", text: $searchString)
                 .onAppear {
-                    searchString = viewModel.searchString
+                    searchString = libraryInfoViewModel.searchString
                 }
                 .onSubmit {
                     searchStringChanged(searchString: searchString)
@@ -84,14 +83,14 @@ struct LibraryInfoBookListView: View {
                 }.disabled(searchString.isEmpty)
                 
                 Menu {
-                    ForEach(viewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
+                    ForEach(libraryInfoViewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
                         ForEach(categoryFilter.value.filter({
-                            categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
+                            categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
                         }).sorted(), id: \.self) { categoryFilterValue in
                             Button {
-                                if viewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
-                                    if viewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
-                                        viewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
+                                if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
+                                    if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
+                                        libraryInfoViewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
                                     }
                                     searchStringChanged(searchString: self.searchString)
                                 }
@@ -108,9 +107,9 @@ struct LibraryInfoBookListView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease.circle")
                         .foregroundColor(
-                            viewModel.filterCriteriaCategory.filter({ categoryFilter in
+                            libraryInfoViewModel.filterCriteriaCategory.filter({ categoryFilter in
                                 categoryFilter.value.filter({
-                                    categoryFilter.key != viewModel.categoriesSelected || $0 != viewModel.categoryItemSelected
+                                    categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
                                 }).isEmpty == false
                             }).isEmpty ? .gray : .accentColor
                         )
@@ -135,33 +134,37 @@ struct LibraryInfoBookListView: View {
                 debugView()
                 #endif
                 
-                if unifiedSearchObject.books.isEmpty {
+                let books = viewModel.unifiedSearchResult?.books ?? []
+                if books.isEmpty {
                     Text(getLibraryLoadingCount() > 0 ? "Loading books..." : "Found no books.")
                 } else {
-                    if let sectionByString = viewModel.sectionedBy?.sectionByString {
-                        ForEach(unifiedSearchObject.books.sectioned(by: sectionByString)) { section in
+                    if let groupString = libraryInfoViewModel.sectionedBy?.groupString {
+                        let grouped = Dictionary(grouping: Array(books.enumerated()), by: { groupString($0.element) })
+                        let sortedKeys = grouped.keys.compactMap { $0 }.sorted()
+                        ForEach(sortedKeys, id: \.self) { key in
                             Section {
-                                ForEach(section) { bookRealm in
-                                    listEntryView(bookRealm: bookRealm)
+                                ForEach(grouped[key] ?? [], id: \.element.id) { index, book in
+                                    listEntryView(book: book, index: index)
                                 }
                             } header: {
-                                Text(section.key ?? "Unknown")
+                                Text(key)
                             }
-                            
                         }
-                    } else if let sectionByRating = viewModel.sectionedBy?.sectionByRating {
-                        ForEach(unifiedSearchObject.books.sectioned(by: sectionByRating, ascending: false)) { section in
+                    } else if let groupRating = libraryInfoViewModel.sectionedBy?.groupRating {
+                        let grouped = Dictionary(grouping: Array(books.enumerated()), by: { groupRating($0.element) })
+                        let sortedKeys = grouped.keys.sorted(by: >)
+                        ForEach(sortedKeys, id: \.self) { key in
                             Section {
-                                ForEach(section) { bookRealm in
-                                    listEntryView(bookRealm: bookRealm)
+                                ForEach(grouped[key] ?? [], id: \.element.id) { index, book in
+                                    listEntryView(book: book, index: index)
                                 }
                             } header: {
-                                Text(CalibreBookRealm.RatingDescription(section.key))
+                                Text(CalibreBookRealm.RatingDescription(key))
                             }
                         }
                     } else {
-                        ForEach(unifiedSearchObject.books) { bookRealm in
-                            listEntryView(bookRealm: bookRealm)
+                        ForEach(Array(books.enumerated()), id: \.element.id) { index, book in
+                            listEntryView(book: book, index: index)
                         }
                     }
                 }
@@ -170,36 +173,41 @@ struct LibraryInfoBookListView: View {
                 #endif
             }
             .onAppear {
-                print("LIBRARYINFOVIEW books=\(unifiedSearchObject.books.count)")
+                print("LIBRARYINFOVIEW books=\(viewModel.unifiedSearchResult?.books.count ?? 0)")
             }
-            .disabled(unifiedSearchObject.loading)
+            .disabled(viewModel.isSearchLoading)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     downloadButton(geometry: geometry)
-                        .disabled(unifiedSearchObject.loading)
+                        .disabled(viewModel.isSearchLoading)
                     
                     sortMenuView()
-                        .disabled(unifiedSearchObject.loading)
+                        .disabled(viewModel.isSearchLoading)
                 }
             }
         }
     }
     
     @ViewBuilder
-    private func listEntryView(bookRealm: CalibreBookRealm) -> some View {
-        NavigationLink (
-            destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
-            tag: bookRealm.primaryKey!,
-            selection: $modelData.selectedBookId
-        ) {
-            LibraryInfoBookRow(unifiedSearchObject: unifiedSearchObject, bookRealm: bookRealm)
-        }
-        .isDetailLink(true)
-        .contextMenu {
-            if let book = modelData.convert(bookRealm: bookRealm) {
-                bookRowContextMenuView(book: book)
+    private func listEntryView(book: CalibreBook, index: Int) -> some View {
+        Group {
+            if let bookRealm = modelData.getBookRealm(forPrimaryKey: book.inShelfId) {
+                NavigationLink (
+                    destination: BookDetailView(book: bookRealm, viewMode: .LIBRARY),
+                    tag: book.inShelfId,
+                    selection: $modelData.selectedBookId
+                ) {
+                    LibraryInfoBookRow(book: book, index: index)
+                }
+                .isDetailLink(true)
+                .contextMenu {
+                    bookRowContextMenuView(book: book)
+                }
             } else {
-                EmptyView()
+                LibraryInfoBookRow(book: book, index: index)
+                    .contextMenu {
+                        bookRowContextMenuView(book: book)
+                    }
             }
         }
     }
@@ -213,42 +221,26 @@ struct LibraryInfoBookListView: View {
                 Image(systemName: "info.circle")
             }
             .popover(isPresented: $booksListInfoPresenting) {
-                LibraryInfoBookListInfoView(unifiedSearchObject: unifiedSearchObject, presenting: $booksListInfoPresenting)
+                LibraryInfoBookListInfoView(presenting: $booksListInfoPresenting)
                     .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
             }
             .padding([.leading, .trailing], 4)
 
             Text(getLibrarySearchingText())
             
-            if unifiedSearchObject.loading {
+            if viewModel.isSearchLoading {
                 ProgressView()
                     .progressViewStyle(.circular)
             }
             
             Spacer()
             
-            if unifiedSearchObject.totalNumber > 0 {
-                Text("\(unifiedSearchObject.books.count) / \(unifiedSearchObject.totalNumber)")
+            if let result = viewModel.unifiedSearchResult, result.totalNumber > 0 {
+                Text("\(result.books.count) / \(result.totalNumber)")
             }
             
             Button {
-                guard let realm = unifiedSearchObject.realm?.thaw(),
-                let thawedObject = unifiedSearchObject.thaw()
-                else {
-                    return
-                }
-                
-                try! realm.write {
-                    thawedObject.unifiedOffsets.forEach {
-                        $0.value?.generation = .distantPast
-                    }
-                }
-                
-                modelData.librarySearchManager.refreshSearchResults(
-                    libraryIds: viewModel.filterCriteriaLibraries,
-                    searchCriteria: viewModel.currentLibrarySearchCriteria,
-                    force: true
-                )
+                viewModel.resetSearch(force: true)
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
@@ -260,14 +252,12 @@ struct LibraryInfoBookListView: View {
     private func downloadButton(geometry: GeometryProxy) -> some View {
         Button {
             downloadBookList.removeAll(keepingCapacity: true)
-            downloadBookList = unifiedSearchObject.books.compactMap({ bookRealm in
-                modelData.convert(bookRealm: bookRealm)
-            })
+            downloadBookList = viewModel.unifiedSearchResult?.books ?? []
             batchDownloadSheetPresenting = true
         } label: {
             Image(systemName: "square.and.arrow.down.on.square")
         }
-        .disabled(unifiedSearchObject.loading)
+        .disabled(viewModel.isSearchLoading)
         .popover(isPresented: $batchDownloadSheetPresenting,
                  attachmentAnchor: .point(.bottom),
                  arrowEdge: .bottom
@@ -285,17 +275,17 @@ struct LibraryInfoBookListView: View {
         Menu {
             ForEach(SortCriteria.allCases, id: \.self) { sort in
                 Button(action: {
-                    if viewModel.sortCriteria.by == sort {
-                        viewModel.sortCriteria.ascending.toggle()
+                    if libraryInfoViewModel.sortCriteria.by == sort {
+                        libraryInfoViewModel.sortCriteria.ascending.toggle()
                     } else {
-                        viewModel.sortCriteria.by = sort
-                        viewModel.sortCriteria.ascending = sort == .Title ? true : false
+                        libraryInfoViewModel.sortCriteria.by = sort
+                        libraryInfoViewModel.sortCriteria.ascending = sort == .Title ? true : false
                     }
                     resetToFirstPage()
                 }) {
                     HStack {
-                        if viewModel.sortCriteria.by == sort {
-                            if viewModel.sortCriteria.ascending {
+                        if libraryInfoViewModel.sortCriteria.by == sort {
+                            if libraryInfoViewModel.sortCriteria.ascending {
                                 Image(systemName: "arrow.down")
                             } else {
                                 Image(systemName: "arrow.up")
@@ -308,22 +298,23 @@ struct LibraryInfoBookListView: View {
                 }
             }
             
-            if unifiedSearchObject.books.count == unifiedSearchObject.totalNumber,
-               unifiedSearchObject.totalNumber > 0,
-               unifiedSearchObject.totalNumber < 1000 {
+            if let result = viewModel.unifiedSearchResult,
+               result.books.count == result.totalNumber,
+               result.totalNumber > 0,
+               result.totalNumber < 1000 {
                 Divider()
                 
                 Text("Group By")
                 
                 ForEach(LibraryInfoView.GroupKey.allCases) { key in
                     Button {
-                        if viewModel.sectionedBy != key {
-                            viewModel.sectionedBy = key
+                        if libraryInfoViewModel.sectionedBy != key {
+                            libraryInfoViewModel.sectionedBy = key
                         } else {
-                            viewModel.sectionedBy = nil
+                            libraryInfoViewModel.sectionedBy = nil
                         }
                     } label: {
-                        Text((viewModel.sectionedBy == key ? "✓ " : "  ") + key.description)
+                        Text((libraryInfoViewModel.sectionedBy == key ? "✓ " : "  ") + key.description)
                     }
                 }
             } else {
@@ -484,7 +475,7 @@ struct LibraryInfoBookListView: View {
     @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         if let authors = book.authors.filter({
-            viewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
+            libraryInfoViewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
         }) as [String]?, authors.isEmpty == false {
             Menu("More by Author ...") {
                 ForEach(authors, id: \.self) { author in
@@ -498,7 +489,7 @@ struct LibraryInfoBookListView: View {
         }
         
         if let tags = book.tags.filter({
-            viewModel.filterCriteriaCategory["Tags"]?.contains($0) != true
+            libraryInfoViewModel.filterCriteriaCategory["Tags"]?.contains($0) != true
         }) as [String]?, tags.isEmpty == false {
             Menu("More of Tags ...") {
                 ForEach(tags, id: \.self) { tag in
@@ -512,10 +503,10 @@ struct LibraryInfoBookListView: View {
         }
         
         if book.series.isEmpty == false,
-           viewModel.filterCriteriaCategory["Series"]?.contains(book.series) != true {
+           libraryInfoViewModel.filterCriteriaCategory["Series"]?.contains(book.series) != true {
             Button {
-                viewModel.sortCriteria.by = .SeriesIndex
-                viewModel.sortCriteria.ascending = true
+                libraryInfoViewModel.sortCriteria.by = .SeriesIndex
+                libraryInfoViewModel.sortCriteria.ascending = true
                 updateFilterCategory(key: "Series", value: book.series)
             } label: {
                 Text("More in Series: \(book.series)")
@@ -545,26 +536,23 @@ struct LibraryInfoBookListView: View {
     }
     
     private func getLibraryLoadingCount() -> Int {
-        modelData.calibreLibraries
-            .sorted(by: { $0.key < $1.key })
+        guard let result = viewModel.unifiedSearchResult else { return 0 }
+        return modelData.calibreLibraries
             .filter({
                 $0.value.hidden == false
                 &&
                 $0.value.server.removed == false
                 &&
-                (unifiedSearchObject.libraryIds.isEmpty || unifiedSearchObject.libraryIds.contains($0.key))
+                (result.libraryIds.isEmpty || result.libraryIds.contains($0.key))
             })
             .map({
                 $0.key
             })
             .reduce(0, { partialResult, libraryId in
-                guard let unifiedOffsetOpt = unifiedSearchObject.unifiedOffsets[libraryId],
-                      unifiedOffsetOpt != nil
-                else {
+                if result.unifiedOffsets[libraryId] == nil {
                     return partialResult + 1
                 }
-                if let runtime = modelData.librarySearchManager.cacheSearchLibraryRuntime[.init(libraryId: libraryId, criteria: viewModel.currentLibrarySearchCriteria)],
-                   runtime.loading > 0 {
+                if viewModel.libraryStatuses[libraryId]?.loading == true {
                     return partialResult + 1
                 }
                 return partialResult
@@ -574,15 +562,10 @@ struct LibraryInfoBookListView: View {
     private func getLibrarySearchingText() -> String {
         let librariesLoading = getLibraryLoadingCount()
         
-        let offsets = unifiedSearchObject.unifiedOffsets.filter {
-            guard let unifiedOffset = $0.value,
-                  let searchSourceOpt = unifiedOffset.searchObject?.sources[unifiedOffset.searchObjectSource],
-                  let searchSource = searchSourceOpt
-            else {
-                return false
-            }
-            
-            return searchSource.totalNumber > 0
+        guard let result = viewModel.unifiedSearchResult else { return "Preparing Book List" }
+        
+        let offsets = result.unifiedOffsets.filter {
+            $0.value.searchObjectSource.isEmpty == false
         }
         
         var text = ""
@@ -607,100 +590,68 @@ struct LibraryInfoBookListView: View {
     
     func searchStringChanged(searchString: String) {
         self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
-        viewModel.searchString = self.searchString
+        libraryInfoViewModel.searchString = self.searchString
         
         resetToFirstPage()
     }
     
     func updateFilterCategory(key: String, value: String) {
-        if viewModel.filterCriteriaCategory[key] == nil {
-            viewModel.filterCriteriaCategory[key] = .init()
+        if libraryInfoViewModel.filterCriteriaCategory[key] == nil {
+            libraryInfoViewModel.filterCriteriaCategory[key] = .init()
         }
-        viewModel.filterCriteriaCategory[key]?.insert(value)
+        libraryInfoViewModel.filterCriteriaCategory[key]?.insert(value)
         
         resetToFirstPage()
     }
     
     func resetToFirstPage() {
-        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
-            viewModel.filterCriteriaLibraries,
-            viewModel.currentLibrarySearchCriteria,
-            unifiedSearches
-        )
-        
-        if cacheObj.realm == nil {
-            $unifiedSearches.append(cacheObj)
-        }
-        
-        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
+        viewModel.startSearch(key: libraryInfoViewModel.currentLibrarySearchResultKey)
     }
     
     @ViewBuilder
     func debugView() -> some View {
         Group {
-            Group {
-                Text("Object: \(unifiedSearchObject._id) \(unifiedSearchObject.libraryIds.count) \(unifiedSearchObject.unifiedOffsets.count)")
-                
-                Text("Books: \(unifiedSearchObject.books.count), Total: \(unifiedSearchObject.totalNumber), Limit: \(unifiedSearchObject.limitNumber)")
-                
-                Button {
-                    viewModel.expandSearchUnifiedBookLimit(unifiedSearchObject)
-                } label: {
-                    Text("Expand")
-                }
-                
-                Button {
-                    let realm = unifiedSearchObject.realm!.thaw()
-                    let thawedObject = unifiedSearchObject.thaw()!
-                    try! realm.write {
-                        thawedObject.resetList()
-                        thawedObject.limitNumber = 0
-                    }
-                } label: {
-                    Text("Reset")
-                }
-            }
-            
-            ForEach(modelData.calibreLibraries
-                .sorted(by: { $0.key < $1.key })
-                .filter({
-                    $0.value.hidden == false
-                    &&
-                    $0.value.server.removed == false
-                    &&
-                    (unifiedSearchObject.libraryIds.isEmpty || unifiedSearchObject.libraryIds.contains($0.key))
-                }), id: \.key
-            ) { libraryId, library in
-                Text("Required: \(libraryId)")
-                if let unifiedOffsetOpt = unifiedSearchObject.unifiedOffsets[libraryId],
-                   let unifiedOffset = unifiedOffsetOpt {
-                    HStack {
-                        if let runtime = modelData.librarySearchManager.cacheSearchLibraryRuntime[.init(libraryId: libraryId, criteria: viewModel.currentLibrarySearchCriteria)] {
-                            Text("Loading: \(runtime.loading)")
-                        } else {
-                            Text("!!!Mising Search Runtime!!!")
-                        }
-                        Text(unifiedOffset.description)
-                    }
-                    if let searchObj = unifiedOffset.searchObject {
-                        ForEach(searchObj.sources.sorted(by: { $0.key < $1.key }), id: \.key) { searchSourceEntry in
-                            HStack {
-                                Text(library.name)
-                                Text("\(library.lastModified)")
-                                Spacer()
-                                Text(searchSourceEntry.value?.description ?? "N/A")
-                            }
-                            .tag(searchObj.libraryId + "|" + searchSourceEntry.key)
-                        }
-                        .padding([.leading, .trailing], 8)
-                    } else {
-                        Text("Missing searchObj & Library")
+            if let result = viewModel.unifiedSearchResult {
+                Group {
+                    Text("Object: \(result.libraryIds.count) \(result.unifiedOffsets.count)")
+                    
+                    Text("Books: \(result.books.count), Total: \(result.totalNumber), Limit: \(result.limitNumber)")
+                    
+                    Button {
+                        viewModel.expandSearchUnifiedBookLimit()
+                    } label: {
+                        Text("Expand")
                     }
                     
-                } else {
-                    Text("No Unified Offset Object")
+                    Button {
+                        viewModel.resetSearch(force: false)
+                    } label: {
+                        Text("Reset")
+                    }
                 }
                 
+                ForEach(modelData.calibreLibraries
+                    .sorted(by: { $0.key < $1.key })
+                    .filter({
+                        $0.value.hidden == false
+                        &&
+                        $0.value.server.removed == false
+                        &&
+                        (result.libraryIds.isEmpty || result.libraryIds.contains($0.key))
+                    }), id: \.key
+                ) { libraryId, library in
+                    Text("Required: \(libraryId)")
+                    if let unifiedOffset = result.unifiedOffsets[libraryId] {
+                        HStack {
+                            Text("Loading: \(viewModel.libraryStatuses[libraryId]?.loading == true ? 1 : 0)")
+                            Text("offset: \(unifiedOffset.offset)")
+                        }
+                    } else {
+                        Text("No Unified Offset Object")
+                    }
+                }
+            } else {
+                Text("No Unified Search Result")
             }
         }
         .foregroundColor(.red)

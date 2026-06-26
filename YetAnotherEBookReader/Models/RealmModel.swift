@@ -221,7 +221,8 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     }
     
     func updatePrimaryKey() {
-        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID!, libraryName: libraryName!, id: idInLib.description)
+        guard let serverUUID = serverUUID, let libraryName = libraryName else { return }
+        primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: idInLib.description)
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {

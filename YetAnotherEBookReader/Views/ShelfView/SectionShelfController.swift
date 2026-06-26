@@ -42,8 +42,6 @@ class SectionShelfController: UIViewController, SectionShelfCompositionalViewDel
     
     let refreshBarButtonItem = UIBarButtonItem()
     
-    ///
-    var shelfObjects: [SearchCriteriaMergedKey: CalibreUnifiedSearchObject] = [:]
     var cancellables: Set<AnyCancellable> = []
     
     override var canBecomeFirstResponder: Bool {

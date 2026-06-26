@@ -16,11 +16,10 @@ import KingfisherSwiftUI
 struct LibraryInfoView: View {
     @EnvironmentObject var modelData: ModelData
     
-    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
-    
     @ObservedResults(CalibreUnifiedCategoryObject.self, configuration: ModelData.shared?.realmConf, where: { $0.search == "" && $0.itemsCount > 0 }) var unifiedCategories
     
     @StateObject var viewModel = ViewModel()
+    @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
     
 //    @State private var categoriesSelected : String? = nil
 //    @State private var categoryItemSelected: String? = nil
@@ -67,6 +66,7 @@ struct LibraryInfoView: View {
             .padding(4)
             .navigationTitle(Text("Library Browser"))
             .environmentObject(viewModel)
+            .environmentObject(unifiedSearchViewModel)
         }   //NavigationView
         .navigationViewStyle(.stack)
         .listStyle(PlainListStyle())
@@ -142,13 +142,9 @@ struct LibraryInfoView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-//            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
-//                let unifiedSearch = unifiedSearches.where({
-//                $0._id == objectId
-//            }).first {
-            if let unifiedSearch = viewModel.unifiedSearchObject {
-                LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
-                    .environmentObject(viewModel)
+            if unifiedSearchViewModel.unifiedSearchResult != nil {
+                LibraryInfoBookListView()
+                    .environmentObject(unifiedSearchViewModel)
             } else {
                 Text("Preparing Book List")
             }
@@ -166,17 +162,7 @@ struct LibraryInfoView: View {
     }
     
     func resetToFirstPage() {
-        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
-            viewModel.filterCriteriaLibraries,
-            viewModel.currentLibrarySearchCriteria,
-            unifiedSearches
-        )
-        
-        if cacheObj.realm == nil {
-            $unifiedSearches.append(cacheObj)
-        }
-        
-        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
+        unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
     }
     
     func resetSearchCriteria() {

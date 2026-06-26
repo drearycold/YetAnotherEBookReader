@@ -25,23 +25,23 @@ extension LibraryInfoView {
         case Tag
         case Rating
         
-        var sectionByString: KeyPath<CalibreBookRealm, String?>? {
+        var groupString: ((CalibreBook) -> String?)? {
             switch(self) {
             case .Library:
-                return \CalibreBookRealm.libraryName
+                return { $0.library.name }
             case .Author:
-                return \CalibreBookRealm.authorFirst
+                return { $0.authors.first }
             case .Tag:
-                return \CalibreBookRealm.tagFirst
+                return { $0.tags.first }
             default:
                 return nil
             }
         }
         
-        var sectionByRating: KeyPath<CalibreBookRealm, Int>? {
+        var groupRating: ((CalibreBook) -> Int)? {
             switch(self) {
             case .Rating:
-                return \CalibreBookRealm.rating
+                return { $0.rating }
             default:
                 return nil
             }
@@ -86,10 +86,6 @@ extension LibraryInfoView {
             )
         }
         
-        @Published private(set) var unifiedSearchObject: CalibreUnifiedSearchObject?
-        
-        var unifiedSearchUpdateCancellable: AnyCancellable?
-        
         //category filters
         @Published var categoriesSelected: String? = nil
         @Published var categoryItemSelected: String? = nil
@@ -104,58 +100,6 @@ extension LibraryInfoView {
         @Published private(set) var unifiedCategoryObject: CalibreUnifiedCategoryObject?
         
         var unifiedCategoryUpdateCancellable: AnyCancellable?
-        
-        func expandSearchUnifiedBookLimit(_ unifiedSearchObject: CalibreUnifiedSearchObject) {
-            guard unifiedSearchObject.limitNumber < unifiedSearchObject.totalNumber,
-                  let realm = unifiedSearchObject.realm?.thaw(),
-                  let thawedObject = unifiedSearchObject.thaw()
-            else {
-                return
-            }
-            try! realm.write {
-                thawedObject.limitNumber = min(unifiedSearchObject.limitNumber + 100, unifiedSearchObject.totalNumber)
-            }
-        }
-        
-        func setUnifiedSearchObject(modelData: ModelData, unifiedSearchObject: CalibreUnifiedSearchObject?) {
-            unifiedSearchUpdateCancellable?.cancel()
-            unifiedSearchUpdateCancellable = nil
-            
-            self.unifiedSearchObject = unifiedSearchObject
-            
-            guard let unifiedSearchObject = unifiedSearchObject
-            else {
-                return
-            }
-            
-            let searchCriteria = SearchCriteria(
-                searchString: unifiedSearchObject.search,
-                sortCriteria: .init(by: unifiedSearchObject.sortBy, ascending: unifiedSearchObject.sortAsc),
-                filterCriteriaCategory: unifiedSearchObject.filters.reduce(into: [:], { partialResult, filter in
-                    if let values = filter.value?.values {
-                        partialResult[filter.key] = Set(values)
-                    }
-                })
-            )
-            unifiedSearchUpdateCancellable = modelData.calibreUpdatedSubject.receive(on: DispatchQueue.main)
-                .sink(receiveValue: { calibreUpdatedSignal in
-                    switch calibreUpdatedSignal {
-                    case .shelf:
-                        break
-                    case .deleted(_):
-                        break
-                    case .book(_):
-                        break
-                    case .library(let library):
-                        if unifiedSearchObject.unifiedOffsets[library.id] != nil {
-                            modelData.librarySearchManager.refreshSearchResults(libraryIds: [library.id], searchCriteria: searchCriteria)
-                        }
-                        break
-                    case .server(_):
-                        break
-                    }
-                })
-        }
         
         func setUnifiedCategoryObject(_ modelData: ModelData, _ unifiedCategoryObject: CalibreUnifiedCategoryObject?) {
             unifiedCategoryUpdateCancellable?.cancel()

@@ -14,15 +14,31 @@ import Kingfisher
 import ShelfView
 import CryptoSwift
 
-final class ModelData: ObservableObject, CalibreServerConfigProvider {
+final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryProvider {
     static var shared: ModelData?
     
-    @Published var deviceName = UIDevice.current.name
+    func getLibraries() -> [String: CalibreLibrary] {
+        return calibreLibraries
+    }
+    
+    @Published var deviceName = UIDevice.current.name {
+        didSet {
+            calibreServerService.updateDeviceName(deviceName)
+        }
+    }
     
     @Published var calibreServers = [String: CalibreServer]()
-    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]()
+    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
+        didSet {
+            calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
+        }
+    }
     
-    @Published var calibreLibraries = [String: CalibreLibrary]()
+    @Published var calibreLibraries = [String: CalibreLibrary]() {
+        didSet {
+            calibreServerService.updateCalibreLibraries(calibreLibraries)
+        }
+    }
     @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
     
     @Published var activeTab = 0
@@ -109,7 +125,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion:UInt64 = 137
+    static var RealmSchemaVersion:UInt64 = 138
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -151,7 +167,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         ModelData.shared = self
         
         // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = 137
+        ModelData.RealmSchemaVersion = 138
         let initialConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { _, _ in }
@@ -266,6 +282,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider {
         realmConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
+                if oldSchemaVersion < 138 {
+                    migration.deleteData(forType: "CalibreUnifiedSearchObject")
+                    migration.deleteData(forType: "CalibreUnifiedOffsets")
+                }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
                         //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")

@@ -24,10 +24,19 @@ final class CalibreServerService {
     
     private let sessionsQueue = DispatchQueue(label: "io.github.dsreader.CalibreServerService.sessions")
     
+    private let configLock = NSRecursiveLock()
+    private var _localDeviceName = ""
+    private var _localCalibreLibraries = [String: CalibreLibrary]()
+    private var _localCalibreServerInfoStaging = [String: CalibreServerInfo]()
+    
     init(logger: CalibreActivityLogger, config: CalibreServerConfigProvider, database: DatabaseService) {
         self.logger = logger
         self.config = config
         self.database = database
+        
+        self._localDeviceName = config.deviceName
+        self._localCalibreLibraries = config.calibreLibraries
+        self._localCalibreServerInfoStaging = config.calibreServerInfoStaging
     }
     
     // Mapping Computed Properties
@@ -48,13 +57,55 @@ final class CalibreServerService {
         set { config?.librarySyncStatus = newValue }
     }
     var deviceName: String {
-        config?.deviceName ?? ""
+        configLock.lock()
+        defer { configLock.unlock() }
+        if Thread.isMainThread {
+            let val = config?.deviceName ?? ""
+            _localDeviceName = val
+            return val
+        } else {
+            return _localDeviceName
+        }
     }
     var calibreLibraries: [String: CalibreLibrary] {
-        config?.calibreLibraries ?? [:]
+        configLock.lock()
+        defer { configLock.unlock() }
+        if Thread.isMainThread {
+            let val = config?.calibreLibraries ?? [:]
+            _localCalibreLibraries = val
+            return val
+        } else {
+            return _localCalibreLibraries
+        }
     }
     var calibreServerInfoStaging: [String: CalibreServerInfo] {
-        config?.calibreServerInfoStaging ?? [:]
+        configLock.lock()
+        defer { configLock.unlock() }
+        if Thread.isMainThread {
+            let val = config?.calibreServerInfoStaging ?? [:]
+            _localCalibreServerInfoStaging = val
+            return val
+        } else {
+            return _localCalibreServerInfoStaging
+        }
+    }
+    
+    func updateServerInfoStaging(_ staging: [String: CalibreServerInfo]) {
+        configLock.lock()
+        defer { configLock.unlock() }
+        self._localCalibreServerInfoStaging = staging
+    }
+    
+    func updateCalibreLibraries(_ libraries: [String: CalibreLibrary]) {
+        configLock.lock()
+        defer { configLock.unlock() }
+        self._localCalibreLibraries = libraries
+    }
+    
+    func updateDeviceName(_ deviceName: String) {
+        configLock.lock()
+        defer { configLock.unlock() }
+        self._localDeviceName = deviceName
     }
     
     // Mapping methods
@@ -675,13 +726,10 @@ final class CalibreServerService {
     
     func getServerUrlByReachability(server: CalibreServer) -> URL? {
         let serverInfos = self.calibreServerInfoStaging.filter { $1.reachable && $1.server.id == server.id }.sorted { !$0.value.isPublic && $1.value.isPublic }
-        guard let serverInfo = serverInfos.first else { return nil }
-        
-        if serverInfo.value.isPublic {
-            return URL(string: server.publicUrl)
-        } else {
-            return URL(string: server.baseUrl)
+        guard let serverInfo = serverInfos.first else {
+            return nil
         }
+        return serverInfo.value.isPublic ? URL(string: server.publicUrl) : URL(string: server.baseUrl)
     }
     
     // MARK: - Async Methods
@@ -1250,7 +1298,7 @@ struct CalibreServerURLSessionKey: Hashable, Equatable {
     let qos: DispatchQoS.QoSClass
     
     func hash(into hasher: inout Hasher) {
-        hasher.combine(server.uuid)
+        hasher.combine(server)
         hasher.combine(timeout)
         hasher.combine(qos)
     }

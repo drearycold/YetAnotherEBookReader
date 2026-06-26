@@ -115,73 +115,11 @@ class CalibreUnifiedCategoryObject: Object, ObjectKeyIdentifiable {
     }
 }
 
-class CalibreUnifiedOffsets: Object {
-    @Persisted var beenCutOff = false
-    @Persisted var beenConsumed = false
 
-    @Persisted var cutOffOffset = 0
-    @Persisted var offset = 0
-    @Persisted var generation: Date
-    
-    @Persisted var searchObject: CalibreLibrarySearchObject?
-    @Persisted var searchObjectSource: String = ""
-    
-    @Persisted(originProperty: "unifiedOffsets") var assignee: LinkingObjects<CalibreUnifiedSearchObject>
-    
-    override var description: String {
-        return "O:\(offset) CO:\(beenCutOff) CS:\(beenConsumed) S:\(searchObjectSource)"
-    }
-}
-
-class CalibreUnifiedSearchObject: Object, ObjectKeyIdentifiable {
-    @Persisted(primaryKey: true) var _id: ObjectId
-    
-    //search criteria
-    @Persisted var search = ""
-    
-    @Persisted var sortBy = SortCriteria.Modified
-    @Persisted var sortAsc = false
-    
-    @Persisted var filters: Map<String, CalibreLibrarySearchFilterValues?>
-    
-    @Persisted var libraryIds: MutableSet<String>
-    
-    
-    //search results
-    @Persisted var unifiedOffsets: Map<String, CalibreUnifiedOffsets?>
-    
-    @Persisted var totalNumber = 0
-    
-    @Persisted var limitNumber = 100
-    
-    @Persisted var books: List<CalibreBookRealm>
-    
-    //runtime
-    var loading = false
-    
-    var parameters: String {
-        return "search: \(search); sort by: \(sortBy.rawValue), asc: \(sortAsc);"
-    }
-    
-    func resetList() {
-        self.books.removeAll()
-        self.unifiedOffsets.forEach {
-            $0.value?.beenCutOff = false
-            $0.value?.beenConsumed = false
-            $0.value?.offset = 0
-        }
-    }
-}
 
 struct CalibreLibrarySearchRuntime {
     var loading = 0
     var error = false
 }
 
-struct CalibreUnifiedSearchRuntime {
-    var indexMap: [String: Int] = [:]
-    var objectNotificationToken: NotificationToken?
-    
-    var loading = false
-    var error = false
-}
+

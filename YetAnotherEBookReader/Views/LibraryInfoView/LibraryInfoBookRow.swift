@@ -14,31 +14,21 @@ struct LibraryInfoBookRow: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     
-    @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var viewModel: UnifiedSearchViewModel
 
-    @ObservedRealmObject var unifiedSearchObject: CalibreUnifiedSearchObject
-
-    @ObservedRealmObject var bookRealm: CalibreBookRealm
+    let book: CalibreBook
+    let index: Int
     
     var body: some View {
-        if let book = modelData.convert(bookRealm: bookRealm) {
             HStack {
-                //                            if let index = unifiedSearchObject.getIndex(primaryKey: bookRealm.primaryKey!) {
-                //                                Text(index.description)
-                //                            }
-                if let bookIndex = self.modelData.librarySearchManager.getMergedBookIndex(mergedKey: .init(libraryIds: viewModel.filterCriteriaLibraries, criteria: viewModel.currentLibrarySearchCriteria), primaryKey: bookRealm.primaryKey!){
-                    Text(bookIndex.description)
-                        .frame(minWidth: 40)
-                        .onAppear {
-                            guard bookIndex > unifiedSearchObject.limitNumber - 20
-                            else {
-                                return
-                            }
-                            
-                            viewModel.expandSearchUnifiedBookLimit(unifiedSearchObject)
-                        }
-                }
-//                                    bookRowView(book: book, bookRealm: bookRealm)
+                Text((index + 1).description)
+                    .frame(minWidth: 40)
+                    .onAppear {
+                        guard let result = viewModel.unifiedSearchResult else { return }
+                        guard index + 1 > result.limitNumber - 20 else { return }
+                        viewModel.expandSearchUnifiedBookLimit()
+                    }
+                
                 HStack(alignment: .bottom) {
                     ZStack {
                         KFImage(book.coverURL)
@@ -183,12 +173,8 @@ struct LibraryInfoBookRow: View {
                     }
                 }
             }
-        } else {
-            Text(bookRealm.title)
         }
-        
     }
-}
 
 //struct LibraryInfoBookRow_Previews: PreviewProvider {
 //    static private var modelData = ModelData(mock: true)

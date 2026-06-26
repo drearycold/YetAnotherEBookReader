@@ -12,10 +12,9 @@ struct LibraryInfoCategoryItemsView: View {
     @EnvironmentObject var modelData: ModelData
     
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
+    @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     
     @ObservedRealmObject var unifiedCategory: CalibreUnifiedCategoryObject
-    
-    @ObservedResults(CalibreUnifiedSearchObject.self, configuration: ModelData.shared?.realmConf) var unifiedSearches
     
     @ObservedResults(CalibreLibraryCategoryObject.self, configuration: ModelData.shared?.realmConf, sortDescriptor: .init(keyPath: "libraryId")) var libraryCategories
 
@@ -121,17 +120,9 @@ struct LibraryInfoCategoryItemsView: View {
     @ViewBuilder
     private func bookListView() -> some View {
         Group {
-//            if let objectId = modelData.librarySearchManager.getUnifiedResultObjectIdForSwiftUI(libraryIds: viewModel.filterCriteriaLibraries, searchCriteria: viewModel.currentLibrarySearchCriteria),
-//                let unifiedSearch = unifiedSearches.where({
-//                $0._id == objectId
-//            }).first {
-            if let unifiedSearch = viewModel.unifiedSearchObject {
-//                if unifiedSearch.books.isEmpty {
-//                    Text("Found 0 books")
-//                } else {
-                    LibraryInfoBookListView(unifiedSearchObject: unifiedSearch)
-                        .environmentObject(viewModel)
-//                }
+            if unifiedSearchViewModel.unifiedSearchResult != nil {
+                LibraryInfoBookListView()
+                    .environmentObject(unifiedSearchViewModel)
             } else {
                 Text("Preparing Book List")
             }
@@ -145,17 +136,7 @@ struct LibraryInfoCategoryItemsView: View {
     }
     
     func resetToFirstPage() {
-        let cacheObj = modelData.librarySearchManager.retrieveUnifiedSearchObject(
-            viewModel.filterCriteriaLibraries,
-            viewModel.currentLibrarySearchCriteria,
-            unifiedSearches
-        )
-        
-        if cacheObj.realm == nil {
-            $unifiedSearches.append(cacheObj)
-        }
-        
-        viewModel.setUnifiedSearchObject(modelData: modelData, unifiedSearchObject: cacheObj)
+        unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
     }
 }
 
