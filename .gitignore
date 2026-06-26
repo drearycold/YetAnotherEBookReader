@@ -91,6 +91,7 @@ iOSInjectionProject/
 
 .DS_Store
 
-git_diff.txt
-.gemini/
 gha-creds-*.json
+
+.agents/skills
+.agents/skills_library

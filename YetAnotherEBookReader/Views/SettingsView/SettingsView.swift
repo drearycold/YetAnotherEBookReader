@@ -104,7 +104,7 @@ struct SettingsView: View {
             Section(header: Text("More")) {
                 NavigationLink("Readers Options", destination: ReaderOptionsView())
                 NavigationLink("Reading Statistics", destination: LazyView(ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: nil, bookId: nil)))
-                NavigationLink("Activity Logs", destination: LazyView(ActivityList(presenting: Binding<Bool>(get: { false }, set: { _ in } ))))
+                NavigationLink("Activity Logs", destination: LazyView(ActivityList(viewModel: ActivityListViewModel(modelData: modelData), presenting: Binding<Bool>(get: { false }, set: { _ in } ))))
             }
             
             Section(

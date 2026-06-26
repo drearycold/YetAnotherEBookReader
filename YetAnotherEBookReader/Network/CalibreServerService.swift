@@ -547,6 +547,7 @@ final class CalibreServerService {
         }
         bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: [])
         _ = bookRealm.readPos(library: library)
+        bookRealm.lastUpdated = Date()
     }
     
     func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {

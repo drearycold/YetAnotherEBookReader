@@ -305,6 +305,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
             
             let bookDetailView = BookDetailView(book: bookRealm, viewMode: .SHELF)
                 .environmentObject(modelData)
+                .environmentObject(modelData.downloadManager)
                 .environment(\.realmConfiguration, bookAnnoRealm.configuration)
             
             let detailView = UIHostingController(

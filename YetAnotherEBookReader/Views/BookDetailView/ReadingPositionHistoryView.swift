@@ -6,50 +6,36 @@
 //
 
 import SwiftUI
-import RealmSwift
 
 #if canImport(SwiftUICharts)
 import SwiftUICharts
 #endif
 
 struct ReadingPositionHistoryView: View {
-    @EnvironmentObject var modelData: ModelData
+    @StateObject private var viewModel: ReadingPositionHistoryViewModel
     
     @Binding var presenting: Bool
     
-    @ObservedResults(BookDeviceReadingPositionRealm.self, configuration: ModelData.shared?.realmConf, where: { !$0.bookId.ends(with: " - History") }) var readingPositions
-
-    let library: CalibreLibrary?
-    let bookId: Int32?
-    
-    //model
-    @State private var readingStatistics = [Double]()
-    @State private var maxMinutes = 0
-    @State private var avgMinutes = 0
-    @State private var _positionViewModel: ReadingPositionListViewModel? = nil
-    @State private var booksHistory = [String: Double]()   //InShelfId to minutes
-    
-    #if canImport(SwiftUICharts)
-    @State private var barChartData: BarChartData?
-    #endif
-    
-    let minutesFormatter = NumberFormatter()
+    init(presenting: Binding<Bool>, library: CalibreLibrary?, bookId: Int32?) {
+        self._presenting = presenting
+        self._viewModel = StateObject(wrappedValue: ReadingPositionHistoryViewModel(library: library, bookId: bookId))
+    }
     
     var body: some View {
         VStack {
             Group {
-                if readingStatistics.isEmpty {
+                if viewModel.readingStatistics.isEmpty {
                     Text("New Book")
                 } else {
                     #if DEBUG
                     List {
-                        ForEach(readingStatistics, id: \.self) { minutes in
+                        ForEach(viewModel.readingStatistics, id: \.self) { minutes in
                             Text("\(minutes)")
                         }
                     }
                     #endif
                     #if canImport(SwiftUICharts)
-                    if let data = barChartData {
+                    if let data = viewModel.barChartData {
                         BarChart(
                             chartData: data
                         )
@@ -86,42 +72,35 @@ struct ReadingPositionHistoryView: View {
 //                }
                 
                 #if DEBUG
-                Text("BookId: \(bookId ?? -1)")
-                Text("Library: \(library?.id ?? "NO LIB")")
-                if let bookId = bookId,
-                   let library = library {
-                    ForEach(readingPositions.where({
-                        $0.bookId.starts(
-                            with: BookAnnotation.PrefId(library: library, id: bookId)
-                        )
-                    })) { readingPosition in
-                        HStack {
-                            Text(readingPosition.deviceId)
-                            Text(readingPosition.lastReadChapter)
-                            Text("\(readingPosition.lastProgress)")
-                        }
+                Text("BookId: \(viewModel.bookId ?? -1)")
+                Text("Library: \(viewModel.library?.id ?? "NO LIB")")
+                ForEach(viewModel.debugReadingPositions, id: \.id) { readingPosition in
+                    HStack {
+                        Text(readingPosition.id)
+                        Text(readingPosition.lastReadChapter)
+                        Text("\(readingPosition.lastProgress)")
                     }
                 }
                 #endif
                 
-                if let viewModel = _positionViewModel {
-                    if viewModel.positions.isEmpty == false {
-                        ForEach(viewModel.positionsDeviceKeys(), id: \.self) { deviceId in
+                if let listVM = viewModel.listViewModel {
+                    if listVM.positions.isEmpty == false {
+                        ForEach(listVM.positionsDeviceKeys(), id: \.self) { deviceId in
                             Section(
                                 header: HStack {
                                     Text("On \(deviceId)")
                                     Spacer()
-                                    if deviceId == modelData.deviceName {
+                                    if deviceId == viewModel.modelData.deviceName {
                                         Text("This Device").foregroundColor(.red)
                                     }
                                 }
                             ) {
-                                ForEach(viewModel.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
+                                ForEach(listVM.positionsByLatestStyle(deviceId: deviceId), id: \.hashValue) { position in
                                     NavigationLink(
                                         destination: ReadingPositionDetailView(
                                             viewModel: ReadingPositionDetailViewModel(
-                                                modelData: modelData,
-                                                listModel: _positionViewModel!,
+                                                modelData: viewModel.modelData,
+                                                listModel: listVM,
                                                 position: position)
                                         )
                                     ) {
@@ -138,8 +117,8 @@ struct ReadingPositionHistoryView: View {
                             Text("Start Reading Now")
                             
                         }
-                        Text(getSavedUrl(book: viewModel.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
-                        Text(getBookBaseUrl(id: viewModel.book.id, library: viewModel.book.library, localFilename: viewModel.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
+                        Text(getSavedUrl(book: listVM.book, format: Format.EPUB)?.absoluteString ?? "NO URL")
+                        Text(getBookBaseUrl(id: listVM.book.id, library: listVM.book.library, localFilename: listVM.book.formats.first?.value.filename)?.absoluteString ?? "NIL")
                         #endif
                     }
                 } else {
@@ -151,33 +130,32 @@ struct ReadingPositionHistoryView: View {
                 }
                 
                 Section(header: Text("Local Activities")) {
-                    if let library = library, let bookId = bookId {
-                        if let viewModel = _positionViewModel {
-                            ForEach(modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? [], id: \.self) { obj in
-                                NavigationLink(
-                                    destination: ReadingPositionDetailView(
-                                        viewModel: ReadingPositionDetailViewModel(
-                                            modelData: modelData,
-                                            listModel: viewModel,
-                                            position: obj.endPosition!)
-                                    )
-                                ) {
-                                    row(position: obj.endPosition!)
+                    if viewModel.library != nil, viewModel.bookId != nil {
+                        if let listVM = viewModel.listViewModel {
+                            ForEach(viewModel.localActivities, id: \.self) { obj in
+                                if let endPos = obj.endPosition {
+                                    NavigationLink(
+                                        destination: ReadingPositionDetailView(
+                                            viewModel: ReadingPositionDetailViewModel(
+                                                modelData: viewModel.modelData,
+                                                listModel: listVM,
+                                                position: endPos)
+                                        )
+                                    ) {
+                                        row(position: endPos)
+                                    }
                                 }
                             }
                         }
                     } else {
-                        ForEach(booksHistory.sorted(by: { $0.value > $1.value }), id: \.key) { inShelfId, minutes in
-                            if let book = modelData.booksInShelf[inShelfId],
-                               let minutesText = minutesFormatter.string(from: NSNumber(value: minutes)) {
-                                NavigationLink(
-                                    destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: book.library, bookId: book.id)
-                                ) {
-                                    HStack {
-                                        Text(book.title)
-                                        Spacer()
-                                        Text(minutesText)
-                                    }
+                        ForEach(viewModel.booksHistoryItems) { item in
+                            NavigationLink(
+                                destination: ReadingPositionHistoryView(presenting: Binding<Bool>(get: { false }, set: { _ in }), library: item.book.library, bookId: item.book.id)
+                            ) {
+                                HStack {
+                                    Text(item.book.title)
+                                    Spacer()
+                                    Text(item.minutesText)
                                 }
                             }
                         }
@@ -186,55 +164,7 @@ struct ReadingPositionHistoryView: View {
             }
         }
         .onAppear {
-            let limitDays = 7
-            let startDate = Calendar.current.startOfDay(for: Date(timeIntervalSinceNow: Double(-86400 * (limitDays))))
-            
-            let readingHistoryList = modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId, startDateAfter: startDate)
-            
-            readingStatistics = modelData.getReadingStatistics(list: readingHistoryList.flatMap({ $0.value }), limitDays: limitDays)
-            maxMinutes = Int(readingStatistics.dropLast().max() ?? 0)
-            avgMinutes = Int(readingStatistics.dropLast().reduce(0.0,+) / Double(readingStatistics.count - 1))
-            
-            #if canImport(SwiftUICharts)
-            barChartData = .init(
-                dataSets: .init(
-                    dataPoints: readingStatistics.map({
-                        .init(value: $0)
-                    }),
-                    legendTitle: "Minutes"
-                ),
-                metadata: .init(
-                    title: "Weekly Read Time",
-                    subtitle: "Minutes"
-                )
-            )
-            #endif
-            
-            print("\(#function) readingStatistics=\(readingStatistics)")
-            
-            minutesFormatter.maximumFractionDigits = 1
-            minutesFormatter.minimumFractionDigits = 1
-            
-            if let library = library, let bookId = bookId {
-                if let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
-                   let book = modelData.convert(bookRealm: bookRealm) {
-                    _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
-                } else if let book = modelData.readingBook {
-                    _positionViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
-                }
-            }
-            else {
-                self.booksHistory = readingHistoryList.reduce(into: [:], { partialResult, entry in
-                    let inShelfId = entry.key
-                    entry.value.forEach {
-                        guard let endPosition = $0.endPosition else { return }
-                        let duration = endPosition.epoch - $0.startDatetime.timeIntervalSince1970
-                        if duration > 0 {
-                            partialResult[inShelfId] = (partialResult[inShelfId] ?? 0.0) + (duration / 60.0)
-                        }
-                    }
-                })
-            }
+            viewModel.loadData()
         }
         .navigationTitle("Reading History")
         .navigationBarTitleDisplayMode(.inline)
@@ -250,12 +180,12 @@ struct ReadingPositionHistoryView: View {
             HStack {
                 if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
                     Text(position.lastReadBook)
-                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastProgress / 100)) {
+                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastProgress / 100)) {
                         Text("(\(percent))")
                     }
                 } else {
                     Text(position.lastReadChapter)
-                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
+                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
                         Text("(\(percent))")
                     }
                 }
@@ -267,7 +197,7 @@ struct ReadingPositionHistoryView: View {
                 Spacer()
                 if position.structuralStyle != 0, position.lastReadBook.isEmpty == false {
                     Text(position.lastReadChapter)
-                    if let percent = _positionViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
+                    if let percent = viewModel.listViewModel?.percentFormatter.string(from: NSNumber(value: position.lastChapterProgress / 100)) {
                         Text("(\(percent))")
                     }
                 }
