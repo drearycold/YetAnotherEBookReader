@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import RealmSwift
 @testable import YetAnotherEBookReader
 
 class BookDetailViewModelTests: XCTestCase {
@@ -9,8 +10,12 @@ class BookDetailViewModelTests: XCTestCase {
     var mockBookRealm: CalibreBookRealm!
     var mockCalibreBook: CalibreBook!
     
+    var originalModelDataShared: ModelData?
+    
     override func setUpWithError() throws {
+        originalModelDataShared = ModelData.shared
         mockModelData = ModelData(mock: true)
+        ModelData.shared = mockModelData
         viewModel = BookDetailViewModel(modelData: mockModelData)
         
         guard let library = mockModelData.calibreLibraries.first?.value else {
@@ -33,13 +38,39 @@ class BookDetailViewModelTests: XCTestCase {
         }
         
         viewModel.setup(bookId: mockBookRealm.primaryKey!)
+        clearReadingPositions()
     }
 
     override func tearDownWithError() throws {
+        if let library = mockModelData?.calibreLibraries.first?.value {
+            try? mockModelData?.realm.write {
+                if let serverRealm = mockModelData?.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+                    serverRealm.dsreaderHelper = nil
+                }
+            }
+        }
+        clearReadingPositions()
+        
+        ModelData.shared = originalModelDataShared
         viewModel = nil
         mockModelData = nil
         mockBookRealm = nil
         mockCalibreBook = nil
+    }
+    
+    private func clearReadingPositions() {
+        guard let calibreBook = mockCalibreBook else { return }
+        let bookId = calibreBook.bookPrefId
+        let components = bookId.components(separatedBy: " - ")
+        if components.count > 1 {
+            let libraryKey = components[0]
+            if let library = mockModelData?.calibreLibraries.values.first(where: { $0.key == libraryKey }),
+               let realm = try? Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server)) {
+                try? realm.write {
+                    realm.delete(realm.objects(BookDeviceReadingPositionRealm.self))
+                }
+            }
+        }
     }
 
     func testViewModelSetup() throws {
@@ -156,6 +187,245 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.presentingReadingSheet)
         XCTAssertEqual(mockModelData.presentingStack.count, 0)
     }
+
+    private func setupMockGoodreadsSync(dateReadColumn: String = "#date_read", readingProgressColumn: String = "#progress") {
+        let options = CalibreDSReaderHelperPrefs.Options(
+            servicePort: 8080,
+            goodreadsSyncEnabled: true,
+            dictViewerEnabled: false,
+            dictViewerLibraryName: "",
+            readingPositionColumnAllLibrary: false,
+            readingPositionColumnName: "",
+            readingPositionColumnPrefix: "",
+            readingPositionColumnUserSeparated: false
+        )
+        let dsPrefs = CalibreDSReaderHelperPrefs(plugin_prefs: .init(Options: options))
+        
+        let grSync = CalibreGoodreadsSyncPrefs.Goodreads(
+            dateReadColumn: dateReadColumn,
+            ratingColumn: "#rating",
+            readingProgressColumn: readingProgressColumn,
+            reviewTextColumn: "#review",
+            tagMappingColumn: "#tags"
+        )
+        let grUsers = ["Default": CalibreGoodreadsSyncPrefs.Shelves(shelves: [])]
+        let grPluginPrefs = CalibreGoodreadsSyncPrefs.PluginPrefs(
+            SchemaVersion: 1.0,
+            Goodreads: grSync,
+            Users: grUsers
+        )
+        let grPrefs = CalibreGoodreadsSyncPrefs(plugin_prefs: grPluginPrefs)
+        
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: dsPrefs,
+            count_pages_prefs: nil,
+            goodreads_sync_prefs: grPrefs
+        )
+        
+        let helper = CalibreServerDSReaderHelper(port: 8080)
+        helper.configuration = config
+        
+        guard let library = mockModelData.calibreLibraries.first?.value else { return }
+        
+        try! mockModelData.realm.write {
+            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+                serverRealm.dsreaderHelper = helper
+            }
+        }
+    }
+    
+    func testReadingProgressSummary_GoodreadsReadDate() throws {
+        setupMockGoodreadsSync(dateReadColumn: "#date_read")
+        mockCalibreBook.userMetadatas = ["date_read": "2026-06-21T15:00:00Z"]
+        
+        let expectedDate = ISO8601DateFormatter().date(from: "2026-06-21T15:00:00Z")!
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .short
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        let expectedString = dateFormatter.string(from: expectedDate)
+        
+        let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
+        XCTAssertEqual(summary, .goodreadsReadDate(expectedString))
+    }
+    
+    func testReadingProgressSummary_GoodreadsProgress() throws {
+        setupMockGoodreadsSync(readingProgressColumn: "#progress")
+        mockCalibreBook.userMetadatas = ["progress": 85]
+        
+        let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
+        XCTAssertEqual(summary, .goodreadsProgress("85"))
+    }
+    
+    func testReadingProgressSummary_LocalProgress_CurrentDevice() throws {
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: nil,
+            count_pages_prefs: nil,
+            goodreads_sync_prefs: nil
+        )
+        let helper = CalibreServerDSReaderHelper(port: 8080)
+        helper.configuration = config
+        guard let library = mockModelData.calibreLibraries.first?.value else {
+            XCTFail("No mock library found")
+            return
+        }
+        try! mockModelData.realm.write {
+            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+                serverRealm.dsreaderHelper = helper
+            }
+        }
+        
+        let devicePosition = BookDeviceReadingPosition(
+            id: viewModel.deviceName,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 12,
+            lastProgress: 75.0,
+            epoch: Date().timeIntervalSince1970
+        )
+        mockModelData.readingPositionRepository.savePosition(devicePosition, forBookId: mockCalibreBook.bookPrefId)
+        
+        let otherPosition = BookDeviceReadingPosition(
+            id: "other-device",
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 5,
+            lastProgress: 30.0,
+            epoch: Date().timeIntervalSince1970
+        )
+        mockModelData.readingPositionRepository.savePosition(otherPosition, forBookId: mockCalibreBook.bookPrefId)
+        
+        let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
+        XCTAssertEqual(summary, .localProgress(percent: 75.0, device: viewModel.deviceName))
+    }
+    
+    func testReadingProgressSummary_LocalProgress_Fallback() throws {
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: nil,
+            count_pages_prefs: nil,
+            goodreads_sync_prefs: nil
+        )
+        let helper = CalibreServerDSReaderHelper(port: 8080)
+        helper.configuration = config
+        guard let library = mockModelData.calibreLibraries.first?.value else {
+            XCTFail("No mock library found")
+            return
+        }
+        try! mockModelData.realm.write {
+            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+                serverRealm.dsreaderHelper = helper
+            }
+        }
+        
+        let otherPosition = BookDeviceReadingPosition(
+            id: "other-device",
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 5,
+            lastProgress: 30.0,
+            epoch: Date().timeIntervalSince1970
+        )
+        mockModelData.readingPositionRepository.savePosition(otherPosition, forBookId: mockCalibreBook.bookPrefId)
+        
+        let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
+        XCTAssertEqual(summary, .localProgress(percent: 30.0, device: "other-device"))
+    }
+    
+    func testReadingProgressSummary_None() throws {
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: nil,
+            count_pages_prefs: nil,
+            goodreads_sync_prefs: nil
+        )
+        let helper = CalibreServerDSReaderHelper(port: 8080)
+        helper.configuration = config
+        guard let library = mockModelData.calibreLibraries.first?.value else {
+            XCTFail("No mock library found")
+            return
+        }
+        try! mockModelData.realm.write {
+            if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+                serverRealm.dsreaderHelper = helper
+            }
+        }
+        
+        let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
+        XCTAssertNil(summary)
+    }
+    
+    func testHasReadingHistory() throws {
+        XCTAssertFalse(viewModel.hasReadingHistory(for: mockCalibreBook))
+        
+        let position = BookDeviceReadingPosition(
+            id: "some-device",
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 5,
+            lastProgress: 30.0,
+            epoch: Date().timeIntervalSince1970
+        )
+        mockModelData.readingPositionRepository.savePosition(position, forBookId: mockCalibreBook.bookPrefId)
+        
+        XCTAssertTrue(viewModel.hasReadingHistory(for: mockCalibreBook))
+    }
+    
+    func testIsFormatDownloading() throws {
+        let format = Format.EPUB
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: 123, format: format))
+        
+        let download = BookFormatDownload(
+            isDownloading: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: mockCalibreBook,
+            format: format,
+            startDatetime: Date(),
+            sourceURL: URL(string: "http://localhost")!,
+            savedURL: URL(string: "file:///local")!,
+            modificationDate: Date()
+        )
+        viewModel.activeDownloads[download.savedURL] = download
+        XCTAssertTrue(viewModel.isFormatDownloading(bookId: 123, format: format))
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: 456, format: format))
+        
+        viewModel.activeDownloads.removeAll()
+    }
+    
+    func testGetActiveDownload() throws {
+        let format = Format.EPUB
+        XCTAssertNil(viewModel.getActiveDownload(bookId: 123, format: format))
+        
+        let download = BookFormatDownload(
+            isDownloading: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: mockCalibreBook,
+            format: format,
+            startDatetime: Date(),
+            sourceURL: URL(string: "http://localhost")!,
+            savedURL: URL(string: "file:///local")!,
+            modificationDate: Date()
+        )
+        viewModel.activeDownloads[download.savedURL] = download
+        
+        let retrieved = viewModel.getActiveDownload(bookId: 123, format: format)
+        XCTAssertNotNil(retrieved)
+        XCTAssertEqual(retrieved?.book.id, 123)
+        XCTAssertEqual(retrieved?.format, format)
+        
+        viewModel.activeDownloads.removeAll()
+    }
+    
+    func testGetFormatStatusTextAndIcon() throws {
+        var formatInfo = FormatInfo(filename: "test.epub", serverSize: 100, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
+        
+        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Not cached")
+        
+        formatInfo.cached = true
+        formatInfo.cacheSize = 100
+        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Up to date")
+        XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsup")
+        
+        formatInfo.cacheMTime = formatInfo.serverMTime.addingTimeInterval(-120)
+        XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Server has update")
+        XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsdown")
+    }
 }
 
 class ReadingPositionViewModelTests: XCTestCase {
@@ -231,6 +501,9 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     
     override func setUpWithError() throws {
         mockModelData = ModelData(mock: true)
+        try! mockModelData.realm.write {
+            mockModelData.realm.deleteAll()
+        }
     }
     
     override func tearDownWithError() throws {
@@ -238,10 +511,16 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     }
     
     func testGetPositionsCanReadFromBackgroundQueue() throws {
-        guard let book = mockModelData.booksInShelf.first?.value else {
-            XCTFail("Expected mock in-shelf book")
-            return
-        }
+        let library = mockModelData.calibreLibraries.first?.value ?? CalibreLibrary(
+            server: CalibreServer(uuid: UUID(), name: "MockServer", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""),
+            key: "lib1",
+            name: "Mock Library"
+        )
+        
+        mockModelData.calibreLibraries[library.id] = library
+        
+        var book = CalibreBook(id: 456, library: library)
+        book.title = "Threading Test Book"
         
         let position = BookDeviceReadingPosition(
             id: "thread-test-device",

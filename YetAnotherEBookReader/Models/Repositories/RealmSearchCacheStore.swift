@@ -113,7 +113,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             sObj.bookIds.append(objectsIn: result.bookIds)
             
             for book in result.books {
-                let bookRealm = book.managedObject()
+                let bookRealm = book.makeRealmObject()
                 _ = realm.create(CalibreBookRealm.self, value: bookRealm, update: .modified)
             }
         }
@@ -200,7 +200,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) else {
                     return nil
                 }
-                return CalibreBook(managedObject: bookRealm, library: lib)
+                return bookRealm.toDomain(library: lib)
             })
             
             sources[url] = LibrarySourceSearchResult(

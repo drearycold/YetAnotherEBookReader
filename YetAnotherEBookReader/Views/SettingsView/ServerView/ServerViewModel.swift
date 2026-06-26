@@ -104,19 +104,19 @@ class ServerViewModel: ObservableObject {
     
     // MARK: - Add / Modify Server Actions (AddModServerView)
     
-    func resetStates(server: CalibreServer) {
-        self.calibreServerName = server.name
-        self.calibreServerUrl = server.baseUrl
-        self.calibreUsername = server.username
-        self.calibrePassword = server.password
-        self.calibreServerUrlPublic = server.publicUrl
-        self.calibreServerSetPublicAddress = server.hasPublicUrl
-        self.calibreServerNeedAuth = server.hasAuth
+    func resetStates(server: CalibreServer?) {
+        self.calibreServerName = server?.name ?? ""
+        self.calibreServerUrl = server?.baseUrl ?? ""
+        self.calibreUsername = server?.username ?? ""
+        self.calibrePassword = server?.password ?? ""
+        self.calibreServerUrlPublic = server?.publicUrl ?? ""
+        self.calibreServerSetPublicAddress = server?.hasPublicUrl ?? false
+        self.calibreServerNeedAuth = server?.hasAuth ?? false
         self.updateLibraryList()
     }
     
-    func processInputAction(server: CalibreServer, completion: @escaping () -> Void) {
-        if server.baseUrl.isEmpty {
+    func processInputAction(server: CalibreServer?, completion: @escaping () -> Void) {
+        if server == nil {
             dataAction = "Add"
             processUrlInputs(server: server)
             addServerConfirmButtonAction(completion: completion)
@@ -128,8 +128,8 @@ class ServerViewModel: ObservableObject {
         self.serverCalibreInfoPresenting = true
     }
     
-    private func processUrlInputs(server: CalibreServer) {
-        if calibreServerUrl != server.baseUrl {
+    private func processUrlInputs(server: CalibreServer?) {
+        if calibreServerUrl != server?.baseUrl {
             if calibreServerUrl.contains("://") == false {
                 calibreServerUrl = "http://" + calibreServerUrl
             }
@@ -145,7 +145,7 @@ class ServerViewModel: ObservableObject {
                 }
             }
         }
-        if calibreServerUrlPublic != server.publicUrl, var components = URLComponents(string: calibreServerUrlPublic) {
+        if calibreServerUrlPublic != server?.publicUrl, var components = URLComponents(string: calibreServerUrlPublic) {
             if components.scheme == nil {
                 components.scheme = "http://"
             }
@@ -191,7 +191,7 @@ class ServerViewModel: ObservableObject {
         performProbeServer(server: calibreServer, isAdd: true, completion: completion)
     }
     
-    func addServerConfirmed(serverBinding: Binding<CalibreServer>, isActiveBinding: Binding<Bool>) {
+    func addServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>) {
         guard let serverInfo = calibreServerInfo else { return }
         
         var newServer = serverInfo.server
@@ -252,7 +252,7 @@ class ServerViewModel: ObservableObject {
         performProbeServer(server: newServer, isAdd: false, completion: completion)
     }
     
-    func modServerConfirmed(serverBinding: Binding<CalibreServer>, isActiveBinding: Binding<Bool>) {
+    func modServerConfirmed(serverBinding: Binding<CalibreServer?>, isActiveBinding: Binding<Bool>) {
         guard let serverInfo = calibreServerInfo else {
             alertItem = AlertItem(id: "Error", msg: "Unexpected Error")
             return
@@ -260,7 +260,7 @@ class ServerViewModel: ObservableObject {
         
         var newServer = serverInfo.request.server
         newServer.defaultLibrary = serverInfo.defaultLibrary
-        newServer.removed = serverBinding.wrappedValue.removed
+        newServer.removed = serverBinding.wrappedValue?.removed ?? false
         
         serverBinding.wrappedValue = newServer
         isActiveBinding.wrappedValue = false

@@ -11,7 +11,6 @@ import RealmSwift
 import SwiftUI
 import OSLog
 import Kingfisher
-import ShelfView
 import CryptoSwift
 
 #if canImport(R2Shared)
@@ -36,8 +35,6 @@ class CalibreBookManager: ObservableObject {
             }
         }
     }
-
-    @Published var bookModelSection = [ShelfModelSection]()
 
     var currentBookId: String = "" {
         didSet {
@@ -146,8 +143,7 @@ class CalibreBookManager: ObservableObject {
     }
 
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
-        let calibreBook = CalibreBook(managedObject: bookRealm, library: library)
-        return calibreBook
+        return bookRealm.toDomain(library: library)
     }
 
     func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {

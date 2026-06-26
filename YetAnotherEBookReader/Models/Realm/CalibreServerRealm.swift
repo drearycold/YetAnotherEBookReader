@@ -27,32 +27,11 @@ class CalibreServerRealm: Object {
 
 extension CalibreServer: Persistable {
     init(managedObject: CalibreServerRealm) {
-        self.name = managedObject.name ?? managedObject.baseUrl!
-        self.baseUrl = managedObject.baseUrl!
-        self.hasPublicUrl = managedObject.hasPublicUrl
-        self.publicUrl = managedObject.publicUrl ?? ""
-        self.hasAuth = managedObject.hasAuth
-        self.username = managedObject.username ?? ""
-        self.password = managedObject.password ?? ""
-        self.defaultLibrary = managedObject.defaultLibrary ?? ""
-        self.removed = managedObject.removed
-        self.uuid = UUID(uuidString: managedObject.primaryKey ?? "") ?? .init()
+        self = managedObject.toDomain()
     }
     
     func managedObject() -> CalibreServerRealm {
-        let serverRealm = CalibreServerRealm()
-        serverRealm.name = self.name
-        serverRealm.baseUrl = self.baseUrl
-        serverRealm.hasPublicUrl = self.hasPublicUrl
-        serverRealm.publicUrl = self.publicUrl
-        serverRealm.hasAuth = self.hasAuth
-        serverRealm.username = self.username
-        serverRealm.password = self.password
-        serverRealm.defaultLibrary = self.defaultLibrary
-        serverRealm.removed = self.removed
-        serverRealm.primaryKey = self.uuid.uuidString
-        
-        return serverRealm
+        return self.makeRealmObject()
     }
 }
 

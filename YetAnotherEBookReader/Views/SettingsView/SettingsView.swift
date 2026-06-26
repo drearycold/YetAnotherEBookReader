@@ -11,9 +11,11 @@ import Combine
 struct SettingsView: View {
     @EnvironmentObject var modelData: ModelData
     @StateObject var viewModel: SettingsViewModel
+    @StateObject private var addServerViewModel: ServerViewModel
     
     init(viewModel: SettingsViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(modelData: viewModel.modelData, server: nil))
     }
     
     var body: some View {
@@ -34,15 +36,8 @@ struct SettingsView: View {
             }) {
                 NavigationLink(
                     destination: AddModServerView(
-                        viewModel: ServerViewModel(modelData: modelData, server: nil),
-                        server: Binding<CalibreServer>(
-                            get: {
-                                .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-                            },
-                            set: { _ in
-                                viewModel.updateServerList()
-                            }
-                        ),
+                        viewModel: addServerViewModel,
+                        server: .constant(nil),
                         isActive: $viewModel.addServerActive
                     )
                     .navigationTitle("Add Server"),

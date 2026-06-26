@@ -251,7 +251,7 @@ class ReadingPositionHistoryViewModel: ObservableObject {
                 let prefix = BookAnnotation.PrefId(library: library, id: bookId)
                 let objs = realm.objects(BookDeviceReadingPositionRealm.self)
                     .filter("NOT bookId ENDSWITH ' - History' AND bookId BEGINSWITH %@", prefix)
-                self.debugReadingPositions = objs.map { BookDeviceReadingPosition(managedObject: $0) }
+                self.debugReadingPositions = objs.map { $0.toDomain() }
             }
         } else {
             let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in

@@ -36,12 +36,12 @@ class RealmServerRepository: ServerRepositoryProtocol {
     
     func getAllServers() -> [CalibreServer] {
         guard let realm = getRealm() else { return [] }
-        return realm.objects(CalibreServerRealm.self).map { CalibreServer(managedObject: $0) }
+        return realm.objects(CalibreServerRealm.self).map { $0.toDomain() }
     }
     
     func saveServer(_ server: CalibreServer) throws {
         guard let realm = getRealm() else { return }
-        let serverRealm = server.managedObject()
+        let serverRealm = server.makeRealmObject()
         try realm.write {
             realm.add(serverRealm, update: .modified)
         }

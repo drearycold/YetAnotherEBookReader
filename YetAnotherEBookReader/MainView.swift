@@ -33,7 +33,7 @@ struct MainView: View {
         ZStack {
             if let realmConf = viewModel.realmConf {
                 TabView(selection: $viewModel.activeTab) {
-                    RecentShelfUI()
+                    RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .tabItem {
                             Image(systemName: "doc.text.fill")
                             Text("Recent")
@@ -43,15 +43,12 @@ struct MainView: View {
                             modelData.calibreUpdatedSubject.send(.shelf)
                         }
                         
-                    SectionShelfUI()
+                    SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
                         .tabItem {
                             Image(systemName: "books.vertical.fill")
                             Text("Discover")
                         }
                         .tag(1)
-                        .onAppear {
-                            modelData.discoverShelfModelSubject.send(modelData.bookModelSection)
-                        }
                     
                     LibraryInfoView()
                         .tabItem {

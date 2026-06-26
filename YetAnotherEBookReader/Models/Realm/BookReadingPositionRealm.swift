@@ -55,54 +55,15 @@ class BookDeviceReadingPositionRealm: Object, ObjectKeyIdentifiable {
 
 extension BookDeviceReadingPosition: Persistable {
     public init(managedObject: BookDeviceReadingPositionRealm) {
-        id = managedObject.deviceId
-        readerName = managedObject.readerName
-        maxPage = managedObject.maxPage
-        lastReadPage = managedObject.lastReadPage
-        lastReadChapter = managedObject.lastReadChapter
-        lastChapterProgress = managedObject.lastChapterProgress
-        lastProgress = managedObject.lastProgress
-        furthestReadPage = managedObject.furthestReadPage
-        furthestReadChapter = managedObject.furthestReadChapter
-        lastPosition = managedObject.lastPosition.map{$0}
-        cfi = managedObject.cfi
-        epoch = managedObject.epoch
-        
-        structuralStyle = managedObject.structuralStyle
-        structuralRootPageNumber = managedObject.structuralRootPageNumber
-        positionTrackingStyle = managedObject.positionTrackingStyle
-        lastReadBook = managedObject.lastReadBook
-        lastBundleProgress = managedObject.lastBundleProgress
+        self = managedObject.toDomain()
     }
     
     public func managedObject() -> BookDeviceReadingPositionRealm {
-        let obj = BookDeviceReadingPositionRealm()
-        obj.deviceId = id
-        obj.readerName = readerName
-        obj.maxPage = maxPage
-        obj.lastReadPage = lastReadPage
-        obj.lastReadChapter = lastReadChapter
-        obj.lastChapterProgress = lastChapterProgress
-        obj.lastProgress = lastProgress
-        obj.furthestReadPage = furthestReadPage
-        obj.furthestReadChapter = furthestReadChapter
-        obj.lastPosition.append(objectsIn: lastPosition)
-        obj.cfi = cfi
-        obj.epoch = epoch
-        
-        obj.structuralStyle = structuralStyle
-        obj.structuralRootPageNumber = structuralRootPageNumber
-        obj.positionTrackingStyle = positionTrackingStyle
-        obj.lastReadBook = lastReadBook
-        obj.lastBundleProgress = lastBundleProgress
-        
-        return obj
+        return self.makeRealmObject(bookId: "")
     }
     
     public func managedObject(bookId: String) -> BookDeviceReadingPositionRealm {
-        let obj = managedObject()
-        obj.bookId = bookId
-        return obj
+        return self.makeRealmObject(bookId: bookId)
     }
 }
 
@@ -137,23 +98,11 @@ class BookDeviceReadingPositionHistoryRealm: Object, ObjectKeyIdentifiable {
 
 extension BookDeviceReadingPositionHistory: Persistable {
     public init(managedObject: BookDeviceReadingPositionHistoryRealm) {
-        self.bookId = managedObject.bookId
-        self.startDatetime = managedObject.startDatetime
-        if let startPosition = managedObject.startPosition {
-            self.startPosition = .init(managedObject: startPosition)
-        }
-        if let endPosition = managedObject.endPosition {
-            self.endPosition = .init(managedObject: endPosition)
-        }
+        self = managedObject.toDomain()
     }
     
     public func managedObject() -> BookDeviceReadingPositionHistoryRealm {
-        let object = BookDeviceReadingPositionHistoryRealm()
-        object.bookId = self.bookId
-        object.startDatetime = self.startDatetime
-        object.startPosition = self.startPosition?.managedObject()
-        object.endPosition = self.endPosition?.managedObject()
-        return object
+        return self.makeRealmObject()
     }
 }
 

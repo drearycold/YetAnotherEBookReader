@@ -2,7 +2,46 @@
 
 ## Date: 2026-06-06
 
-## Latest Update: 2026-06-17
+## Latest Update: 2026-06-23
+
+## FolioReader Book-ID Compatibility Fix: 2026-06-23
+
+The FolioReader adapter layer now explicitly handles the mismatch between
+FolioReaderKit's runtime book id and Yabr's canonical repository id.
+
+### Root Cause
+
+- FolioReaderKit frequently calls providers with `book.name?.deletingPathExtension`
+  (the EPUB filename without extension).
+- Yabr stores reading positions, highlights, and bookmarks under
+  `CalibreBook.bookPrefId`.
+- The old FolioReader providers rejected non-canonical ids, so saved FolioReader
+  positions could be written through shared reader delegate paths but not restored
+  on reopen.
+
+### Delivered Boundary
+
+- Added `FolioReaderBookIdentity` in `Views/FolioReaderView/Providers.swift`.
+- Providers accept both:
+  - canonical id: `book.bookPrefId`
+  - FolioReaderKit runtime id: `readerInfo.url.deletingPathExtension().lastPathComponent`
+- Repository reads/writes remain canonical-only.
+- Read-position provider now accepts runtime ids for restore and always calls
+  completion on set.
+- Highlight and bookmark providers normalize FolioReaderKit ids before storing
+  or forwarding values.
+- Bookmark save status handling now treats repository success states `0/1/2` as
+  success instead of surfacing a false runtime error.
+
+### Test Coverage
+
+- Added `FolioReaderProviderBookIdTests`.
+- Covers identity acceptance/rejection, reading-position restore through runtime
+  id, set completion behavior, highlight canonicalization, and bookmark
+  canonicalization.
+- Verification: focused provider tests passed (7 tests). Full
+  `xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData`
+  passed (187 unit tests + 1 UI test).
 
 ## P1e Implementation: 2026-06-17
 

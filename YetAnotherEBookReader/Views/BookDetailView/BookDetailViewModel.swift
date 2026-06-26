@@ -330,4 +330,53 @@ class BookDetailViewModel: ObservableObject {
         
         return tocString
     }
+    
+    enum ReadingProgressSummary: Equatable {
+        case goodreadsReadDate(String)
+        case goodreadsProgress(String)
+        case localProgress(percent: Double, device: String)
+    }
+    
+    func getReadingProgressSummary(for book: CalibreBook) -> ReadingProgressSummary? {
+        guard let repository = modelData?.readingPositionRepository else { return nil }
+        
+        if let readDateGR = book.readDateGRByLocale {
+            return .goodreadsReadDate(readDateGR)
+        } else if let readProgressGR = book.readProgressGRDescription {
+            return .goodreadsProgress(readProgressGR)
+        } else if let position = repository.getPosition(forBookId: book.bookPrefId, deviceName: deviceName) ?? repository.getPositions(forBookId: book.bookPrefId).first {
+            return .localProgress(percent: position.lastProgress, device: position.id)
+        } else {
+            return nil
+        }
+    }
+    
+    func hasReadingHistory(for book: CalibreBook) -> Bool {
+        guard let repository = modelData?.readingPositionRepository else { return false }
+        return !repository.getPositions(forBookId: book.bookPrefId).isEmpty
+    }
+    
+    func isFormatDownloading(bookId: Int32, format: Format) -> Bool {
+        return activeDownloads.values.contains { download in
+            download.book.id == bookId && download.format == format && (download.isDownloading || download.resumeData != nil)
+        }
+    }
+    
+    func getActiveDownload(bookId: Int32, format: Format) -> BookFormatDownload? {
+        return activeDownloads.values.first { download in
+            download.book.id == bookId && download.format == format && (download.isDownloading || download.resumeData != nil)
+        }
+    }
+    
+    func getFormatStatusText(formatInfo: FormatInfo) -> String {
+        if formatInfo.cached {
+            return formatInfo.cacheUptoDate ? "Up to date" : "Server has update"
+        } else {
+            return "Not cached"
+        }
+    }
+    
+    func getFormatStatusIcon(formatInfo: FormatInfo) -> String {
+        return formatInfo.cacheUptoDate ? "hand.thumbsup" : "hand.thumbsdown"
+    }
 }

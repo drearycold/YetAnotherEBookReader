@@ -68,8 +68,8 @@ test target or class first, then state exactly what was and was not verified.
   `ModelData`, initializes Realm on scene activation, and injects shared
   environment objects.
 - `YetAnotherEBookReader/MainView.swift` owns the main tab shell:
-  - `RecentShelfUI`
-  - `SectionShelfUI`
+  - `RecentShelfView`
+  - `SectionShelfView`
   - `LibraryInfoView`
   - `SettingsView`
 - `YetAnotherEBookReader/Models/ModelData.swift` is still the composition root
@@ -179,9 +179,7 @@ The modern path is value-type/actor based. Do not revive direct
 - `Views/BookDetailView/*`: book detail, preview, activity, reading position UI.
 - `Views/SettingsView/*`: settings, server/library configuration, reader
   options, import pickers.
-- `Views/ShelfView/*`: recent/discover shelf UIKit adapters. The shelf data
-  model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved
-  out of `Views/ShelfView/` in Milestone P2/A10).
+- `Views/ShelfView/*`: native SwiftUI Recent/Discover shelves (`RecentShelfView`, `SectionShelfView`, view models, and components). The shelf data model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved out of `Views/ShelfView/` in Milestone P2/A10).
 - `Views/DictView/*`: dictionary and external lookup UI.
 
 ## Coding Rules
@@ -217,6 +215,14 @@ The modern path is value-type/actor based. Do not revive direct
   preparation, and value construction outside writes.
 - Schema changes require a version bump and migration handling in
   `ModelData.tryInitializeDatabase(statusHandler:)`.
+
+### Verification Checklist
+
+Before finalizing any changes to persistence, check that none of the following patterns are introduced:
+- Direct `RealmSwift` imports in views:
+  `rg "import RealmSwift" YetAnotherEBookReader/Views/`
+- Direct `CalibreBook(managedObject:)` or `BookDeviceReadingPosition(managedObject:)` usage outside approved mapper or repository files.
+- `realm.create(... value: [String: Any])` outside repository/cache sync paths.
 
 ## Common Change Paths
 
@@ -267,8 +273,22 @@ Avoid growing the main controller again.
 The main workstream is still reader architecture modernization and large-file
 decomposition.
 
-Recent important state:
-
+- **P2/A26 Readium Volume Key Timing Modernization (Milestone A26):** Modernized the volume key paging timing and event interpretation architecture in Readium view controllers, completely removing wall-clock delays (`DispatchQueue.main.asyncAfter`) and polling loops:
+  - Extracted a pure event resolver `ReadiumVolumeKeyEventResolver` and state coordinator `ReadiumVolumeKeyPagingCoordinator` under `Views/ReadiumView/` to interpret raw volume changes (up/down/busy/programmatic) thread-safely.
+  - Replaced the recursive `setSystemVolume` timer loop in `YabrReadiumReaderViewController.swift` with layout-driven `UISlider` discovery using a static tree-search helper `findVolumeSlider(in:)` invoked in `viewDidLayoutSubviews()`.
+  - Replaced the 0.1-second event unlock delay with completion-based async boundaries: introduced `performVolumeKeyPage(up:) async` and awaited page navigation / vertical scroll animations (using a safe non-blocking offset polling loop with a 0.4s timeout) before resetting and unlocking.
+  - Hardened lifecycle de-activation, settings toggles, and added idempotency guards.
+  - Added comprehensive test coverage in `ReadiumVolumeKeyPagingCoordinatorTests.swift` covering resolver, coordinator, and slider discovery. All 180 unit tests pass.
+- **P2/A27 Realm Value Conversion Modernization (Milestone A27):** Modernized the persistence mapping layer to prevent boilerplate duplication, thread boundary leaks, and field drift risks:
+  - Created dedicated explicit mapping files `CalibreRealmMappers.swift`, `ReadingPositionRealmMappers.swift`, and `AnnotationRealmMappers.swift` under `Models/Realm/`.
+  - Refactored repositories (`RealmServerRepository`, `RealmLibraryRepository`, `RealmBookRepository`, `RealmAnnotationRepository`, and `RealmReadingPositionRepository`) to use the explicit mappers.
+  - Eliminated duplicate conversion shims outside the persistence boundary in `LibrarySearchService`, `RealmSearchCacheStore`, `CalibreBookManager`, `ReadingSessionManager`, and `ReadingPositionViewModel`.
+  - Standardized write-side population by implementing in-place `applyDomain` updates on all 7 Realm models, guarding identity properties/primary keys against modification on managed objects.
+  - Introduced a generic `replaceAll` extension on Realm `List` to cleanly update nested collections in-place.
+  - Refactored `RealmAnnotationRepository.saveBookmark` to perform in-place updates on existing managed bookmarks.
+  - Cleaned up Calibre sync payload boundary by deleting unused legacy payload converter extensions on `BookHighlightRealm` and `BookBookmarkRealm`.
+  - Added a golden test suite `RealmDomainMappingTests` verifying all round-trip and update semantics.
+- **P2/A21 SwiftUI Native Shelves and UIKit Removal (Milestone A21):** Completed the UIKit-to-SwiftUI native migration of Recent and Discover shelves (Stage A21-S1 through A21-S6). Deleted `RecentShelfController.swift`, `RecentShelfUI.swift`, `SectionShelfController.swift`, and `SectionShelfUI.swift` from the codebase. Removed the `ShelfView` SPM dependency usage entirely and cleaned up related publishers/subjects/computed-properties in `RecentShelfViewModel`, `SectionShelfViewModel`, `ModelData`, `CalibreBookManager`, `ShelfDataManager`, `ShelfDisplayModels`, `MainView`, and associated tests.
 - **P2/A22 CalibreSearchCache Deprecated Properties (Milestone A22):** Removed
   4 deprecated `@Persisted` properties (`generation`, `totalNumber`, `bookIds`,
   `books: List<CalibreBookRealm>`) from `CalibreLibrarySearchObject` in
@@ -324,7 +344,7 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 90 unit tests and 1 UI test passed. The Mac Catalyst build is
+Recorded result: 174 unit tests passed. The Mac Catalyst build is
 currently blocked by a pre-existing SPM package product resolution issue
 (`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
 the P1/P2 work.

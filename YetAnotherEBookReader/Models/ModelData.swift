@@ -11,7 +11,6 @@ import RealmSwift
 import SwiftUI
 import OSLog
 import Kingfisher
-import ShelfView
 import CryptoSwift
 
 final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryProvider {
@@ -82,8 +81,8 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     let bookImportedSubject = PassthroughSubject<BookImportInfo, Never>()
     let dismissAllSubject = PassthroughSubject<String, Never>()
     
-    let recentShelfModelSubject = PassthroughSubject<[BookModel], Never>()
-    let discoverShelfModelSubject = PassthroughSubject<[ShelfModelSection], Never>()
+    let recentShelfItemsSubject = PassthroughSubject<[ShelfBookItem], Never>()
+    let discoverShelfItemsSubject = PassthroughSubject<[ShelfSectionItem], Never>()
     
     var presentingStack = [Binding<Bool>]()
     
@@ -201,11 +200,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         set { fontsManager.userFontInfos = newValue }
     }
 
-    var bookModelSection: [ShelfModelSection] {
-        get { bookManager.bookModelSection }
-        set { bookManager.bookModelSection = newValue }
-    }
-    
     func getBook(for primaryKey: String) -> CalibreBook? {
         bookManager.getBook(for: primaryKey)
     }

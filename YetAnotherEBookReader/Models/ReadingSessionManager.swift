@@ -149,7 +149,7 @@ class ReadingSessionManager: ObservableObject {
         results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
         
         var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
-            .map { BookDeviceReadingPositionHistory(managedObject: $0) }
+            .map { $0.toDomain() }
         
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId

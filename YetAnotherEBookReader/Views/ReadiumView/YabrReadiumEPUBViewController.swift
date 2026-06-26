@@ -79,17 +79,15 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         }.first?.scrollView
     }
     
-    override func handleVolumeKey(up: Bool) {
+    @MainActor
+    override func performVolumeKeyPage(up: Bool) async {
         let isScroll = self.preferences.scroll ?? false
-        let isRTL = self.preferences.readingProgression == .rtl
         
         if isScroll {
             guard let scrollView = getActiveVerticalScrollView() else {
                 self.log(.debug, "No active scroll view found, falling back to jump")
-                Task {
-                    if up { await self.epubNavigator.goBackward(options: .animated) }
-                    else { await self.epubNavigator.goForward(options: .animated) }
-                }
+                if up { _ = await self.epubNavigator.goBackward(options: .animated) }
+                else { _ = await self.epubNavigator.goForward(options: .animated) }
                 return
             }
             
@@ -101,25 +99,39 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
             if up {
                 if offset.y <= 0 {
                     self.log(.debug, "At top, jumping backward")
-                    Task { await self.epubNavigator.goBackward(options: .animated) }
+                    _ = await self.epubNavigator.goBackward(options: .animated)
                 } else {
                     let newY = max(0, offset.y - scrollAmount)
                     self.log(.debug, "Scrolling up to \(newY)")
-                    scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
+                    await scroll(scrollView, to: CGPoint(x: offset.x, y: newY))
                 }
             } else {
                 let maxOffsetY = max(0, contentHeight - viewHeight)
                 if offset.y >= maxOffsetY - 1 { // 1pt tolerance
                     self.log(.debug, "At bottom, jumping forward")
-                    Task { await self.epubNavigator.goForward(options: .animated) }
+                    _ = await self.epubNavigator.goForward(options: .animated)
                 } else {
                     let newY = min(maxOffsetY, offset.y + scrollAmount)
                     self.log(.debug, "Scrolling down to \(newY)")
-                    scrollView.setContentOffset(CGPoint(x: offset.x, y: newY), animated: true)
+                    await scroll(scrollView, to: CGPoint(x: offset.x, y: newY))
                 }
             }
         } else {
-            super.handleVolumeKey(up: up)
+            await super.performVolumeKeyPage(up: up)
+        }
+    }
+    
+    private func scroll(_ scrollView: UIScrollView, to point: CGPoint) async {
+        if scrollView.contentOffset == point { return }
+        
+        scrollView.setContentOffset(point, animated: true)
+        
+        let start = Date()
+        while Date().timeIntervalSince(start) < 0.4 {
+            if abs(scrollView.contentOffset.y - point.y) < 0.1 && abs(scrollView.contentOffset.x - point.x) < 0.1 {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000) // 20ms
         }
     }
     
