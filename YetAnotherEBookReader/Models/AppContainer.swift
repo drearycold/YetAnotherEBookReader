@@ -132,13 +132,18 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, container: self)
     lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
     lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, container: self)
-    lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository()
+    lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository { [weak self] server in
+        self?.serverScopedRealmProvider.configuration(for: server)
+            ?? BookAnnotation.getBookPreferenceServerConfig(server)
+    }
     lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.realmConf)
 
     lazy var serverManager = CalibreServerManager(container: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(container: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
     lazy var databaseBootstrapper = DatabaseBootstrapper(container: self)
     lazy var bookManager = CalibreBookManager(container: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
+
+    var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
     lazy var searchCacheRepository = RealmSearchCacheStore(container: self)
@@ -177,7 +182,10 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         databaseService.realm?.refresh()
     }
 
-    init(mock: Bool = false) {
+    init(
+        mock: Bool = false,
+        testRealmEnvironment: TestRealmEnvironment? = nil
+    ) {
         AppContainer.shared = self
 
         setupRealmDefaults()
@@ -185,11 +193,42 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         wireCrossManagerSubscriptions()
         wireObjectWillChangeForwarding()
 
+        if let env = testRealmEnvironment {
+            // Test path: install the in-memory main Realm + in-memory
+            // server-scoped provider before any of the mock population
+            // runs, so repositories and managers observe consistent
+            // test-only Realm configurations from the very first
+            // access. The mock block below calls populateLibraries()
+            // and initializeDatabase(), both of which need this to
+            // already be wired.
+            Realm.Configuration.defaultConfiguration = env.mainRealmConfiguration
+            self.realmConf = env.mainRealmConfiguration
+            DatabaseService.shared.setup(conf: env.mainRealmConfiguration)
+            self.serverScopedRealmProvider = env.serverScopedRealmProvider
+        }
+
         if mock {
-            try? tryInitializeDatabase { _ in }
+            // In the test path the in-memory main Realm is already
+            // wired; skip tryInitializeDatabase so the production
+            // DatabaseMigrator does not overwrite realmConf with a
+            // file-backed configuration. initializeDatabase() still
+            // runs so the bootstrap opens the (in-memory) Realm and
+            // populates the libraries.
+            if testRealmEnvironment == nil {
+                try? tryInitializeDatabase { _ in }
+            }
             try? initializeDatabase()
 
-            let library = libraryManager.calibreLibraries.first!.value
+            // If the bootstrap failed (e.g. file-descriptor exhaustion
+            // in long test runs opening many in-memory Realms), the
+            // libraries dict stays empty. Skip the mock-data population
+            // rather than force-unwrapping nil — tests that depend on
+            // this state will fail their own assertions, but the
+            // container still constructs and the rest of the app stays
+            // usable.
+            guard let library = libraryManager.calibreLibraries.first?.value else {
+                return
+            }
 
             var book = CalibreBook(id: 1, library: library)
 

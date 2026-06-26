@@ -11,13 +11,15 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class ReaderPreferenceRepositoryTests: XCTestCase {
-    private var configByServerId: [String: Realm.Configuration]!
+    private var serverScopedProvider: InMemoryServerScopedRealmConfigurationProvider!
     private var repository: ReaderPreferenceRepositoryProtocol!
     private var folioProfileConfig: Realm.Configuration!
     private var folioProfileRepository: FolioReaderProfileRepositoryProtocol!
 
     override func setUpWithError() throws {
-        configByServerId = [:]
+        serverScopedProvider = InMemoryServerScopedRealmConfigurationProvider(
+            identifierPrefix: "ReaderPreferenceRepositoryTests"
+        )
         folioProfileConfig = Realm.Configuration(
             inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles",
             schemaVersion: AppContainer.RealmSchemaVersion,
@@ -26,30 +28,12 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         )
         folioProfileRepository = RealmFolioReaderProfileRepository(realmConfiguration: folioProfileConfig)
         repository = RealmReaderPreferenceRepository { [unowned self] server in
-            if let config = self.configByServerId[server.id] {
-                return config
-            }
-            let config = Realm.Configuration(
-                inMemoryIdentifier: "ReaderPreferenceRepositoryTests-\(server.id)",
-                schemaVersion: AppContainer.RealmSchemaVersion,
-                migrationBlock: { _, _ in },
-                objectTypes: [
-                    BookDeviceReadingPositionRealm.self,
-                    BookDeviceReadingPositionHistoryRealm.self,
-                    FolioReaderPreferenceRealm.self,
-                    BookHighlightRealm.self,
-                    BookBookmarkRealm.self,
-                    PDFOptions.self,
-                    ReadiumPreferenceRealm.self,
-                ]
-            )
-            self.configByServerId[server.id] = config
-            return config
+            self.serverScopedProvider.configuration(for: server)
         }
     }
 
     override func tearDownWithError() throws {
-        configByServerId = nil
+        serverScopedProvider = nil
         repository = nil
         folioProfileRepository = nil
         folioProfileConfig = nil
@@ -104,7 +88,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
 
         repository.savePreferences(prefs, for: book, readerType: .YabrPDF)
 
-        let config = configByServerId[book.library.server.id]!
+        let config = serverScopedProvider.configuration(for: book.library.server)
         let realm = try Realm(configuration: config)
         let saved = realm.objects(PDFOptions.self)
             .filter("bookId == %@ AND libraryName == %@", book.id, book.library.name)
@@ -145,7 +129,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
 
         repository.savePDFPreferences(preferences, for: book)
 
-        let config = try XCTUnwrap(configByServerId[book.library.server.id])
+        let config = serverScopedProvider.configuration(for: book.library.server)
         let realm = try Realm(configuration: config)
         let saved = try XCTUnwrap(
             realm.objects(PDFOptions.self)
@@ -193,7 +177,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
 
         repository.savePreferences(prefs, for: book, readerType: .YabrEPUB)
 
-        let config = configByServerId[book.library.server.id]!
+        let config = serverScopedProvider.configuration(for: book.library.server)
         let realm = try Realm(configuration: config)
         let saved = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: book.bookPrefId)
 
@@ -220,7 +204,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         repository.savePreferences(ReaderEnginePreferences(themeMode: 2), for: pdfBook, readerType: .YabrPDF)
         repository.savePreferences(ReaderEnginePreferences(fontSizePercentage: 110), for: folioBook, readerType: .YabrEPUB)
 
-        let config = configByServerId[readiumBook.library.server.id]!
+        let config = serverScopedProvider.configuration(for: readiumBook.library.server)
         let realm = try Realm(configuration: config)
 
         XCTAssertNotNil(realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: readiumBook.bookPrefId))
@@ -271,7 +255,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
 
         repository.saveReadiumPreferences(preferences, for: book)
 
-        let config = try XCTUnwrap(configByServerId[book.library.server.id])
+        let config = serverScopedProvider.configuration(for: book.library.server)
         let realm = try Realm(configuration: config)
         let saved = try XCTUnwrap(realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: book.bookPrefId))
 

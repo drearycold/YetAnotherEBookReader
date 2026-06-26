@@ -43,6 +43,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var fontsManager: FontsManager { get }
     var databaseBootstrapper: DatabaseBootstrapper { get }
     var shelfDataModel: YabrShelfDataModel { get }
+    var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding { get set }
 
     // MARK: - Services
 

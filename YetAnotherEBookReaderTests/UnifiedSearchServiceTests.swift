@@ -20,16 +20,16 @@ class UnifiedSearchServiceTests: XCTestCase {
     var mockLibrary2: CalibreLibrary!
     var cancellables: Set<AnyCancellable>!
     var serverService: CalibreServerService!
+    var container: AppContainer!
     
     override func setUp() async throws {
         try await super.setUp()
-        
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests-\(UUID().uuidString)")
+
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests")
         DatabaseService.shared.setup(conf: config)
         let logger = CalibreActivityLogger(realmConf: config)
-        let container = AppContainer(mock: true)
-        container.realmConf = config
-        
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchServiceTests")
+
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         mockLibrary1 = CalibreLibrary(server: server1, key: "lib1", name: "Library 1")
         

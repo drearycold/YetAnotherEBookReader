@@ -14,19 +14,18 @@ final class ReadingSessionManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: ReadingSessionManager!
     private var cancellables: Set<AnyCancellable>!
-    private var originalAppContainerShared: AppContainer?
-    
+
     override func setUpWithError() throws {
-        originalAppContainerShared = AppContainer.shared
-        container = AppContainer(mock: true)
-        AppContainer.shared = container
-        
+        container = MockAppContainerFactory.makeContainer(
+            testName: "ReadingSessionManagerTests"
+        )
+
         manager = ReadingSessionManager(container: container)
         cancellables = []
     }
-    
+
     override func tearDownWithError() throws {
-        AppContainer.shared = originalAppContainerShared
+        AppContainer.shared = nil
         manager = nil
         container = nil
         cancellables = nil

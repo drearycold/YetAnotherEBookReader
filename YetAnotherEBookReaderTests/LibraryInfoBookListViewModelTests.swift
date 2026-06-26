@@ -19,11 +19,7 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         
-        let config = Realm.Configuration(inMemoryIdentifier: "LibraryInfoBookListViewModelTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-        
-        container = AppContainer(mock: true)
-        container.realmConf = config
+        container = MockAppContainerFactory.makeContainer(testName: "LibraryInfoBookListViewModelTests")
         
         libraryInfoViewModel = LibraryInfoView.ViewModel()
         searchViewModel = UnifiedSearchViewModel(container: container)

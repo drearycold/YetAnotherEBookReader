@@ -16,7 +16,7 @@ class ReaderOptionsViewModelTests: XCTestCase {
     var cancellables: Set<AnyCancellable>!
     
     override func setUpWithError() throws {
-        mockAppContainer = AppContainer(mock: true)
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ReaderOptionsViewModelTests")
         viewModel = ReaderOptionsViewModel(container: mockAppContainer, fontsManager: mockAppContainer.fontsManager)
         cancellables = []
     }

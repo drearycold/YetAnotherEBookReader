@@ -232,7 +232,12 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
 
     private let configurationProvider: ConfigurationProvider
 
-    init(configurationProvider: @escaping ConfigurationProvider = BookAnnotation.getBookPreferenceServerConfig) {
+    init(
+        configurationProvider: @escaping ConfigurationProvider = { server in
+            AppContainer.shared?.serverScopedRealmProvider.configuration(for: server)
+                ?? BookAnnotation.getBookPreferenceServerConfig(server)
+        }
+    ) {
         self.configurationProvider = configurationProvider
     }
 

@@ -21,11 +21,7 @@ final class CalibreServerServiceTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let config = Realm.Configuration(inMemoryIdentifier: "CalibreServerServiceTests-\(UUID().uuidString)")
-        DatabaseService.shared.setup(conf: config)
-
-        container = AppContainer(mock: true)
-        container.realmConf = config
+        container = MockAppContainerFactory.makeContainer(testName: "CalibreServerServiceTests")
         service = container.calibreServerService
         cancellables = []
 

@@ -13,16 +13,15 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class FolioReaderProviderBookIdTests: XCTestCase {
-    private var originalAppContainerShared: AppContainer?
     private var container: AppContainer!
     private var book: CalibreBook!
     private var readerInfo: ReaderInfo!
     private let folioReaderBookId = "Runtime File Name"
 
     override func setUpWithError() throws {
-        originalAppContainerShared = AppContainer.shared
-        container = AppContainer(mock: true)
-        AppContainer.shared = container
+        container = MockAppContainerFactory.makeContainer(
+            testName: "FolioReaderProviderBookIdTests"
+        )
 
         guard let library = container.libraryManager.calibreLibraries.first?.value else {
             XCTFail("No mock library available")
@@ -49,7 +48,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         clearReadingPositions()
         clearBookmarks()
         clearHighlights()
-        AppContainer.shared = originalAppContainerShared
+        AppContainer.shared = nil
         container = nil
         book = nil
         readerInfo = nil
@@ -461,7 +460,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let components = book.bookPrefId.components(separatedBy: " - ")
         guard components.count > 1,
               let library = container?.calibreLibraries.values.first(where: { $0.key == components[0] }),
-              let realm = try? Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server)) else {
+              let config = container?.serverScopedRealmProvider.configuration(for: library.server),
+              let realm = try? Realm(configuration: config) else {
             return
         }
         try? realm.write {
@@ -472,7 +472,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     private func readingPositionRealm() throws -> Realm {
         let components = book.bookPrefId.components(separatedBy: " - ")
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.values.first(where: { $0.key == components[0] }))
-        return try Realm(configuration: BookAnnotation.getBookPreferenceServerConfig(library.server))
+        let config = container.serverScopedRealmProvider.configuration(for: library.server)
+        return try Realm(configuration: config)
     }
 
     private func positionsMatchingIdentity(of position: BookDeviceReadingPosition) throws -> Results<BookDeviceReadingPositionRealm> {

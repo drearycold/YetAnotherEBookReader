@@ -31,12 +31,8 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         debugLog("setUpWithError started")
 
         // Setup in-memory Realm for testing
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
-        container = AppContainer(mock: true)
-        container.realmConf = config
-
-        // Setup DatabaseService singleton
-        DatabaseService.shared.setup(conf: config)
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests")
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchIntegrationTests")
 
         // Setup mock server and library
         mockServer = CalibreServer(
@@ -284,7 +280,13 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         unifiedSearchService.publisher(for: key)
             .sink { result in
                 debugLog("publisher emitted result with \(result.books.count) books")
-                if result.books.count > 0 {
+                // Guard against multiple fulfillments: the publisher
+                // can emit the same result more than once (e.g. when
+                // a cached result is re-emitted after a network
+                // response arrives), and XCTestExpectation.fulfill()
+                // is an API violation if called twice on the same
+                // expectation.
+                if result.books.count > 0 && finalResult == nil {
                     finalResult = result
                     expectation.fulfill()
                 }
