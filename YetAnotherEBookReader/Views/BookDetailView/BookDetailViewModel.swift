@@ -196,7 +196,12 @@ class BookDetailViewModel: ObservableObject {
     func cacheFormat(book: CalibreBook, format: Format) {
         guard let modelData = modelData else { return }
         if book.inShelf {
-            modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+            switch modelData.startDownloadFormatNew(book: book, format: format, overwrite: true) {
+            case .success:
+                break
+            case .failure(let error):
+                alertItem = AlertItem(id: "Error Download Book", msg: error.localizedDescription)
+            }
         } else {
             modelData.addToShelf(book: book, formats: [format])
         }
@@ -254,9 +259,15 @@ class BookDetailViewModel: ObservableObject {
         previewViewModel.reader = reader
         previewViewModel.toc = "Initializing"
         
-        modelData.calibreServerService.getBookManifest(book: book, format: format) { [weak self] data in
-            guard let data = data else { return }
-            self?.parseManifestToTOC(json: data)
+        Task { [weak self] in
+            do {
+                let data = try await modelData.calibreServerService.getBookManifest(book: book, format: format)
+                await MainActor.run {
+                    self?.parseManifestToTOC(json: data)
+                }
+            } catch {
+                // Error handled or left as initializing
+            }
         }
         return true
     }

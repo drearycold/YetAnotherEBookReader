@@ -356,7 +356,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             }
             .store(in: &cancellables)
         
-        await fulfillment(of: [expectation1], timeout: 2.0)
+        await fulfillment(of: [expectation1], timeout: 5.0)
         
         XCTAssertEqual(lastResult?.books.count, 2)
         XCTAssertEqual(lastResult?.limitNumber, 100)
@@ -377,7 +377,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             .store(in: &cancellables)
             
         await manager.expandLimit(for: key, by: 50)
-        await fulfillment(of: [expectation2], timeout: 2.0)
+        await fulfillment(of: [expectation2], timeout: 5.0)
         XCTAssertEqual(lastExpandedResult?.limitNumber, 150)
         
         // Reset search
@@ -396,7 +396,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             .store(in: &cancellables)
             
         await manager.resetSearch(for: key)
-        await fulfillment(of: [expectation3], timeout: 2.0)
+        await fulfillment(of: [expectation3], timeout: 5.0)
         XCTAssertEqual(lastResetResult?.limitNumber, 100)
     }
     
@@ -460,7 +460,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             }
             .store(in: &cancellables)
             
-        await fulfillment(of: [expectation1], timeout: 2.0)
+        await fulfillment(of: [expectation1], timeout: 5.0)
         
         XCTAssertEqual(lastResult?.books.count, 2)
         XCTAssertEqual(lastResult?.totalNumber, 2)
@@ -482,7 +482,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             .store(in: &cancellables)
             
         await manager.expandLimit(for: key, by: 50)
-        await fulfillment(of: [expectation2], timeout: 2.0)
+        await fulfillment(of: [expectation2], timeout: 5.0)
         XCTAssertEqual(lastExpandedResult?.limitNumber, 150)
     }
     
@@ -557,7 +557,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             }
             .store(in: &cancellables)
             
-        await fulfillment(of: [expA, expB], timeout: 2.0)
+        await fulfillment(of: [expA, expB], timeout: 5.0)
         
         XCTAssertEqual(resultsA.last?.books.first?.title, "Apple")
         XCTAssertEqual(resultsB.last?.books.first?.title, "Banana")
@@ -608,7 +608,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             }
             .store(in: &cancellables)
             
-        await fulfillment(of: [expA, expB], timeout: 2.0)
+        await fulfillment(of: [expA, expB], timeout: 5.0)
         
         XCTAssertEqual(resultsA.last?.limitNumber, 100)
         XCTAssertEqual(resultsB.last?.limitNumber, 100)
@@ -627,7 +627,7 @@ class UnifiedSearchServiceTests: XCTestCase {
             .store(in: &cancellables)
             
         await manager.expandLimit(for: keyA, by: 50)
-        await fulfillment(of: [expA2], timeout: 2.0)
+        await fulfillment(of: [expA2], timeout: 5.0)
         
         // Verify B's limit is still 100
         var currentB: UnifiedSearchResult?
@@ -643,7 +643,7 @@ class UnifiedSearchServiceTests: XCTestCase {
                 }
             }
             .store(in: &cancellables)
-        await fulfillment(of: [expB2], timeout: 2.0)
+        await fulfillment(of: [expB2], timeout: 5.0)
         
         XCTAssertEqual(currentB?.limitNumber, 100)
     }

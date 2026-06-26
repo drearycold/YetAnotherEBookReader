@@ -7,6 +7,7 @@
 
 import SwiftUI
 import KingfisherSwiftUI
+import OSLog
 
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
@@ -360,7 +361,9 @@ struct LibraryInfoBookListView: View {
             ForEach(book.formats.keys.compactMap{ Format.init(rawValue: $0) }, id:\.self) { format in
                 Button {
                     if book.inShelf {
-                        modelData.startDownloadFormat(book: book, format: format, overwrite: true)
+                        if case .failure(let error) = modelData.startDownloadFormatNew(book: book, format: format, overwrite: true) {
+                            Logger(subsystem: "YetAnotherEBookReader", category: "LibraryInfoBookListView").error("Failed to start download: \(error.localizedDescription)")
+                        }
                     } else {
                         modelData.addToShelf(book: book, formats: [format])
                     }

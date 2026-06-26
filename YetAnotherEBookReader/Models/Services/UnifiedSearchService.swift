@@ -311,8 +311,10 @@ actor UnifiedSearchService {
             let searchError: SearchError
             if let sErr = error as? SearchError {
                 searchError = sErr
+            } else if error is CancellationError {
+                searchError = .cancelled
             } else {
-                searchError = .unknown(error.localizedDescription)
+                searchError = .invalidState(error.localizedDescription)
             }
             activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(loading: false, error: searchError)
         }

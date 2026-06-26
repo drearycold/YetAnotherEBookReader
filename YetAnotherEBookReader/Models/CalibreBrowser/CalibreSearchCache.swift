@@ -43,19 +43,6 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     //search results
     @Persisted var sources: Map<String, CalibreLibrarySearchValueObject?>
     
-    @available(*, deprecated, message: "use sources")
-    @Persisted var generation: Date
-    
-    @available(*, deprecated, message: "use sources")
-    @Persisted var totalNumber = 0
-    
-    @available(*, deprecated, message: "use sources")
-    @Persisted var bookIds: List<Int32>
-    
-    //books after getting metadata and annotations
-    @available(*, deprecated, message: "use sources")
-    @Persisted var books: List<CalibreBookRealm>
-    
     var loading = false
     var error = false
 }

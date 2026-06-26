@@ -97,6 +97,7 @@ extension CalibreServerService {
         var resultInfo = serverInfo
         resultInfo.reachable = false
         resultInfo.errorMsg = "Cannot connect"
+        resultInfo.error = nil
 
         var url = resultInfo.url
         url.appendPathComponent("/ajax/library-info", isDirectory: false)
@@ -112,16 +113,19 @@ extension CalibreServerService {
                 guard let defaultLibrary = libraryInfo.defaultLibrary,
                       libraryInfo.libraryMap.count > 0 else {
                     resultInfo.errorMsg = "Server has no library"
+                    resultInfo.error = .unsupportedPayload
                     return resultInfo
                 }
 
                 resultInfo.defaultLibrary = defaultLibrary
                 resultInfo.libraryMap = libraryInfo.libraryMap
                 resultInfo.errorMsg = "Success"
+                resultInfo.error = nil
                 resultInfo.reachable = true
                 return resultInfo
             }
             .catch { error -> Just<CalibreServerInfo> in
+                resultInfo.error = error
                 if case .transport(let transportError) = error, transportError.code == .cancelled {
                     resultInfo.errorMsg = "cancelled, server may require authentication"
                 } else {

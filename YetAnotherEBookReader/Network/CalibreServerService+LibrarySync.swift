@@ -63,7 +63,9 @@ extension CalibreServerService {
             resultTask.response = response
             return applyBooksMetadataPayload(data, to: resultTask)
         } catch {
-            return task
+            var resultTask = task
+            resultTask.error = CalibreAPIError(error: error)
+            return resultTask
         }
     }
 
@@ -101,7 +103,7 @@ extension CalibreServerService {
         }
     }
 
-    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> {
         do {
             let endpointURL = try makeEndpointURL(
                 server: resultPrev.request.library.server,
@@ -128,30 +130,41 @@ extension CalibreServerService {
                     try self.decodePayload([String: CalibreCdbCmdListResult].self, from: data)
                 }
                 .mapError(CalibreAPIError.init(error:))
-                .map { [weak self] listResult -> CalibreSyncLibraryResult in
+                .handleEvents(receiveOutput: { [weak self] listResult in
+                    let errMsg = (listResult["result"]?.book_ids.first == -1) ? "Failure" : "Success"
+                    Task { [weak self] in
+                        await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: errMsg)
+                    }
+                }, receiveCompletion: { [weak self] completion in
+                    if case .failure(let error) = completion {
+                        Task { [weak self] in
+                            await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
+                        }
+                    }
+                })
+                .map { listResult -> CalibreSyncLibraryResult in
                     var result = resultPrev
                     if let list = listResult["result"] {
                         result.list = list
                     }
-                    Task { [weak self] in
-                        await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.list.book_ids.first == -1 ? "Failure" : "Success")
-                    }
                     return result
-                }
-                .catch { [weak self] error -> Just<CalibreSyncLibraryResult> in
-                    var result = resultPrev
-                    result.errmsg = error.localizedDescription
-                    Task { [weak self] in
-                        await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: result.errmsg)
-                    }
-                    return Just(result)
                 }
                 .eraseToAnyPublisher()
         } catch {
-            var result = resultPrev
-            result.errmsg = CalibreAPIError(error: error).localizedDescription
-            return Just(result).eraseToAnyPublisher()
+            return Fail(error: CalibreAPIError(error: error)).eraseToAnyPublisher()
         }
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError version instead")
+    func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+        let typedPublisher: AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> = syncLibraryPublisher(resultPrev: resultPrev, order: order, filter: filter, limit: limit)
+        return typedPublisher
+            .catch { [weak self] error -> Just<CalibreSyncLibraryResult> in
+                var result = resultPrev
+                result.errmsg = error.localizedDescription
+                return Just(result)
+            }
+            .eraseToAnyPublisher()
     }
 
     func buildBooksMetadataTask(library: CalibreLibrary, books: [CalibreBook], getAnnotations: Bool = false, searchTask: CalibreLibrarySearchTask? = nil) -> CalibreBooksTask? {
@@ -200,11 +213,11 @@ extension CalibreServerService {
         )
     }
 
-    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<CalibreBooksTask, URLError> {
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
         guard let metadataUrl = task.metadataUrl,
               metadataUrl.isHTTP,
               task.books.isEmpty == false else {
-            return Just(task).setFailureType(to: URLError.self).eraseToAnyPublisher()
+            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
         }
 
         return validatedDataPublisher(from: metadataUrl, server: task.library.server, qos: qos)
@@ -214,6 +227,12 @@ extension CalibreServerService {
                 resultTask.response = response
                 return self.applyBooksMetadataPayload(data, to: resultTask)
             }
+            .eraseToAnyPublisher()
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
+    func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<CalibreBooksTask, URLError> {
+        getBooksMetadata(task: task, qos: qos)
             .mapError(\.asURLError)
             .eraseToAnyPublisher()
     }
@@ -254,7 +273,7 @@ extension CalibreServerService {
         }
     }
 
-    func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+    func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> {
         do {
             let endpointURL = try makeEndpointURL(
                 server: resultPrev.request.library.server,
@@ -271,19 +290,32 @@ extension CalibreServerService {
                     result.categories = categories
                     return result
                 }
-                .catch { _ in
-                    Just(resultPrev)
-                }
                 .eraseToAnyPublisher()
         } catch {
-            return Just(resultPrev).eraseToAnyPublisher()
+            return Fail(error: CalibreAPIError(error: error)).eraseToAnyPublisher()
         }
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError version instead")
+    func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
+        let typedPublisher: AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> = getLibraryCategoriesPublisher(resultPrev: resultPrev)
+        return typedPublisher
+            .catch { error -> Just<CalibreSyncLibraryResult> in
+                var result = resultPrev
+                result.errmsg = error.localizedDescription
+                return Just(result)
+            }
+            .eraseToAnyPublisher()
     }
 
     private func applyBooksMetadataPayload(_ data: Data, to task: CalibreBooksTask) -> CalibreBooksTask {
         var task = task
 
-        task.booksMetadataJSON = try? JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+        do {
+            task.booksMetadataJSON = try JSONSerialization.jsonObject(with: data, options: []) as? NSDictionary
+        } catch {
+            task.error = CalibreAPIError(error: error)
+        }
 
         do {
             task.booksMetadataEntry = try JSONDecoder().decode([String: CalibreBookEntry?].self, from: data)
@@ -295,10 +327,16 @@ extension CalibreServerService {
             } else if task.books.count == 1 {
                 task.booksError.formUnion(task.books)
             }
+            if let lastCodingPath = context.codingPath.last {
+                task.error = CalibreAPIError(error: DecodingError.keyNotFound(lastCodingPath, context))
+            } else {
+                task.error = CalibreAPIError(error: DecodingError.keyNotFound(context.codingPath.first!, context))
+            }
         } catch {
             if task.books.count == 1 {
                 task.booksError.formUnion(task.books)
             }
+            task.error = CalibreAPIError(error: error)
         }
 
         if let entries = try? JSONDecoder().decode([String: CalibreBookEntry].self, from: data) {

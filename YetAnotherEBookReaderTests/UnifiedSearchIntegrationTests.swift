@@ -15,29 +15,29 @@ func debugLog(_ message: String) {
 }
 
 class UnifiedSearchIntegrationTests: XCTestCase {
-    
+
     var modelData: ModelData!
     var unifiedSearchService: UnifiedSearchService!
     var mockServer: CalibreServer!
     var mockLibrary: CalibreLibrary!
     var cancellables: Set<AnyCancellable>!
-    
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         cancellables = Set<AnyCancellable>()
-        
+
         // Setup logger
-        
+
         debugLog("setUpWithError started")
-        
+
         // Setup in-memory Realm for testing
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
         modelData = ModelData(mock: true)
         modelData.realmConf = config
-        
+
         // Setup DatabaseService singleton
         DatabaseService.shared.setup(conf: config)
-        
+
         // Setup mock server and library
         mockServer = CalibreServer(
             uuid: UUID(),
@@ -50,10 +50,10 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             password: ""
         )
         mockLibrary = CalibreLibrary(server: mockServer, key: "lib1", name: "Library 1")
-        
+
         // Inject library into ModelData using library.id as the key
         modelData.calibreLibraries = [mockLibrary.id: mockLibrary]
-        
+
         // Mock server reachability staging
         let probeRequest = CalibreProbeServerRequest(
             server: mockServer,
@@ -74,12 +74,12 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             request: probeRequest
         )
         modelData.calibreServerInfoStaging = [mockServer.uuid.uuidString: serverInfo]
-        
+
         // Setup ephemeral URLSession with MockURLProtocol
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let mockSession = URLSession(configuration: sessionConfig)
-        
+
         // Create test services and pre-populate metadataSessions
         let logger = CalibreActivityLogger(realmConf: config)
         let service = CalibreServerService(
@@ -87,7 +87,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             config: modelData,
             database: DatabaseService.shared
         )
-        
+
         // Register mock sessions in the service
         let keyDefault = CalibreServerURLSessionKey(server: mockServer, timeout: 600, qos: .default)
         let keyBackground = CalibreServerURLSessionKey(server: mockServer, timeout: 600, qos: .background)
@@ -97,7 +97,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             keyBackground: mockSession,
             keyUtility: mockSession
         ]
-        
+
         let cacheRepository = RealmSearchCacheStore(config: config, modelData: modelData)
         let librarySearchService = LibrarySearchService(service: service, repository: cacheRepository)
         let unifiedSearchService = UnifiedSearchService(
@@ -105,7 +105,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             librarySearchService: librarySearchService,
             libraryProvider: modelData
         )
-        
+
         modelData.calibreServerService = service
         modelData.searchCacheRepository = cacheRepository
         modelData.librarySearchService = librarySearchService
@@ -113,11 +113,11 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         modelData.categoryCacheRepository = cacheRepository
         modelData.libraryCategoryService = LibraryCategoryService(service: service, repository: cacheRepository)
         modelData.unifiedCategoryService = UnifiedCategoryService(repository: cacheRepository, libraryProvider: modelData)
-        
+
         self.unifiedSearchService = unifiedSearchService
         debugLog("setUpWithError finished")
     }
-    
+
     override func tearDownWithError() throws {
         cancellables = nil
         unifiedSearchService = nil
@@ -126,10 +126,10 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         mockLibrary = nil
         try super.tearDownWithError()
     }
-    
+
     func testUnifiedSearchEndToEndWithMockServer() throws {
         debugLog("testUnifiedSearchEndToEndWithMockServer started")
-        
+
         // Mock search response JSON
         let searchResultJSON = """
         {
@@ -146,7 +146,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             "vl": ""
         }
         """
-        
+
         // Mock metadata response JSON
         let metadataJSON = """
         {
@@ -240,21 +240,21 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             }
         }
         """
-        
+
         MockURLProtocol.requestHandler = { request in
             guard let url = request.url else {
                 debugLog("requestHandler got request without URL")
                 throw URLError(.badURL)
             }
             debugLog("requestHandler intercepting url: \(url.absoluteString)")
-            
+
             let response = HTTPURLResponse(
                 url: url,
                 statusCode: 200,
                 httpVersion: nil,
                 headerFields: ["Content-Type": "application/json"]
             )!
-            
+
             if url.path.contains("ajax/search/lib1") {
                 debugLog("requestHandler returning search JSON")
                 return (response, searchResultJSON.data(using: .utf8)!)
@@ -262,11 +262,11 @@ class UnifiedSearchIntegrationTests: XCTestCase {
                 debugLog("requestHandler returning metadata JSON")
                 return (response, metadataJSON.data(using: .utf8)!)
             }
-            
+
             debugLog("requestHandler unhandled path: \(url.path)")
             throw URLError(.badURL)
         }
-        
+
         // Create SearchCriteria
         let criteria = SearchCriteria(
             searchString: "Integration",
@@ -275,10 +275,10 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         )
         // Key uses the library.id
         let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary.id], criteria: criteria)
-        
+
         let expectation = expectation(description: "UnifiedSearchManager returns search results from network")
         var finalResult: UnifiedSearchResult?
-        
+
         debugLog("subscribing to publisher")
         // Observe search manager publisher
         unifiedSearchService.publisher(for: key)
@@ -290,39 +290,88 @@ class UnifiedSearchIntegrationTests: XCTestCase {
                 }
             }
             .store(in: &cancellables)
-        
+
         debugLog("waiting for expectations")
         // Verify wait
         waitForExpectations(timeout: 5.0)
-        
+
         debugLog("test finished. result: \(String(describing: finalResult))")
-        
+
         XCTAssertNotNil(finalResult)
         XCTAssertEqual(finalResult?.books.count, 1)
         XCTAssertEqual(finalResult?.books.first?.title, "Quick Start Guide")
         XCTAssertEqual(finalResult?.books.first?.authors.first, "John Schember")
+    }
+
+    func testUnifiedSearchFailureHttpStatus() async throws {
+        debugLog("testUnifiedSearchFailureHttpStatus started")
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 404,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("Not Found".utf8))
+        }
+
+        let criteria = SearchCriteria(
+            searchString: "ErrorSearch",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary.id], criteria: criteria)
+
+        let stream = await unifiedSearchService.search(key: key)
+        var receivedStatuses: [String: LibrarySearchStatus] = [:]
+
+        for await update in stream {
+            receivedStatuses = update.statuses
+            if update.statuses[mockLibrary.id]?.loading == false {
+                break
+            }
+        }
+
+        let status = try XCTUnwrap(receivedStatuses[mockLibrary.id])
+        XCTAssertFalse(status.loading)
+
+        guard let error = status.error else {
+            return XCTFail("Expected search error but got nil")
+        }
+
+        if case .network(let apiError) = error {
+            if case .httpStatus(let code, _) = apiError {
+                XCTAssertEqual(code, 404)
+            } else {
+                XCTFail("Expected httpStatus error but got \(apiError)")
+            }
+        } else {
+            XCTFail("Expected .network error but got \(error)")
+        }
     }
 }
 
 // MockURLProtocol implementation for intercepting requests
 class MockURLProtocol: URLProtocol {
     static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
-    
+
     override class func canInit(with request: URLRequest) -> Bool {
         debugLog("MockURLProtocol.canInit: \(request.url?.absoluteString ?? "nil")")
         return true
     }
-    
+
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
         return request
     }
-    
+
     override func startLoading() {
         debugLog("MockURLProtocol.startLoading: \(request.url?.absoluteString ?? "nil")")
         guard let handler = MockURLProtocol.requestHandler else {
             return
         }
-        
+
         do {
             let (response, data) = try handler(request)
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -332,6 +381,6 @@ class MockURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: error)
         }
     }
-    
+
     override func stopLoading() {}
 }

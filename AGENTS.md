@@ -109,9 +109,30 @@ code.
 
 ### Models
 
-- `CalibreData.swift`: value/domain types for servers, libraries, books, sync
-  tasks, custom columns, plugin prefs, annotations payloads, and Calibre API
-  result structures.
+- `CalibreData.swift` has been split (Milestone P2/A11) into focused files in
+  `Models/` and `Network/`. The decomposition is a zero-behavior move:
+  - `CalibreCoreModels.swift`: `CalibreServer`, `CalibreLibrary`,
+    `CalibreBook`, `CalibreSyncStatus`.
+  - `ReadingPositionModels.swift`: `BookDeviceReadingPosition`,
+    `BookDeviceReadingPositionHistory`, reading statistics.
+  - `CalibreHighlightStyle.swift`: `BookHighlightStyle` (only model file in the
+    split that imports UIKit).
+  - `CalibreTasks.swift`: network/metadata task structs
+    (`CalibreBookTask`, `CalibreBooksMetadataRequest`, `CalibreBooksTask`,
+    `CalibreLibraryProbeTask`, `CalibreLibrarySearchTask`,
+    `CalibreBookSetLastReadPositionTask`, `CalibreBookUpdateAnnotationsTask`).
+  - `CalibrePayloadModels.swift`: Codable API entry/result payloads
+    (`CalibreBookEntry`, `CalibreBookLastReadPositionEntry`,
+    `CalibreBookAnnotationsResult`, `CalibreBookAnnotationsMap`,
+    `CalibreLibraryBooksResult`, etc.).
+  - `CalibreSyncModels.swift`: custom columns, category keys, probe/sync
+    requests, `CalibreCdbCmdListResult`.
+  - `CalibrePluginModels.swift`: DSReader Helper / Count Pages / Goodreads Sync
+    preferences and `CalibreDSReaderHelperConfiguration`.
+  - `Network/CalibreActivityModels.swift`: `CalibreActivity`/`Start`/`Finish`.
+  - `CalibreServerConfigProvider.swift`: the `CalibreServerConfigProvider`
+    protocol used to bridge managers/services with the `ModelData` facade.
+  - `Array+Chunks.swift`: generic `Array.chunks(size:)` helper.
 - `RealmModel.swift`: Realm object schema. Treat edits here as migration work.
 - `YabrData.swift`: format, reader, reader-info, and app-specific value types.
 - `BookFiles.swift`: import and local-file helpers.
@@ -158,7 +179,9 @@ The modern path is value-type/actor based. Do not revive direct
 - `Views/BookDetailView/*`: book detail, preview, activity, reading position UI.
 - `Views/SettingsView/*`: settings, server/library configuration, reader
   options, import pickers.
-- `Views/ShelfView/*`: recent/discover shelf UIKit adapters and shelf data model.
+- `Views/ShelfView/*`: recent/discover shelf UIKit adapters. The shelf data
+  model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved
+  out of `Views/ShelfView/` in Milestone P2/A10).
 - `Views/DictView/*`: dictionary and external lookup UI.
 
 ## Coding Rules
@@ -246,6 +269,46 @@ decomposition.
 
 Recent important state:
 
+- **P2/A22 CalibreSearchCache Deprecated Properties (Milestone A22):** Removed
+  4 deprecated `@Persisted` properties (`generation`, `totalNumber`, `bookIds`,
+  `books: List<CalibreBookRealm>`) from `CalibreLibrarySearchObject` in
+  `CalibreSearchCache.swift`. Bumped Realm schema version 139→140 (updated
+  `ModelData.RealmSchemaVersion`, `CFBundleVersion` in both iOS and macOS
+  Info.plist files, and added migration block entry for `oldSchemaVersion < 140`).
+- **P2/A13 Book.swift Deleted (Milestone A13):** Deleted the entire 378-line
+  `Models/Book.swift`. The file was not registered in the Xcode project and
+  was never compiled; all 7 types in it (`ServerInfo`, `LibraryInfo`,
+  `Library`, `Book`, `BookRealm`, `BookReadingPosition`, `BookDeviceReadingPosition`
+  old duplicate) had zero external references.
+- **P2/A07 Providers.swift Dead Code Removal (Milestone A07):** Deleted 417
+  lines of unreachable/deprecated code from `Providers.swift` and
+  `RealmModel.swift`: `FolioReaderRealmPreferenceProvider` (replaced by
+  `FolioReaderDelegatePreferenceProvider`), `FolioReaderHighlightRealm`
+  (deprecated, not in Realm schema), `FolioReaderYabrHighlightProvider`
+  (replaced by `FolioReaderDelegateHighlightProvider`),
+  `FolioReaderReadPositionRealm` (deprecated, not in Realm schema), and the
+  dead `extension FolioReaderHighlightRealm` in `RealmModel.swift`.
+  `Providers.swift` shrank from 1095 to 708 lines.
+- **P1/A09 DSReaderHelperConnector Thread Safety (Milestone A09):** Removed the
+  `DispatchQueue.main.sync` call and redundant `URLCredentialStorage.shared.set`
+  block from `DSReaderHelperConnector.urlSession`. Authentication is now handled
+  solely by `CalibreServerTaskDelegate`'s challenge callback. Added
+  `DSReaderHelperConnectorTests` (3 cases) for background-thread-safe access.
+- **P2/A10 ShelfDataManager Move (Milestone A10):** Moved
+  `ShelfDataManager.swift` (containing `YabrShelfDataModel` and the
+  `ModelData.registerRecentShelfUpdater()`/`parseShelfSectionId` helpers) from
+  `Views/ShelfView/` to `Models/`. The Xcode project was updated via
+  `xcode_XcodeMV`, preserving both app and Catalyst target memberships. Pure
+  file move, no declaration changes.
+- **P2/A11 CalibreData Split (Milestone A11):** Decomposed the 1307-line
+  `Models/CalibreData.swift` into ten focused files (see the Architecture Map
+  `Models` section above) as a zero-behavior-change move. The original
+  `CalibreData.swift` was deleted; all new files are registered in both app and
+  Catalyst targets. Added `YetAnotherEBookReaderTests/CalibreDataSplitTests`
+  (20 cases) covering `CalibreServer`/`CalibreLibrary` identity and hashing,
+  `CalibreBook.inShelfId`, `BookHighlightStyle` class/color mapping, plugin
+  preference Codable decoding, custom-column snake_case CodingKeys,
+  `Array.chunks`, and the `CalibreActivity` class hierarchy.
 - **P1f / MVVM Modernization (Milestone A08):** Successfully migrated high-traffic main screens out of monolithic `@EnvironmentObject var modelData` orchestration into focused, isolated ViewModels.
 - **New ViewModels Introduced:**
   - `MainViewModel` (manages app shell tab selection, terms acceptance, book imports, and modal presentations).
@@ -253,7 +316,7 @@ Recent important state:
   - `SupportInfoViewModel` (decouples file-processing ZIP/backup operations and state tracking).
   - `RecentShelfViewModel` and `SectionShelfViewModel` (extract business flows out of UIKit/compositional shelf controllers).
 - **LibraryInfo & Filter Consolidations:** Extended `LibraryInfoView.ViewModel` to handle search string alterations, category filtering, and count/status string derivations, eliminating direct `ModelData` reads in subviews.
-- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, and `RecentShelfViewModelTests` (total suite: 67 unit tests + 1 UI test).
+- **Unit Testing Safety Net:** Added thorough, `@MainActor`-isolated unit tests covering `MainViewModelTests`, `SettingsViewModelTests`, `SupportInfoViewModelTests`, `RecentShelfViewModelTests`, `CalibreDataSplitTests`, and `DSReaderHelperConnectorTests` (total suite: 90 unit tests + 1 UI test).
 
 Latest recorded verification in handoff notes:
 
@@ -261,7 +324,10 @@ Latest recorded verification in handoff notes:
 xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
 ```
 
-Recorded result: 67 unit tests and 1 UI test passed.
+Recorded result: 90 unit tests and 1 UI test passed. The Mac Catalyst build is
+currently blocked by a pre-existing SPM package product resolution issue
+(`R2Navigator`, `GCDWebServer`, `R2Shared`, `R2Streamer`) that is unrelated to
+the P1/P2 work.
 
 ## Known Risks
 

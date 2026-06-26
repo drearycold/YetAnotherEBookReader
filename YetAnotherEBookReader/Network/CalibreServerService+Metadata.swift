@@ -9,130 +9,134 @@ import Foundation
 import Combine
 
 extension CalibreServerService {
-    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
+    func getMetadata(oldbook: CalibreBook) async throws -> CalibreBook {
         guard oldbook.library.server.isLocal == false else {
             updatingMetadataStatus = "Local File"
             updatingMetadataSucceed = true
-            return
+            return oldbook
         }
 
-        let endpointURL: URL
-        do {
-            endpointURL = try makeEndpointURL(
-                server: oldbook.library.server,
-                path: "/get/json/\(oldbook.id)/\(oldbook.library.key)"
-            )
-        } catch {
-            updatingMetadataStatus = CalibreAPIError(error: error).localizedDescription
-            return
-        }
+        let endpointURL = try makeEndpointURL(
+            server: oldbook.library.server,
+            path: "/get/json/\(oldbook.id)/\(oldbook.library.key)"
+        )
 
         let request = URLRequest(url: endpointURL, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 600)
         let startDatetime = Date()
         updatingMetadata = true
 
-        Task { [weak self] in
-            guard let self else { return }
+        await self.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
 
-            await self.logger.logStartCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, bookId: oldbook.id, libraryId: oldbook.library.id)
+        do {
+            let (data, httpResponse) = try await self.validatedData(for: request, server: oldbook.library.server)
+            guard httpResponse.mimeType == "application/json" else {
+                throw CalibreAPIError.unsupportedPayload
+            }
+            let newbook = try self.handleLibraryBookOne(oldbook: oldbook, json: data)
 
-            var status = "Unknown Error"
-            var bookResult = oldbook
+            await self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Success")
 
-            defer {
-                Task { [weak self] in
-                    await self?.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: status)
-                }
+            await MainActor.run {
+                self.updatingMetadataStatus = "Success"
+                self.updatingMetadata = false
 
-                DispatchQueue.main.async {
-                    self.updatingMetadataStatus = status
-                    self.updatingMetadata = false
-
-                    if status == "Success",
-                       self.getBookRealm(forPrimaryKey: bookResult.inShelfId) != nil {
-                        self.updateBook(book: bookResult)
-                    }
-
-                    completion?(bookResult)
+                if self.getBookRealm(forPrimaryKey: newbook.inShelfId) != nil {
+                    self.updateBook(book: newbook)
                 }
             }
 
-            do {
-                let (data, httpResponse) = try await self.validatedData(for: request, server: oldbook.library.server)
-                guard httpResponse.mimeType == "application/json" else {
-                    status = CalibreAPIError.unsupportedPayload.localizedDescription
-                    return
-                }
-                guard let newbook = self.handleLibraryBookOne(oldbook: oldbook, json: data) else {
-                    status = CalibreAPIError.decoding(NSError(domain: "CalibreServerService", code: 0)).localizedDescription
-                    return
-                }
+            return newbook
+        } catch {
+            let err = CalibreAPIError(error: error)
+            await self.logger.logFinishCalibreActivity(type: "Get Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
+            await MainActor.run {
+                self.updatingMetadataStatus = err.localizedDescription
+                self.updatingMetadata = false
+            }
+            throw err
+        }
+    }
 
-                status = "Success"
-                bookResult = newbook
+    @available(*, deprecated, message: "Use async throwing getMetadata(oldbook:) instead")
+    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
+        guard oldbook.library.server.isLocal == false else {
+            updatingMetadataStatus = "Local File"
+            updatingMetadataSucceed = true
+            completion?(oldbook)
+            return
+        }
+
+        Task {
+            do {
+                let newbook = try await getMetadata(oldbook: oldbook)
+                await MainActor.run {
+                    self.updatingMetadataStatus = "Success"
+                    self.updatingMetadataSucceed = true
+                    completion?(newbook)
+                }
             } catch {
-                status = CalibreAPIError(error: error).localizedDescription
+                await MainActor.run {
+                    self.updatingMetadataStatus = error.localizedDescription
+                    self.updatingMetadataSucceed = false
+                    completion?(oldbook)
+                }
             }
         }
     }
 
-    func handleLibraryBookOne(oldbook: CalibreBook, json: Data) -> CalibreBook? {
-        do {
-            let entry = try decodePayload(CalibreBookEntry.self, from: json)
-            guard let root = try JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
-                return nil
-            }
-
-            var book = oldbook
-            book.title = entry.title
-            book.publisher = entry.publisher ?? ""
-            book.series = entry.series ?? ""
-            book.seriesIndex = entry.series_index ?? 0.0
-
-            let parserOne = ISO8601DateFormatter()
-            parserOne.formatOptions = .withInternetDateTime
-            let parserTwo = ISO8601DateFormatter()
-            parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            book.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
-            book.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .init()
-            book.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .init()
-            book.lastSynced = book.lastModified
-
-            book.tags = entry.tags
-
-            book.formats = entry.format_metadata.reduce(into: book.formats) {
-                var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-
-                formatInfo.serverSize = $1.value.size
-
-                let dateFormatter = ISO8601DateFormatter()
-                dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-                formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
-
-                $0[$1.key.uppercased()] = formatInfo
-            }
-
-            book.size = 0
-            book.rating = Int(entry.rating * 2)
-            book.authors = entry.authors
-            book.identifiers = entry.identifiers
-            book.comments = entry.comments ?? ""
-
-            if let userMetadata = root["user_metadata"] as? NSDictionary {
-                book.userMetadatas = userMetadata.reduce(into: book.userMetadatas) {
-                    guard let dict = $1.value as? NSDictionary,
-                          let label = dict["label"] as? String,
-                          let value = dict["#value#"] else {
-                        return
-                    }
-                    $0[label] = value
-                }
-            }
-
-            return book
-        } catch {
-            return nil
+    func handleLibraryBookOne(oldbook: CalibreBook, json: Data) throws -> CalibreBook {
+        let entry = try decodePayload(CalibreBookEntry.self, from: json)
+        guard let root = try JSONSerialization.jsonObject(with: json, options: []) as? NSDictionary else {
+            throw CalibreAPIError.unsupportedPayload
         }
+
+        var book = oldbook
+        book.title = entry.title
+        book.publisher = entry.publisher ?? ""
+        book.series = entry.series ?? ""
+        book.seriesIndex = entry.series_index ?? 0.0
+
+        let parserOne = ISO8601DateFormatter()
+        parserOne.formatOptions = .withInternetDateTime
+        let parserTwo = ISO8601DateFormatter()
+        parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        book.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
+        book.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .init()
+        book.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .init()
+        book.lastSynced = book.lastModified
+
+        book.tags = entry.tags
+
+        book.formats = entry.format_metadata.reduce(into: book.formats) {
+            var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
+
+            formatInfo.serverSize = $1.value.size
+
+            let dateFormatter = ISO8601DateFormatter()
+            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+            formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
+
+            $0[$1.key.uppercased()] = formatInfo
+        }
+
+        book.size = 0
+        book.rating = Int(entry.rating * 2)
+        book.authors = entry.authors
+        book.identifiers = entry.identifiers
+        book.comments = entry.comments ?? ""
+
+        if let userMetadata = root["user_metadata"] as? NSDictionary {
+            book.userMetadatas = userMetadata.reduce(into: book.userMetadatas) {
+                guard let dict = $1.value as? NSDictionary,
+                      let label = dict["label"] as? String,
+                      let value = dict["#value#"] else {
+                    return
+                }
+                $0[label] = value
+            }
+        }
+
+        return book
     }
 
     func handleLibraryBookOne(library: CalibreLibrary, bookRealm: CalibreBookRealm, entry: CalibreBookEntry, root: NSDictionary) {
@@ -199,93 +203,87 @@ extension CalibreServerService {
         bookRealm.lastUpdated = Date()
     }
 
-    func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
-        let endpointURL: URL
-        do {
-            endpointURL = try makeEndpointURL(
-                server: book.library.server,
-                path: "/book-manifest/\(book.id)/\(format.id)",
-                queryItems: [URLQueryItem(name: "library_id", value: book.library.key)]
-            )
-        } catch {
-            updatingMetadataStatus = CalibreAPIError(error: error).localizedDescription
-            return
-        }
+    func getBookManifest(book: CalibreBook, format: Format) async throws -> Data {
+        let endpointURL = try makeEndpointURL(
+            server: book.library.server,
+            path: "/book-manifest/\(book.id)/\(format.id)",
+            queryItems: [URLQueryItem(name: "library_id", value: book.library.key)]
+        )
 
         let request = URLRequest(url: endpointURL)
-
         let startDatetime = Date()
         updatingMetadata = true
 
-        Task { [weak self] in
-            guard let self else { return }
+        await self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
 
-            await self.logger.logStartCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, bookId: book.id, libraryId: book.library.id)
-
-            var status = "Unknown Error"
-            var manifestData: Data?
-
-            defer {
-                Task { [weak self] in
-                    await self?.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: status)
-                }
-                DispatchQueue.main.async {
-                    self.updatingMetadataStatus = status
-                    self.updatingMetadata = false
-                    completion?(manifestData)
-                }
+        do {
+            let (data, httpResponse) = try await self.validatedData(for: request, server: book.library.server)
+            guard httpResponse.mimeType == "application/json" else {
+                throw CalibreAPIError.unsupportedPayload
             }
+            await self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: "Success")
+            await MainActor.run {
+                self.updatingMetadataStatus = "Success"
+                self.updatingMetadata = false
+            }
+            return data
+        } catch {
+            let err = CalibreAPIError(error: error)
+            await self.logger.logFinishCalibreActivity(type: "Get Book Manifest", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
+            await MainActor.run {
+                self.updatingMetadataStatus = err.localizedDescription
+                self.updatingMetadata = false
+            }
+            throw err
+        }
+    }
 
+    @available(*, deprecated, message: "Use async throwing getBookManifest(book:format:) instead")
+    func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
+        Task {
             do {
-                let (data, httpResponse) = try await self.validatedData(for: request, server: book.library.server)
-                guard httpResponse.mimeType == "application/json" else {
-                    status = CalibreAPIError.unsupportedPayload.localizedDescription
-                    return
-                }
-                status = "Success"
-                manifestData = data
+                let data = try await getBookManifest(book: book, format: format)
+                completion?(data)
             } catch {
-                status = CalibreAPIError(error: error).localizedDescription
+                completion?(nil)
             }
         }
     }
 
-    func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) -> Int {
-        let endpointURL: URL
-        do {
-            endpointURL = try makeEndpointURL(
-                server: library.server,
-                path: "/cdb/cmd/set_metadata/0",
-                queryItems: [URLQueryItem(name: "library_id", value: library.key)]
-            )
-        } catch {
-            return -1
-        }
+    func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) async throws {
+        let endpointURL = try makeEndpointURL(
+            server: library.server,
+            path: "/cdb/cmd/set_metadata/0",
+            queryItems: [URLQueryItem(name: "library_id", value: library.key)]
+        )
 
         let json: [Any] = ["fields", bookId, metadata]
-
-        guard let data = try? JSONSerialization.data(withJSONObject: json, options: []) else {
-            return -1
-        }
-
+        let data = try JSONSerialization.data(withJSONObject: json, options: [])
         let request = makeJSONRequest(url: endpointURL, method: "POST", body: data)
         let startDatetime = Date()
 
-        Task { [weak self] in
-            guard let self else { return }
-            await self.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
+        await self.logger.logStartCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, bookId: bookId, libraryId: library.id)
 
-            let logErrMsg: String
-            do {
-                let (_, response) = try await self.validatedData(for: request, server: library.server)
-                logErrMsg = "HTTP \(response.statusCode)"
-            } catch {
-                logErrMsg = CalibreAPIError(error: error).localizedDescription
-            }
-
+        do {
+            let (_, response) = try await self.validatedData(for: request, server: library.server)
+            let logErrMsg = "HTTP \(response.statusCode)"
             await self.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: logErrMsg)
+        } catch {
+            let err = CalibreAPIError(error: error)
+            await self.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
+            throw err
         }
+    }
 
+    @available(*, deprecated, message: "Use async throwing updateMetadata instead")
+    func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) -> Int {
+        Task {
+            do {
+                try await updateMetadata(library: library, bookId: bookId, metadata: metadata)
+            } catch {
+                // No-op
+            }
+        }
         return 0
     }
 
@@ -321,20 +319,25 @@ extension CalibreServerService {
         )
     }
 
-    func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), Never> {
+    func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), CalibreAPIError> {
         validatedDataPublisher(from: task.url, server: task.server)
             .tryMap { data, _ in
                 try self.decodePayload(CalibreBookEntry.self, from: data)
             }
             .mapError(CalibreAPIError.init(error:))
-            .replaceError(with: CalibreBookEntry())
             .map { (task, $0) }
             .eraseToAnyPublisher()
     }
 
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
+    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), CalibreAPIError> {
         validatedDataPublisher(from: task.url, server: task.server)
             .map { (task, $0.0, $0.1 as URLResponse) }
+            .eraseToAnyPublisher()
+    }
+
+    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
+    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
+        getMetadataNew(task: task)
             .mapError(\.asURLError)
             .eraseToAnyPublisher()
     }

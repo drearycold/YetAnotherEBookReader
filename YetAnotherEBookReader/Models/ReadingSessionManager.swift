@@ -192,13 +192,20 @@ class ReadingSessionManager: ObservableObject {
             
             let connector = DSReaderHelperConnector(calibreServerService: modelData.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
             
-            // These are currently dataTask based with internal resume()
-            _ = connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+            do {
+                try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+            } catch {
+                logger.error("Failed to update Goodreads reading progress for book \(book.title): \(error.localizedDescription)")
+            }
 
             if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
-                modelData.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
-                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                ])
+                do {
+                    try await modelData.calibreServerService.updateMetadata(library: library, bookId: book.id, metadata: [
+                        [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                    ])
+                } catch {
+                    logger.error("Failed to update custom column metadata for book \(book.title): \(error.localizedDescription)")
+                }
             }
         }
     }
@@ -223,12 +230,22 @@ class ReadingSessionManager: ObservableObject {
            let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = modelData?.shouldAutoUpdateGoodreads(library: library),
            dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
             let connector = DSReaderHelperConnector(calibreServerService: modelData!.calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-            connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+            Task {
+                do {
+                    try await connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
+                } catch {
+                    logger.error("Failed to update Goodreads reading progress for book \(readingBook.title): \(error.localizedDescription)")
+                }
 
-            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
-                modelData?.calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
-                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                ])
+                if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
+                    do {
+                        try await modelData?.calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
+                            [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
+                        ])
+                    } catch {
+                        logger.error("Failed to update custom column metadata for book \(readingBook.title): \(error.localizedDescription)")
+                    }
+                }
             }
         }
     }

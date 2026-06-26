@@ -14,26 +14,26 @@ final class SupportInfoViewModel: ObservableObject {
     @Published var yabrPrivacyHtml: String?
     @Published var yabrTermsHtml: String?
     @Published var yabrVersionHtml: String?
-    
+
     @Published var isExporting = false
     @Published var showFolderPicker = false
     @Published var exportProgress: Double = 0
     @Published var currentExportFile = ""
     @Published var alertMessage = ""
     @Published var showAlert = false
-    
+
     init() {
         yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml
         yabrTermsHtml = YabrAppInfo.shared.termsHtml
         yabrVersionHtml = YabrAppInfo.shared.versionHtml
     }
-    
+
     func onAppear() {
         yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml
         yabrTermsHtml = YabrAppInfo.shared.termsHtml
         yabrVersionHtml = YabrAppInfo.shared.versionHtml
     }
-    
+
     func exportAppData(to folderURL: URL) async {
         guard folderURL.startAccessingSecurityScopedResource() else {
             await MainActor.run {
@@ -42,29 +42,29 @@ final class SupportInfoViewModel: ObservableObject {
             }
             return
         }
-        
+
         defer { folderURL.stopAccessingSecurityScopedResource() }
-        
+
         await MainActor.run {
             isExporting = true
             exportProgress = 0
             currentExportFile = "Preparing..."
         }
-        
+
         let zipFileName = "YABR_Backup_\(Int(Date().timeIntervalSince1970)).zip"
         let destinationURL = folderURL.appendingPathComponent(zipFileName)
-        
+
         do {
             let result = try await Task.detached(priority: .userInitiated) { [weak self] in
-                guard let self = self else { throw NSError(domain: "YABRError", code: -1, userInfo: nil) }
+                guard let self = self else { throw SupportInfoError.viewModelDeinitialized }
                 return try await self.performZip(destinationURL: destinationURL)
             }.value
-            
+
             await MainActor.run {
                 self.currentExportFile = "Completed"
                 self.exportProgress = 1.0
                 self.isExporting = false
-                
+
                 if result.skipped > 0 {
                     self.alertMessage = "Export saved to: \(zipFileName)\n\n\(result.success) files added. \(result.skipped) files were skipped due to system restrictions."
                 } else {
@@ -80,38 +80,38 @@ final class SupportInfoViewModel: ObservableObject {
             }
         }
     }
-    
+
     private func performZip(destinationURL: URL) async throws -> (url: URL, skipped: Int, success: Int) {
         let fileManager = FileManager.default
         let archive = try await Archive(url: destinationURL, accessMode: .create)
-        
+
         let docsDir = try fileManager.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false).resolvingSymlinksInPath()
         let appSupportDir = try fileManager.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: false).resolvingSymlinksInPath()
-        
+
         let sources = [
             (url: docsDir, label: "Documents"),
             (url: appSupportDir, label: "ApplicationSupport")
         ]
-        
+
         var totalFiles = 0
         for source in sources {
             let enumerator = fileManager.enumerator(at: source.url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsPackageDescendants])
             while enumerator?.nextObject() != nil { totalFiles += 1 }
         }
-        
+
         var processedFiles = 0
         var successCount = 0
         var skippedCount = 0
-        
+
         for source in sources {
             let enumerator = fileManager.enumerator(at: source.url, includingPropertiesForKeys: [.isDirectoryKey, .fileResourceTypeKey], options: [.skipsHiddenFiles, .skipsPackageDescendants])
-            
+
             while let sourceURL = (enumerator?.nextObject() as? URL)?.resolvingSymlinksInPath() {
                 if sourceURL.path == destinationURL.path { continue }
-                
+
                 let relativePath = sourceURL.path.hasPrefix(source.url.path) ? String(sourceURL.path.dropFirst(source.url.path.count)) : sourceURL.path
                 let entryPath = source.label + relativePath
-                
+
                 processedFiles += 1
                 if processedFiles % 5 == 0 || processedFiles == totalFiles {
                     let fileName = sourceURL.lastPathComponent
@@ -121,7 +121,7 @@ final class SupportInfoViewModel: ObservableObject {
                         self.exportProgress = progress
                     }
                 }
-                
+
                 do {
                     let resourceValues = try sourceURL.resourceValues(forKeys: [.isDirectoryKey, .fileResourceTypeKey])
                     if resourceValues.fileResourceType == .directory {
@@ -129,13 +129,13 @@ final class SupportInfoViewModel: ObservableObject {
                     } else if resourceValues.fileResourceType == .regular {
                         let fileHandle = try FileHandle(forReadingFrom: sourceURL)
                         defer { try? fileHandle.close() }
-                        
+
                         let fileSize = try fileManager.attributesOfItem(atPath: sourceURL.path)[.size] as? Int64 ?? 0
-                        
+
                         try await archive.addEntry(with: entryPath, type: .file, uncompressedSize: fileSize, provider: { (position, size) -> Data in
                             try fileHandle.seek(toOffset: UInt64(position))
                             guard let data = try fileHandle.read(upToCount: size) else {
-                                throw NSError(domain: "YABRError", code: 3, userInfo: [NSLocalizedDescriptionKey: "Read failed at \(position)"])
+                                throw SupportInfoError.fileReadFailed(position: position, size: size, path: sourceURL.lastPathComponent)
                             }
                             return data
                         })
@@ -148,7 +148,21 @@ final class SupportInfoViewModel: ObservableObject {
                 }
             }
         }
-        
+
         return (destinationURL, skippedCount, successCount)
+    }
+}
+
+enum SupportInfoError: LocalizedError {
+    case viewModelDeinitialized
+    case fileReadFailed(position: Int64, size: Int, path: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .viewModelDeinitialized:
+            return "Backup failed: View model was deinitialized."
+        case .fileReadFailed(let position, let size, let path):
+            return "Read failed at position \(position) (size: \(size)) for file: \(path)"
+        }
     }
 }

@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum CalibreAPIError: LocalizedError {
+enum CalibreAPIError: LocalizedError, Sendable {
     case serverUnreachable
     case invalidURL(String?)
     case transport(URLError)
@@ -93,5 +93,34 @@ enum CalibreAPIError: LocalizedError {
             return nil
         }
         return message
+    }
+}
+
+extension CalibreAPIError: Equatable {
+    static func == (lhs: CalibreAPIError, rhs: CalibreAPIError) -> Bool {
+        switch (lhs, rhs) {
+        case (.serverUnreachable, .serverUnreachable):
+            return true
+        case (.invalidURL(let l), .invalidURL(let r)):
+            return l == r
+        case (.transport(let l), .transport(let r)):
+            return l.code == r.code
+        case (.httpStatus(let lCode, let lData), .httpStatus(let rCode, let rData)):
+            return lCode == rCode && lData == rData
+        case (.decoding(let l), .decoding(let r)):
+            return l.localizedDescription == r.localizedDescription
+        case (.emptyResponse, .emptyResponse):
+            return true
+        case (.authFailed, .authFailed):
+            return true
+        case (.serverRejected(let l), .serverRejected(let r)):
+            return l == r
+        case (.unsupportedPayload, .unsupportedPayload):
+            return true
+        case (.unknown(let l), .unknown(let r)):
+            return l.localizedDescription == r.localizedDescription
+        default:
+            return false
+        }
     }
 }

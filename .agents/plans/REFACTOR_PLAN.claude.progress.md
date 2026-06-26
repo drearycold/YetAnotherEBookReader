@@ -1,7 +1,7 @@
 # REFACTOR_PLAN.md — YetAnotherEBookReader (D.S.Reader)
 
 > 基于对全部 88 个 Swift 源文件的完整分析，生成于 2026-06-05
-> **最后更新**: 2026-06-17 — 继续拆分 YabrPDFViewController 导航/Chrome/选区/分享/选项职责
+> **最后更新**: 2026-06-18 — P0 全部完成，P1 完成 7/8，P2 完成 2/11
 
 ---
 
@@ -9,38 +9,40 @@
 
 ```mermaid
 pie title 任务完成状态
-    "P0 已完成" : 8
-    "P0 进行中" : 2
-    "P1 已完成" : 4
-    "P1 未开始" : 4
-    "P2 未开始" : 6
+    "P0 已完成" : 10
+    "P1 已完成" : 7
+    "P1 未开始" : 1
+    "P2 已完成" : 2
+    "P2 未开始" : 4
 ```
 
-| 指标 | 初始 (06-05) | 当前 (06-17) | 变化 |
-|------|-------------|-------------|------|
-| **ModelData.swift 行数** | 2,180 | 996 | 🟢 **-54%** |
-| **CalibreBrowser.swift 行数** | 2,137 | 1,320 | 🟢 **-38%** |
-| **YabrPDFViewController.swift 行数** | 1,716 | 311 | 🟢 **-82%** |
-| **测试文件数** | 1 (占位) | 7 | 🟢 **+600%** |
-| **测试代码行数** | ~0 | 2,029 | 🟢 **从零到有** |
-| **通过的单元测试** | 0 | 41+ | 🟢 |
-| **Views 层 `import RealmSwift` 文件数** | 20+ | 17 | 🟡 **-15%** |
-| **总 `import RealmSwift` 文件数** | 36 | 36 | ⚪ (ViewModel 层新增抵消了 View 层减少) |
-| **Swift 源文件数** | 88 | 144 | 📈 (+56 新文件，含 Services/Repos/VMs/Tests) |
-| **总代码行数** | 28,702 | 31,486 | 📈 (+10%, 含测试+新模块) |
+| 指标 | 初始 (06-05) | 上次 (06-17) | 当前 (06-18) | 变化 |
+|------|-------------|-------------|-------------|------|
+| **ModelData.swift 行数** | 2,180 | 996 | 1,040 | 🟢 **-52%** (微增因新管理器接线) |
+| **CalibreBrowser.swift** | 2,137 | 1,320 | ❌ **已删除** | 🟢 **-100%** |
+| **CalibreData.swift** | 1,542 | 1,542 | ❌ **已拆分为 10 文件** | 🟢 **-100%** |
+| **CalibreServerService.swift** | 1,388 | 1,436 | 372 (核心) + 1,100 (6 extensions) | 🟢 **拆分完成** |
+| **YabrPDFViewController.swift** | 1,716 | 311 | 311 | 🟢 **-82%** |
+| **测试文件数** | 1 (占位) | 7 | 15 | 🟢 **+114%** |
+| **测试代码行数** | ~0 | 2,029 | 3,131 | 🟢 **+54%** |
+| **通过的单元测试** | 0 | 41+ | 87+ | 🟢 **+112%** |
+| **Views 层 `import RealmSwift` 文件数** | 20+ | 17 | 18 | ⚪ (新 ViewModel 文件抵消了减少) |
+| **总 `import RealmSwift` 文件数** | 36 | 36 | 38 | ⚪ (新 ViewModel 层需要 Realm) |
+| **Swift 源文件数** | 88 | 144 | 170 | 📈 (+26, 含 extensions/split/VMs) |
+| **总代码行数** | 28,702 | 31,486 | 30,666 | 🟢 **-3%** (净减少，含删除旧代码) |
 
 ---
 
 ## 一、架构问题清单 — 完成状态
 
-### P0 任务 (阻塞后续重构)
+### P0 任务 (阻塞后续重构) — ✅ 全部完成
 
-| # | 问题 | 初始行数 | 当前行数 | 状态 | 完成日期 | 关键 Commits |
-|---|------|---------|---------|------|---------|-------------|
-| **A01** | ModelData God Object | 2,180 | 996 | ✅ **已拆分** | 06-12 | `82aae5b` `fe8154b` `8428e19` `dffebdb` |
-| **A02** | CalibreBrowser 搜索/缓存巨类 | 2,137 | 1,320 | 🟡 **部分完成** | — | `e366f13` `649cbc5` |
-| **A25** | 测试覆盖为零 | 0 tests | 41+ tests | ✅ **已建立** | 06-10 | `8ec1bb8` `f20ad30` |
-| **A05** | RealmSwift 泄漏到视图层 | 20+ Views | 17 Views | 🟡 **进行中** | — | `726fc9f` `a7e3317` `64f97a1` |
+| # | 问题 | 初始行数 | 当前状态 | 完成日期 | 关键 Commits |
+|---|------|---------|---------|---------|-------------|
+| **A01** | ModelData God Object | 2,180 → 1,040 | ✅ **已拆分** | 06-12 | `82aae5b` `fe8154b` `8428e19` `dffebdb` |
+| **A02** | CalibreBrowser 搜索/缓存巨类 | 2,137 → **删除** | ✅ **已完成** | 06-18 | `25fac5a` (V2 迁移完成+V1 删除) |
+| **A25** | 测试覆盖为零 | 0 → 87+ tests | ✅ **已建立** | 06-10 | `8ec1bb8` `f20ad30` |
+| **A05** | RealmSwift 泄漏到视图层 | 20+ → 18 Views | ✅ **核心完成** | 06-18 | `726fc9f` `a7e3317` `64f97a1` |
 
 #### A01: ModelData 拆分详情
 
@@ -48,25 +50,29 @@ pie title 任务完成状态
 
 | 提取组件 | 任务编号 | 行数 | 职责 |
 |---------|---------|------|------|
-| [CalibreServerManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Managers/CalibreServerManager.swift) | P0-1a | ~300 | 服务器 CRUD、探测、连接状态 |
-| [CalibreLibraryManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Managers/CalibreLibraryManager.swift) | P0-1b | ~350 | 图书馆管理、同步状态 |
-| [CalibreBookManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Managers/CalibreBookManager.swift) | P0-1d | ~400 | 图书 CRUD、元数据、书架管理 |
+| [CalibreServerManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreServerManager.swift) | P0-1a | ~300 | 服务器 CRUD、探测、连接状态 |
+| [CalibreLibraryManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreLibraryManager.swift) | P0-1b | ~350 | 图书馆管理、同步状态 |
+| [CalibreBookManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreBookManager.swift) | P0-1d | ~400 | 图书 CRUD、元数据、书架管理 |
 | [ReadingSessionManager](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/ReadingSessionManager.swift) | P0-1e | ~200 | 格式偏好、阅读位置、会话 |
 
 > [!TIP]
 > ModelData 现在主要作为**协调者**，持有子管理器实例并转发 `objectWillChange`。向后兼容的委托属性保留，确保 legacy 视图继续编译。
 
-#### A02: CalibreBrowser 搜索现代化详情
+#### A02: CalibreBrowser 搜索现代化详情 — ✅ 全部完成
 
 | 阶段 | 描述 | 状态 |
 |------|------|------|
 | Phase 1: 值类型 + Repository 协议 | `UnifiedSearchResult`, `SearchCacheRepository`, `RealmSearchCacheStore` | ✅ |
 | Phase 2: Heap 合并算法 | `UnifiedSearchMergeService` + `MergeHead` | ✅ |
-| Phase 3: 内存协调器 | `UnifiedSearchManager` (已删除，替换为 actor) | ✅ |
+| Phase 3: 内存协调器 | `UnifiedSearchManager` → `actor UnifiedSearchService` | ✅ |
 | Phase 4: UI 消费层迁移 | `UnifiedSearchViewModel`, Views 迁移 | ✅ |
 | Phase 5: Realm Schema 清理 | 删除 `CalibreUnifiedSearchObject`, 迁移 v138 | ✅ |
 | Phase 6: Swift Concurrency | `actor UnifiedSearchService`, `actor LibrarySearchService` | ✅ |
-| 剩余: 分类系统迁移 | `CalibreUnifiedCategoryObject` 仍在 Realm | 🟡 |
+| Phase 7: V2 完成 + V1 删除 | `CalibreBrowser.swift` **已删除**, V2 目录已清理 | ✅ `25fac5a` |
+| Phase 8: 分类系统迁移 | `UnifiedCategoryService` + `UnifiedCategoryViewModel` | ✅ `25fac5a` |
+
+> [!IMPORTANT]
+> `CalibreBrowser.swift` (2,137 行) 已在 commit `25fac5a` 中**完全删除**。搜索和分类功能已迁移到 actor-based 现代化服务层。`Models/CalibreBrowser/V2/` 目录也已不存在。
 
 #### A05: Repository 层引入详情
 
@@ -81,43 +87,53 @@ pie title 任务完成状态
 
 ---
 
-### P1 任务 (高价值，可独立完成)
+### P1 任务 (高价值，可独立完成) — 7/8 完成
 
 | # | 问题 | 状态 | 完成日期 | 关键 Commits |
 |---|------|------|---------|-------------|
 | **A06** | 阅读位置三引擎重复 | ✅ **已统一** | 06-15 | `c95c78f` `49defcb` |
-| **A03** | YabrPDFViewController 1716行 | ✅ **已拆分** | 06-16 | `7aea6eb` `c6871e3` |
+| **A03** | YabrPDFViewController 1716行 | ✅ **已拆分** | 06-17 | `7aea6eb` `c6871e3` `37afd35` `2f26f2f` |
 | **A14** | 高亮/标注三引擎重复 | ✅ **已统一** | 06-16 | `d4ae1a3` |
 | **A15** | 主题/外观三引擎重复 | ✅ **已统一** | 06-16 | `c4f71ea` |
-| **A04** | CalibreServerService 1388行 | ❌ 未开始 | — | — |
-| **A08** | 视图层无 ViewModel 分隔 | 🟡 **部分完成** | — | 多个 commits |
-| **A09** | DSReaderHelper DispatchQueue.main.sync | ❌ 未开始 | — | — |
-| **A18** | V1/V2 共存 | ❌ 未开始 | — | — |
+| **A04** | CalibreServerService 1388行 | ✅ **已拆分** | 06-18 | (split into 7 files) |
+| **A08** | 视图层无 ViewModel 分隔 | ✅ **已完成** | 06-18 | `284b574` |
+| **A18** | V1/V2 共存 | ✅ **V1 已删除** | 06-18 | `25fac5a` |
+| **A09** | DSReaderHelper DispatchQueue.main.sync | ✅ 已完成 | P1/A09: removed DispatchQueue.main.sync on 2026-06-18 |
 
-#### A06+A14+A15: 统一阅读引擎抽象层详情
+#### A04: CalibreServerService 拆分详情 — ✅ 新完成
+
+从 1,388 行单文件拆分为 7 个专注文件：
+
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| [CalibreServerService.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService.swift) | 372 | 核心：session 管理、配置属性、共享基础设施 |
+| [+Annotations](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+Annotations.swift) | 114 | 高亮/书签同步 API |
+| [+Discovery](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+Discovery.swift) | 161 | 服务器探测、library 发现 |
+| [+LibrarySync](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+LibrarySync.swift) | 310 | 图书馆增量/全量同步 |
+| [+Metadata](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+Metadata.swift) | 341 | 图书元数据批量获取 |
+| [+ReadingPosition](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+ReadingPosition.swift) | 85 | 阅读位置上传/获取 |
+| [+Search](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreServerService+Search.swift) | 89 | 搜索 API |
+| **总计** | **1,472** | |
+
+#### A03: YabrPDFViewController 拆分详情
 
 | 组件 | 描述 | 文件 |
 |------|------|------|
-| `ReaderPositionService` | 统一位置保存/恢复协议 | [ReaderPositionService.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Services/ReaderPositionService.swift) |
-| `ReaderEngineDelegate` | 统一引擎回调协议 | 各引擎 VC 实现 |
-| `BookBookmark` / `BookHighlight` | 解耦后的标注值类型 | [AnnotationRepository](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Repositories/RealmAnnotationRepository.swift) |
-| `PDFAnnotationManager` | 从 PDFViewController 提取 | [PDFAnnotationManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFAnnotationManager.swift) |
-| `PDFBookmarkManager` | 从 PDFViewController 提取 | [PDFBookmarkManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFBookmarkManager.swift) |
-| `PDFSearchController` | 从 PDFViewController 提取 + Search Tab | [PDFSearchController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFSearchController.swift) |
-| `PDFMarginCropController` | PDF 自动裁边、可见内容缓存、空白遮罩、像素扫描 | [PDFMarginCropController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/Managers/PDFMarginCropController.swift) |
-| `YabrPDFViewController+Chrome` | 阅读器 UI Chrome、导航栏、工具栏、缩略图约束 | [YabrPDFViewController+Chrome.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Chrome.swift) |
-| `YabrPDFViewController+Navigation` | 目录、页码变化、阅读进度、位置历史 | [YabrPDFViewController+Navigation.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Navigation.swift) |
-| `YabrPDFViewController+Options` | ReaderEngineController 偏好应用、缩放、DisplayBox、高亮入口 | [YabrPDFViewController+Options.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Options.swift) |
-| `YabrPDFViewController+Selection` | 文本选区菜单、字典、标注动作 | [YabrPDFViewController+Selection.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Selection.swift) |
-| `YabrPDFViewController+Sharing` | PDF 原文/带标注分享入口 | [YabrPDFViewController+Sharing.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Sharing.swift) |
+| `PDFAnnotationManager` | 高亮标注管理 | [PDFAnnotationManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFAnnotationManager.swift) |
+| `PDFBookmarkManager` | 书签管理 | [PDFBookmarkManager.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFBookmarkManager.swift) |
+| `PDFSearchController` | 搜索 + Search Tab | [PDFSearchController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/PDFSearchController.swift) |
+| `PDFMarginCropController` | 自动裁边、空白遮罩 | [PDFMarginCropController.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/Managers/PDFMarginCropController.swift) |
+| `+Chrome` | UI Chrome、导航栏、工具栏 | [YabrPDFViewController+Chrome.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Chrome.swift) |
+| `+Navigation` | 目录、页码、进度 | [YabrPDFViewController+Navigation.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Navigation.swift) |
+| `+Options` | 偏好应用、缩放 | [YabrPDFViewController+Options.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Options.swift) |
+| `+Selection` | 文本选区、字典 | [YabrPDFViewController+Selection.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Selection.swift) |
+| `+Sharing` | 分享入口 | [YabrPDFViewController+Sharing.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/PDFView/YabrPDFViewController+Sharing.swift) |
 
-2026-06-17 继续拆分：`YabrPDFViewController.swift` 从 1,717 行降到 311 行，新增 `PDFMarginCropController.swift` 与 5 个职责扩展文件。验证通过 `xcodebuild build` 与 `xcodebuild test`，共 40 个单元测试 + 1 个 UI 测试通过。
-
-#### A08: ViewModel 引入进度
+#### A08: ViewModel 引入进度 — ✅ 全部完成
 
 | 视图 | ViewModel | 状态 |
 |------|-----------|------|
-| `BookDetailView` | `BookDetailViewModel` | ✅ 完全解耦 |
+| `BookDetailView` | `BookDetailViewModel` | ✅ |
 | `LibraryInfoView` | `LibraryInfoView.ViewModel` + `UnifiedSearchViewModel` + `UnifiedCategoryViewModel` | ✅ |
 | `ServerDetailView` | `ServerViewModel` | ✅ |
 | `LibraryDetailView` | `LibraryViewModel` | ✅ |
@@ -125,29 +141,48 @@ pie title 任务完成状态
 | `ActivityList` | `ActivityListViewModel` | ✅ |
 | `ReadingPositionHistoryView` | `ReadingPositionHistoryViewModel` | ✅ |
 | `ReadingPositionDetailView` | `ReadingPositionDetailViewModel` | ✅ |
-| `AddModServerView` (542行) | — | ❌ 未开始 |
-| `MainView` (419行) | — | ❌ 未开始 |
-| `SettingsView` (350行) | — | ❌ 未开始 |
+| `MainView` | [MainViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/MainViewModel.swift) | ✅ `284b574` |
+| `SettingsView` | [SettingsViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/SettingsView/SettingsViewModel.swift) | ✅ `284b574` |
+| `SupportInfoView` | [SupportInfoViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/SettingsView/SupportInfoViewModel.swift) | ✅ `284b574` |
+| `RecentShelfController` | [RecentShelfViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/RecentShelfViewModel.swift) | ✅ `284b574` |
+| `SectionShelfController` | [SectionShelfViewModel](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Views/ShelfView/SectionShelfViewModel.swift) | ✅ `284b574` |
 
 ---
 
-### P2 任务 (有益但可延后)
+### P2 任务 (有益但可延后) — 2/11 完成
 
 | # | 问题 | 状态 | 备注 |
 |---|------|------|------|
-| **A07** | Providers.swift ~370行废弃代码 | ❌ 未开始 | |
-| **A10** | ShelfDataManager 错放在 Views | ❌ 未开始 | |
-| **A11** | CalibreData.swift 1542行 | ❌ 未开始 | |
+| **A07** | Providers.swift ~370行废弃代码 | ✅ 已完成 | P2/A07: removed 417 lines on 2026-06-18 |
+| **A10** | ShelfDataManager 错放在 Views | ✅ 已完成 | `b2edb0e` moved to Models/ |
+| **A11** | CalibreData.swift 1542行 | ✅ **已拆分** | `0c0b956` split into 10 files |
 | **A12+A24** | RealmModel.swift + Readium 耦合 | ❌ 未开始 | |
-| **A13** | Book.swift ~200行废弃代码 | ❌ 未开始 | |
+| **A13** | Book.swift ~200行废弃代码 | ✅ 已完成 | P2/A13: deleted entire 378-line file on 2026-06-18 |
 | **A16+A17** | BookDetailView + LibraryInfoBookListView 超大 | 🟡 已有 ViewModel | 逻辑已迁移，视图文件仍大 |
 | **A19** | 网络层无统一错误处理 | ❌ 未开始 | |
-| **A20** | CalibreBrowser Realm force unwrap | 🟡 部分修复 | 搜索路径已修复 |
+| **A20** | CalibreBrowser Realm force unwrap | ✅ **已消除** | CalibreBrowser 已删除 |
 | **A21** | UIKit/SwiftUI 混合书架 | ❌ 未开始 | |
-| **A22** | CalibreSearchCache 废弃属性 | ❌ 未开始 | |
-| **A23** | DatabaseService force unwrap | ❌ 未开始 | |
+| **A22** | CalibreSearchCache 废弃属性 | ✅ 已完成 | P2/A22: removed 4 deprecated props, schema bump 140 on 2026-06-18 |
+| **A23** | DatabaseService force unwrap | ✅ 已完成 | P2/A23: converted to optionals on 2026-06-18 |
 | **A26** | Readium timing hack | ❌ 未开始 | |
 | **A27** | Realm ↔ 值类型手动转换 | 🟡 Repository 层部分解决 | |
+
+#### A11: CalibreData.swift 拆分详情 — ✅ 新完成
+
+原 1,542 行文件拆分为 10 个专注文件 (commit `0c0b956`):
+
+| 文件 | 内容 |
+|------|------|
+| [CalibreCoreModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreCoreModels.swift) | `CalibreServer`, `CalibreLibrary`, `CalibreBook`, `CalibreSyncStatus` |
+| [ReadingPositionModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/ReadingPositionModels.swift) | `BookDeviceReadingPosition`, history, statistics |
+| [CalibreHighlightStyle.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreHighlightStyle.swift) | `BookHighlightStyle` |
+| [CalibreTasks.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreTasks.swift) | Network task structs |
+| [CalibrePayloadModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibrePayloadModels.swift) | Codable API payloads |
+| [CalibreSyncModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreSyncModels.swift) | Custom columns, probe/sync requests |
+| [CalibrePluginModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibrePluginModels.swift) | DSReader Helper / Count Pages prefs |
+| [CalibreActivityModels.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Network/CalibreActivityModels.swift) | `CalibreActivity` hierarchy |
+| [CalibreServerConfigProvider.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/CalibreServerConfigProvider.swift) | Protocol for manager/service bridge |
+| [Array+Chunks.swift](file:///Users/peterlee/git/YetAnotherEBookReader/YetAnotherEBookReader/Models/Array+Chunks.swift) | Generic `chunks(size:)` helper |
 
 ---
 
@@ -157,7 +192,7 @@ pie title 任务完成状态
 
 ```mermaid
 gantt
-    title 重构进度 (2026-06-05 → 2026-06-16)
+    title 重构进度 (2026-06-05 → 2026-06-18)
     dateFormat  YYYY-MM-DD
     axisFormat  %m-%d
 
@@ -176,32 +211,38 @@ gantt
     Phases 1-5 Combine         :done, 2026-06-09, 2026-06-10
     Phase 6 Swift Concurrency  :done, 2026-06-11, 2026-06-11
     Code Reviews + Fixes       :done, 2026-06-11, 2026-06-11
+    V2 Complete + V1 Delete    :done, 2026-06-18, 2026-06-18
 
     section P0 测试
     测试基础设施              :done, 2026-06-10, 2026-06-10
-    41+ 单元测试               :done, 2026-06-10, 2026-06-16
+    87+ 单元测试               :done, 2026-06-10, 2026-06-18
 
     section P1 阅读器
     A06 位置统一              :done, 2026-06-15, 2026-06-15
-    A03 PDF VC 拆分           :done, 2026-06-16, 2026-06-16
+    A03 PDF VC 拆分           :done, 2026-06-16, 2026-06-17
     A14+A15 标注/主题统一      :done, 2026-06-16, 2026-06-16
 
-    section P1 ViewModel
-    BookDetail MVVM           :done, 2026-06-08, 2026-06-09
-    ServerView MVVM           :done, 2026-06-13, 2026-06-13
-    ReaderOptions MVVM        :done, 2026-06-13, 2026-06-13
+    section P1 Network+ViewModel
+    A04 ServerService 拆分     :done, 2026-06-18, 2026-06-18
+    A08 ViewModel 迁移         :done, 2026-06-08, 2026-06-18
+    A18 V2 迁移完成            :done, 2026-06-18, 2026-06-18
+
+    section P2 清理
+    A10 ShelfDataManager 移动  :done, 2026-06-18, 2026-06-18
+    A11 CalibreData 拆分       :done, 2026-06-18, 2026-06-18
 ```
 
-### 42 Commits 汇总 (2026-06-06 → 2026-06-16)
+### Commits 汇总 (2026-06-06 → 2026-06-18)
 
 | 类别 | Commits | 描述 |
 |------|---------|------|
 | **ModelData 拆分** | 7 | Server/Library/Book Manager + ReadingSession 提取 |
-| **搜索现代化** | 14 | Phases 1-6 + Code Review 修复 |
+| **搜索现代化** | 15 | Phases 1-8 + Code Review 修复 + V1 删除 |
 | **Repository 层** | 5 | Book/Server/Library/Annotation/Category Repository |
-| **阅读器统一** | 5 | Position/Highlight/Theme 合并 + PDF VC 拆分 |
-| **MVVM 迁移** | 6 | BookDetail/Server/Library/ReaderOptions/Activity/Position ViewModels |
-| **Bug 修复** | 5 | Realm 线程安全、SwiftUI 崩溃、UI 状态 |
+| **阅读器统一** | 8 | Position/Highlight/Theme 合并 + PDF VC 拆分 (含续拆) |
+| **MVVM 迁移** | 8 | Main/Settings/SupportInfo/Shelf ViewModels + 先前的 |
+| **文件拆分** | 3 | CalibreData 10 文件 + CalibreServerService 7 文件 + ShelfDataManager 移动 |
+| **Bug 修复** | 5+ | Realm 线程安全、SwiftUI 崩溃、UI 状态 |
 
 ---
 
@@ -210,19 +251,19 @@ gantt
 | 优先级 | 问题编号 | 任务描述 | 状态 | 预计剩余工作量 |
 |--------|---------|---------|------|--------------|
 | **P0** | A01 | 拆分 ModelData God Object | ✅ 完成 | — |
-| **P0** | A25 | 建立测试基础设施 | ✅ 完成 | — |
-| **P0** | A05 | Repository 层隔离 Realm | ✅ 核心完成 | Views 层仍有 17 个文件 |
-| **P0** | A02 | 搜索/浏览现代化 | ✅ 搜索完成 | 分类系统待迁移 |
+| **P0** | A25 | 建立测试基础设施 | ✅ 完成 (87+ tests) | — |
+| **P0** | A05 | Repository 层隔离 Realm | ✅ 核心完成 | 18 Views 仍 import Realm |
+| **P0** | A02 | 搜索/浏览现代化 | ✅ **完成 (V1 已删除)** | — |
 | **P1** | A06+A14+A15 | 统一阅读引擎抽象层 | ✅ 完成 | — |
-| **P1** | A03 | 拆分 YabrPDFViewController | ✅ 完成 | — |
-| **P1** | A08 | 为主要视图引入 ViewModel | 🟡 60% | AddModServer/Main/Settings |
-| **P1** | A04 | 重构 CalibreServerService | ❌ 未开始 | ~3 天 |
-| **P1** | A09 | 重构 DSReaderHelper 线程安全 | ❌ 未开始 | ~0.5 天 |
-| **P1** | A18 | 完成 V2 迁移 | ❌ 未开始 | ~2 天 |
-| **P2** | A07+A13+A22 | 清理废弃代码 | ❌ 未开始 | ~1 天 |
-| **P2** | A11 | 拆分 CalibreData.swift | ❌ 未开始 | ~1 天 |
+| **P1** | A03 | 拆分 YabrPDFViewController | ✅ 完成 (311行) | — |
+| **P1** | A04 | 重构 CalibreServerService | ✅ **完成 (7 文件)** | — |
+| **P1** | A08 | 为主要视图引入 ViewModel | ✅ **完成 (13 VMs)** | — |
+| **P1** | A18 | 完成 V2 迁移 | ✅ **完成 (V1 已删除)** | — |
+| **P1** | A09 | 重构 DSReaderHelper 线程安全 | ✅ 已完成 | ~0.5 天 |
+| **P2** | A10 | 移动 ShelfDataManager | ✅ **完成** | — |
+| **P2** | A11 | 拆分 CalibreData.swift | ✅ **完成 (10 文件)** | — |
+| **P2** | A07+A13+A22 | 清理废弃代码 | ✅ **完成** | A07+A13+A22 全部完成 |
 | **P2** | A12+A24 | RealmModel + Readium 解耦 | ❌ 未开始 | ~2 天 |
-| **P2** | A10 | 移动 ShelfDataManager | ❌ 未开始 | ~0.5 天 |
 | **P2** | A19 | 统一网络错误处理 | ❌ 未开始 | ~2 天 |
 | **P2** | A21 | 书架 SwiftUI 原生化 | ❌ 未开始 | ~3 天 |
 
@@ -230,43 +271,26 @@ gantt
 
 ## 四、剩余工作计划
 
-### 近期重点 (Week 3)
+### 近期重点
 
 ```
-第3周 ─── 收尾 P1 + 开始 P2 快速任务 ──────────────────────
-├── [P1-A08] 剩余 ViewModel 迁移
-│   ├── AddModServerView (542行) → AddModServerViewModel
-│   ├── MainView (419行) → 简化直接引用
-│   └── SettingsView (350行) → SettingsViewModel
-├── [P1-A09] 修复 DSReaderHelperConnector.main.sync (快速)
+近期 ─── 收尾 P1 + P2 快速任务 ──────────────────────
+├── [P1-A09] 修复 DSReaderHelperConnector.main.sync (快速, ~0.5天) ✅
 ├── [P2] 清理废弃代码 (A07+A13+A22) — 低风险，快速减负
-│   ├── 删除 Providers.swift L330-700 废弃代码
-│   ├── 删除 Book.swift 4 个废弃结构体
+│   ├── 删除 Providers.swift 废弃代码
+│   ├── 删除 Book.swift 废弃结构体
 │   └── 清理 CalibreSearchCache 废弃属性
 └── [P0-A05] 继续减少 Views 层 RealmSwift 导入 (目标: <10)
+    └── 将 ViewModel 层 Realm 依赖迁移到 Repository 层
 ```
 
-### 中期目标 (Week 4-5)
-
-```
-第4-5周 ─── 网络层 + CalibreBrowser 完成迁移 ──────────────
-├── [P1-A04] 重构 CalibreServerService
-│   ├── 引入 CalibreAPIError 统一错误类型
-│   ├── 按端点拆分方法
-│   └── async/await 迁移 (搜索已完成，扩展到其他端点)
-├── [P1-A18] 完成 V2 迁移
-│   └── 废弃 CalibreBrowser V1 分类系统
-├── [P2-A11] 拆分 CalibreData.swift
-└── [P2-A10] 移动 ShelfDataManager 到 Models
-```
-
-### 长期目标
+### 中长期目标
 
 ```
 后续 ─── 深度解耦 + 现代化 ──────────────────────────────
 ├── [P2-A12+A24] RealmModel 拆分 + Readium 类型解耦
 ├── [P2-A21] 书架视图 SwiftUI 原生化
-├── [P2-A19] 统一网络错误处理
+├── [P2-A19] 统一网络错误处理 (CalibreAPIError)
 └── 持续提升测试覆盖率
 ```
 
@@ -275,26 +299,24 @@ gantt
 ```mermaid
 graph LR
     P0_ModelData["✅ P0-1 ModelData 拆分"]
-    P0_Test["✅ P0-2 测试基础设施"]
+    P0_Test["✅ P0-2 测试 (87+)"]
     P0_Repo["✅ P0-3 Repository 层"]
-    P0_Search["✅ 搜索现代化"]
+    P0_Search["✅ 搜索+分类现代化"]
     
     P1_Reader["✅ P1 统一阅读器"]
-    P1_PDF["✅ P1 PDF VC 拆分"]
-    P1_VM["🟡 P1 ViewModel 迁移"]
-    P1_Network["❌ P1 CalibreServerService"]
-    P1_V2["❌ P1 V2 迁移"]
+    P1_PDF["✅ P1 PDF VC (311行)"]
+    P1_VM["✅ P1 ViewModel (13个)"]
+    P1_Network["✅ P1 ServerService (7文件)"]
+    P1_V2["✅ P1 V2 完成"]
+    P1_DSReader["❌ P1 DSReaderHelper"]
     
     P2_Clean["❌ P2 清理废弃代码"]
-    P2_Data["❌ P2 拆分 CalibreData"]
+    P2_Realm["❌ P2 RealmModel 解耦"]
     P2_Shelf["❌ P2 书架原生化"]
     P2_Error["❌ P2 统一错误处理"]
 
-    P0_ModelData --> P1_Network
-    P0_Repo --> P1_V2
-    P0_Search --> P1_V2
-    P1_VM --> P2_Data
     P1_Network --> P2_Error
+    P1_VM --> P2_Realm
     
     style P0_ModelData fill:#4CAF50,color:#fff
     style P0_Test fill:#4CAF50,color:#fff
@@ -302,13 +324,14 @@ graph LR
     style P0_Search fill:#4CAF50,color:#fff
     style P1_Reader fill:#4CAF50,color:#fff
     style P1_PDF fill:#4CAF50,color:#fff
-    style P1_VM fill:#FF9800,color:#fff
-    style P1_Network fill:#F44336,color:#fff
-    style P1_V2 fill:#F44336,color:#fff
+    style P1_VM fill:#4CAF50,color:#fff
+    style P1_Network fill:#4CAF50,color:#fff
+    style P1_V2 fill:#4CAF50,color:#fff
+    style P1_DSReader fill:#FF9800,color:#fff
     style P2_Clean fill:#9E9E9E,color:#fff
-    style P2_Data fill:#9E9E9E,color:#fff
+    style P2_Realm fill:#9E9E9E,color:#fff
     style P2_Shelf fill:#9E9E9E,color:#fff
     style P2_Error fill:#9E9E9E,color:#fff
 ```
 
-> **关键路径更新**：P0 全部完成 ✅ → P1 剩余 (A04 + A08 + A18) → P2 (并行)
+> **关键路径更新**：P0 ✅ → P1 几乎全部完成 (仅剩 A09 DSReaderHelper) → P2 可并行推进
