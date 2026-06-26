@@ -94,7 +94,7 @@ class LibraryViewModel: ObservableObject {
             .store(in: &cancellables)
             
         // Observe modelData.librarySyncStatus
-        modelData.$librarySyncStatus
+        modelData.libraryManager.$librarySyncStatus
             .receive(on: DispatchQueue.main)
             .sink { [weak self] statusMap in
                 guard let self = self else { return }

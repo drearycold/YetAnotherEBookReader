@@ -27,33 +27,58 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
-    @Published var calibreServers = [String: CalibreServer]()
-    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
-        didSet {
-            calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
-        }
+        var calibreServers: [String: CalibreServer] {
+        get { serverManager.calibreServers }
+        set { serverManager.calibreServers = newValue }
+    }
+    var calibreServerInfoStaging: [String: CalibreServerInfo] {
+        get { serverManager.calibreServerInfoStaging }
+        set { serverManager.calibreServerInfoStaging = newValue }
     }
     
-    @Published var calibreLibraries = [String: CalibreLibrary]() {
-        didSet {
-            calibreServerService.updateCalibreLibraries(calibreLibraries)
-        }
+    var calibreLibraries: [String: CalibreLibrary] {
+        get { libraryManager.calibreLibraries }
+        set { libraryManager.calibreLibraries = newValue }
     }
-    @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
+    var calibreLibraryInfoStaging: [String: CalibreLibraryInfo] {
+        get { libraryManager.calibreLibraryInfoStaging }
+        set { libraryManager.calibreLibraryInfoStaging = newValue }
+    }
+    var localLibrary: CalibreLibrary? {
+        get { libraryManager.localLibrary }
+        set { libraryManager.localLibrary = newValue }
+    }
     
     @Published var activeTab = 0
-    var documentServer: CalibreServer?
-    var localLibrary: CalibreLibrary?
+    var documentServer: CalibreServer? {
+        get { serverManager.documentServer }
+        set { serverManager.documentServer = newValue }
+    }
     
     //for LibraryInfoView
-    @Published var defaultFormat = Format.PDF
-    var formatReaderMap = [Format: [ReaderType]]()
-    var formatList = [Format]()
+    var defaultFormat: Format {
+        get { sessionManager.defaultFormat }
+        set { sessionManager.defaultFormat = newValue }
+    }
+    var formatReaderMap: [Format: [ReaderType]] {
+        get { sessionManager.formatReaderMap }
+        set { sessionManager.formatReaderMap = newValue }
+    }
+    var formatList: [Format] {
+        get { sessionManager.formatList }
+        set { sessionManager.formatList = newValue }
+    }
     
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
     
-    @Published var booksInShelf = [String: CalibreBook]()
-    @Published var booksAnnotation = [String: CalibreBook]()
+    var booksInShelf: [String: CalibreBook] {
+        get { bookManager.booksInShelf }
+        set { bookManager.booksInShelf = newValue }
+    }
+    var booksAnnotation: [String: CalibreBook] {
+        get { bookManager.booksAnnotation }
+        set { bookManager.booksAnnotation = newValue }
+    }
     
     let bookImportedSubject = PassthroughSubject<BookImportInfo, Never>()
     let dismissAllSubject = PassthroughSubject<String, Never>()
@@ -63,19 +88,14 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     var presentingStack = [Binding<Bool>]()
     
-    var currentBookId: String = "" {
-        didSet {
-            self.selectedBookId = currentBookId
-        }
+    var currentBookId: String {
+        get { bookManager.currentBookId }
+        set { bookManager.currentBookId = newValue }
     }
 
-    @Published var selectedBookId: String? = nil {
-        didSet {
-            if let selectedBookId = selectedBookId,
-               readingBookInShelfId != selectedBookId {
-                readingBookInShelfId = selectedBookId
-            }
-        }
+    var selectedBookId: String? {
+        get { bookManager.selectedBookId }
+        set { bookManager.selectedBookId = newValue }
     }
     
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
@@ -83,23 +103,23 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     var calibreCancellables = Set<AnyCancellable>()
     
     @Published var downloadManager = BookDownloadManager()
-    @Published var sessionManager = ReadingSessionManager()
+    lazy var sessionManager = ReadingSessionManager(modelData: self)
 
     var readingBookInShelfId: String? {
-        get { sessionManager.readingBookInShelfId }
-        set { sessionManager.readingBookInShelfId = newValue }
+        get { bookManager.readingBookInShelfId }
+        set { bookManager.readingBookInShelfId = newValue }
     }
     var readingBook: CalibreBook? {
-        get { sessionManager.readingBook }
-        set { sessionManager.readingBook = newValue }
+        get { bookManager.readingBook }
+        set { bookManager.readingBook = newValue }
     }
     var readerInfo: ReaderInfo? {
         get { sessionManager.readerInfo }
         set { sessionManager.readerInfo = newValue }
     }
     var presentingEBookReaderFromShelf: Bool {
-        get { sessionManager.presentingEBookReaderFromShelf }
-        set { sessionManager.presentingEBookReaderFromShelf = newValue }
+        get { bookManager.presentingEBookReaderFromShelf }
+        set { bookManager.presentingEBookReaderFromShelf = newValue }
     }
     var selectedPosition: String {
         get { sessionManager.selectedPosition }
@@ -137,6 +157,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     var databaseService = DatabaseService.shared
     
+    lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService)
+    lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService)
+    lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService)
+    
     lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
 
     lazy var librarySearchManager = CalibreLibrarySearchManager(service: self.calibreServerService, modelData: self)
@@ -153,7 +177,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
     
-    @Published var librarySyncStatus = [String: CalibreSyncStatus]()
+    var librarySyncStatus: [String: CalibreSyncStatus] {
+        get { libraryManager.librarySyncStatus }
+        set { libraryManager.librarySyncStatus = newValue }
+    }
 
     @Published var fontsManager = FontsManager()
     var userFontInfos: [String: FontInfo] {
@@ -161,7 +188,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         set { fontsManager.userFontInfos = newValue }
     }
 
-    @Published var bookModelSection = [ShelfModelSection]()
+    var bookModelSection: [ShelfModelSection] {
+        get { bookManager.bookModelSection }
+        set { bookManager.bookModelSection = newValue }
+    }
 
     init(mock: Bool = false) {
         ModelData.shared = self
@@ -179,34 +209,40 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(modelData: self))]
         ImageDownloader.default.authenticationChallengeResponder = authResponsor
         
-        switch UIDevice.current.userInterfaceIdiom {
-            case .phone:
-                defaultFormat = Format.EPUB
-            case .pad:
-                defaultFormat = Format.PDF
-            default:
-                defaultFormat = Format.EPUB
-        }
-        
-        formatReaderMap[Format.EPUB] = [ReaderType.YabrEPUB, ReaderType.ReadiumEPUB]
-        formatReaderMap[Format.PDF] = [ReaderType.YabrPDF, ReaderType.ReadiumPDF]
-        formatReaderMap[Format.CBZ] = [ReaderType.ReadiumCBZ]
-
         downloadManager.modelData = self
-        sessionManager.setup(modelData: self)
         
         fontsManager.reloadCustomFonts()
         
 //        calibreServerService.defaultUrlSessionConfiguration.timeoutIntervalForRequest = 600
 //        calibreServerService.defaultUrlSessionConfiguration.httpMaximumConnectionsPerHost = 2
         
-        registerProbeLibraryLastModifiedCancellable()
+        libraryManager.registerProbeLibraryLastModifiedCancellable()
         
         registerRecentShelfUpdater()
         
         downloadManager.bookDownloadedSubject.sink { book in
             self.calibreUpdatedSubject.send(.book(book))
         }.store(in: &calibreCancellables)
+        
+        serverManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
+        
+        libraryManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
+        
+        bookManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
+        
+        sessionManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &calibreCancellables)
         
         if mock {
             try? tryInitializeDatabase() { _ in
@@ -529,7 +565,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             )
         }
         
-        populateServers()
+        serverManager.populateServers()
         
         populateLibraries()
         
@@ -555,442 +591,40 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func populateBookShelf() {
-        let booksInShelfRealm = realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "inShelf = true")
-        )
-        
-        booksInShelfRealm.forEach {
-            // print(bookRealm)
-            guard let serverUUIDString = $0.serverUUID,
-                  let server = calibreServers[serverUUIDString],
-                  let libraryName = $0.libraryName,
-                  let library = calibreLibraries[CalibreLibrary(server: server, key: "", name: libraryName).id]
-            else { return }
-            
-//            guard let server = calibreServers[CalibreServer(name: "", baseUrl: $0.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: $0.serverUsername?.count ?? 0 > 0, username: $0.serverUsername!, password: "").id] else {
-//                print("ERROR booksInShelfRealm missing server \($0)")
-//                return
-//            }
-//            guard  else {
-//                print("ERROR booksInShelfRealm missing library \($0)")
-//                return
-//            }
-            
-            var book = self.convert(library: library, bookRealm: $0)
-            
-            book.formats.forEach { formatRaw, formatInfo in
-                guard let format = Format(rawValue: formatRaw) else {
-//                    var formatInfo = formatInfo
-//                    formatInfo.cached = false
-//                    book.formats[formatRaw] = formatInfo
-                    return
-                }
-                var formatInfoNew = formatInfo
-                if let cacheInfo = getCacheInfo(book: book, format: format),
-                   let modified = cacheInfo.1 {
-                    formatInfoNew.cached = true
-                    formatInfoNew.cacheSize = cacheInfo.0
-                    formatInfoNew.cacheMTime = modified
-                } else {
-                    formatInfoNew.cached = false
-                    formatInfoNew.cacheSize = 0
-                    formatInfoNew.cacheMTime = Date.distantPast
-                }
-                
-                if formatInfoNew.cached != formatInfo.cached {
-                    book.formats[formatRaw] = formatInfoNew
-                    self.updateBook(book: book)
-                }
-            }
-            
-            self.booksInShelf[book.inShelfId] = book
-            
-//            self.shelfDataModel.addToShelf(book: book)
-            
-            print("booksInShelfRealm \(book.inShelfId)")
-        }
-    }
-    
-    func populateServers() {
-        let serversCached = realm.objects(CalibreServerRealm.self).sorted(by: [SortDescriptor(keyPath: "username"), SortDescriptor(keyPath: "baseUrl")])
-        serversCached.forEach { serverRealm in
-            guard serverRealm.removed == false,
-                  serverRealm.baseUrl != nil
-            else { return }
-            
-            guard let uuidString = serverRealm.primaryKey,
-                  let uuid = UUID(uuidString: uuidString)
-            else { return }
-            
-            let calibreServer = CalibreServer(
-                uuid: uuid,
-                name: serverRealm.name ?? serverRealm.baseUrl!,
-                baseUrl: serverRealm.baseUrl!,
-                hasPublicUrl: serverRealm.hasPublicUrl,
-                publicUrl: serverRealm.publicUrl ?? "",
-                hasAuth: serverRealm.hasAuth,
-                username: serverRealm.username ?? "",
-                password: serverRealm.password ?? "",
-                defaultLibrary: serverRealm.defaultLibrary ?? "",
-                removed: serverRealm.removed
-            )
-            calibreServers[calibreServer.id] = calibreServer
-            
-            if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
-                if let url = URL(string: calibreServer.baseUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
-                if let url = URL(string: calibreServer.publicUrl), let host = url.host, let port = url.port {
-                    var authMethod = NSURLAuthenticationMethodDefault
-                    if url.scheme == "http" {
-                        authMethod = NSURLAuthenticationMethodHTTPDigest
-                    }
-                    if url.scheme == "https" {
-                        authMethod = NSURLAuthenticationMethodHTTPBasic
-                    }
-                    let protectionSpace = URLProtectionSpace.init(host: host,
-                                                                  port: port,
-                                                                  protocol: url.scheme,
-                                                                  realm: "calibre",
-                                                                  authenticationMethod: authMethod)
-                    let userCredential = URLCredential(user: calibreServer.username,
-                                                       password: calibreServer.password,
-                                                       persistence: .permanent)
-                    URLCredentialStorage.shared.set(userCredential, for: protectionSpace)
-                }
-            }
-        }
+        bookManager.populateBookShelf()
     }
     
     func populateLibraries() {
-        let librariesCached = realm.objects(CalibreLibraryRealm.self)
-
-        librariesCached.forEach { libraryRealm in
-//            guard let calibreServer = calibreServers[CalibreServer(name: "", baseUrl: libraryRealm.serverUrl!, hasPublicUrl: false, publicUrl: "", hasAuth: libraryRealm.serverUsername?.count ?? 0 > 0, username: libraryRealm.serverUsername!, password: "").id] else {
-//                print("Unknown Server: \(libraryRealm)")
-//                return
-//            }
-            guard let serverUUIDString = libraryRealm.serverUUID,
-                  let calibreServer = calibreServers[serverUUIDString]
-            else {
-                return
-            }
-            let calibreLibrary = CalibreLibrary(
-                server: calibreServer,
-                key: libraryRealm.key ?? libraryRealm.name!,
-                name: libraryRealm.name!,
-                autoUpdate: libraryRealm.autoUpdate,
-                discoverable: libraryRealm.discoverable,
-                hidden: libraryRealm.hidden,
-                lastModified: libraryRealm.lastModified,
-                customColumnInfos: {
-                    guard let data = libraryRealm.customColumnsData else { return [:] }
-                    return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
-                }()
-            )
-            
-            calibreLibraries[calibreLibrary.id] = calibreLibrary
-        }
-        
-//        print("populateLibraries \(calibreLibraries)")
+        libraryManager.populateLibraries()
     }
     
     func populateLocalLibraryBooks() {
-        guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
-            return
-        }
-        
-        let tmpServer = CalibreServer(uuid: CalibreServer.LocalServerUUID, name: "Document Folder", baseUrl: ".", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        documentServer = calibreServers[tmpServer.id]
-        if documentServer == nil || documentServer?.name != tmpServer.name {
-            calibreServers[tmpServer.id] = tmpServer
-            documentServer = calibreServers[tmpServer.id]
-            do {
-                try updateServerRealm(server: documentServer!)
-            } catch {
-                
-            }
-        }
-        
-        let localLibraryURL = documentDirectoryURL.appendingPathComponent("Local Library", isDirectory: true)
-        
-        if FileManager.default.fileExists(atPath: localLibraryURL.path) == false {
-            do {
-                try FileManager.default.createDirectory(atPath: localLibraryURL.path, withIntermediateDirectories: true, attributes: nil)
-            } catch {
-                print(error)
-            }
-        }
-        
-        let tmpLibrary = CalibreLibrary(
-            server: documentServer!,
-            key: localLibraryURL.lastPathComponent,
-            name: localLibraryURL.lastPathComponent)
-        localLibrary = calibreLibraries[tmpLibrary.id]
-        if localLibrary == nil {
-            calibreLibraries[tmpLibrary.id] = tmpLibrary
-            localLibrary = calibreLibraries[tmpLibrary.id]
-            do {
-                try updateLibraryRealm(library: localLibrary!, realm: self.realm)
-            } catch {
-                
-            }
-        }
-        
-        guard let dirEnum = FileManager.default.enumerator(atPath: localLibraryURL.path) else {
-            return
-        }
-        
-        dirEnum.forEach {
-            guard let fileName = $0 as? String else {
-                return
-            }
-            if fileName.hasSuffix(".db") { return }
-            if fileName.hasSuffix(".db.lock") { return }
-            if fileName.hasSuffix(".db.note") { return }
-            if fileName.hasSuffix(".db.management") { return }
-            if fileName.hasSuffix(".cv") { return }
-            if fileName.hasSuffix(".mx") { return }
-
-            print("populateLocalLibraryBooks \(fileName)")
-            let fileURL = documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-
-            loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: documentServer!)
-        }
-        
-        let removedBooks: [CalibreBook] = booksInShelf.compactMap { inShelfId, book in
-            guard book.library.server.isLocal else { return nil }
-            let existingFormats: [String] = book.formats.compactMap {
-                guard let format = Format(rawValue: $0.key),
-                      let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
-                
-                var isDirectory : ObjCBool = false
-                guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
-                    return nil
-                }
-                guard isDirectory.boolValue == false else {
-                    return nil
-                }
-                
-                return $0.key
-            }
-
-            guard existingFormats.isEmpty else {
-                return nil
-            }
-            
-            return book
-        }
-        
-        removedBooks.forEach {
-            self.removeFromShelf(inShelfId: $0.inShelfId)
-            // self.removeFromRealm(book: $0)
-            print("populateLocalLibraryBooks removeFromShelf \($0)")
-        }
+        libraryManager.populateLocalLibraryBooks()
     }
     
     // only move file when triggered by in-app importer, DO NOT MOVE FROM OTHER PLACES
     func onOpenURL(url: URL, doMove: Bool, doOverwrite: Bool, asNew: Bool, knownBookId: Int32? = nil) -> BookImportInfo {
-        var bookImportInfo = BookImportInfo(url: url, bookId: nil, error: nil)
-        
-        guard let documentServer = documentServer,
-              let localLibrary = localLibrary,
-              let localBaseUrl = documentServer.localBaseUrl else {
-            return bookImportInfo.with(error: .libraryAbsent)
-        }
-        
-        guard let format = Format(rawValue: url.pathExtension.uppercased()) else {
-            return bookImportInfo.with(error: .formatUnsupported)
-        }
-
-        if url.isFileURL {
-            let _ = url.startAccessingSecurityScopedResource()
-//            else {
-//                print("onOpenURL url.startAccessingSecurityScopedResource() -> false")
-//                return bookImportInfo.with(error: .securityFail)
-//            }
-            defer {
-                url.stopAccessingSecurityScopedResource()
-            }
-            
-            do {
-                guard let bookId = knownBookId ?? calcLocalFileBookId(for: url) else { return bookImportInfo.with(error: .idCalcFail) }
-                print("onOpenURL \(bookId)")
-                bookImportInfo.bookId = bookId
-                
-                // check for identical file
-                let bookForQuery = CalibreBook(id: bookId, library: localLibrary)
-                if let book = booksInShelf[bookForQuery.inShelfId] {
-                   let readerInfo = prepareBookReading(book: book)
-                    if readerInfo.url.pathExtension.lowercased() == url.pathExtension.lowercased() {
-                        return bookImportInfo
-                    }
-                }
-                
-                // check for dest file
-                let basename = url.deletingPathExtension().lastPathComponent
-                var dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent(basename, isDirectory: false).appendingPathExtension(format.ext)
-                if FileManager.default.fileExists(atPath: dest.path) {
-                    if !doOverwrite && !asNew {
-                        return bookImportInfo.with(error: .destConflict)
-                    }
-                    if doOverwrite && asNew {
-                        return bookImportInfo.with(error: .invalidArg)
-                    }
-                    if doOverwrite {
-                        if let book = booksInShelf.filter (
-                            {
-                                guard $1.library.server.isLocal, let formatInfo = $1.formats[format.rawValue] else { return false }
-                                return formatInfo.cached && formatInfo.filename == dest.lastPathComponent
-                            }).first {
-                            self.clearCache(book: book.value, format: format)   //should remove it from shelf
-                        }
-                    }
-                    if asNew {
-                        var found = false
-                        for i in (1..<100) {
-                            dest = localBaseUrl.appendingPathComponent("Local Library", isDirectory: true).appendingPathComponent("\(basename) (\(i))", isDirectory: false).appendingPathExtension(url.pathExtension.lowercased())
-                            if FileManager.default.fileExists(atPath: dest.path) == false {
-                                found = true
-                                break
-                            }
-                        }
-                        if !found {
-                            return bookImportInfo.with(error: .tooManyFiles)
-                        }
-                    }
-                }
-                
-                if doMove {
-                    try FileManager.default.moveItem(at: url, to: dest)
-                } else {
-                    try FileManager.default.copyItem(at: url, to: dest)
-                }
-                
-                if bookId == loadLocalLibraryBookMetadata(fileURL: dest, in: localLibrary, on: documentServer, knownBookId: bookId) {
-                    return bookImportInfo
-                } else {
-                    return bookImportInfo.with(error: .loadMetaFail)
-                }
-                
-                
-            } catch {
-                print("onOpenURL \(error)")
-                return bookImportInfo.with(error: .fileOpFail)
-            }
-        }
-        
-        return bookImportInfo.with(error: .protocolUnsupported)
+        bookManager.onOpenURL(url: url, doMove: doMove, doOverwrite: doOverwrite, asNew: asNew, knownBookId: knownBookId)
     }
     
     func calcLocalFileBookId(for fileURL: URL) -> Int32? {
-        guard let digest = sha256new(for: fileURL) else { return nil }
-        
-        let bookId = Int32(bigEndian: digest.prefix(4).withUnsafeBytes{$0.load(as: Int32.self)})
-        return bookId
+        bookManager.calcLocalFileBookId(for: fileURL)
     }
     
     func loadLocalLibraryBookMetadata(fileURL: URL, in library: CalibreLibrary, on server: CalibreServer, knownBookId: Int32? = nil) -> Int32? {
-        guard let format = Format(rawValue: fileURL.pathExtension.uppercased()) else { return nil }
-            
-        guard let bookId = knownBookId ?? calcLocalFileBookId(for: fileURL) else { return nil }
-        
-        var book = CalibreBook(
-            id: bookId,
-            library: library
-        )
-        
-        if let bookRealm = queryBookRealm(book: book, realm: realm) {
-            book = convert(library: library, bookRealm: bookRealm)
-        }
-        
-        book.title = fileURL.deletingPathExtension().lastPathComponent
-        book.lastModified = Date()
-        book.lastSynced = book.lastModified
-
-        var formatInfo = FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: true, cacheSize: 0, cacheMTime: .distantPast)
-        formatInfo.filename = fileURL.lastPathComponent
-        if let fileAttribs = try? FileManager.default.attributesOfItem(atPath: fileURL.path) {
-            if let fileSize = fileAttribs[.size] as? NSNumber {
-                formatInfo.serverSize = fileSize.uint64Value
-                formatInfo.cacheSize = fileSize.uint64Value
-            }
-            if let fileTS = fileAttribs[.modificationDate] as? Date {
-                formatInfo.serverMTime = fileTS
-                formatInfo.cacheMTime = fileTS
-                if book.timestamp < fileTS {
-                    book.timestamp = fileTS
-                }
-            }
-        }
-        
-        book.formats[format.rawValue] = formatInfo
-        
-        book.inShelf = true
-        
-        self.updateBook(book: book)
-        
-        #if canImport(R2Shared)
-        let streamer = Streamer()
-        streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
-            guard let publication = try? result.get() else {
-                print("Streamer \(fileURL)")
-                return
-            }
-            
-            book.title = publication.metadata.title
-            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
-                self.kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
-            }
-            
-            self.updateBook(book: book)
-        }
-        #endif
-        return bookId
+        bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: library, on: server, knownBookId: knownBookId)
     }
     
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-//        let serverId = { () -> String in
-//            let serverUrl = bookRealm.serverUrl ?? "."
-//            if let username = bookRealm.serverUsername,
-//               username.isEmpty == false {
-//                return "\(username) @ \(serverUrl)"
-//            } else {
-//                return serverUrl
-//            }
-//        }()
-        guard let library = queryLibrary(for: bookRealm) else { return nil }
-        
-        return convert(library: library, bookRealm: bookRealm)
+        bookManager.convert(bookRealm: bookRealm)
     }
     
     func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
-        let calibreBook = CalibreBook(managedObject: bookRealm, library: library)
-        
-        return calibreBook
+        bookManager.convert(library: library, bookRealm: bookRealm)
     }
     
     func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {
-        guard let serverUUID = bookRealm.serverUUID,
-              let libraryName = bookRealm.libraryName
-        else { return nil }
-        
-        return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+        bookManager.queryLibrary(for: bookRealm)
     }
     
     func getCustomDictViewer() -> (Bool, URL?) {
@@ -1001,7 +635,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     func getCustomDictViewerNew(library: CalibreLibrary) -> (Bool, URL?) {
         var result: (Bool, URL?) = (false, nil)
-        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server) else { return result }
+        guard let dsreaderHelperServer = serverManager.queryServerDSReaderHelper(server: library.server) else { return result }
         let pluginDictionaryViewer = library.pluginDictionaryViewerWithDefault
         guard pluginDictionaryViewer.isEnabled else { return result }
 
@@ -1022,283 +656,86 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func getPreferredFormat() -> Format {
-        return Format(rawValue: UserDefaults.standard.string(forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT) ?? "" ) ?? defaultFormat
+        sessionManager.getPreferredFormat()
     }
     
     func getPreferredFormat(for book: CalibreBook) -> Format? {
-        let selectedFormats = book.formats.filter { $0.value.selected == true }
-        if selectedFormats.count == 1,
-           let firstFormatRaw = selectedFormats.first?.key,
-           let firstFormat = Format(rawValue: firstFormatRaw) {
-            return firstFormat
-        }
-        if book.formats[getPreferredFormat().rawValue] != nil {
-            return getPreferredFormat()
-        } else if let format = book.formats.compactMap({ Format(rawValue: $0.key) }).first {
-            return format
-        }
-        return nil
+        sessionManager.getPreferredFormat(for: book)
     }
     
     func updatePreferredFormat(for format: Format) {
-        UserDefaults.standard.setValue(format.rawValue, forKey: Constants.KEY_DEFAULTS_PREFERRED_FORMAT)
+        sessionManager.updatePreferredFormat(for: format)
     }
     
     // user preferred -> default -> unsupported
     func getPreferredReader(for format: Format) -> ReaderType {
-        return ReaderType(
-            rawValue: UserDefaults.standard.string(forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)") ?? ""
-        ) ?? formatReaderMap[format]?.first ?? ReaderType.UNSUPPORTED
+        sessionManager.getPreferredReader(for: format)
     }
     
     func updatePreferredReader(for format: Format, with reader: ReaderType) {
-        UserDefaults.standard.setValue(reader.rawValue, forKey: "\(Constants.KEY_DEFAULTS_PREFERRED_READER_PREFIX)\(format.rawValue)")
+        sessionManager.updatePreferredReader(for: format, with: reader)
     }
     
-    func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
-        libraries.forEach {
-            do {
-                try updateLibraryRealm(library: $0, realm: self.realm)
-                calibreLibraries[$0.id] = $0
-            } catch {
-                
-            }
-        }
-        
-        do {
-            try updateServerRealm(server: server)
-            calibreServers[server.id] = server
-        } catch {
-            
-        }
-    }
-    
-    func updateServerRealm(server: CalibreServer) throws {
-        let serverRealm = CalibreServerRealm()
-        serverRealm.primaryKey = server.uuid.uuidString
-        serverRealm.name = server.name
-        serverRealm.baseUrl = server.baseUrl
-        serverRealm.hasPublicUrl = server.hasPublicUrl
-        serverRealm.publicUrl = server.publicUrl
-        serverRealm.hasAuth = server.hasAuth
-        serverRealm.username = server.username
-        serverRealm.password = server.password
-        serverRealm.defaultLibrary = server.defaultLibrary
-        serverRealm.removed = server.removed
-        try realm.write {
-            realm.add(serverRealm, update: .modified)
-        }
-    }
-    
-    func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
-        let libraryRealm = CalibreLibraryRealm()
-        libraryRealm.key = library.key
-        libraryRealm.name = library.name
-        libraryRealm.serverUUID = library.server.uuid.uuidString
-        
-        libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
-        
-        libraryRealm.autoUpdate = library.autoUpdate
-        libraryRealm.discoverable = library.discoverable
-        libraryRealm.hidden = library.hidden
-        libraryRealm.lastModified = library.lastModified
-        
-        try realm.write {
-            realm.add(libraryRealm, update: .all)
-        }
+            func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
+        try libraryManager.updateLibraryRealm(library: library, realm: realm)
     }
     
     func hideLibrary(libraryId: String) {
-        calibreLibraries[libraryId]?.hidden = true
-        calibreLibraries[libraryId]?.autoUpdate = false
-        if let library = calibreLibraries[libraryId] {
-            try? updateLibraryRealm(library: library, realm: realm)
-        }
+        libraryManager.hideLibrary(libraryId: libraryId)
     }
     
     func restoreLibrary(libraryId: String) {
-        calibreLibraries[libraryId]?.hidden = false
-        calibreLibraries[libraryId]?.lastModified = Date(timeIntervalSince1970: 0)
-        if let library = calibreLibraries[libraryId] {
-            try? updateLibraryRealm(library: library, realm: realm)
+        libraryManager.restoreLibrary(libraryId: libraryId)
+    }
+    
+    func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Realm) -> Int {
+        return libraryManager.queryLibraryBookRealmCount(library: library, realm: realm)
+    }
+    
+    func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
+        libraryManager.updateServerLibraryInfo(serverInfo: serverInfo)
+        
+        guard let server = calibreServers[serverInfo.server.id] else { return }
+        if server.defaultLibrary != serverInfo.defaultLibrary {
+            calibreServers[server.id]!.defaultLibrary = serverInfo.defaultLibrary
+            do {
+                try serverManager.updateServerRealm(server: calibreServers[server.id]!)
+            } catch {
+                
+            }
         }
     }
     
     func updateBook(book: CalibreBook) {
-        updateBookRealm(book: book, realm: (try? Realm(configuration: self.realmConf)) ?? self.realm)
-        
-        if readingBook?.inShelfId == book.inShelfId {
-            readingBook = book
-        }
-        if book.inShelf {
-            booksInShelf[book.inShelfId] = book
-        }
+        bookManager.updateBook(book: book)
     }
     
     func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
-//        return realm.objects(CalibreBookRealm.self).filter(
-//            NSPredicate(format: "id = %@ AND serverUrl = %@ AND serverUsername = %@ AND libraryName = %@",
-//                        NSNumber(value: book.id),
-//                        book.library.server.baseUrl,
-//                        book.library.server.username,
-//                        book.library.name
-//            )
-//        ).first
-        
-        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
-    }
-
-    func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Realm) -> Int {
-        return realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUUID = %@ AND libraryName = %@",
-                        library.server.uuid.uuidString,
-                        library.name
-            )
-        ).count
+        bookManager.queryBookRealm(book: book, realm: realm)
     }
     
     func updateBookRealm(book: CalibreBook, realm: Realm) {
-        let bookRealm = book.managedObject()
-        try? realm.write {
-            realm.add(bookRealm, update: .modified)
-        }
+        bookManager.updateBookRealm(book: book, realm: realm)
     }
     
     func removeFromRealm(book: CalibreBook) {
-        removeFromRealm(for: CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description))
+        bookManager.removeFromRealm(book: book)
     }
     
     func removeFromRealm(for primaryKey: String) {
-        guard let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) else { return }
-        
-        try? realm.write {
-            realm.delete(object)
-        }
-    }
-    
-    func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
-        guard let realm = Thread.isMainThread ? self.realm : try? Realm(configuration: self.realmConf) else { return nil }
-        
-        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: server.id),
-              let helper = serverRealm.dsreaderHelper else { return nil }
-        
-        let unmanaged = CalibreServerDSReaderHelper(port: helper.port)
-        unmanaged.configurationData = helper.configurationData
-        return unmanaged
-    }
-    
-    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        guard let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId) else { return }
-        try? realm.write {
-            if let existing = serverRealm.dsreaderHelper {
-                existing.update(from: dsreaderHelper)
-            } else {
-                serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: dsreaderHelper)
-            }
-        }
-    }
-    
-    
-    /// update server library infos,
-    /// make sure libraries' server ids equal to serverId
-    /// - Parameters:
-    ///   - serverId: id of target server
-    ///   - libraries: library list
-    ///   - defaultLibrary: key of default library
-    /// - TODO: update & remove
-    func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
-        guard let server = calibreServers[serverInfo.server.id] else { return }
-        
-        serverInfo.libraryMap.forEach { key, name in
-            let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-            let libraryId = newLibrary.id
-            
-            if calibreLibraries[libraryId] != nil {
-                calibreLibraries[libraryId]!.key = newLibrary.key
-            } else {
-                let library = CalibreLibrary(server: server, key: newLibrary.key, name: newLibrary.name)
-                calibreLibraries[libraryId] = library
-            }
-            do {
-                try updateLibraryRealm(library: calibreLibraries[libraryId]!, realm: self.realm)
-            } catch {
-                
-            }
-        }
-        
-        if server.defaultLibrary != serverInfo.defaultLibrary {
-            calibreServers[server.id]!.defaultLibrary = serverInfo.defaultLibrary
-            do {
-                try updateServerRealm(server: calibreServers[server.id]!)
-            } catch {
-                
-            }
-        }
+        bookManager.removeFromRealm(for: primaryKey)
     }
     
     func shouldAutoUpdateGoodreads(library: CalibreLibrary) -> (CalibreServerDSReaderHelper, CalibreDSReaderHelperPrefs.Options, CalibreGoodreadsSyncPrefs.PluginPrefs)? {
-        // must have dsreader helper info and enabled by server
-        guard let dsreaderHelperServer = queryServerDSReaderHelper(server: library.server), dsreaderHelperServer.port > 0 else { return nil }
-        guard let configuration = dsreaderHelperServer.configuration, let dsreader_helper_prefs = configuration.dsreader_helper_prefs, dsreader_helper_prefs.plugin_prefs.Options.goodreadsSyncEnabled else { return nil }
-        
-        // check if user disabled auto update
-        let dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault
-        guard dsreaderHelperLibrary.isEnabled else { return nil }
-        
-        // check if profile name exists
-        let goodreadsSync = library.pluginGoodreadsSyncWithDefault
-        guard goodreadsSync.isEnabled else { return nil }
-        guard let goodreads_sync_prefs = configuration.goodreads_sync_prefs, goodreads_sync_prefs.plugin_prefs.Users.contains(where: { $0.key == goodreadsSync.profileName }) else { return nil }
-        
-        return (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync)
+        bookManager.shouldAutoUpdateGoodreads(library: library)
     }
     
     func addToShelf(book: CalibreBook, formats: [Format]) {
-        var book = book
-        book.inShelf = true
-        formats.forEach {
-            book.formats[$0.rawValue]?.selected = true
-        }        
-        updateBook(book: book)
-        
-        if let library = calibreLibraries[book.library.id],
-           let goodreadsId = book.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
-           dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf {
-            let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-            let ret = connector.addToShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
-        }
-        
-        calibreUpdatedSubject.send(.book(book))
+        bookManager.addToShelf(book: book, formats: formats)
     }
     
     func removeFromShelf(inShelfId: String) {
-        if readingBook?.inShelfId == inShelfId {
-            readingBook?.inShelf = false
-//            NotificationCenter.default.post(Notification(name: .YABR_ReadingBookRemovedFromShelf))
-        }
-        
-        guard var book = booksInShelf[inShelfId] else { return }
-        book.inShelf = false
-
-        updateBookRealm(book: book, realm: (try? Realm(configuration: self.realmConf)) ?? self.realm)
-        
-        booksInShelf.removeValue(forKey: inShelfId)
-        
-        if book.readPos.getDevices().first?.id == deviceName,
-           let library = calibreLibraries[book.library.id],
-           let goodreadsId = book.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
-           dsreaderHelperLibrary.autoUpdateGoodreadsBookShelf {
-            let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-            let ret = connector.removeFromShelf(goodreads_id: goodreadsId, shelfName: "currently-reading")
-            
-            if let position = book.readPos.getPosition(deviceName), position.lastProgress > 99 {
-                connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
-            }
-        }
-
-        calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        bookManager.removeFromShelf(inShelfId: inShelfId)
     }
     
     func startDownloadFormat(book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
@@ -1322,160 +759,45 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func clearCache(inShelfId: String) {
-        guard let book = booksInShelf[inShelfId] else {
-            return
-        }
-        
-        let cachedFormats = book.formats.filter { $1.cached }
-        for (key, _) in cachedFormats {
-            guard let format = Format(rawValue: key) else { continue }
-            guard let currentBook = booksInShelf[inShelfId] else { continue }
-            clearCache(book: currentBook, format: format)
-        }
+        bookManager.clearCache(inShelfId: inShelfId)
     }
     
     func addedCache(book: CalibreBook, format: Format) {
-        guard var formatInfo = book.formats[format.rawValue] else { return }
-        var newBook = book
-        
-        if let cacheInfo = getCacheInfo(book: newBook, format: format),
-           let cacheMTime = cacheInfo.1 {
-            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
-            formatInfo.cached = true
-            formatInfo.cacheSize = cacheInfo.0
-            formatInfo.cacheMTime = cacheMTime
-        } else {
-            formatInfo.cached = false
-            formatInfo.cacheSize = 0
-            formatInfo.cacheMTime = .distantPast
-        }
-
-        newBook.formats[format.rawValue] = formatInfo
-        newBook.lastUpdated = .init()
-        
-        updateBook(book: newBook)
-
-//        if newBook.inShelf == false {
-//            addToShelf(newBook.inShelfId)
-//        }
-        
-        if format == Format.EPUB {
-            removeFolioCache(book: newBook, format: format)
-        }
-        
-        refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
+        bookManager.addedCache(book: book, format: format)
     }
     
     func clearCache(book: CalibreBook, format: Format) {
-        guard let bookFileURL = getSavedUrl(book: book, format: format) else { return }
-        
-        if FileManager.default.fileExists(atPath: bookFileURL.path) {
-            do {
-                try FileManager.default.removeItem(at: bookFileURL)
-            } catch {
-                defaultLog.error("clearCache \(error.localizedDescription)")
-            }
-        }
-        var newBook = book
-        
-        newBook.formats[format.rawValue]?.cacheMTime = .distantPast
-        newBook.formats[format.rawValue]?.cacheSize = 0
-        newBook.formats[format.rawValue]?.cached = false
-        newBook.formats[format.rawValue]?.selected = nil
-        newBook.lastUpdated = .init()
-
-        updateBook(book: newBook)
-        
-        if newBook.inShelf, newBook.formats.filter({ $1.cached }).isEmpty {
-            removeFromShelf(inShelfId: newBook.inShelfId)
-        }
-
+        bookManager.clearCache(book: book, format: format)
     }
     
     func getCacheInfo(book: CalibreBook, format: Format) -> (UInt64, Date?)? {
-        var resultStorage: ObjCBool = false
-        guard let bookFileURL = getSavedUrl(book: book, format: format) else {
-            return nil
-        }
-        
-        if FileManager.default.fileExists(atPath: bookFileURL.path, isDirectory: &resultStorage),
-           resultStorage.boolValue == false,
-           let attribs = try? FileManager.default.attributesOfItem(atPath: bookFileURL.path) as NSDictionary {
-            return (attribs.fileSize(), attribs.fileModificationDate())
-        }
-        
-        return nil
+        bookManager.getCacheInfo(book: book, format: format)
     }
     
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
-        guard let readingBook = self.readingBook,
-              let updatedReadingPosition = readingBook.readPos.getDevices().first,
-              let readerInfo = self.readerInfo
-        else {
-            return
-        }
-
-        defaultLog.info("pageNumber:  \(updatedReadingPosition.lastPosition[0])")
-        defaultLog.info("pageOffsetX: \(updatedReadingPosition.lastPosition[1])")
-        defaultLog.info("pageOffsetY: \(updatedReadingPosition.lastPosition[2])")
-
-        refreshShelfMetadataV2(with: [readingBook.library.server.id], for: [readingBook.inShelfId], serverReachableChanged: true)
-
-        if floor(updatedReadingPosition.lastProgress) > readerInfo.position.lastProgress || updatedReadingPosition.lastProgress < floor(readerInfo.position.lastProgress),
-           let library = calibreLibraries[readingBook.library.id],
-           let goodreadsId = readingBook.identifiers["goodreads"],
-           let (dsreaderHelperServer, dsreaderHelperLibrary, goodreadsSync) = shouldAutoUpdateGoodreads(library: library),
-           dsreaderHelperLibrary.autoUpdateGoodreadsProgress {
-            let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: goodreadsSync)
-            connector.updateReadingProgress(goodreads_id: goodreadsId, progress: updatedReadingPosition.lastProgress)
-
-            if goodreadsSync.isEnabled, goodreadsSync.readingProgressColumnName.count > 1 {
-                calibreServerService.updateMetadata(library: library, bookId: readingBook.id, metadata: [
-                    [goodreadsSync.readingProgressColumnName, Int(updatedReadingPosition.lastProgress)]
-                ])
-            }
-        }
-
+        sessionManager.updateCurrentPosition(alertDelegate: alertDelegate)
     }
 
 
-    func goToPreviousBook() {        //MARK: FIXME
-//        if let curIndex = filteredBookList.firstIndex(of: currentBookId), curIndex > 0 {
-//            currentBookId = filteredBookList[curIndex-1]
-//        }
+    func goToPreviousBook() {
+        bookManager.goToPreviousBook()
     }
     
     func goToNextBook() {
-        //MARK: FIXME
-//        if let curIndex = filteredBookList.firstIndex(of: selectedBookId ?? currentBookId), curIndex < filteredBookList.count - 1 {
-//            currentBookId = filteredBookList[curIndex + 1]
-//        }
+        bookManager.goToNextBook()
     }
     
     func defaultReaderForDefaultFormat(book: CalibreBook) -> (Format, ReaderType) {
-        if book.formats.contains(where: { $0.key == defaultFormat.rawValue }) {
-            return (defaultFormat, formatReaderMap[defaultFormat]!.first!)
-        } else {
-            return book.formats.keys.compactMap {
-                Format(rawValue: $0)
-            }
-            .reversed()
-            .reduce((Format.UNKNOWN, ReaderType.UNSUPPORTED)) {
-                ($1, formatReaderMap[$1]!.first!)
-            }
-        }
+        sessionManager.defaultReaderForDefaultFormat(book: book)
     }
     
     func formatOfReader(readerName: String) -> Format? {
-        let formats = formatReaderMap.filter {
-            $0.value.contains(where: { reader in reader.rawValue == readerName } )
-        }
-        return formats.first?.key
+        sessionManager.formatOfReader(readerName: readerName)
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        return sessionManager.prepareBookReading(book: book)
+        sessionManager.prepareBookReading(book: book)
     }
     
     func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
@@ -1483,93 +805,27 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func removeDeleteBooksFromServer(server: CalibreServer) {
-        librarySyncStatus.filter {
-             $0.value.library.server.id == server.id && $0.value.del.count > 0
-        }.forEach { lss in
-            self.librarySyncStatus[lss.key]?.isSync = true
-            var progress = 0
-            let total = lss.value.del.count
-            DispatchQueue.global(qos: .userInitiated).async {
-                guard let realm = try? Realm(configuration: self.realmConf) else { return }
-                
-                try? realm.write {
-                    lss.value.del.forEach { id in
-                        if progress % 100 == 0 {
-                            DispatchQueue.main.async {
-                                self.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
-                            }
-                        }
-                        
-                        let primaryKey = CalibreBookRealm.PrimaryKey(
-                            serverUUID: lss.value.library.server.uuid.uuidString,
-                            libraryName: lss.value.library.name,
-                            id: id.description)
-                        
-                        if let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) {
-                            realm.delete(object)
-                        }
-                        progress += 1
-                        
-                    }
-                }
-                
-                DispatchQueue.main.async {
-                    self.librarySyncStatus[lss.key]?.del.removeAll()
-                    self.librarySyncStatus[lss.key]?.isSync = false
-                    self.librarySyncStatus[lss.key]?.msg = nil
-                }
-            }
-        }
-        
-        probeServersReachability(with: [server.id], updateLibrary: false, autoUpdateOnly: true, incremental: false)
+        bookManager.removeDeleteBooksFromServer(server: server)
     }
     
-    func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
-        
-        calibreServers.filter {
-            $0.value.isLocal == false
-            && (serverIds.isEmpty || serverIds.contains($0.value.id))
-        }.forEach { serverId, server in
-            Task {
-                await self.probeServer(request: .init(server: server, isPublic: false, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
-            }
-            if server.hasPublicUrl {
-                Task {
-                    await self.probeServer(request: .init(server: server, isPublic: true,  updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental))
-                }
-            }
-        }
+        func probeServersReachability(with serverIds: Set<String>, updateLibrary: Bool = false, autoUpdateOnly: Bool = true, incremental: Bool = true) {
+        serverManager.probeServersReachability(with: serverIds, updateLibrary: updateLibrary, autoUpdateOnly: autoUpdateOnly, incremental: incremental)
     }
     
     func isServerReachable(server: CalibreServer) -> Bool {
-        return calibreServerInfoStaging.filter {
-            $1.server.id == server.id
-        }.reduce(false) { partialResult, entry in
-            partialResult || entry.value.reachable
-        }
+        return serverManager.isServerReachable(server: server)
     }
     
     func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
-        return calibreServerInfoStaging.filter {
-            $1.server.id == server.id && $1.isPublic == isPublic
-        }.first?.value.reachable
+        return serverManager.isServerReachable(server: server, isPublic: isPublic)
     }
     
     func isServerProbing(server: CalibreServer) -> Bool {
-        return calibreServerInfoStaging.filter {
-            $1.server.id == server.id
-        }.allSatisfy {
-            $1.probing == false
-        } != true
+        return serverManager.isServerProbing(server: server)
     }
     
     func getServerInfo(server: CalibreServer) -> CalibreServerInfo? {
-        let serverInfos = calibreServerInfoStaging.filter { $1.server.id == server.id }
-        if let reachable = serverInfos.filter({ $1.reachable }).first {
-            return reachable.value
-        } else {
-            return serverInfos.first?.value
-        }
+        return serverManager.getServerInfo(server: server)
     }
     
     func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
@@ -1595,188 +851,46 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         }
     }
     
-    @discardableResult
+        @discardableResult
     @MainActor
     func probeServer(request: CalibreProbeServerRequest) async -> CalibreServerInfo? {
-        if var info = self.calibreServerInfoStaging[request.id] {
-            info.probing = true
-            info.errorMsg = "Connecting"
-            info.request = request
-            info.url = URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/")
-            self.calibreServerInfoStaging[request.id] = info
-        } else {
-            let info = CalibreServerInfo(
-                server: request.server,
-                isPublic: request.isPublic,
-                url: URL(string: request.isPublic ? request.server.publicUrl : request.server.baseUrl) ?? URL(fileURLWithPath: "/"),
-                probing: true,
-                errorMsg: "Connecting",
-                defaultLibrary: request.server.defaultLibrary,
-                request: request
-            )
-            self.calibreServerInfoStaging[request.id] = info
-        }
-        
-        guard let info = self.calibreServerInfoStaging[request.id] else { return nil }
-        
-        let newServerInfo = await calibreServerService.probeServerReachability(serverInfo: info)
-        
-        guard var serverInfo = self.calibreServerInfoStaging[newServerInfo.id] else { return nil }
-        serverInfo.probing = false
-        serverInfo.errorMsg = newServerInfo.errorMsg
-
-        if newServerInfo.libraryMap.isEmpty {
-            serverInfo.reachable = false
-            if serverInfo.errorMsg.isEmpty {
-                serverInfo.errorMsg = "Empty Server"
-            }
-        } else {
-            serverInfo.reachable = newServerInfo.reachable
-            serverInfo.libraryMap = newServerInfo.libraryMap
-            serverInfo.defaultLibrary = newServerInfo.defaultLibrary
-        }
-        self.calibreServerInfoStaging[newServerInfo.id] = serverInfo
-        
-        if serverInfo.server.isLocal == false && serverInfo.request.updateLibrary {
-            serverInfo.libraryMap.forEach { key, name in
-                let newLibrary = CalibreLibrary(server: serverInfo.server, key: key, name: name)
-                if self.calibreLibraries[newLibrary.id] == nil {
-                    self.calibreLibraries[newLibrary.id] = newLibrary
-                    try? self.updateLibraryRealm(library: newLibrary, realm: self.realm)
-                }
-            }
-            
-            if serverInfo.request.autoUpdateOnly == false {
-                self.syncServerHelperConfigSubject.send(serverInfo.server.id)
-            }
-            
-            // TODO: replace sync library with library search
-            self.calibreLibraries.filter {
-                $0.value.server.id == serverInfo.server.id
-            }.forEach { id, library in
-                Task {
-                    await self.syncLibrary(
-                        request: .init(
-                            library: library,
-                            autoUpdateOnly: serverInfo.request.autoUpdateOnly,
-                            incremental: serverInfo.request.incremental
-                        )
-                    )
-                }
-            }
-            
-            if serverInfo.reachable {
-                self.calibreUpdatedSubject.send(.server(serverInfo.server))
-                
-                self.calibreLibraries.filter {
-                    $0.value.server.id == serverInfo.server.id
-                }.forEach { id, library in
-                    self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
-                }
-            }
-        }
-        
-        return serverInfo
+        return await serverManager.probeServer(request: request)
     }
     
     @MainActor
     func removeServer(server: CalibreServer) async {
-        let librariesToRemove = self.calibreLibraries.filter { $0.value.server.id == server.id }
-        for (_, library) in librariesToRemove {
-            self.hideLibrary(libraryId: library.id)
-            await self.removeLibrary(library: library)
-        }
-        
-        self.calibreUpdatedSubject.send(.shelf)
+        await serverManager.removeServer(server: server)
+    }
+    
+    func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {
+        serverManager.addServer(server: server, libraries: libraries)
+    }
+    
+    func updateServerRealm(server: CalibreServer) throws {
+        try serverManager.updateServerRealm(server: server)
+    }
+    
+    func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
+        return serverManager.queryServerDSReaderHelper(server: server)
+    }
+    
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
+        serverManager.updateServerDSReaderHelper(serverId: serverId, dsreaderHelper: dsreaderHelper, realm: realm)
     }
     
     @discardableResult
     @MainActor
     func probeLibrary(request: CalibreProbeLibraryRequest) async -> CalibreLibraryProbeTask {
-        let task = await calibreServerService.probeLibrary(library: request.library)
-        
-        if let probeResult = task.probeResult {
-            self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: probeResult.total_num, errorMessage: "Success")
-        } else {
-            self.calibreLibraryInfoStaging[task.library.id] = .init(library: task.library, totalNumber: 0, errorMessage: "Failed")
-        }
-        
-        return task
+        return await libraryManager.probeLibrary(request: request)
     }
     
     @MainActor
     func removeLibrary(library: CalibreLibrary) async {
-        if librarySyncStatus[library.id] != nil {
-            librarySyncStatus[library.id]?.isSync = true
-        } else {
-            librarySyncStatus[library.id] = .init(library: library, isSync: true)
-        }
-        
-        //remove cached book files
-        let libraryBooksInShelf = self.booksInShelf.filter {
-            $0.value.library.id == library.id
-        }
-        libraryBooksInShelf.forEach {
-            self.clearCache(inShelfId: $0.key)
-            self.removeFromShelf(inShelfId: $0.key)     //just in case
-        }
-        
-        let serverUUIDString = library.server.uuid.uuidString
-        let libraryName = library.name
-        let realmConf = self.realmConf!
-        
-        await Task.detached(priority: .background) {
-            guard let realm = try? Realm(configuration: realmConf)
-            else { return }
-            
-            //remove library info
-            let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", serverUUIDString, libraryName)
-            while true {
-                let booksToDelete = realm.objects(CalibreBookRealm.self).filter(predicate).prefix(256).map { $0 }
-                if booksToDelete.isEmpty { break }
-                
-                try? realm.write {
-                    realm.delete(booksToDelete)
-                }
-            }
-        }.value
-        
-        self.librarySyncStatus[library.id]?.isSync = false
+        await libraryManager.removeLibrary(library: library)
     }
     
     func registerProbeLibraryLastModifiedCancellable() {
-        let dateFormatter = ISO8601DateFormatter()
-        let dateFormatter2 = ISO8601DateFormatter()
-        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
-        
-        let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
-        probeLibraryLastModifiedSubject.receive(on: queue)
-            .flatMap { request -> AnyPublisher<CalibreSyncLibraryResult, Never> in
-                self.calibreServerService.syncLibraryPublisher(
-                    resultPrev: .init(request: request, result: [:]),
-                    order: "",
-                    filter: "",
-                    limit: 1
-                )
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                guard var library = self.calibreLibraries[result.request.library.id],
-                      let lastModifiedStr = result.list.data.last_modified.first?.value.v,
-                      let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
-                else {
-                    return
-                }
-                
-                if lastModified > library.lastModified {
-                    library.lastModified = lastModified
-                    self.calibreLibraries[result.request.library.id] = library
-                    try! self.updateLibraryRealm(library: library, realm: self.realm)
-                }
-                
-                self.calibreUpdatedSubject.send(.library(library))
-            }
-            .store(in: &calibreCancellables)
+        libraryManager.registerProbeLibraryLastModifiedCancellable()
     }
     
     func registerSyncServerHelperConfigCancellable() {
@@ -1785,7 +899,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
             .receive(on: queue)
             .flatMap { serverId -> AnyPublisher<(id: String, port: Int, data: Data), URLError> in
                 if let server = self.calibreServers[serverId],
-                   let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
+                   let dsreaderHelperServer = self.serverManager.queryServerDSReaderHelper(server: server),
                    let publisher = DSReaderHelperConnector(calibreServerService: self.calibreServerService, server: server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil).refreshConfiguration() {
                     return publisher
                 } else {
@@ -1808,399 +922,23 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                     let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
                     dsreaderHelper.configurationData = task.data
                     
-                    self.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
+                    self.serverManager.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
                 }
             }.store(in: &calibreCancellables)
     }
     
     @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
-        let libraryId = request.library.id
-        guard (self.librarySyncStatus[libraryId]?.isSync ?? false) == false else {
-            return
-        }
-        
-        guard request.library.hidden == false else {
-            return
-        }
-        
-        if var status = self.librarySyncStatus[libraryId] {
-            status.isSync = true
-            status.isError = false
-            status.msg = ""
-            status.cnt = nil
-            self.librarySyncStatus[libraryId] = status
-        } else {
-            self.librarySyncStatus[libraryId] = .init(library: request.library, isSync: true)
-        }
-        
-        var result = await calibreServerService.getCustomColumns(request: request)
-        result = await calibreServerService.getLibraryCategories(resultPrev: result)
-        
-        let shouldSyncBooks = request.autoUpdateOnly == false || request.library.autoUpdate
-        
-        if shouldSyncBooks {
-            var filter = ""
-            if request.incremental,
-               let libraryRealm = realm.object(
-                ofType: CalibreLibraryRealm.self,
-                forPrimaryKey: CalibreLibraryRealm.PrimaryKey(
-                    serverUUID: result.request.library.server.uuid.uuidString,
-                    libraryName: result.request.library.name)
-               ) {
-                let formatter = ISO8601DateFormatter()
-                formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
-                formatter.timeZone = .current
-                let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
-                filter = "last_modified:\">=\(lastModifiedStr)\""
-            }
-            
-            result = await calibreServerService.syncLibrary(resultPrev: result, filter: filter)
-            
-            self.librarySyncStatus[libraryId]?.isError = result.isError
-            
-            if result.isError == false {
-                let library = result.request.library
-                let serverUUID = library.server.uuid.uuidString
-                
-                await withCheckedContinuation { continuation in
-                    ModelData.SaveBooksMetadataRealmQueue.async {
-                        try? self.updateLibraryRealm(library: library, realm: self.realmSaveBooksMetadata)
-                        continuation.resume()
-                    }
-                }
-                
-                result.categories.filter { $0.is_category }.forEach { category in
-                    Task {
-                        do {
-                            _ = try await self.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
-                        } catch {
-                            self.defaultLog.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
-                        }
-                    }
-                }
-                
-                let dateFormatter = ISO8601DateFormatter()
-                let dateFormatter2 = ISO8601DateFormatter()
-                dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
-                
-                var progress = 0
-                let total = result.list.book_ids.count
-                for chunk in result.list.book_ids.chunks(size: 1024) {
-                    let preMsg = "\(progress) / \(total)"
-                    let list = chunk.compactMap { id -> [String: Any]? in
-                        let idStr = id.description
-                        guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
-                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return nil }
-                        return [
-                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: idStr),
-                            "serverUUID": serverUUID,
-                            "libraryName": library.name,
-                            "lastModified": lastModified,
-                            "idInLib": id
-                        ]
-                    }
-                    progress += chunk.count
-                    let postMsg = "\(progress) / \(total)"
-                    await saveBookMetadata(metadata: .init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
-                    
-                    if let lastMod = list.last?["lastModified"] as? Date {
-                        result.lastModified = lastMod
-                    }
-                }
-                
-                if result.request.incremental == false {
-                    await saveBookMetadata(metadata: .init(library: library, action: .updateDeleted(result.list.data.last_modified), preMsg: "", postMsg: ""))
-                }
-                
-                await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
-                
-                if isServerReachable(server: library.server) {
-                    self.calibreUpdatedSubject.send(.server(library.server))
-                    self.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
-                }
-            }
-        } else {
-            let isError = !result.errmsg.isEmpty
-            self.librarySyncStatus[libraryId]?.isError = isError
-            self.librarySyncStatus[libraryId]?.isSync = false
-            
-            if !isError {
-                let library = result.request.library
-                
-                result.categories.filter { $0.is_category }.forEach { category in
-                    Task {
-                        do {
-                            _ = try await self.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
-                        } catch {
-                            self.defaultLog.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
-                        }
-                    }
-                }
-                
-                self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
-                
-                if isServerReachable(server: library.server) {
-                    self.calibreUpdatedSubject.send(.server(library.server))
-                }
-            } else {
-                self.librarySyncStatus[libraryId]?.msg = result.errmsg
-            }
-        }
+        await libraryManager.syncLibrary(request: request)
     }
     
-    @MainActor
     func saveBookMetadata(metadata: CalibreSyncLibraryBooksMetadata) async {
-        self.librarySyncStatus[metadata.library.id]?.msg = metadata.preMsg
-        
-        var metadataResult = metadata
-        
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            ModelData.SaveBooksMetadataRealmQueue.async {
-                let realm = self.realmSaveBooksMetadata!
-                
-                switch metadataResult.action {
-                case let .save(list):
-                    try? realm.write {
-                        list.forEach {
-                            realm.create(CalibreBookRealm.self, value: $0, update: .modified)
-                        }
-                    }
-                case let .updateDeleted(last_modified):
-                    let objects = realm.objects(CalibreBookRealm.self).filter(
-                        "serverUUID = %@ AND libraryName = %@", metadataResult.library.server.uuid.uuidString, metadataResult.library.name
-                    )
-                    metadataResult.bookDeleted = objects
-                        .filter {
-                            $0.inShelf == false && last_modified[$0.idInLib.description] == nil
-                        }
-                        .map { $0.idInLib }
-                case .complete:
-                    if metadataResult.library.autoUpdate {
-                        let objects = realm.objects(CalibreBookRealm.self).filter(
-                            "serverUUID = %@ AND libraryName = %@", metadataResult.library.server.uuid.uuidString, metadataResult.library.name
-                        )
-                        metadataResult.bookCount = objects.count
-                        
-                        let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
-                        metadataResult.bookToUpdate = objectsNeedUpdate
-                            .sorted(byKeyPath: "lastModified", ascending: false)
-                            .map { $0.idInLib }
-                    }
-                }
-                continuation.resume()
-            }
-        }
-        
-        let library = metadata.library
-        var libraryUpdated: CalibreLibrary? = nil
-        
-        switch metadataResult.action {
-        case let .complete(lastModified, columnInfos):
-            if columnInfos.isEmpty == false,
-               library.customColumnInfos != columnInfos {
-                if libraryUpdated == nil {
-                    libraryUpdated = library
-                }
-                libraryUpdated!.customColumnInfos = columnInfos
-            }
-            if let lastModified = lastModified,
-               library.lastModified != lastModified {
-                if libraryUpdated == nil {
-                    libraryUpdated = library
-                }
-                libraryUpdated!.lastModified = lastModified
-            }
-            
-            if let libraryUpdated = libraryUpdated {
-                self.calibreLibraries[library.id] = libraryUpdated
-                await withCheckedContinuation { continuation in
-                    ModelData.SaveBooksMetadataRealmQueue.async {
-                        try? self.updateLibraryRealm(library: libraryUpdated, realm: self.realmSaveBooksMetadata)
-                        continuation.resume()
-                    }
-                }
-            }
-            
-            self.librarySyncStatus[library.id]?.isSync = false
-            self.librarySyncStatus[library.id]?.cnt = metadataResult.bookCount
-            
-            let bookToUpdate = metadataResult.bookToUpdate.filter {
-                self.librarySyncStatus[library.id]?.upd.contains($0) == false
-            }
-            self.librarySyncStatus[library.id]?.upd.formUnion(bookToUpdate)
-            
-            bookToUpdate.chunks(size: 256).forEach { chunk in
-                Task {
-                    await self.getBooksMetadata(request: .init(library: metadata.library, books: chunk, getAnnotations: false))
-                }
-            }
-        case .updateDeleted:
-            self.librarySyncStatus[library.id]?.del.formUnion(metadataResult.bookDeleted)
-        case let .save(list):
-            let bookIds = list.compactMap { $0["idInLib"] as? Int32 }
-            bookIds.chunks(size: 256).forEach { chunk in
-                Task {
-                    await self.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))
-                }
-            }
-        }
-        
-        self.librarySyncStatus[library.id]?.msg = metadata.postMsg
+        await libraryManager.saveBookMetadata(metadata: metadata)
     }
     
     @MainActor
     func getBooksMetadata(request: CalibreBooksMetadataRequest) async {
-        self.librarySyncStatus[request.library.id]?.isUpd = true
-        
-        let books = request.books.map { bookId -> CalibreBook in
-            let book = CalibreBook(id: bookId, library: request.library)
-            if let book = self.booksInShelf[book.inShelfId] {
-                return book
-            }
-            if let book = self.booksAnnotation[book.inShelfId] {
-                return book
-            }
-            if request.getAnnotations,
-               let book = self.getBook(for: book.inShelfId) {
-                return book
-            }
-            return book
-        }
-        
-        var task = calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) ?? CalibreBooksTask(request: request)
-        
-        task = await calibreServerService.getBooksMetadata(task: task)
-        
-        if task.request.getAnnotations {
-            task = await calibreServerService.getAnnotations(task: task)
-        }
-        
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            ModelData.SaveBooksMetadataRealmQueue.async {
-                guard let entries = task.booksMetadataEntry,
-                      let json = task.booksMetadataJSON else {
-                    continuation.resume()
-                    return
-                }
-                
-                let serverUUID = task.library.server.uuid.uuidString
-                let libraryName = task.library.name
-                try? self.realmSaveBooksMetadata.write {
-                    task.books.map {
-                        (
-                            obj: self.realmSaveBooksMetadata.object(
-                                ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: $0.description)
-                            ),
-                            entry: entries[$0.description],
-                            root: json[$0.description] as? NSDictionary
-                        )
-                    }.forEach {
-                        guard let obj = $0.obj else { return }
-                        
-                        if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
-                            self.calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: root)
-                            task.booksUpdated.insert(obj.idInLib)
-                            if obj.inShelf {
-                                task.booksInShelf.append(self.convert(library: task.library, bookRealm: obj))
-                            } else if task.annotationsData != nil {
-                                task.booksAnnotation.append(self.convert(library: task.library, bookRealm: obj))
-                            }
-                        } else {
-                            // null data, treat as deleted, update lastSynced to lastModified to prevent further actions
-                            obj.lastSynced = obj.lastModified
-                            task.booksDeleted.insert(obj.idInLib)
-                        }
-                    }
-                }
-                continuation.resume()
-            }
-        }
-        
-        task.booksInShelf.forEach { newBook in
-            self.booksInShelf[newBook.inShelfId] = newBook
-            self.calibreUpdatedSubject.send(.book(newBook))
-        }
-        task.booksAnnotation.forEach { newBook in
-            self.booksAnnotation[newBook.inShelfId] = newBook
-        }
-        
-        if task.request.getAnnotations, let annotationsResult = task.booksAnnotationsEntry {
-            for book in task.booksInShelf {
-                for (formatKey, _) in book.formats {
-                    guard let format = Format(rawValue: formatKey),
-                          let entry = annotationsResult["\(book.id):\(formatKey)"]
-                    else { continue }
-                    
-                    let positions = book.readPos.positions(added: entry.last_read_positions)
-                    for pos in positions {
-                        if let setTask = self.calibreServerService.buildSetLastReadPositionTask(library: task.library, bookId: book.id, format: format, entry: pos) {
-                            Task {
-                                await self.calibreServerService.setLastReadPositionByTask(task: setTask)
-                            }
-                        }
-                    }
-                    
-                    if book.readPos.highlights(added: entry.annotations_map.highlight ?? []) > 0 || book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? []) > 0 {
-                        if let updateTask = self.calibreServerService.buildUpdateAnnotationsTask(
-                            library: task.library,
-                            bookId: book.id,
-                            format: format,
-                            highlights: book.readPos.highlights(excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() },
-                            bookmarks: book.readPos.bookmarks().map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                        ) {
-                            Task {
-                                await self.calibreServerService.updateAnnotationByTask(task: updateTask)
-                            }
-                        }
-                    }
-                }
-            }
-            
-            for book in task.booksAnnotation {
-                for (formatKey, _) in book.formats {
-                    guard let _ = Format(rawValue: formatKey),
-                          let entry = annotationsResult["\(book.id):\(formatKey)"]
-                    else { continue }
-                    
-                    _ = book.readPos.positions(added: entry.last_read_positions)
-                    _ = book.readPos.highlights(added: entry.annotations_map.highlight ?? [])
-                    _ = book.readPos.bookmarks(added: entry.annotations_map.bookmark ?? [])
-                }
-            }
-        }
-        
-        let booksHandled = task.booksUpdated.union(task.booksError).union(task.booksDeleted)
-        
-        self.librarySyncStatus[task.library.id]?.upd.subtract(booksHandled)
-        
-        if task.booksError.isEmpty == false {
-            self.librarySyncStatus[task.library.id]?.err.formUnion(task.booksError)
-            self.librarySyncStatus[task.library.id]?.del.formUnion(task.booksDeleted)
-            let booksRetry = task.books.filter { booksHandled.contains($0) == false }
-            
-            if booksRetry.isEmpty == false {
-                booksRetry.chunks(size: max(booksRetry.count / 16, 1)).forEach { chunk in
-                    Task {
-                        await self.getBooksMetadata(request: .init(library: task.library, books: chunk, getAnnotations: task.request.getAnnotations))
-                    }
-                }
-            }
-        }
-        
-        self.librarySyncStatus[task.library.id]?.isUpd = false
-        
-        if request.books.count == 1,
-           let book = self.getBook(
-            for: CalibreBookRealm.PrimaryKey(
-                serverUUID: task.library.server.uuid.uuidString,
-                libraryName: task.library.name,
-                id: task.request.books.first!.description
-            )
-           ) {
-            self.calibreUpdatedSubject.send(.book(book))
-        }
+        await bookManager.getBooksMetadata(request: request)
     }
     
     func logStartCalibreActivity(type: String, request: URLRequest, startDatetime: Date, bookId: Int32?, libraryId: String?) {
@@ -2228,11 +966,11 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     }
     
     func getReadingStatistics(list: [BookDeviceReadingPositionHistory], limitDays: Int) -> [Double] {
-        return BookDeviceReadingPositionHistory.getReadingStatistics(list: list, limitDays: limitDays)
+        sessionManager.getReadingStatistics(list: list, limitDays: limitDays)
     }
     
     func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: forPrimaryKey)
+        bookManager.getBookRealm(forPrimaryKey: forPrimaryKey)
     }
     
 }

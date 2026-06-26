@@ -1035,12 +1035,7 @@ struct LibraryCategoryListResult: Codable {
 
 extension ModelData {
     func getBook(for primaryKey: String) -> CalibreBook? {
-        var bookLocal: CalibreBook? = nil
-        if let obj = getBookRealm(forPrimaryKey: primaryKey) {
-            bookLocal = convert(bookRealm: obj)
-        }
-        
-        return bookLocal
+        bookManager.getBook(for: primaryKey)
     }
 }
 
