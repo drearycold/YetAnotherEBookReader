@@ -19,7 +19,7 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         
-        container = MockAppContainerFactory.makeContainer(testName: "LibraryInfoBookListViewModelTests-{UUID().uuidString}")
+        container = MockAppContainerFactory.makeContainer(testName: "LibraryInfoBookListViewModelTests-\(UUID().uuidString)")
         
         libraryInfoViewModel = LibraryInfoView.ViewModel()
         searchViewModel = UnifiedSearchViewModel(container: container)

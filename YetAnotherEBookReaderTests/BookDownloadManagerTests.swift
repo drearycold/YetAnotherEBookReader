@@ -17,7 +17,7 @@ final class BookDownloadManagerTests: XCTestCase {
     private var originalAppContainerShared: AppContainer?
     
     override func setUpWithError() throws {
-        container = MockAppContainerFactory.makeContainer(testName: "BookDownloadManagerTests-${UUID().uuidString}")
+        container = MockAppContainerFactory.makeContainer(testName: "BookDownloadManagerTests-\(UUID().uuidString)")
         AppContainer.shared = container
         
         manager = BookDownloadManager(container: container, realmConf: container.realmConf)

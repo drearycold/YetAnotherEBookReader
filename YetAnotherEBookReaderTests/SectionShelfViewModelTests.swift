@@ -17,7 +17,7 @@ class SectionShelfViewModelTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests-{UUID().uuidString}")
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests-\(UUID().uuidString)")
         
         viewModel = SectionShelfViewModel(container: mockAppContainer)
         cancellables = []

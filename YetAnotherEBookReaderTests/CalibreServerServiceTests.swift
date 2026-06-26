@@ -21,7 +21,7 @@ final class CalibreServerServiceTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        container = MockAppContainerFactory.makeContainer(testName: "CalibreServerServiceTests-{UUID().uuidString}")
+        container = MockAppContainerFactory.makeContainer(testName: "CalibreServerServiceTests-\(UUID().uuidString)")
         service = container.calibreServerService
         cancellables = []
 
