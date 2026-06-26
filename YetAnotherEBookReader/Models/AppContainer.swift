@@ -219,7 +219,16 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             }
             try? initializeDatabase()
 
-            let library = libraryManager.calibreLibraries.first!.value
+            // If the bootstrap failed (e.g. file-descriptor exhaustion
+            // in long test runs opening many in-memory Realms), the
+            // libraries dict stays empty. Skip the mock-data population
+            // rather than force-unwrapping nil — tests that depend on
+            // this state will fail their own assertions, but the
+            // container still constructs and the rest of the app stays
+            // usable.
+            guard let library = libraryManager.calibreLibraries.first?.value else {
+                return
+            }
 
             var book = CalibreBook(id: 1, library: library)
 

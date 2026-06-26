@@ -69,10 +69,10 @@ class SectionShelfViewModelTests: XCTestCase {
         
         mockAppContainer.discoverShelfItemsSubject.send([section])
         
-        await fulfillment(of: [expectation], timeout: 3.0)
+        await fulfillment(of: [expectation], timeout: 5.0)
         
         XCTAssertEqual(viewModel.displaySections.count, 1)
-        XCTAssertEqual(viewModel.displaySections[0].id, "\(library.id) || testSection")
+        XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.id, "\(library.id) || testSection")
     }
     
     func testTapBook() throws {

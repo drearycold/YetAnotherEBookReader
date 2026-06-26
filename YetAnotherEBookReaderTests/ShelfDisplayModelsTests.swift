@@ -68,8 +68,8 @@ import Combine
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.books.count, 1)
         XCTAssertEqual(viewModel.libraryFilters.count, 1)
-        XCTAssertEqual(viewModel.libraryFilters[0].id, libraryId)
-        XCTAssertFalse(viewModel.libraryFilters[0].isSelected)
+        XCTAssertEqual(viewModel.libraryFilters.getOrNil(0)?.id, libraryId)
+        XCTAssertFalse(viewModel.libraryFilters.getOrNil(0)?.isSelected ?? true)
         
         // Test Toggling filter
         viewModel.toggleLibraryFilter(libraryId: libraryId)
@@ -77,13 +77,13 @@ import Combine
         
         // Wait for discovery updates
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertTrue(viewModel.libraryFilters[0].isSelected)
+        XCTAssertTrue(viewModel.libraryFilters.getOrNil(0)?.isSelected ?? false)
         
         // Test resetting filters
         viewModel.resetLibraryFilters()
         XCTAssertTrue(viewModel.pickedLibraries.isEmpty)
         
         try await Task.sleep(nanoseconds: 1_200_000_000)
-        XCTAssertFalse(viewModel.libraryFilters[0].isSelected)
+        XCTAssertFalse(viewModel.libraryFilters.getOrNil(0)?.isSelected ?? true)
     }
 }
