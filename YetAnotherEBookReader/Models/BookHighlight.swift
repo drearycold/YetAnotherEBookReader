@@ -104,3 +104,53 @@ extension BookHighlight {
         }
     }
 }
+
+extension BookHighlight {
+    func toReaderEngineHighlight() -> ReaderEngineHighlight {
+        return ReaderEngineHighlight(
+            id: id,
+            bookId: bookId,
+            readerName: readerName,
+            page: page,
+            startOffset: startOffset,
+            endOffset: endOffset,
+            date: date,
+            type: type,
+            note: note,
+            tocFamilyTitles: tocFamilyTitles,
+            content: content,
+            contentPost: contentPost,
+            contentPre: contentPre,
+            cfiStart: cfiStart,
+            cfiEnd: cfiEnd,
+            spineName: spineName,
+            ranges: ranges,
+            removed: removed
+        )
+    }
+}
+
+extension ReaderEngineHighlight {
+    func toBookHighlight() -> BookHighlight {
+        return BookHighlight(
+            id: id,
+            bookId: bookId,
+            readerName: readerName,
+            page: page,
+            startOffset: startOffset,
+            endOffset: endOffset,
+            date: date,
+            type: type,
+            note: note,
+            tocFamilyTitles: tocFamilyTitles,
+            content: content,
+            contentPost: contentPost,
+            contentPre: contentPre,
+            cfiStart: cfiStart,
+            cfiEnd: cfiEnd,
+            spineName: spineName,
+            ranges: ranges,
+            removed: removed
+        )
+    }
+}

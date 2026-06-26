@@ -225,3 +225,42 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.activities.count, 0)
     }
 }
+
+class ReadingPositionRepositoryThreadingTests: XCTestCase {
+    var mockModelData: ModelData!
+    
+    override func setUpWithError() throws {
+        mockModelData = ModelData(mock: true)
+    }
+    
+    override func tearDownWithError() throws {
+        mockModelData = nil
+    }
+    
+    func testGetPositionsCanReadFromBackgroundQueue() throws {
+        guard let book = mockModelData.booksInShelf.first?.value else {
+            XCTFail("Expected mock in-shelf book")
+            return
+        }
+        
+        let position = BookDeviceReadingPosition(
+            id: "thread-test-device",
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 7,
+            lastProgress: 42.0,
+            epoch: Date().timeIntervalSince1970
+        )
+        mockModelData.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+        
+        let expectation = expectation(description: "Background queue can read reading positions")
+        let queue = DispatchQueue(label: "reading-position-thread-test")
+        
+        queue.async {
+            let positions = self.mockModelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            XCTAssertTrue(positions.contains(where: { $0.id == "thread-test-device" }))
+            expectation.fulfill()
+        }
+        
+        wait(for: [expectation], timeout: 2.0)
+    }
+}

@@ -14,6 +14,7 @@ struct RecentShelfUI: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let shelfController = RecentShelfController()
         shelfController.modelData = modelData
+        shelfController.viewModel = RecentShelfViewModel(modelData: modelData)
         
         let navController = UINavigationController(rootViewController: shelfController)
         return navController

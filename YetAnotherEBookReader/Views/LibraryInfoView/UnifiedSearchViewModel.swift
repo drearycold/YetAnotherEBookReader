@@ -26,7 +26,7 @@ class UnifiedSearchViewModel: ObservableObject {
             fatalError("ModelData.shared must be initialized before creating UnifiedSearchViewModel")
         }
         self.modelData = resolvedModelData
-        self.searchService = searchService ?? resolvedModelData.librarySearchManager.unifiedSearchService
+        self.searchService = searchService ?? resolvedModelData.unifiedSearchService
     }
     
     func startSearch(key: SearchCriteriaMergedKey) {

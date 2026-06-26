@@ -8,10 +8,13 @@
 import Foundation
 import RealmSwift
 import Combine
+import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
     private let config: Realm.Configuration
     private let modelData: ModelData
+    
+    var defaultLog = Logger()
     
     init(config: Realm.Configuration, modelData: ModelData) {
         self.config = config
@@ -44,7 +47,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             }
             
         guard let obj = matchingObj else { return nil }
-        return mapToLibraryCachedResult(obj)
+        return mapToLibraryCachedResult(obj, realm: realm)
     }
     
     func saveLibrarySourceResult(
@@ -105,12 +108,10 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             sObj.bookIds.removeAll()
             sObj.bookIds.append(objectsIn: result.bookIds)
             
-            sObj.books.removeAll()
-            let bookRealms = result.books.map { book -> CalibreBookRealm in
+            for book in result.books {
                 let bookRealm = book.managedObject()
-                return realm.create(CalibreBookRealm.self, value: bookRealm, update: .modified)
+                _ = realm.create(CalibreBookRealm.self, value: bookRealm, update: .modified)
             }
-            sObj.books.append(objectsIn: bookRealms)
         }
     }
     
@@ -132,6 +133,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                     .tryMap { [weak self] changeset -> LibraryCachedResult? in
                         guard let self = self else { return nil }
                         
+                        self.defaultLog.log("libraryCachedResultPublisher \(libraryId) \(search) \(sortAsc)")
+                        
                         let collection: Results<CalibreLibrarySearchObject>
                         switch changeset {
                         case .initial(let col):
@@ -152,8 +155,9 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                                 }
                                 return objFilters == filters
                             }
+                        let realm = try self.getRealm()
                         guard let obj = matched else { return nil }
-                        return self.mapToLibraryCachedResult(obj)
+                        return self.mapToLibraryCachedResult(obj, realm: realm)
                     }
                     .compactMap { $0 }
                     .eraseToAnyPublisher()
@@ -173,7 +177,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     
     // MARK: - Mapping Helpers
     
-    private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject) -> LibraryCachedResult {
+    private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
         let libraryId = searchObj.libraryId
         let library = modelData.calibreLibraries[libraryId]
         
@@ -182,8 +186,16 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             guard let sourceObj = sourceEntry.value else { continue }
             let url = sourceEntry.key
             
-            let books = Array(sourceObj.books.compactMap { (bookRealm: CalibreBookRealm) -> CalibreBook? in
+            let books = Array(sourceObj.bookIds.compactMap { bookId -> CalibreBook? in
                 guard let lib = library else { return nil }
+                let pk = CalibreBookRealm.PrimaryKey(
+                    serverUUID: lib.server.uuid.uuidString,
+                    libraryName: lib.name,
+                    id: bookId.description
+                )
+                guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: pk) else {
+                    return nil
+                }
                 return CalibreBook(managedObject: bookRealm, library: lib)
             })
             

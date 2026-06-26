@@ -128,7 +128,7 @@ class BookDetailViewModel: ObservableObject {
         }
         
         bookObserverToken = bookRealm.objectWillChange
-            .receive(on: DispatchQueue.main)
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self = self, let b = self.book, let modelData = self.modelData else { return }
                 if let updatedCalibreBook = modelData.convert(bookRealm: b) {

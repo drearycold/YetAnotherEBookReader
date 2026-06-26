@@ -12,10 +12,7 @@ struct LibraryInfoBookListView: View {
     @EnvironmentObject var modelData: ModelData
     @EnvironmentObject var downloadManager: BookDownloadManager
     @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
-    
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
-
-
 
     @State private var selectedBookIds = Set<String>()
     @State private var downloadBookList = [CalibreBook]()
@@ -58,7 +55,7 @@ struct LibraryInfoBookListView: View {
                     searchString = libraryInfoViewModel.searchString
                 }
                 .onSubmit {
-                    searchStringChanged(searchString: searchString)
+                    libraryInfoViewModel.searchStringChanged(searchString: searchString, searchViewModel: viewModel)
                 }
                 .keyboardType(.webSearch)
                 .padding([.leading, .trailing], 24)
@@ -71,10 +68,12 @@ struct LibraryInfoBookListView: View {
                 .popover(isPresented: $searchHistoryPresenting) {
                     Text("Search History")
                 }
+                .padding(.leading, 4)
 
                 Spacer()
                 Button {
-                    searchStringChanged(searchString: "")
+                    libraryInfoViewModel.searchStringChanged(searchString: "", searchViewModel: viewModel)
+                    searchString = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.gray)
@@ -90,7 +89,7 @@ struct LibraryInfoBookListView: View {
                                     if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
                                         libraryInfoViewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
                                     }
-                                    searchStringChanged(searchString: self.searchString)
+                                    libraryInfoViewModel.searchStringChanged(searchString: self.searchString, searchViewModel: viewModel)
                                 }
                             } label: {
                                 HStack {
@@ -112,20 +111,13 @@ struct LibraryInfoBookListView: View {
                             }).isEmpty ? .gray : .accentColor
                         )
                 }
-            }.padding([.leading, .trailing], 4)
+                .padding(.trailing, 4)
+            }
         }
     }
     
     @ViewBuilder
     private func contentView(geometry: GeometryProxy) -> some View {
-//        #if DEBUG
-//        List {
-//            Text("count \(unifiedSearchObject.books.count)")
-//            ForEach(unifiedSearchObject.books) { bookRealm in
-//                Text(bookRealm.primaryKey!)
-//            }
-//        }
-//        #endif
         ScrollViewReader { proxy in
             List(selection: $selectedBookIds) {
                 #if DEBUG
@@ -134,7 +126,7 @@ struct LibraryInfoBookListView: View {
                 
                 let books = viewModel.unifiedSearchResult?.books ?? []
                 if books.isEmpty {
-                    Text(getLibraryLoadingCount() > 0 ? "Loading books..." : "Found no books.")
+                    Text(libraryInfoViewModel.getLibraryLoadingCount(modelData: modelData, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
                 } else {
                     if let groupString = libraryInfoViewModel.sectionedBy?.groupString {
                         let grouped = Dictionary(grouping: Array(books.enumerated()), by: { groupString($0.element) })
@@ -224,7 +216,7 @@ struct LibraryInfoBookListView: View {
             }
             .padding([.leading, .trailing], 4)
 
-            Text(getLibrarySearchingText())
+            Text(libraryInfoViewModel.getLibrarySearchingText(modelData: modelData, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses))
             
             if viewModel.isSearchLoading {
                 ProgressView()
@@ -243,7 +235,7 @@ struct LibraryInfoBookListView: View {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
         }
-        .padding(4)    //bottom bar
+        .padding(4)
     }
     
     @ViewBuilder
@@ -279,7 +271,7 @@ struct LibraryInfoBookListView: View {
                         libraryInfoViewModel.sortCriteria.by = sort
                         libraryInfoViewModel.sortCriteria.ascending = sort == .Title ? true : false
                     }
-                    resetToFirstPage()
+                    libraryInfoViewModel.resetToFirstPage(searchViewModel: viewModel)
                 }) {
                     HStack {
                         if libraryInfoViewModel.sortCriteria.by == sort {
@@ -324,153 +316,6 @@ struct LibraryInfoBookListView: View {
     }
     
     @ViewBuilder
-    private func bookRowView(book: CalibreBook, bookRealm: CalibreBookRealm) -> some View {
-        HStack(alignment: .bottom) {
-            ZStack {
-                KFImage(book.coverURL)
-                    .placeholder {
-                        ProgressView().progressViewStyle(CircularProgressViewStyle())
-                    }
-                    .resizable()
-                    .frame(width: 72, height: 96, alignment: .center)
-                
-                if book.inShelf {
-                    Image(systemName: "books.vertical")
-                        .frame(width: 64 - 8, height: 96 - 8, alignment: .bottomTrailing)
-                        .foregroundColor(.primary)
-                        .opacity(0.8)
-                }
-                
-                if let download = downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
-                    ZStack {
-                        Rectangle()
-                            .frame(width: 64, height: 64, alignment: .center)
-                            .foregroundColor(.gray)
-                            .cornerRadius(4.0)
-                            .opacity(0.8)
-                        ProgressView(value: download.progress)
-                            .frame(width: 56, height: 64, alignment: .center)
-                            .progressViewStyle(.linear)
-                            .foregroundColor(.primary)
-                    }
-                    .frame(width: 64, height: 96 - 8, alignment: .bottom)
-                }
-            }
-            
-            Spacer()
-            
-            VStack(alignment: .leading, spacing: 2) {
-//                #if DEBUG
-//                HStack {
-//                    Text("Book")
-//                    Text("\(book.id)")
-//                    Spacer()
-//                    Text(book.inShelfId)
-//                }
-//                HStack {
-//                    Text("BookRealm")
-//                    Text("\(bookRealm.idInLib)")
-//                    Spacer()
-//                    Text(bookRealm.primaryKey!)
-//                }
-//                #endif
-
-                Text("\(book.title)")
-                    .font(.callout)
-                    .lineLimit(3)
-                
-                Group {
-                    HStack {
-                        Text("\(book.authorsDescriptionShort)")
-                        Spacer()
-                        Text(book.lastModifiedByLocale)
-                    }
-                    
-                    HStack {
-                        Text(book.tags.first ?? "")
-                        Spacer()
-                        Text(book.library.name)
-                    }
-                }
-                .font(.caption)
-                .lineLimit(1)
-                
-                Spacer()
-                
-                HStack {
-                    if book.identifiers["goodreads"] != nil {
-                        Image("icon-goodreads")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("icon-goodreads")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    if book.identifiers["amazon"] != nil {
-                        Image("icon-amazon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("icon-amazon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    Spacer()
-                    
-                    Text(book.ratingDescription).font(.caption)
-                    
-                    Spacer()
-                    if book.formats["PDF"] != nil {
-                        Image("PDF")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("PDF")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    
-                    if book.formats["EPUB"] != nil {
-                        Image("EPUB")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("EPUB")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                    
-                    if book.formats["CBZ"] != nil {
-                        Image("CBZ")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                    } else {
-                        Image("CBZ")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 12, height: 16, alignment: .center)
-                            .hidden()
-                    }
-                }
-            }
-        }
-    }
-    
-    @ViewBuilder
     private func bookRowContextMenuView(book: CalibreBook) -> some View {
         if let authors = book.authors.filter({
             libraryInfoViewModel.filterCriteriaCategory["Authors"]?.contains($0) != true
@@ -478,7 +323,7 @@ struct LibraryInfoBookListView: View {
             Menu("More by Author ...") {
                 ForEach(authors, id: \.self) { author in
                     Button {
-                        updateFilterCategory(key: "Authors", value: author)
+                        libraryInfoViewModel.updateFilterCategory(key: "Authors", value: author, searchViewModel: viewModel)
                     } label: {
                         Text(author)
                     }
@@ -492,7 +337,7 @@ struct LibraryInfoBookListView: View {
             Menu("More of Tags ...") {
                 ForEach(tags, id: \.self) { tag in
                     Button {
-                        updateFilterCategory(key: "Tags", value: tag)
+                        libraryInfoViewModel.updateFilterCategory(key: "Tags", value: tag, searchViewModel: viewModel)
                     } label: {
                         Text(tag)
                     }
@@ -505,7 +350,7 @@ struct LibraryInfoBookListView: View {
             Button {
                 libraryInfoViewModel.sortCriteria.by = .SeriesIndex
                 libraryInfoViewModel.sortCriteria.ascending = true
-                updateFilterCategory(key: "Series", value: book.series)
+                libraryInfoViewModel.updateFilterCategory(key: "Series", value: book.series, searchViewModel: viewModel)
             } label: {
                 Text("More in Series: \(book.series)")
             }
@@ -531,79 +376,6 @@ struct LibraryInfoBookListView: View {
                 }
             }
         }
-    }
-    
-    private func getLibraryLoadingCount() -> Int {
-        guard let result = viewModel.unifiedSearchResult else { return 0 }
-        return modelData.calibreLibraries
-            .filter({
-                $0.value.hidden == false
-                &&
-                $0.value.server.removed == false
-                &&
-                (result.libraryIds.isEmpty || result.libraryIds.contains($0.key))
-            })
-            .map({
-                $0.key
-            })
-            .reduce(0, { partialResult, libraryId in
-                if result.unifiedOffsets[libraryId] == nil {
-                    return partialResult + 1
-                }
-                if viewModel.libraryStatuses[libraryId]?.loading == true {
-                    return partialResult + 1
-                }
-                return partialResult
-            })
-    }
-    
-    private func getLibrarySearchingText() -> String {
-        let librariesLoading = getLibraryLoadingCount()
-        
-        guard let result = viewModel.unifiedSearchResult else { return "Preparing Book List" }
-        
-        let offsets = result.unifiedOffsets.filter {
-            $0.value.searchObjectSource.isEmpty == false
-        }
-        
-        var text = ""
-        
-        if offsets.count < 1 {
-            if librariesLoading > 0 {
-                text = "Still searching \(librariesLoading) libraries"
-            } else {
-                text = "Cannot find in any library"
-            }
-        } else {
-            text = "From \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
-            
-            if librariesLoading > 0 {
-                text += ", \(librariesLoading) to go"
-            }
-        }
-        
-        
-        return text
-    }
-    
-    func searchStringChanged(searchString: String) {
-        self.searchString = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
-        libraryInfoViewModel.searchString = self.searchString
-        
-        resetToFirstPage()
-    }
-    
-    func updateFilterCategory(key: String, value: String) {
-        if libraryInfoViewModel.filterCriteriaCategory[key] == nil {
-            libraryInfoViewModel.filterCriteriaCategory[key] = .init()
-        }
-        libraryInfoViewModel.filterCriteriaCategory[key]?.insert(value)
-        
-        resetToFirstPage()
-    }
-    
-    func resetToFirstPage() {
-        viewModel.startSearch(key: libraryInfoViewModel.currentLibrarySearchResultKey)
     }
     
     @ViewBuilder
@@ -646,7 +418,7 @@ struct LibraryInfoBookListView: View {
                         }
                     } else {
                         Text("No Unified Offset Object")
-                    }
+                     }
                 }
             } else {
                 Text("No Unified Search Result")
@@ -655,9 +427,3 @@ struct LibraryInfoBookListView: View {
         .foregroundColor(.red)
     }
 }
-
-//struct LibraryInfoBookListView_Previews: PreviewProvider {
-//    static var previews: some View {
-//        LibraryInfoBookListView()
-//    }
-//}

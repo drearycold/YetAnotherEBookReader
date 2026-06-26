@@ -15,16 +15,11 @@ extension EpubFolioReaderContainer {
         if let preferenceProvider = folioReaderPreferenceProvider {
             return preferenceProvider
         } else {
-            guard let book = modelData?.readingBook,
-                  let format = modelData?.readerInfo?.format,
-                  let bookFileURL = getSavedUrl(book: book, format: format),
-                  let profileRealmConfig = modelData?.realmConf
-                  else { return FolioReaderDummyPreferenceProvider(folioReader) }
-            
-            let realmConfig = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
-            let preferenceProvider = FolioReaderRealmPreferenceProvider(folioReader, realmConfig: realmConfig, profileRealmConfig: profileRealmConfig)
+            guard let book = modelData?.readingBook else {
+                return FolioReaderDummyPreferenceProvider(folioReader)
+            }
+            let preferenceProvider = FolioReaderDelegatePreferenceProvider(folioReader, delegate: self.readerEngineDelegate, bookId: book.bookPrefId)
             self.folioReaderPreferenceProvider = preferenceProvider
-            
             return preferenceProvider
         }
     }
@@ -33,12 +28,11 @@ extension EpubFolioReaderContainer {
         if let highlightProvider = folioReaderHighlightProvider {
             return highlightProvider
         } else {
-            guard let book = modelData?.readingBook,
-                  let readerInfo = modelData?.readerInfo
-                  else { return FolioReaderDummyHighlightProvider() }
-            let highlightProvider = FolioReaderYabrHighlightProvider(book: book, readerInfo: readerInfo)
+            guard let book = modelData?.readingBook else {
+                return FolioReaderDummyHighlightProvider()
+            }
+            let highlightProvider = FolioReaderDelegateHighlightProvider(delegate: self.readerEngineDelegate, bookId: book.bookPrefId)
             self.folioReaderHighlightProvider = highlightProvider
-            
             return highlightProvider
         }
     }
@@ -71,6 +65,216 @@ extension EpubFolioReaderContainer {
         }
     }
 }
+
+private let folioFontSizes = ["15.5px", "17px", "18.5px", "20px", "22px", "24px", "26px", "28px", "30.5px", "33px", "35.5px"]
+
+func folioFontSizeToPercentage(_ fontSize: String) -> Double {
+    if let index = folioFontSizes.firstIndex(of: fontSize) {
+        return 100.0 + Double(index - 3) * 10.0
+    }
+    if fontSize.hasSuffix("px"), let val = Double(fontSize.dropLast(2)) {
+        return (val / 20.0) * 100.0
+    }
+    if fontSize.hasSuffix("%"), let val = Double(fontSize.dropLast()) {
+        return val
+    }
+    return 100.0
+}
+
+func percentageToFolioFontSize(_ percentage: Double) -> String {
+    let indexDouble = (percentage - 100.0) / 10.0 + 3.0
+    let index = max(0, min(folioFontSizes.count - 1, Int(round(indexDouble))))
+    return folioFontSizes[index]
+}
+
+class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
+    let folioReader: FolioReader
+    weak var delegate: ReaderEngineDelegate?
+    var bookId: String
+    
+    private var values = [String: Any]()
+    
+    init(_ folioReader: FolioReader, delegate: ReaderEngineDelegate?, bookId: String) {
+        self.folioReader = folioReader
+        self.delegate = delegate
+        self.bookId = bookId
+        
+        values["nightMode"] = false
+        values["themeMode"] = FolioReaderThemeMode.serpia.rawValue
+        values["currentFont"] = "Georgia"
+        values["currentFontSize"] = FolioReader.DefaultFontSize
+        values["currentFontWeight"] = FolioReader.DefaultFontWeight
+        values["currentScrollDirection"] = folioReader.defaultScrollDirection.rawValue
+        values["currentMarginTop"] = folioReader.defaultMarginTop
+        values["currentMarginBottom"] = folioReader.defaultMarginBottom
+        values["currentMarginLeft"] = folioReader.defaultMarginLeft
+        values["currentMarginRight"] = folioReader.defaultMarginRight
+        values["currentVMarginLinked"] = true
+        values["currentHMarginLinked"] = true
+        values["currentLetterSpacing"] = FolioReader.DefaultLetterSpacing
+        values["currentLineHeight"] = FolioReader.DefaultLineHeight
+        values["currentTextIndent"] = FolioReader.DefaultTextIndent
+        values["doWrapPara"] = false
+        values["doClearClass"] = true
+    }
+    
+    func preference(stringFor key: String, default defaultValue: String) -> String {
+        return values[key] as? String ?? defaultValue
+    }
+    
+    func preference(setString value: String, for key: String) {
+        values[key] = value
+        notifyDelegate()
+    }
+    
+    func preference(intFor key: String, default defaultValue: Int) -> Int {
+        return values[key] as? Int ?? defaultValue
+    }
+    
+    func preference(setInt value: Int, for key: String) {
+        values[key] = value
+        notifyDelegate()
+    }
+    
+    func preference(boolFor key: String, default defaultValue: Bool) -> Bool {
+        return values[key] as? Bool ?? defaultValue
+    }
+    
+    func preference(setBool value: Bool, for key: String) {
+        values[key] = value
+        notifyDelegate()
+    }
+    
+    func preference(loadProfile name: String) {}
+    func preference(saveProfile name: String) {}
+    func preference(listProfile filter: String?) -> [String] { return [] }
+    func preference(removeProfile name: String) {}
+    
+    func applyPreferences(_ preferences: ReaderEnginePreferences) {
+        let nightMode = (preferences.themeMode == 2)
+        values["nightMode"] = nightMode
+        values["themeMode"] = preferences.themeMode
+        
+        values["currentFontSize"] = percentageToFolioFontSize(preferences.fontSizePercentage)
+        values["currentFont"] = preferences.fontFamily
+        values["currentScrollDirection"] = preferences.scrollDirection
+    }
+    
+    private func notifyDelegate() {
+        let themeMode = values["themeMode"] as? Int ?? (values["nightMode"] as? Bool == true ? 2 : 1)
+        let fontSizeStr = values["currentFontSize"] as? String ?? FolioReader.DefaultFontSize
+        let fontSizePercentage = folioFontSizeToPercentage(fontSizeStr)
+        let fontFamily = values["currentFont"] as? String ?? "Original"
+        let scrollDirection = values["currentScrollDirection"] as? Int ?? 0
+        
+        let enginePrefs = ReaderEnginePreferences(
+            themeMode: themeMode,
+            fontSizePercentage: fontSizePercentage,
+            fontFamily: fontFamily,
+            lineHeight: 1.2,
+            pageMargins: 1.0,
+            scroll: scrollDirection == 0 ? false : true,
+            scrollDirection: scrollDirection,
+            volumeKeyPaging: false
+        )
+        
+        delegate?.readerEngine(folioReader, didUpdatePreferences: enginePrefs)
+    }
+}
+
+class FolioReaderDelegateHighlightProvider: FolioReaderHighlightProvider {
+    weak var delegate: ReaderEngineDelegate?
+    var bookId: String
+    
+    private var activeHighlights = [String: ReaderEngineHighlight]()
+    
+    init(delegate: ReaderEngineDelegate?, bookId: String) {
+        self.delegate = delegate
+        self.bookId = bookId
+    }
+    
+    func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
+        activeHighlights.removeAll()
+        highlights.forEach {
+            activeHighlights[$0.id] = $0
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, added highlight: FolioReaderHighlight, completion: Completion?) {
+        defer {
+            completion?(nil)
+        }
+        let engineHighlight = highlight.toReaderEngineHighlight()
+        activeHighlights[highlight.highlightId] = engineHighlight
+        delegate?.readerEngine(folioReader, didAddHighlight: engineHighlight)
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
+        activeHighlights.removeValue(forKey: highlightId)
+        delegate?.readerEngine(folioReader, didRemoveHighlight: highlightId)
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: FolioReaderHighlightStyle) {
+        if var existing = activeHighlights[highlightId] {
+            existing.type = style.rawValue
+            existing.date = Date()
+            activeHighlights[highlightId] = existing
+            delegate?.readerEngine(folioReader, didAddHighlight: existing)
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> FolioReaderHighlight? {
+        return activeHighlights[highlightId]?.toFolioReaderHighlight()
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
+        return activeHighlights.values.filter { $0.bookId == bookId && (page == nil || $0.page == page?.intValue) }.compactMap {
+            $0.toFolioReaderHighlight()
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
+        return activeHighlights.values.filter { $0.bookId == bookId }.compactMap {
+            $0.toFolioReaderHighlight()
+        }
+    }
+    
+    public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
+        if var existing = activeHighlights[highlight.highlightId] {
+            existing.note = highlight.noteForHighlight
+            existing.date = Date()
+            activeHighlights[highlight.highlightId] = existing
+            delegate?.readerEngine(folioReader, didAddHighlight: existing)
+        }
+    }
+}
+
+extension FolioReaderHighlight {
+    func toReaderEngineHighlight() -> ReaderEngineHighlight {
+        return self.toBookHighlight().toReaderEngineHighlight()
+    }
+}
+
+extension ReaderEngineHighlight {
+    func toFolioReaderHighlight() -> FolioReaderHighlight? {
+        return self.toBookHighlight().toFolioReaderHighlight()
+    }
+}
+
+extension EpubFolioReaderContainer: ReaderEngineController {
+    func applyPreferences(_ preferences: ReaderEnginePreferences) {
+        if let preferenceProvider = self.folioReaderPreferenceProvider as? FolioReaderDelegatePreferenceProvider {
+            preferenceProvider.applyPreferences(preferences)
+        }
+    }
+    
+    func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
+        if let highlightProvider = self.folioReaderHighlightProvider as? FolioReaderDelegateHighlightProvider {
+            highlightProvider.applyHighlights(highlights)
+        }
+    }
+}
+
 
 class FolioReaderPreferenceRealm: Object {
     override static func primaryKey() -> String? {
@@ -449,7 +653,7 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
     }
 }
 
-fileprivate extension BookHighlight {
+extension BookHighlight {
     func toFolioReaderHighlight() -> FolioReaderHighlight? {
         guard readerName.isEmpty || readerName == ReaderType.YabrEPUB.rawValue
         else { return nil }
@@ -481,7 +685,7 @@ fileprivate extension BookHighlight {
     }
 }
 
-fileprivate extension FolioReaderHighlight {
+extension FolioReaderHighlight {
     func toBookHighlight() -> BookHighlight {
         return BookHighlight(
             id: highlightId,

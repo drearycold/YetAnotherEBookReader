@@ -103,8 +103,8 @@ extension LibraryInfoView {
         
         func fetchAvailableCategories() {
             guard let modelData = ModelData.shared else { return }
-            let repository = modelData.librarySearchManager.categoryCacheRepository
-            if let summaries = try? repository?.fetchCategorySummaries() {
+            let repository = modelData.categoryCacheRepository
+            if let summaries = try? repository.fetchCategorySummaries() {
                 self.availableCategories = summaries
             }
         }
@@ -120,6 +120,78 @@ extension LibraryInfoView {
                 .sink { [weak self] _ in
                     self?.fetchAvailableCategories()
                 }
+        }
+        
+        private var cancellables = Set<AnyCancellable>()
+        
+        func getLibraryLoadingCount(modelData: ModelData, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
+            guard let result = searchResult else { return 0 }
+            return modelData.calibreLibraries
+                .filter({
+                    $0.value.hidden == false
+                    &&
+                    $0.value.server.removed == false
+                    &&
+                    (result.libraryIds.isEmpty || result.libraryIds.contains($0.key))
+                })
+                .map({
+                    $0.key
+                })
+                .reduce(0, { partialResult, libraryId in
+                    if result.unifiedOffsets[libraryId] == nil {
+                        return partialResult + 1
+                    }
+                    if libraryStatuses[libraryId]?.loading == true {
+                        return partialResult + 1
+                    }
+                    return partialResult
+                })
+        }
+        
+        func getLibrarySearchingText(modelData: ModelData, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> String {
+            let librariesLoading = getLibraryLoadingCount(modelData: modelData, searchResult: searchResult, libraryStatuses: libraryStatuses)
+            
+            guard let result = searchResult else { return "Preparing Book List" }
+            
+            let offsets = result.unifiedOffsets.filter {
+                $0.value.searchObjectSource.isEmpty == false
+            }
+            
+            var text = ""
+            
+            if offsets.count < 1 {
+                if librariesLoading > 0 {
+                    text = "Still searching \(librariesLoading) libraries"
+                } else {
+                    text = "Cannot find in any library"
+                }
+            } else {
+                text = "From \(offsets.count) \(offsets.count == 1 ? "library" : "libraries")"
+                
+                if librariesLoading > 0 {
+                    text += ", \(librariesLoading) to go"
+                }
+            }
+            
+            return text
+        }
+        
+        func searchStringChanged(searchString: String, searchViewModel: UnifiedSearchViewModel) {
+            let trimmed = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.searchString = trimmed
+            searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
+        }
+        
+        func updateFilterCategory(key: String, value: String, searchViewModel: UnifiedSearchViewModel) {
+            if filterCriteriaCategory[key] == nil {
+                filterCriteriaCategory[key] = .init()
+            }
+            filterCriteriaCategory[key]?.insert(value)
+            searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
+        }
+        
+        func resetToFirstPage(searchViewModel: UnifiedSearchViewModel) {
+            searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
         }
     }
 }

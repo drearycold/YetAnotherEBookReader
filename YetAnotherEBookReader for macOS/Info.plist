@@ -175,7 +175,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
-	<string>138</string>
+	<string>139</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-2603711004804215~7977491314</string>
 	<key>LSApplicationCategoryType</key>

@@ -46,3 +46,31 @@ struct CategoryCacheSummary: Equatable, Sendable, Identifiable {
     let totalNumber: Int
 }
 
+struct LibraryCategoryList {
+    let library: CalibreLibrary
+    let category: CalibreLibraryCategory
+    let reqId: Int
+    let num: Int
+    let offset: Int
+    
+    var result: LibraryCategoryListResult?
+}
+
+struct LibraryCategoryListResult: Codable {
+    struct Item: Codable {
+        let name: String
+        let average_rating: Double
+        let count: Int
+        let url: String
+        let has_children: Bool
+    }
+    
+    let category_name: String
+    let base_url: String
+    let total_num: Int
+    let offset: Int
+    let num: Int
+    let sort: String
+    let sort_order: String
+    let items: [Item]
+}

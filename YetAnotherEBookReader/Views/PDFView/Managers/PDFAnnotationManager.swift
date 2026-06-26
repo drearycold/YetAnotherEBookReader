@@ -8,11 +8,15 @@ import PDFKit
 
 class PDFAnnotationManager {
     private weak var pdfView: YabrPDFView?
-    private var yabrPDFMetaSource: YabrPDFMetaSource?
+    private weak var delegate: ReaderEngineDelegate?
+    private var bookId: String
+    
+    private var activeHighlights = [UUID: ReaderEngineHighlight]()
 
-    init(pdfView: YabrPDFView, metaSource: YabrPDFMetaSource?) {
+    init(pdfView: YabrPDFView, delegate: ReaderEngineDelegate?, bookId: String) {
         self.pdfView = pdfView
-        self.yabrPDFMetaSource = metaSource
+        self.delegate = delegate
+        self.bookId = bookId
     }
 
     func addHighlight(style: Int, selection: PDFSelection) {
@@ -29,22 +33,101 @@ class PDFAnnotationManager {
             pdfHighlightPageLocations.append(pdfHighlightPage)
         }
         
+        let uuid = UUID()
+        let posData = try? JSONEncoder().encode(pdfHighlightPageLocations)
+        let posString = posData != nil ? String(data: posData!, encoding: .utf8) : nil
+        
+        let engineHighlight = ReaderEngineHighlight(
+            id: uuid.uuidString,
+            bookId: bookId,
+            readerName: "YabrPDF",
+            page: pdfHighlightPageLocations.first?.page ?? 1,
+            date: Date(),
+            type: style,
+            content: selection.string ?? "No Content",
+            cfiStart: "/\((pdfHighlightPageLocations.first?.page ?? 1) * 2)",
+            cfiEnd: "/\((pdfHighlightPageLocations.last?.page ?? 1) * 2)",
+            ranges: posString
+        )
+        
+        activeHighlights[uuid] = engineHighlight
+        delegate?.readerEngine(pdfView, didAddHighlight: engineHighlight)
+        
         let pdfHighlight = PDFHighlight(
-            uuid: UUID(),
+            uuid: uuid,
             pos: pdfHighlightPageLocations,
             type: style,
             content: selection.string ?? "No Content",
             date: Date()
         )
-        
-        yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
         pdfView.injectHighlight(highlight: pdfHighlight)
     }
 
+    func removeHighlight(uuid: UUID) {
+        guard let pdfView = pdfView else { return }
+        
+        delegate?.readerEngine(pdfView, didRemoveHighlight: uuid.uuidString)
+        
+        if let engineHighlight = activeHighlights.removeValue(forKey: uuid),
+           let pdfHighlight = convertToPDFHighlight(engineHighlight) {
+            pdfView.removeHighlight(highlight: pdfHighlight)
+        }
+    }
+
+    func modifyHighlightStyle(uuid: UUID, type: BookHighlightStyle) {
+        guard let pdfView = pdfView,
+              var engineHighlight = activeHighlights[uuid]
+        else { return }
+        
+        if let oldPdfHighlight = convertToPDFHighlight(engineHighlight) {
+            pdfView.removeHighlight(highlight: oldPdfHighlight)
+        }
+        
+        engineHighlight.type = type.rawValue
+        engineHighlight.date = Date()
+        activeHighlights[uuid] = engineHighlight
+        
+        delegate?.readerEngine(pdfView, didAddHighlight: engineHighlight)
+        
+        if let newPdfHighlight = convertToPDFHighlight(engineHighlight) {
+            pdfView.injectHighlight(highlight: newPdfHighlight)
+        }
+    }
+
+    func applyHighlights(_ highlights: [ReaderEngineHighlight]) {
+        guard let pdfView = pdfView else { return }
+        
+        activeHighlights.values.forEach { engineHighlight in
+            if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
+                pdfView.removeHighlight(highlight: pdfHighlight)
+            }
+        }
+        activeHighlights.removeAll()
+        
+        highlights.forEach { engineHighlight in
+            guard let uuid = UUID(uuidString: engineHighlight.id) else { return }
+            activeHighlights[uuid] = engineHighlight
+            if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
+                pdfView.injectHighlight(highlight: pdfHighlight)
+            }
+        }
+    }
+    
     func injectAllHighlights() {
         guard let pdfView = pdfView else { return }
-        yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
-            pdfView.injectHighlight(highlight: highlight)
+        activeHighlights.values.forEach { engineHighlight in
+            if let pdfHighlight = convertToPDFHighlight(engineHighlight) {
+                pdfView.injectHighlight(highlight: pdfHighlight)
+            }
         }
+    }
+    
+    private func convertToPDFHighlight(_ engineHighlight: ReaderEngineHighlight) -> PDFHighlight? {
+        guard let uuid = UUID(uuidString: engineHighlight.id),
+              let posData = engineHighlight.ranges?.data(using: .utf8),
+              let pos = try? JSONDecoder().decode([PDFHighlight.PageLocation].self, from: posData)
+        else { return nil }
+        
+        return PDFHighlight(uuid: uuid, pos: pos, type: engineHighlight.type, content: engineHighlight.content, note: engineHighlight.note, date: engineHighlight.date)
     }
 }

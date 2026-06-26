@@ -30,7 +30,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         self.modelData = modelData
     }
     
-    private func getRealm(forBookId bookId: String) -> Realm? {
+    private func getRealmConfiguration(forBookId bookId: String) -> Realm.Configuration? {
         let actualModelData = modelData ?? ModelData.shared
         
         // 1. If bookId is inShelfId (id^libraryName@serverUUID)
@@ -38,8 +38,8 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             let components = bookId.components(separatedBy: "@")
             if components.count > 1 {
                 let serverUUID = components[1]
-                if let server = actualModelData?.calibreServers.values.first(where: { $0.uuid.uuidString == serverUUID }) {
-                    return server.realmPerf
+                if let server = actualModelData?.calibreServers[serverUUID] {
+                    return BookAnnotation.getBookPreferenceServerConfig(server)
                 }
             }
         }
@@ -49,12 +49,25 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         if components.count > 1 {
             let libraryKey = components[0]
             if let library = actualModelData?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
-                return library.server.realmPerf
+                return BookAnnotation.getBookPreferenceServerConfig(library.server)
             }
         }
         
         // Fallback
-        return databaseService.realm
+        return databaseService.realmConf
+    }
+    
+    private func getRealm(forBookId bookId: String) -> Realm? {
+        guard let config = getRealmConfiguration(forBookId: bookId) else { return nil }
+        
+        let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? "default")"
+        if let cachedRealm = Thread.current.threadDictionary[cacheKey] as? Realm {
+            return cachedRealm
+        }
+        
+        guard let realm = try? Realm(configuration: config) else { return nil }
+        Thread.current.threadDictionary[cacheKey] = realm
+        return realm
     }
     
     func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
@@ -198,9 +211,13 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     }
     
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
+        guard let realm = getRealm(forBookId: bookId) else { return [] }
+        
         var devicesUpdated = [String: BookDeviceReadingPosition]()
         var devicesInserted = [String: BookDeviceReadingPosition]()
         var tasks = [CalibreBookLastReadPositionEntry]()
+        
+        var positionsToSave = [BookDeviceReadingPosition]()
         
         lastReadPositions.forEach { remoteEntry in
             guard let remotePosition = BookDeviceReadingPosition(entry: remoteEntry) else {
@@ -208,7 +225,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             }
             
             guard let localPosition = self.getPosition(forBookId: bookId, deviceName: remoteEntry.device) else {
-                self.savePosition(remotePosition, forBookId: bookId)
+                positionsToSave.append(remotePosition)
                 devicesInserted[remoteEntry.device] = remotePosition
                 return
             }
@@ -223,15 +240,50 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             devicesUpdated[remoteEntry.device] = remotePosition
         }
         
-        self.getPositions(forBookId: bookId).forEach {
-            guard devicesInserted[$0.id] == nil else {
+        self.getPositions(forBookId: bookId).forEach { localPos in
+            guard devicesInserted[localPos.id] == nil else {
                 return
             }
             
-            if let position = devicesUpdated[$0.id] {
-                self.savePosition(position, forBookId: bookId)
+            if let position = devicesUpdated[localPos.id] {
+                positionsToSave.append(position)
             } else {
-                tasks.append($0.toEntry())
+                tasks.append(localPos.toEntry())
+            }
+        }
+        
+        if !positionsToSave.isEmpty {
+            try? realm.write {
+                for position in positionsToSave {
+                    let existingToRemove = realm.objects(BookDeviceReadingPositionRealm.self)
+                        .filter(NSPredicate(
+                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@ AND epoch < %@",
+                            bookId,
+                            position.id,
+                            position.readerName,
+                            NSNumber(value: position.structuralStyle),
+                            NSNumber(value: position.positionTrackingStyle),
+                            NSNumber(value: position.structuralRootPageNumber),
+                            NSNumber(value: position.epoch)
+                        ))
+                    if !existingToRemove.isEmpty {
+                        realm.delete(existingToRemove)
+                    }
+                    
+                    let exactMatch = realm.objects(BookDeviceReadingPositionRealm.self)
+                        .filter(NSPredicate(
+                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
+                            bookId,
+                            position.id,
+                            position.readerName,
+                            NSNumber(value: position.structuralStyle),
+                            NSNumber(value: position.positionTrackingStyle),
+                            NSNumber(value: position.structuralRootPageNumber)
+                        ))
+                    if exactMatch.isEmpty {
+                        realm.add(position.managedObject(bookId: bookId))
+                    }
+                }
             }
         }
         

@@ -49,7 +49,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         set { libraryManager.localLibrary = newValue }
     }
     
-    @Published var activeTab = 0
     var documentServer: CalibreServer? {
         get { serverManager.documentServer }
         set { serverManager.documentServer = newValue }
@@ -145,7 +144,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     
     private var defaultLog = Logger()
     
-    static var RealmSchemaVersion:UInt64 = 138
+    static var RealmSchemaVersion: UInt64 = 139
     var realm: Realm!
     var realmSaveBooksMetadata: Realm!
     var realmConf: Realm.Configuration!
@@ -168,10 +167,18 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var bookManager = CalibreBookManager(modelData: self, databaseService: self.databaseService, bookRepository: self.bookRepository, readingPositionRepository: self.readingPositionRepository, annotationRepository: self.annotationRepository)
     
     lazy var calibreServerService = CalibreServerService(logger: self.logger, config: self, database: self.databaseService)
-
-    lazy var librarySearchManager = CalibreLibrarySearchManager(service: self.calibreServerService, modelData: self)
+    lazy var searchCacheRepository = RealmSearchCacheStore(config: self.realmConf, modelData: self)
+    lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
+    lazy var unifiedSearchService = UnifiedSearchService(
+        repository: self.searchCacheRepository,
+        librarySearchService: self.librarySearchService,
+        libraryProvider: self
+    )
+    lazy var categoryCacheRepository: CategoryCacheRepository = self.searchCacheRepository
+    lazy var libraryCategoryService = LibraryCategoryService(service: self.calibreServerService, repository: self.categoryCacheRepository)
+    lazy var unifiedCategoryService = UnifiedCategoryService(repository: self.categoryCacheRepository, libraryProvider: self)
     
-    lazy var shelfDataModel = YabrShelfDataModel(service: self.calibreServerService, searchManager: librarySearchManager, modelData: self)
+    lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, modelData: self)
     
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
     
@@ -198,12 +205,16 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         get { bookManager.bookModelSection }
         set { bookManager.bookModelSection = newValue }
     }
+    
+    func getBook(for primaryKey: String) -> CalibreBook? {
+        bookManager.getBook(for: primaryKey)
+    }
 
     init(mock: Bool = false) {
         ModelData.shared = self
         
         // Ensure default configuration is set early to prevent crashes in SwiftUI views using ObservedResults
-        ModelData.RealmSchemaVersion = 138
+        ModelData.RealmSchemaVersion = 139
         let initialConf = Realm.Configuration(
             schemaVersion: ModelData.RealmSchemaVersion,
             migrationBlock: { _, _ in }
@@ -326,6 +337,10 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                 if oldSchemaVersion < 138 {
                     migration.deleteData(forType: "CalibreUnifiedSearchObject")
                     migration.deleteData(forType: "CalibreUnifiedOffsets")
+                }
+                if oldSchemaVersion < 139 {
+                    migration.deleteData(forType: "CalibreUnifiedCategoryObject")
+                    migration.deleteData(forType: "CalibreUnifiedCategoryItemObject")
                 }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
@@ -467,15 +482,6 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                     migration.renameProperty(onType: CalibreBookRealm.className(), from: "id", to: "idInLib")
                 }
                 
-                if oldSchemaVersion < 110 {
-                    migration.enumerateObjects(ofType: CalibreUnifiedCategoryObject.className()) { oldObject, newObject in
-                        newObject?["search"] = ""
-                        if let items = oldObject?["items"] as? RealmSwift.List<DynamicObject> {
-                            newObject?["itemsCount"] = items.count
-                        }
-                    }
-                }
-                
                 if oldSchemaVersion < 125 {
                     migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")
                 }
@@ -581,6 +587,44 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         calibreUpdatedSubject.send(.shelf)
         
         cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
+        
+        migrateLegacyReadPosData()
+    }
+    
+    func migrateLegacyReadPosData() {
+        DispatchQueue.global(qos: .background).async {
+            guard let realm = try? Realm(configuration: self.realmConf) else {
+                return
+            }
+            
+            let bookKeysToMigrate = realm.objects(CalibreBookRealm.self)
+                .filter("readPosData != nil")
+                .compactMap { $0.primaryKey }
+            
+            guard !bookKeysToMigrate.isEmpty else { return }
+            
+            print("migrateLegacyReadPosData: Found \(bookKeysToMigrate.count) legacy reading positions to migrate.")
+            
+            for key in bookKeysToMigrate {
+                guard let freshRealm = try? Realm(configuration: self.realmConf),
+                      let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
+                      let serverUUID = bookRealm.serverUUID,
+                      let libraryName = bookRealm.libraryName
+                else {
+                    continue
+                }
+                
+                if let library = self.library(forServerUUID: serverUUID, libraryName: libraryName) {
+                    bookRealm.migrateReadPos(library: library, repository: self.readingPositionRepository)
+                }
+                
+                try? freshRealm.write {
+                    bookRealm.readPosData = nil
+                }
+            }
+            
+            print("migrateLegacyReadPosData: Completed background migration of legacy reading positions.")
+        }
     }
     
     func importCustomFonts(urls: [URL]) -> [CFArray]? {

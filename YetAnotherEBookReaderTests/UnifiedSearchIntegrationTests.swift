@@ -17,7 +17,7 @@ func debugLog(_ message: String) {
 class UnifiedSearchIntegrationTests: XCTestCase {
     
     var modelData: ModelData!
-    var searchManager: CalibreLibrarySearchManager!
+    var unifiedSearchService: UnifiedSearchService!
     var mockServer: CalibreServer!
     var mockLibrary: CalibreLibrary!
     var cancellables: Set<AnyCancellable>!
@@ -80,7 +80,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         sessionConfig.protocolClasses = [MockURLProtocol.self]
         let mockSession = URLSession(configuration: sessionConfig)
         
-        // Create search manager and pre-populate metadataSessions
+        // Create test services and pre-populate metadataSessions
         let logger = CalibreActivityLogger(realmConf: config)
         let service = CalibreServerService(
             logger: logger,
@@ -98,14 +98,29 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             keyUtility: mockSession
         ]
         
-        searchManager = CalibreLibrarySearchManager(service: service, modelData: modelData)
-        modelData.librarySearchManager = searchManager
+        let cacheRepository = RealmSearchCacheStore(config: config, modelData: modelData)
+        let librarySearchService = LibrarySearchService(service: service, repository: cacheRepository)
+        let unifiedSearchService = UnifiedSearchService(
+            repository: cacheRepository,
+            librarySearchService: librarySearchService,
+            libraryProvider: modelData
+        )
+        
+        modelData.calibreServerService = service
+        modelData.searchCacheRepository = cacheRepository
+        modelData.librarySearchService = librarySearchService
+        modelData.unifiedSearchService = unifiedSearchService
+        modelData.categoryCacheRepository = cacheRepository
+        modelData.libraryCategoryService = LibraryCategoryService(service: service, repository: cacheRepository)
+        modelData.unifiedCategoryService = UnifiedCategoryService(repository: cacheRepository, libraryProvider: modelData)
+        
+        self.unifiedSearchService = unifiedSearchService
         debugLog("setUpWithError finished")
     }
     
     override func tearDownWithError() throws {
         cancellables = nil
-        searchManager = nil
+        unifiedSearchService = nil
         modelData = nil
         mockServer = nil
         mockLibrary = nil
@@ -266,7 +281,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         
         debugLog("subscribing to publisher")
         // Observe search manager publisher
-        searchManager.unifiedSearchService.publisher(for: key)
+        unifiedSearchService.publisher(for: key)
             .sink { result in
                 debugLog("publisher emitted result with \(result.books.count) books")
                 if result.books.count > 0 {

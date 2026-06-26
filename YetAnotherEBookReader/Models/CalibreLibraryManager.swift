@@ -325,7 +325,7 @@ class CalibreLibraryManager: ObservableObject {
                 result.categories.filter { $0.is_category }.forEach { category in
                     Task {
                         do {
-                            _ = try await modelData.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                            _ = try await modelData.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
                         } catch {
                             logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
                         }
@@ -383,7 +383,7 @@ class CalibreLibraryManager: ObservableObject {
                 result.categories.filter { $0.is_category }.forEach { category in
                     Task {
                         do {
-                            _ = try await modelData.librarySearchManager.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
+                            _ = try await modelData.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
                         } catch {
                             logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
                         }

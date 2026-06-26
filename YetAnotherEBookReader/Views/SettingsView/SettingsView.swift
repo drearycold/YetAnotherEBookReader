@@ -10,27 +10,21 @@ import Combine
 
 struct SettingsView: View {
     @EnvironmentObject var modelData: ModelData
+    @StateObject var viewModel: SettingsViewModel
     
-    @State private var selectedServer: String? = nil
-    
-    @State private var addServerActive = false
-    @State private var alertItem: AlertItem?
-
-    @State private var serverList = [CalibreServer]()
-    @State private var serverListDelete: CalibreServer? = nil
-    @State private var updater = 0
-
-    @State private var removeServerCancellable: AnyCancellable?
+    init(viewModel: SettingsViewModel) {
+        _viewModel = StateObject(wrappedValue: viewModel)
+    }
     
     var body: some View {
         Form {
             Section(header: HStack {
                 Text("Servers")
                 Spacer()
-                if let serverListDelete = serverListDelete {
+                if let serverListDelete = viewModel.serverListDelete {
                     Text("Removing \(serverListDelete.name)")
                     ProgressView().progressViewStyle(CircularProgressViewStyle())
-                } else if modelData.calibreServerInfoStaging.allSatisfy{$1.probing == false} == false {
+                } else if viewModel.isRefreshing {
                     Text("Refreshing")
                     ProgressView().progressViewStyle(CircularProgressViewStyle())
                 } else {
@@ -46,18 +40,19 @@ struct SettingsView: View {
                                 .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
                             },
                             set: { _ in
-                                updateServerList()
+                                viewModel.updateServerList()
                             }
                         ),
-                        isActive: $addServerActive
+                        isActive: $viewModel.addServerActive
                     )
                     .navigationTitle("Add Server"),
-                    isActive: $addServerActive
+                    isActive: $viewModel.addServerActive
                 ) {
                     Text("Connect to a new server")
                 }
                 
-                ForEach(serverList, id: \.self) { server in
+                ForEach(viewModel.serverList, id: \.self) { server in
+                    let state = viewModel.rowState(for: server)
                     NavigationLink (
                         destination: ServerDetailView(
                             server: Binding<CalibreServer>(
@@ -65,32 +60,31 @@ struct SettingsView: View {
                                     server
                                 },
                                 set: { [server] newServer in
-                                    updateServer(oldServer: server, newServer: newServer)
+                                    viewModel.updateServer(oldServer: server, newServer: newServer)
                                 }
                             )
                         ),
                         tag: server.id,
-                        selection: $selectedServer
+                        selection: $viewModel.selectedServer
                     ) {
-                        serverRowBuilder(server: server)
+                        serverRowBuilder(server: server, state: state)
                     }
                     .isDetailLink(false)
                 }
                 .onDelete(perform: { indexSet in
-                    guard let index = indexSet.first, index < serverList.count else { return }
-                    serverListDelete = serverList.remove(at: index)
-                    alertItem = AlertItem(id: "DelServer")
+                    guard let index = indexSet.first else { return }
+                    viewModel.stageServerDeletion(at: index)
                 })
-                .alert(item: $alertItem) { item in
+                .alert(item: $viewModel.alertItem) { item in
                     if item.id == "DelServer" {
                         return Alert(
                             title: Text("Remove Server"),
                             message: Text("Will Remove Cached Libraries and Books from Reader, Everything on Server will Stay Intact"),
                             primaryButton: .destructive(Text("Confirm")) {
-                                self.deleteServer()
+                                viewModel.confirmDeleteServer()
                             },
-                            secondaryButton: .cancel{
-                                serverListDelete = nil
+                            secondaryButton: .cancel {
+                                viewModel.cancelServerDeletion()
                             }
                         )
                     }
@@ -99,7 +93,7 @@ struct SettingsView: View {
                     })
                 }
             }
-            .disabled(serverListDelete != nil)
+            .disabled(viewModel.serverListDelete != nil)
             
             Section(header: Text("More")) {
                 NavigationLink("Readers Options", destination: ReaderOptionsView())
@@ -127,39 +121,39 @@ struct SettingsView: View {
         .toolbar {
             ToolbarItem {
                 Button(action:{
-                    modelData.probeServersReachability(with: [], updateLibrary: true)
+                    viewModel.refreshServers()
                 }) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                 }
             }
         }
         .onAppear() {
-            updateServerList()
+            viewModel.updateServerList()
         }
-        .onChange(of: serverListDelete, perform: { value in
-            updateServerList()
+        .onChange(of: viewModel.serverListDelete, perform: { value in
+            viewModel.updateServerList()
         })
     }
     
     @ViewBuilder
-    private func serverRowBuilder(server: CalibreServer) -> some View {
+    private func serverRowBuilder(server: CalibreServer, state: SettingsViewModel.ServerRowState) -> some View {
         VStack(alignment: .leading) {
             HStack {
                 Text("\(server.name)")
                 Spacer()
-                if modelData.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0 > 0 {
+                if state.hasDSReaderHelper {
                     Image("logo_1024")
                         .resizable()
                         .frame(width: 16, height: 16, alignment: .center)
                 }
                 
-                if let reachable = modelData.isServerReachable(server: server, isPublic: false) {
+                if let reachable = state.isLocalReachable {
                     Image(
                         systemName: reachable ? "flag.circle" : "flag.slash.circle"
                     ).foregroundColor(reachable ? .green : .red)
                 }
                 
-                if let reachable = modelData.isServerReachable(server: server, isPublic: true) {
+                if let reachable = state.isPublicReachable {
                     Image(
                         systemName: reachable ? "flag" : "flag.slash"
                     ).foregroundColor(reachable ? .green : .red)
@@ -169,172 +163,27 @@ struct SettingsView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     if server.isLocal == false {
-                        Text("\(modelData.calibreLibraries.filter{$0.value.server.id == server.id}.count) libraries")
-                    } else {
-                        
+                        Text("\(state.libraryCount) libraries")
                     }
                     
                     HStack(spacing: 4) {
                         Text("Location:")
-                        if server.isLocal == false {
-                            Text(server.username.isEmpty ? "\(server.baseUrl)" : "\(server.username) @ \(server.baseUrl)")
-                        } else {
-                            Text("On Device")
-                        }
+                        Text(state.locationString)
                     }
                 }
                 
                 Spacer()
                 
-                if modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count > 0 {
-                    Text("\(modelData.librarySyncStatus.filter { $0.value.isSync && modelData.calibreLibraries[$0.key]?.server.id == server.id }.count) processing")
-                } else if let serverInfo = modelData.getServerInfo(server: server) {
-                    if serverInfo.reachable {
-                        Text("Server has \(serverInfo.libraryMap.count) libraries")
-                    } else {
-                        Text("\(serverInfo.errorMsg)")
-                            .foregroundColor(.red)
-                    }
+                if state.processingCount > 0 {
+                    Text("\(state.processingCount) processing")
+                } else if let serverInfoText = state.serverInfoText {
+                    Text(serverInfoText)
+                        .foregroundColor(state.isServerError ? .red : .primary)
                 }
             }
             .font(.caption)
         }
     }
-    
-    private func updateServerList() {
-        serverList = modelData.calibreServers
-            .filter { $1.isLocal == false && $1.id != serverListDelete?.id && $1.removed == false }
-            .map { $0.value }
-        sortServerList()
-    }
-    
-    private func sortServerList() {
-        serverList.sort {
-            if $0.isLocal {
-                return false
-            }
-            if $1.isLocal {
-                return true
-            }
-            if $0.name != $1.name {
-                return $0.name < $1.name
-            }
-            if $0.baseUrl != $1.baseUrl {
-                return $0.baseUrl < $1.baseUrl
-            }
-            return $0.username < $1.username
-        }
-    }
-    
-    //MARK: Model Funtionalities
-    
-    private func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
-        if oldServer.id == newServer.id {
-            //minor changes only
-            modelData.calibreServers[newServer.id] = newServer
-            try? modelData.updateServerRealm(server: newServer)
-            if let index = serverList.firstIndex(where: {$0.id == newServer.id}) {
-                serverList[index] = newServer
-            }
-
-            for libraryId in modelData.calibreLibraries.filter({ $0.value.server.id == newServer.id }).map({ $0.key }) {
-                modelData.calibreLibraries[libraryId]?.server = newServer
-            }
-            
-//            modelData.calibreServerUpdatingStatus = "Updated"
-            return
-        }
-        
-        serverListDelete = oldServer        //staging
-        print("\(#function) staging finished \(oldServer.id) -> \(newServer.id)")
-
-//        modelData.calibreServerUpdatingStatus = "Updating..."
-        
-        let newServerLibraries = modelData.calibreLibraries.filter { $1.server.id == oldServer.id }.map { id, library -> CalibreLibrary in
-            var newLibrary = library
-            newLibrary.server = newServer
-            if var syncStat = modelData.librarySyncStatus[library.id] {
-                syncStat.library = newLibrary
-                modelData.librarySyncStatus[newLibrary.id] = syncStat
-            }
-            return newLibrary
-        }
-        
-        modelData.addServer(server: newServer, libraries: newServerLibraries)
-        
-        selectedServer = nil
-        print("\(#function) addServer finished")
-        
-        DispatchQueue(label: "data").async {
-//            let realm = try! Realm(configuration: modelData.realmConf)
-
-            //update books
-//            let booksCached = realm.objects(CalibreBookRealm.self)
-//                .filter("serverUrl == %@ AND serverUsername == %@", oldServer.baseUrl, oldServer.username)
-//            let booksCount = booksCached.count
-//            var booksProgress = 0
-//            do {
-//                var batch: [CalibreBookRealm] = booksCached.prefix(256).map { $0 }
-//                while batch.count > 0 {
-//                    booksProgress += batch.count
-//                    print("\(#function) update books \(batch.count) / \(booksProgress) / \(booksCount)")
-//                    DispatchQueue.main.async {
-//                        modelData.calibreServerUpdatingStatus = "Updating... \(booksProgress)/\(booksCount)"
-//                    }
-//
-//                    try realm.write {
-//                        batch.forEach { oldBookRealm in
-//                            let newBookRealm = CalibreBookRealm(value: oldBookRealm)
-//                            newBookRealm.serverUrl = newServer.baseUrl
-//                            newBookRealm.serverUsername = newServer.username
-//                            newBookRealm.updatePrimaryKey()
-//                            realm.delete(oldBookRealm)
-//                            realm.add(newBookRealm, update: .all)
-//                        }
-//                    }
-//                    batch = booksCached.prefix(256).map { $0 }
-//                }
-//            } catch {
-//                print("\(#function) update books error=\(error)")
-//            }
-//            print("\(#function) update books finished")
-
-//            DispatchQueue.main.async {
-//                modelData.calibreServerUpdatingStatus = "Cleanup up..."
-//            }
-//            let _ = modelData.removeServer(serverId: oldServer.id, realm: realm)
-            
-            print("\(#function) removeServer finished")
-
-            DispatchQueue.main.async {
-                //reload shelf
-                modelData.realm.refresh()
-
-                modelData.booksInShelf.removeAll(keepingCapacity: true)
-                modelData.populateBookShelf()
-                
-//                modelData.calibreServerUpdatingStatus = "Finished"
-                
-                serverListDelete = nil      //will trigger updateServerList
-
-                modelData.probeServersReachability(with: [newServer.id])
-            }
-        }
-    }
-    
-    private func deleteServer() {
-        guard let server = serverListDelete else { return }
-        
-        modelData.calibreServers[server.id]?.removed = true
-        if let server = modelData.calibreServers[server.id] {
-            try? modelData.updateServerRealm(server: server)
-        }
-        Task {
-            await self.modelData.removeServer(server: server)
-        }
-
-        serverListDelete = nil    }
-    
 }
 
 struct SettingsView_Previews: PreviewProvider {
@@ -342,7 +191,7 @@ struct SettingsView_Previews: PreviewProvider {
 
     static var previews: some View {
         NavigationView {
-            SettingsView()
+            SettingsView(viewModel: SettingsViewModel(modelData: modelData))
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .environmentObject(modelData)
