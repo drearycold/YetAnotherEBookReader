@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import RealmSwift
 import SwiftUI
 
 @MainActor
@@ -130,32 +129,30 @@ class ServerViewModel: ObservableObject {
     
     private func processUrlInputs(server: CalibreServer?) {
         if calibreServerUrl != server?.baseUrl {
-            if calibreServerUrl.contains("://") == false {
-                calibreServerUrl = "http://" + calibreServerUrl
-            }
-            if var components = URLComponents(string: calibreServerUrl) {
-                if components.scheme == nil {
-                    components.scheme = "http://"
-                }
-                if components.path == "" {
-                    components.path = "/"
-                }
-                if let s = components.string {
-                    calibreServerUrl = s
-                }
-            }
+            calibreServerUrl = normalizedServerURLString(calibreServerUrl)
         }
-        if calibreServerUrlPublic != server?.publicUrl, var components = URLComponents(string: calibreServerUrlPublic) {
-            if components.scheme == nil {
-                components.scheme = "http://"
-            }
-            if components.path == "" {
-                components.path = "/"
-            }
-            if let s = components.string {
-                calibreServerUrlPublic = s
-            }
+        if calibreServerUrlPublic != server?.publicUrl {
+            calibreServerUrlPublic = normalizedServerURLString(calibreServerUrlPublic)
         }
+    }
+
+    private func normalizedServerURLString(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return "" }
+
+        let prefixed = trimmed.contains("://") ? trimmed : "http://" + trimmed
+        guard var components = URLComponents(string: prefixed) else {
+            return prefixed
+        }
+
+        if components.scheme == nil {
+            components.scheme = "http"
+        }
+        if components.path.isEmpty {
+            components.path = "/"
+        }
+
+        return components.string ?? prefixed
     }
     
     private func addServerConfirmButtonAction(completion: @escaping () -> Void) {
@@ -215,8 +212,8 @@ class ServerViewModel: ObservableObject {
                 serverId: newServer.id,
                 dsreaderHelper: CalibreServerDSReaderHelper(
                     port: (url.port ?? -1) + 1
-                ),
-                realm: modelData.realm)
+                )
+            )
         }
         
         modelData.probeServersReachability(with: [newServer.id], updateLibrary: true, autoUpdateOnly: true)
@@ -433,7 +430,7 @@ class ServerViewModel: ObservableObject {
         dsreaderHelperServer.configuration = configuration
         dsreaderHelperServer.configurationData = configurationData
         
-        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer, realm: modelData.realm)
+        modelData.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: dsreaderHelperServer)
         helperStatus = nil
     }
 }

@@ -1,32 +1,42 @@
 import SwiftUI
-import RealmSwift
 import ReadiumShared
 import ReadiumNavigator
 
 class YabrReaderSettingsViewModel: ObservableObject {
     @Published var epubEditor: EPUBPreferencesEditor?
     @Published var pdfEditor: PDFPreferencesEditor?
+    @Published var preferences: ReadiumPreferenceValue
     
-    let prefs: ReadiumPreferenceRealm
     let publication: Publication
-    let navigator: Navigator
+    let navigator: Navigator?
+    private let onPreferencesChanged: (ReadiumPreferenceValue) -> Void
     
-    var onChanged: (() -> Void)?
-    
-    init(prefs: ReadiumPreferenceRealm, publication: Publication, navigator: Navigator) {
-        self.prefs = prefs
+    init(
+        preferences: ReadiumPreferenceValue,
+        publication: Publication,
+        navigator: Navigator?,
+        onPreferencesChanged: @escaping (ReadiumPreferenceValue) -> Void = { _ in },
+        epubEditor: EPUBPreferencesEditor? = nil,
+        pdfEditor: PDFPreferencesEditor? = nil
+    ) {
+        self.preferences = preferences
         self.publication = publication
         self.navigator = navigator
-        
-        if let epub = navigator as? EPUBNavigatorViewController {
+        self.onPreferencesChanged = onPreferencesChanged
+
+        if let epubEditor = epubEditor {
+            self.epubEditor = epubEditor
+        } else if navigator is EPUBNavigatorViewController {
             self.epubEditor = EPUBPreferencesEditor(
-                initialPreferences: prefs.toEPUBPreferences(),
+                initialPreferences: preferences.toEPUBPreferences(),
                 metadata: publication.metadata,
                 defaults: EPUBDefaults()
             )
-        } else if let pdf = navigator as? PDFNavigatorViewController {
+        } else if let pdfEditor = pdfEditor {
+            self.pdfEditor = pdfEditor
+        } else if navigator is PDFNavigatorViewController {
             self.pdfEditor = PDFPreferencesEditor(
-                initialPreferences: prefs.toPDFPreferences(),
+                initialPreferences: preferences.toPDFPreferences(),
                 metadata: publication.metadata,
                 defaults: PDFDefaults()
             )
@@ -34,47 +44,29 @@ class YabrReaderSettingsViewModel: ObservableObject {
     }
     
     func commit() {
-        let updateAction = { [weak self] in
-            guard let self = self else { return }
-            if let epubEditor = self.epubEditor {
-                self.prefs.update(from: epubEditor.preferences)
-            } else if let pdfEditor = self.pdfEditor {
-                self.prefs.update(from: pdfEditor.preferences)
-            }
+        var updatedPreferences = preferences
+        if let epubEditor = self.epubEditor {
+            updatedPreferences.update(from: epubEditor.preferences)
+        } else if let pdfEditor = self.pdfEditor {
+            updatedPreferences.update(from: pdfEditor.preferences)
         }
+        preferences = updatedPreferences
         
-        if let realm = prefs.realm {
-            try? realm.write { updateAction() }
-        } else {
-            updateAction()
-        }
-        
-        // Decouple navigator UI update from Realm write lock
         if let epubEditor = epubEditor {
             (navigator as? EPUBNavigatorViewController)?.submitPreferences(epubEditor.preferences)
         } else if let pdfEditor = pdfEditor {
             (navigator as? PDFNavigatorViewController)?.submitPreferences(pdfEditor.preferences)
         }
         
-        onChanged?()
-        objectWillChange.send()
+        onPreferencesChanged(preferences)
     }
     
     func updateVerticalMargin(_ value: Double) {
-        let updateAction = { [weak self] in
-            self?.prefs.verticalMargin = value
-        }
-        
-        if let realm = prefs.realm {
-            try? realm.write { updateAction() }
-        } else {
-            updateAction()
-        }
+        preferences.verticalMargin = value
         
         (navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: value, left: 0, bottom: value, right: 0)
         
-        onChanged?()
-        objectWillChange.send()
+        onPreferencesChanged(preferences)
     }
 }
 
@@ -118,15 +110,9 @@ struct YabrReaderSettingsView: View {
             Form {
                 Section(header: Text("Appearance")) {
                     Picker("Theme", selection: Binding(
-                        get: { model.prefs.themeMode },
+                        get: { model.preferences.themeMode },
                         set: { value in
-                            if let realm = model.prefs.realm {
-                                try? realm.write {
-                                    model.prefs.themeMode = value
-                                }
-                            } else {
-                                model.prefs.themeMode = value
-                            }
+                            model.preferences.themeMode = value
                             
                             // Sync with Readium editor if available
                             if let editor = model.epubEditor {
@@ -156,15 +142,9 @@ struct YabrReaderSettingsView: View {
                     }
                     
                     Toggle("Scroll Mode", isOn: Binding(
-                        get: { model.prefs.scroll },
+                        get: { model.preferences.scroll },
                         set: { value in
-                            if let realm = model.prefs.realm {
-                                try? realm.write {
-                                    model.prefs.scroll = value
-                                }
-                            } else {
-                                model.prefs.scroll = value
-                            }
+                            model.preferences.scroll = value
                             
                             // Sync with Readium editor
                             if let editor = model.epubEditor {
@@ -177,7 +157,7 @@ struct YabrReaderSettingsView: View {
                             if value {
                                 (model.navigator as? UIViewController)?.additionalSafeAreaInsets = .zero
                             } else {
-                                let margin = model.prefs.verticalMargin
+                                let margin = model.preferences.verticalMargin
                                 (model.navigator as? UIViewController)?.additionalSafeAreaInsets = UIEdgeInsets(top: margin, left: 0, bottom: margin, right: 0)
                             }
                             
@@ -186,29 +166,17 @@ struct YabrReaderSettingsView: View {
                     ))
                     
                     Toggle("Volume Key Paging", isOn: Binding(
-                        get: { model.prefs.volumeKeyPaging },
+                        get: { model.preferences.volumeKeyPaging },
                         set: { value in
-                            if let realm = model.prefs.realm {
-                                try? realm.write {
-                                    model.prefs.volumeKeyPaging = value
-                                }
-                            } else {
-                                model.prefs.volumeKeyPaging = value
-                            }
+                            model.preferences.volumeKeyPaging = value
                             model.commit()
                         }
                     ))
                     
                     Picker("Progression", selection: Binding(
-                        get: { model.prefs.readingProgression },
+                        get: { model.preferences.readingProgression },
                         set: { value in
-                            if let realm = model.prefs.realm {
-                                try? realm.write {
-                                    model.prefs.readingProgression = value
-                                }
-                            } else {
-                                model.prefs.readingProgression = value
-                            }
+                            model.preferences.readingProgression = value
                             
                             let direction: ReadiumNavigator.ReadingProgression = (value == 1) ? .rtl : .ltr
                             if let editor = model.epubEditor {
@@ -432,7 +400,7 @@ struct YabrReaderSettingsView: View {
                             }
                         }
                     }
-                } else if !model.prefs.scroll {
+                } else if !model.preferences.scroll {
                     // Fallback for Fixed-layout formats without a specialized editor (like CBZ/Images)
                     Section(header: Text("Layout")) {
                         verticalMarginStepper()
@@ -446,12 +414,12 @@ struct YabrReaderSettingsView: View {
     }
     
     @ViewBuilder private func verticalMarginStepper() -> some View {
-        if !model.prefs.scroll {
+        if !model.preferences.scroll {
             Stepper(value: Binding(
-                get: { model.prefs.verticalMargin },
+                get: { model.preferences.verticalMargin },
                 set: { model.updateVerticalMargin($0) }
             ), in: 0.0...100.0, step: 5.0) {
-                Text("Vertical Margin: \(Int(model.prefs.verticalMargin))pt")
+                Text("Vertical Margin: \(Int(model.preferences.verticalMargin))pt")
             }
         }
     }

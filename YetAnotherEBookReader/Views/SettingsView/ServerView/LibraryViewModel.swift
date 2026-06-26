@@ -7,11 +7,11 @@
 
 import Foundation
 import Combine
-import RealmSwift
 
 class LibraryViewModel: ObservableObject {
     let modelData: ModelData
     let library: CalibreLibrary
+    private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var discoverable: Bool = false
     @Published var autoUpdate: Bool = false
@@ -33,46 +33,28 @@ class LibraryViewModel: ObservableObject {
     @Published var deletedBookIds: [Int32] = []
     
     private var cancellables = Set<AnyCancellable>()
-    private var libraryRealmToken: NotificationToken?
     
-    init(modelData: ModelData, library: CalibreLibrary) {
+    init(modelData: ModelData, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
         self.modelData = modelData
         self.library = library
+        self.libraryRepository = libraryRepository ?? modelData.libraryRepository
         
         setupBindings()
     }
     
-    deinit {
-        libraryRealmToken?.invalidate()
-    }
-    
     private func setupBindings() {
-        // Fetch initially
-        if let realm = try? Realm(configuration: modelData.realmConf),
-           let realmLib = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) {
-            self.discoverable = realmLib.discoverable
-            self.autoUpdate = realmLib.autoUpdate
-            
-            // Observe changes to the Realm object
-            libraryRealmToken = realmLib.observe { [weak self] change in
-                guard let self = self else { return }
-                switch change {
-                case .change(let object, let properties):
-                    for property in properties {
-                        if property.name == "discoverable", let val = property.newValue as? Bool {
-                            DispatchQueue.main.async { self.discoverable = val }
-                        }
-                        if property.name == "autoUpdate", let val = property.newValue as? Bool {
-                            DispatchQueue.main.async { self.autoUpdate = val }
-                        }
-                    }
-                case .error(let error):
-                    print("Error observing CalibreLibraryRealm: \(error)")
-                case .deleted:
-                    break
-                }
-            }
+        if let persistedLibrary = libraryRepository.getLibrary(id: library.id) {
+            self.discoverable = persistedLibrary.discoverable
+            self.autoUpdate = persistedLibrary.autoUpdate
         }
+
+        libraryRepository.observeLibrary(id: library.id)
+            .sink { [weak self] observedLibrary in
+                guard let self = self, let observedLibrary = observedLibrary else { return }
+                self.discoverable = observedLibrary.discoverable
+                self.autoUpdate = observedLibrary.autoUpdate
+            }
+            .store(in: &cancellables)
         
         // Listen to UI changes and save to Realm
         $discoverable
@@ -80,7 +62,11 @@ class LibraryViewModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] newValue in
                 guard let self = self else { return }
-                self.updateRealmField { $0.discoverable = newValue }
+                try? self.libraryRepository.updateLibraryFlags(
+                    id: self.library.id,
+                    discoverable: newValue,
+                    autoUpdate: self.autoUpdate
+                )
             }
             .store(in: &cancellables)
             
@@ -89,7 +75,11 @@ class LibraryViewModel: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] newValue in
                 guard let self = self else { return }
-                self.updateRealmField { $0.autoUpdate = newValue }
+                try? self.libraryRepository.updateLibraryFlags(
+                    id: self.library.id,
+                    discoverable: self.discoverable,
+                    autoUpdate: newValue
+                )
             }
             .store(in: &cancellables)
             
@@ -116,15 +106,6 @@ class LibraryViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    private func updateRealmField(writeBlock: @escaping (CalibreLibraryRealm) -> Void) {
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        if let realmLib = realm.object(ofType: CalibreLibraryRealm.self, forPrimaryKey: library.id) {
-            try? realm.write {
-                writeBlock(realmLib)
-            }
-        }
-    }
-    
     private func resolveBookTitles() {
         let serverUUID = library.server.uuid.uuidString
         let libraryName = library.name
@@ -147,17 +128,13 @@ class LibraryViewModel: ObservableObject {
         }
         self.deletedBookTitles = tempDeleted
     }
-    
+
     #if DEBUG
     func resetBooks() {
-        guard let realm = try? Realm(configuration: modelData.realmConf) else { return }
-        try? realm.write {
-            realm.objects(CalibreBookRealm.self).forEach {
-                $0.lastModified = .init(timeIntervalSince1970: 0)
-                $0.lastSynced = .init(timeIntervalSince1970: 0)
-                $0.title = "__RESET__"
-            }
-        }
+        modelData.bookRepository.resetBooks(
+            serverUUID: library.server.uuid.uuidString,
+            libraryName: library.name
+        )
     }
     #endif
 }

@@ -66,4 +66,18 @@ import Combine
         XCTAssertNotNil(viewModel.urlToOpen)
         XCTAssertTrue(viewModel.urlToOpen?.absoluteString.contains("destConflict") == true)
     }
+
+    func testShowWelcomeIsFalseWhenDatabaseIsNotReady() throws {
+        mockModelData.databaseService.realm = nil
+        mockModelData.booksInShelf.removeAll()
+
+        XCTAssertFalse(viewModel.showWelcome)
+    }
+
+    func testShowWelcomeIsTrueWhenDatabaseIsReadyAndShelfIsEmpty() throws {
+        XCTAssertTrue(mockModelData.isDatabaseReady)
+        mockModelData.booksInShelf.removeAll()
+
+        XCTAssertTrue(viewModel.showWelcome)
+    }
 }

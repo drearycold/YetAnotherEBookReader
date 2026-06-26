@@ -42,11 +42,13 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
         clearReadingPositions()
         clearBookmarks()
+        clearHighlights()
     }
 
     override func tearDownWithError() throws {
         clearReadingPositions()
         clearBookmarks()
+        clearHighlights()
         ModelData.shared = originalModelDataShared
         modelData = nil
         book = nil
@@ -494,15 +496,21 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         }
     }
 
-    func testDefaultProfileSeededAndContainsLegacyDefaults() {
-        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderProfileTests")
+    private func clearHighlights() {
+        guard let realm = modelData?.realm else { return }
+        try? realm.write {
+            realm.delete(realm.objects(BookHighlightRealm.self).filter("bookId == %@", book?.bookPrefId ?? ""))
+        }
+    }
 
+    func testDefaultProfileSeededAndContainsLegacyDefaults() {
         let folioReader = FolioReader()
+        let repository = makeProfileRepository(id: "FolioReaderProfileTests")
         let provider = FolioReaderDelegatePreferenceProvider(
             folioReader,
             delegate: nil,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // Assert listProfile returns ["Default"]
@@ -534,15 +542,14 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     func testCustomProfileSaveLoadListAndRemove() {
-        let isolatedConfig = Realm.Configuration(inMemoryIdentifier: "FolioReaderCustomProfileTests")
-
         let folioReader = FolioReader()
         let mockDelegate = MockReaderEngineDelegate()
+        let repository = makeProfileRepository(id: "FolioReaderCustomProfileTests")
         let provider = FolioReaderDelegatePreferenceProvider(
             folioReader,
             delegate: mockDelegate,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // 1. Initially lists only "Default"
@@ -570,7 +577,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             folioReader,
             delegate: mockDelegate,
             bookId: book.bookPrefId,
-            profileRealmConfig: isolatedConfig
+            profileRepository: repository
         )
 
         // Before load: has Default profile (e.g. nightMode = false)
@@ -597,6 +604,135 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         provider2.preference(removeProfile: "Default")
         // listProfile should recreate Default via ensureDefaultProfile()
         XCTAssertEqual(provider2.preference(listProfile: nil), ["Default"])
+    }
+
+    func testProviderLoadsDefaultProfileThroughRepositoryOnInit() {
+        let folioReader = FolioReader()
+        let repository = MockFolioReaderProfileRepository()
+        repository.loadProfileReturn = FolioReaderProfileValue(
+            nightMode: true,
+            themeMode: 2,
+            currentFont: "Avenir",
+            currentFontSize: "24px",
+            currentFontWeight: "700",
+            currentScrollDirection: 1,
+            currentMarginTop: 9,
+            currentMarginBottom: 10,
+            currentMarginLeft: 11,
+            currentMarginRight: 12,
+            currentVMarginLinked: false,
+            currentHMarginLinked: false,
+            currentLetterSpacing: 3,
+            currentLineHeight: 4,
+            currentTextIndent: 5,
+            doWrapPara: true,
+            doClearClass: false
+        )
+
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: repository
+        )
+
+        XCTAssertTrue(repository.ensureDefaultProfileCalled)
+        XCTAssertEqual(repository.loadProfileNameParam, "Default")
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: false), true)
+        XCTAssertEqual(provider.preference(stringFor: "currentFont", default: ""), "Avenir")
+    }
+
+    func testProviderSaveAndRemoveDelegateToRepository() {
+        let folioReader = FolioReader()
+        let repository = MockFolioReaderProfileRepository()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: repository
+        )
+
+        provider.preference(setBool: true, for: "nightMode")
+        provider.preference(setString: "Avenir", for: "currentFont")
+        provider.preference(saveProfile: "NightAvenir")
+        provider.preference(removeProfile: "NightAvenir")
+
+        XCTAssertTrue(repository.saveProfileCalled)
+        XCTAssertEqual(repository.saveProfileNameParam, "NightAvenir")
+        XCTAssertEqual(repository.saveProfileParam?.nightMode, true)
+        XCTAssertEqual(repository.saveProfileParam?.currentFont, "Avenir")
+        XCTAssertTrue(repository.removeProfileCalled)
+        XCTAssertEqual(repository.removeProfileNameParam, "NightAvenir")
+    }
+
+    @MainActor
+    func testConcurrentHighlightWriting() throws {
+        let repository = modelData.annotationRepository
+        let group = DispatchGroup()
+        
+        for i in 1...20 {
+            group.enter()
+            DispatchQueue.global().async {
+                let highlight = BookHighlight(
+                    id: "highlight-\(i)",
+                    bookId: self.book.bookPrefId,
+                    readerName: "YabrEPUB",
+                    page: 1,
+                    startOffset: 0,
+                    endOffset: 10,
+                    date: Date(),
+                    type: 0,
+                    note: nil,
+                    tocFamilyTitles: [],
+                    content: "Text \(i)",
+                    contentPost: "",
+                    contentPre: "",
+                    cfiStart: "epubcfi(/6/4[chap-2]!/4/2/10/1:\(i))",
+                    cfiEnd: nil,
+                    spineName: nil,
+                    ranges: nil,
+                    removed: false
+                )
+                repository.saveHighlight(highlight)
+                group.leave()
+            }
+        }
+        
+        let result = group.wait(timeout: .now() + 5.0)
+        XCTAssertEqual(result, .success)
+        
+        modelData.refreshDatabase()
+        
+        let retrieved = repository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false)
+        XCTAssertEqual(Set(retrieved.map(\.id)).count, 20)
+        XCTAssertEqual(retrieved.filter { $0.id.hasPrefix("highlight-") }.count, 20)
+    }
+
+    func testLargeAmountOfBookmarks() throws {
+        let provider = FolioReaderYabrBookmarkProvider(book: book, readerInfo: readerInfo)
+        
+        for i in 1...100 {
+            let folioBookmark = makeBookmark(
+                bookId: folioReaderBookId,
+                page: i,
+                pos: "epubcfi(/6/4[chap-2]!/4/2/10/1:\(i))"
+            )
+            provider.folioReaderBookmark(FolioReader(), added: folioBookmark) { _ in }
+        }
+        
+        let bookmarks = provider.folioReaderBookmark(FolioReader(), allByBookId: folioReaderBookId, andPage: nil)
+        XCTAssertEqual(bookmarks.count, 100)
+    }
+
+
+    private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
+        let config = Realm.Configuration(
+            inMemoryIdentifier: id,
+            schemaVersion: ModelData.RealmSchemaVersion,
+            migrationBlock: { _, _ in },
+            objectTypes: [FolioReaderPreferenceRealm.self]
+        )
+        return RealmFolioReaderProfileRepository(realmConfiguration: config)
     }
 }
 

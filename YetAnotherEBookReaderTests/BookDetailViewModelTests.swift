@@ -1,8 +1,10 @@
 import XCTest
 import SwiftUI
+import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+@MainActor
 class BookDetailViewModelTests: XCTestCase {
     
     var viewModel: BookDetailViewModel!
@@ -11,17 +13,46 @@ class BookDetailViewModelTests: XCTestCase {
     var mockCalibreBook: CalibreBook!
     
     var originalModelDataShared: ModelData?
+    var cancellables = Set<AnyCancellable>()
     
     override func setUpWithError() throws {
         originalModelDataShared = ModelData.shared
         mockModelData = ModelData(mock: true)
         ModelData.shared = mockModelData
         viewModel = BookDetailViewModel(modelData: mockModelData)
-        
-        guard let library = mockModelData.calibreLibraries.first?.value else {
-            XCTFail("No mock library found in mockModelData")
-            return
-        }
+
+        let server = CalibreServer(
+            uuid: UUID(),
+            name: "Book Detail Test Server",
+            baseUrl: "http://localhost",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
+        mockModelData.addServer(server: server, libraries: [library])
+
+        let probeRequest = CalibreProbeServerRequest(
+            server: server,
+            isPublic: false,
+            updateLibrary: false,
+            autoUpdateOnly: false,
+            incremental: false
+        )
+        let serverInfo = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: "http://localhost")!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: library.id,
+            libraryMap: [library.id: library.name],
+            request: probeRequest
+        )
+        mockModelData.calibreServerInfoStaging = [server.uuid.uuidString: serverInfo]
         
         mockBookRealm = CalibreBookRealm()
         mockBookRealm.serverUUID = library.server.uuid.uuidString
@@ -56,6 +87,21 @@ class BookDetailViewModelTests: XCTestCase {
         mockModelData = nil
         mockBookRealm = nil
         mockCalibreBook = nil
+        cancellables.removeAll()
+    }
+
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 3_000_000_000,
+        pollNanoseconds: UInt64 = 100_000_000,
+        condition: @escaping @MainActor () -> Bool
+    ) async {
+        let deadline = Date().timeIntervalSince1970 + (Double(timeoutNanoseconds) / 1_000_000_000)
+        while Date().timeIntervalSince1970 < deadline {
+            if await condition() {
+                return
+            }
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
     }
     
     private func clearReadingPositions() {
@@ -77,6 +123,27 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertNotNil(viewModel.listVM)
         XCTAssertEqual(viewModel.listVM?.book.id, 123)
         XCTAssertEqual(viewModel.listVM?.book.title, "Test Book")
+    }
+
+    func testSetupObservesBookValueTypeUpdates() throws {
+        let expectation = expectation(description: "book publisher update propagates to view model")
+        viewModel.$calibreBook
+            .compactMap { $0?.title }
+            .dropFirst()
+            .sink { title in
+                if title == "Updated Book" {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        try mockModelData.realm.write {
+            mockBookRealm.title = "Updated Book"
+        }
+
+        wait(for: [expectation], timeout: 2.0)
+        XCTAssertEqual(viewModel.calibreBook?.title, "Updated Book")
+        XCTAssertEqual(viewModel.listVM?.book.title, "Updated Book")
     }
     
     func testReadBookWhenNotInShelf() throws {
@@ -225,7 +292,7 @@ class BookDetailViewModelTests: XCTestCase {
         let helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         
-        guard let library = mockModelData.calibreLibraries.first?.value else { return }
+        guard let library = mockCalibreBook?.library else { return }
         
         try! mockModelData.realm.write {
             if let serverRealm = mockModelData.realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
@@ -426,6 +493,140 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.getFormatStatusText(formatInfo: formatInfo), "Server has update")
         XCTAssertEqual(viewModel.getFormatStatusIcon(formatInfo: formatInfo), "hand.thumbsdown")
     }
+
+    func testDownloadInteraction() throws {
+        var book = mockCalibreBook!
+        book.formats = ["EPUB": FormatInfo(selected: nil, filename: "book.epub", serverSize: 1024, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)]
+        
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+        viewModel.cacheFormat(book: book, format: .EPUB)
+        
+        viewModel.cancelDownload(book: book, format: .EPUB)
+        XCTAssertFalse(viewModel.isFormatDownloading(bookId: book.id, format: .EPUB))
+    }
+
+    func testPreviewSelection() async throws {
+        var book = mockCalibreBook!
+        book.formats = ["EPUB": FormatInfo(selected: nil, filename: "book.epub", serverSize: 1024, serverMTime: Date(), cached: true, cacheSize: 1024, cacheMTime: Date(), manifest: nil)]
+        
+        guard let savedURL = getSavedUrl(book: book, format: .EPUB) else {
+            return XCTFail("Unable to get saved URL")
+        }
+        
+        let fileManager = FileManager.default
+        try? fileManager.createDirectory(at: savedURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        fileManager.createFile(atPath: savedURL.path, contents: Data("mock epubs".utf8))
+        defer {
+            try? fileManager.removeItem(at: savedURL)
+        }
+        
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        
+        let calibreServerService = mockModelData.calibreServerService
+        let library = book.library
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
+                calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let manifestJson = "{\"toc\": {\"children\": [{\"title\": \"Intro\"}]}}"
+            return (response, manifestJson.data(using: .utf8)!)
+        }
+        
+        let handled = viewModel.previewAction(book: book, format: .EPUB, formatInfo: book.formats["EPUB"]!)
+        XCTAssertTrue(handled)
+        XCTAssertEqual(viewModel.previewViewModel.toc, "Initializing")
+
+        await waitUntil {
+            self.viewModel.previewViewModel.toc == "Intro\n"
+        }
+        XCTAssertEqual(viewModel.previewViewModel.toc, "Intro\n")
+    }
+
+    func testMetadataRefresh() async throws {
+        let book = mockCalibreBook!
+        
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        
+        let calibreServerService = mockModelData.calibreServerService
+        let library = book.library
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: library.server, timeout: timeout, qos: qos)
+                calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+        
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let bookEntryJson = """
+            {
+                "123": {
+                    "authors": ["Refreshed Author"],
+                    "formats": ["epub"],
+                    "author_sort": "Author, Refreshed",
+                    "title": "Refreshed Title",
+                    "uuid": "uuid-apple",
+                    "author_sort_map": {},
+                    "identifiers": {},
+                    "languages": ["eng"],
+                    "pubdate": "",
+                    "rating": 0.0,
+                    "format_metadata": {},
+                    "category_urls": {},
+                    "tags": [],
+                    "user_metadata": {},
+                    "title_sort": "Apple",
+                    "thumbnail": "/get/thumb/123/lib1",
+                    "timestamp": "2023-07-21T07:43:05+00:00",
+                    "user_categories": {},
+                    "cover": "/get/cover/123/lib1",
+                    "last_modified": "2023-07-25T03:11:04+00:00",
+                    "application_id": 123
+                }
+            }
+            """
+            return (response, bookEntryJson.data(using: .utf8)!)
+        }
+        
+        viewModel.refresh(book: book)
+
+        await waitUntil {
+            self.viewModel.calibreBook?.title == "Refreshed Title"
+        }
+
+        mockModelData.refreshDatabase()
+        
+        guard let realm = mockModelData.realm else {
+            XCTFail("Realm is nil")
+            return
+        }
+        
+        XCTAssertEqual(viewModel.calibreBook?.title, "Refreshed Title")
+        XCTAssertEqual(viewModel.listVM?.book.title, "Refreshed Title")
+        XCTAssertEqual(
+            realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: mockBookRealm.primaryKey!)?.title,
+            "Refreshed Title"
+        )
+    }
 }
 
 class ReadingPositionViewModelTests: XCTestCase {
@@ -477,6 +678,24 @@ class ReadingPositionViewModelTests: XCTestCase {
         
         XCTAssertNotNil(historyVM.readingStatistics)
     }
+
+    func testHistoryViewModelUsesRepositoryForHistoryBookAndDebugPositions() throws {
+        let repository = MockReadingPositionRepository()
+        repository.historyBookReturn = mockBook
+        repository.debugPositionsReturn = [
+            BookDeviceReadingPosition(id: "debug-device", readerName: ReaderType.YabrEPUB.rawValue)
+        ]
+        mockModelData.readingPositionRepository = repository
+
+        let historyVM = ReadingPositionHistoryViewModel(modelData: mockModelData, library: mockBook.library, bookId: mockBook.id)
+        historyVM.loadData()
+
+        XCTAssertTrue(repository.historyBookCalled)
+        XCTAssertEqual(repository.historyBookIdParam, mockBook.id)
+        XCTAssertTrue(repository.debugPositionsCalled)
+        XCTAssertEqual(historyVM.listViewModel?.book.id, mockBook.id)
+        XCTAssertEqual(historyVM.debugReadingPositions.first?.id, "debug-device")
+    }
 }
 
 class ActivityListViewModelTests: XCTestCase {
@@ -491,8 +710,100 @@ class ActivityListViewModelTests: XCTestCase {
     }
     
     func testInitialization() throws {
-        let viewModel = ActivityListViewModel(modelData: mockModelData)
+        let repository = MockActivityLogRepository()
+        let viewModel = ActivityListViewModel(modelData: mockModelData, activityLogRepository: repository)
+        XCTAssertTrue(repository.fetchEntriesCalled)
         XCTAssertEqual(viewModel.activities.count, 0)
+    }
+
+    func testInitializationUsesRepositoryAndReceivesUpdates() throws {
+        let repository = MockActivityLogRepository()
+        let initialEntry = ActivityLogUIEntry(
+            id: "1",
+            libraryName: "Library",
+            bookTitle: "Book",
+            type: "Sync",
+            errMsg: "",
+            startDateString: "start",
+            finishDateString: "finish",
+            startDateLongString: "start long",
+            finishDateLongString: "finish long",
+            endpointURL: "http://localhost",
+            httpMethod: "GET",
+            httpBodyString: nil
+        )
+        repository.fetchEntriesReturn = [initialEntry]
+
+        let viewModel = ActivityListViewModel(
+            modelData: mockModelData,
+            libraryId: "library-id",
+            bookId: 7,
+            activityLogRepository: repository
+        )
+
+        XCTAssertTrue(repository.fetchEntriesCalled)
+        XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
+        XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
+        XCTAssertEqual(viewModel.activities, [initialEntry])
+
+        let updatedEntry = ActivityLogUIEntry(
+            id: "2",
+            libraryName: "Library 2",
+            bookTitle: "Book 2",
+            type: "Error",
+            errMsg: "boom",
+            startDateString: "s2",
+            finishDateString: "f2",
+            startDateLongString: "sl2",
+            finishDateLongString: "fl2",
+            endpointURL: "http://localhost/2",
+            httpMethod: "POST",
+            httpBodyString: "{}"
+        )
+        repository.observeEntriesSubject.send([updatedEntry])
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertEqual(viewModel.activities, [updatedEntry])
+    }
+}
+
+class LibraryViewModelTests: XCTestCase {
+    func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
+        let modelData = ModelData(mock: true)
+        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let repository = MockLibraryRepository()
+        repository.getLibraryReturn = library
+
+        let viewModel = LibraryViewModel(modelData: modelData, library: library, libraryRepository: repository)
+
+        XCTAssertTrue(repository.getLibraryCalled)
+        XCTAssertTrue(repository.observeLibraryCalled)
+
+        var updatedLibrary = library
+        updatedLibrary.discoverable = true
+        updatedLibrary.autoUpdate = true
+        repository.observeLibrarySubject.send(updatedLibrary)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(viewModel.discoverable)
+        XCTAssertTrue(viewModel.autoUpdate)
+    }
+
+    func testFlagMutationsCallUpdateLibraryFlags() throws {
+        let modelData = ModelData(mock: true)
+        let library = try XCTUnwrap(modelData.calibreLibraries.first?.value)
+        let repository = MockLibraryRepository()
+        repository.getLibraryReturn = library
+
+        let viewModel = LibraryViewModel(modelData: modelData, library: library, libraryRepository: repository)
+        repository.updateLibraryFlagsCalled = false
+
+        viewModel.discoverable = !library.discoverable
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(repository.updateLibraryFlagsCalled)
+        XCTAssertEqual(repository.updateLibraryFlagsIdParam, library.id)
+        XCTAssertEqual(repository.updateLibraryFlagsDiscoverableParam, !library.discoverable)
     }
 }
 
@@ -542,4 +853,6 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
         
         wait(for: [expectation], timeout: 2.0)
     }
+
+
 }

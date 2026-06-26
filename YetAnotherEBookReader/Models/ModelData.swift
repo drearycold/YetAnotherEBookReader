@@ -160,6 +160,9 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
     lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
     lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, modelData: self)
     lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
+    lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, modelData: self)
+    lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository()
+    lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.realmConf)
     
     lazy var serverManager = CalibreServerManager(modelData: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(modelData: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
@@ -200,8 +203,17 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         set { fontsManager.userFontInfos = newValue }
     }
 
+    var isDatabaseReady: Bool {
+        databaseService.realm != nil
+    }
+
     func getBook(for primaryKey: String) -> CalibreBook? {
         bookManager.getBook(for: primaryKey)
+    }
+
+    @MainActor
+    func refreshDatabase() {
+        databaseService.realm?.refresh()
     }
 
     init(mock: Bool = false) {
@@ -932,8 +944,8 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
         return serverManager.queryServerDSReaderHelper(server: server)
     }
     
-    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Realm) {
-        serverManager.updateServerDSReaderHelper(serverId: serverId, dsreaderHelper: dsreaderHelper, realm: realm)
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper) {
+        serverManager.updateServerDSReaderHelper(serverId: serverId, dsreaderHelper: dsreaderHelper)
     }
     
     @discardableResult
@@ -991,7 +1003,7 @@ final class ModelData: ObservableObject, CalibreServerConfigProvider, LibraryPro
                     let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
                     dsreaderHelper.configurationData = task.data
                     
-                    self.serverManager.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper, realm: self.realm)
+                    self.serverManager.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
                 }
             }
             .store(in: &calibreCancellables)

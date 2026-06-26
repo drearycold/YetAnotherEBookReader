@@ -6,7 +6,142 @@
 //
 
 import Foundation
+import Combine
 import RealmSwift
+
+struct ActivityLogUIEntry: Identifiable, Hashable {
+    let id: String
+    let libraryName: String
+    let bookTitle: String
+    let type: String
+    let errMsg: String
+    let startDateString: String
+    let finishDateString: String
+    let startDateLongString: String
+    let finishDateLongString: String
+    let endpointURL: String
+    let httpMethod: String
+    let httpBodyString: String?
+}
+
+protocol ActivityLogRepositoryProtocol {
+    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry]
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never>
+}
+
+final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
+    private let databaseService: DatabaseService
+    private let bookRepository: BookRepositoryProtocol
+    private weak var modelData: ModelData?
+
+    init(
+        databaseService: DatabaseService = .shared,
+        bookRepository: BookRepositoryProtocol,
+        modelData: ModelData?
+    ) {
+        self.databaseService = databaseService
+        self.bookRepository = bookRepository
+        self.modelData = modelData
+    }
+
+    private func getRealm() -> Realm? {
+        if Thread.isMainThread {
+            return databaseService.realm
+        }
+
+        let key = "ActivityLogRepositoryRealm"
+        if let cachedRealm = Thread.current.threadDictionary[key] as? Realm {
+            cachedRealm.refresh()
+            return cachedRealm
+        }
+
+        if let conf = databaseService.realmConf, let realm = try? Realm(configuration: conf) {
+            Thread.current.threadDictionary[key] = realm
+            return realm
+        }
+        return nil
+    }
+
+    private func predicate(libraryId: String?, bookId: Int32?, since: Date) -> NSPredicate {
+        if let libraryId = libraryId {
+            if let bookId = bookId {
+                return NSPredicate(
+                    format: "startDatetime >= %@ AND libraryId == %@ AND bookId == %d",
+                    since as NSDate,
+                    libraryId,
+                    bookId
+                )
+            }
+            return NSPredicate(format: "startDatetime >= %@ AND libraryId == %@", since as NSDate, libraryId)
+        }
+
+        return NSPredicate(format: "startDatetime >= %@", since as NSDate)
+    }
+
+    private func mapToUI(_ obj: CalibreActivityLogEntry) -> ActivityLogUIEntry {
+        var libraryName = "No Entity"
+        var bookTitle = ""
+
+        if let libraryId = obj.libraryId,
+           let library = modelData?.calibreLibraries[libraryId] {
+            libraryName = library.name
+            let primaryKey = CalibreBookRealm.PrimaryKey(
+                serverUUID: library.server.uuid.uuidString,
+                libraryName: library.name,
+                id: obj.bookId.description
+            )
+            if let book = bookRepository.getBook(id: primaryKey) {
+                bookTitle = book.title
+            }
+        }
+
+        return ActivityLogUIEntry(
+            id: obj.id,
+            libraryName: libraryName,
+            bookTitle: bookTitle,
+            type: obj.type ?? "Unknown Type",
+            errMsg: obj.errMsg ?? "Unknown Error",
+            startDateString: obj.startDateByLocale ?? "Start Unknown",
+            finishDateString: obj.finishDateByLocale ?? "Finish Unknown",
+            startDateLongString: obj.startDateByLocaleLong ?? "Unknown",
+            finishDateLongString: obj.finishDateByLocaleLong ?? "Unknown",
+            endpointURL: obj.endpoingURL ?? "Unknown",
+            httpMethod: obj.httpMethod ?? "GET",
+            httpBodyString: obj.httpBody.flatMap { String(data: $0, encoding: .utf8) }
+        )
+    }
+
+    func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
+        guard let realm = getRealm() else { return [] }
+
+        return realm.objects(CalibreActivityLogEntry.self)
+            .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
+            .sorted(byKeyPath: "startDatetime", ascending: false)
+            .map(mapToUI)
+    }
+
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never> {
+        guard let realm = getRealm() else {
+            return Just([]).eraseToAnyPublisher()
+        }
+
+        return realm.objects(CalibreActivityLogEntry.self)
+            .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
+            .sorted(byKeyPath: "startDatetime", ascending: false)
+            .changesetPublisher
+            .map { [weak self] change -> [ActivityLogUIEntry] in
+                guard let self = self else { return [] }
+                switch change {
+                case .initial(let collection), .update(let collection, _, _, _):
+                    return collection.map(self.mapToUI)
+                case .error:
+                    return []
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .eraseToAnyPublisher()
+    }
+}
 
 protocol AnnotationRepositoryProtocol {
     // Bookmarks CRUD

@@ -31,7 +31,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            if let realmConf = viewModel.realmConf {
+            if let realmConf = modelData.realmConf {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .tabItem {

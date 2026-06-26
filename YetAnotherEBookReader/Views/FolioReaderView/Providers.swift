@@ -8,7 +8,6 @@
 import Foundation
 import UIKit
 import FolioReaderKit
-import RealmSwift
 
 extension EpubFolioReaderContainer {
     func folioReaderPreferenceProvider(_ folioReader: FolioReader) -> FolioReaderPreferenceProvider {
@@ -22,7 +21,7 @@ extension EpubFolioReaderContainer {
                 folioReader,
                 delegate: self.readerEngineDelegate,
                 bookId: book.bookPrefId,
-                profileRealmConfig: modelData?.realmConf
+                profileRepository: modelData?.folioReaderProfileRepository
             )
             self.folioReaderPreferenceProvider = preferenceProvider
             return preferenceProvider
@@ -125,15 +124,15 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     let folioReader: FolioReader
     weak var delegate: ReaderEngineDelegate?
     var bookId: String
-    private var profileRealmConfig: Realm.Configuration?
+    private let profileRepository: FolioReaderProfileRepositoryProtocol?
 
     private var values = [String: Any]()
 
-    init(_ folioReader: FolioReader, delegate: ReaderEngineDelegate?, bookId: String, profileRealmConfig: Realm.Configuration? = nil) {
+    init(_ folioReader: FolioReader, delegate: ReaderEngineDelegate?, bookId: String, profileRepository: FolioReaderProfileRepositoryProtocol? = nil) {
         self.folioReader = folioReader
         self.delegate = delegate
         self.bookId = bookId
-        self.profileRealmConfig = profileRealmConfig
+        self.profileRepository = profileRepository
 
         values["nightMode"] = false
         values["themeMode"] = FolioReaderThemeMode.serpia.rawValue
@@ -153,9 +152,10 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         values["doWrapPara"] = false
         values["doClearClass"] = true
 
-        ensureDefaultProfile()
-        if let realm = openProfileRealm(), let defaultPref = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default") {
-            seedValuesFromProfile(defaultPref)
+        let defaultProfile = FolioReaderProfileValue(defaultsFrom: folioReader)
+        profileRepository?.ensureDefaultProfile(defaults: defaultProfile)
+        if let profile = profileRepository?.loadProfile(named: "Default", defaults: defaultProfile) {
+            profile.apply(to: &values, folioReader: folioReader)
         }
     }
 
@@ -187,63 +187,29 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     }
 
     func preference(loadProfile name: String) {
-        ensureDefaultProfile()
-        guard let realm = openProfileRealm() else { return }
-        if let profile = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name) {
-            seedValuesFromProfile(profile)
+        let defaultProfile = FolioReaderProfileValue(defaultsFrom: folioReader)
+        profileRepository?.ensureDefaultProfile(defaults: defaultProfile)
+        if let profile = profileRepository?.loadProfile(named: name, defaults: defaultProfile) {
+            profile.apply(to: &values, folioReader: folioReader)
             notifyDelegate()
         }
     }
 
     func preference(saveProfile name: String) {
-        ensureDefaultProfile()
-        guard let realm = openProfileRealm() else { return }
-
-        let profile = FolioReaderPreferenceRealm()
-        profile.id = name
-        saveValuesToProfile(profile)
-
-        do {
-            try realm.write {
-                realm.add(profile, update: .modified)
-            }
-        } catch {
-            // Ignore write failures in profile saving
-        }
+        let profile = FolioReaderProfileValue(values: values, folioReader: folioReader)
+        profileRepository?.saveProfile(profile, named: name)
     }
 
     func preference(listProfile filter: String?) -> [String] {
-        ensureDefaultProfile()
-        guard let realm = openProfileRealm() else {
+        let defaultProfile = FolioReaderProfileValue(defaultsFrom: folioReader)
+        guard let profileRepository else {
             return ["Default"]
         }
-
-        let objects = realm.objects(FolioReaderPreferenceRealm.self)
-        var names = Array(objects.map { $0.id })
-
-        if !names.contains("Default") {
-            names.append("Default")
-        }
-
-        if let filter = filter, !filter.isEmpty {
-            names = names.filter { $0.localizedCaseInsensitiveContains(filter) }
-        }
-
-        return names.sorted()
+        return profileRepository.listProfiles(filter: filter, defaults: defaultProfile)
     }
 
     func preference(removeProfile name: String) {
-        guard let realm = openProfileRealm() else { return }
-
-        if let profile = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: name) {
-            do {
-                try realm.write {
-                    realm.delete(profile)
-                }
-            } catch {
-                // Ignore write failures in profile removal
-            }
-        }
+        profileRepository?.removeProfile(named: name)
     }
 
     func applyPreferences(_ preferences: ReaderEnginePreferences) {
@@ -275,94 +241,6 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         )
 
         delegate?.readerEngine(folioReader, didUpdatePreferences: enginePrefs)
-    }
-
-    private func openProfileRealm() -> Realm? {
-        guard let config = profileRealmConfig else { return nil }
-        do {
-            return try Realm(configuration: config)
-        } catch {
-            return nil
-        }
-    }
-
-    private func ensureDefaultProfile() {
-        guard let realm = openProfileRealm() else { return }
-
-        if realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: "Default") == nil {
-            let defaultPref = FolioReaderPreferenceRealm()
-            defaultPref.id = "Default"
-            defaultPref.nightMode = false
-            defaultPref.themeMode = FolioReaderThemeMode.serpia.rawValue
-            defaultPref.currentFont = "Georgia"
-            defaultPref.currentFontSize = FolioReader.DefaultFontSize
-            defaultPref.currentFontWeight = FolioReader.DefaultFontWeight
-            defaultPref.currentScrollDirection = folioReader.defaultScrollDirection.rawValue
-            defaultPref.currentMarginTop = folioReader.defaultMarginTop
-            defaultPref.currentMarginBottom = folioReader.defaultMarginBottom
-            defaultPref.currentMarginLeft = folioReader.defaultMarginLeft
-            defaultPref.currentMarginRight = folioReader.defaultMarginRight
-            defaultPref.currentVMarginLinked = true
-            defaultPref.currentHMarginLinked = true
-            defaultPref.currentLetterSpacing = FolioReader.DefaultLetterSpacing
-            defaultPref.currentLineHeight = FolioReader.DefaultLineHeight
-            defaultPref.currentTextIndent = FolioReader.DefaultTextIndent
-            defaultPref.doWrapPara = false
-            defaultPref.doClearClass = true
-
-            do {
-                try realm.write {
-                    realm.add(defaultPref, update: .modified)
-                }
-            } catch {
-                // Ignore write failures in setup
-            }
-        }
-    }
-
-    private func seedValuesFromProfile(_ profile: FolioReaderPreferenceRealm) {
-        values["nightMode"] = profile.nightMode
-        values["themeMode"] = profile.themeMode
-        values["currentFont"] = profile.currentFont ?? "Georgia"
-        values["currentFontSize"] = profile.currentFontSize ?? FolioReader.DefaultFontSize
-        values["currentFontWeight"] = profile.currentFontWeight ?? FolioReader.DefaultFontWeight
-
-        values["currentScrollDirection"] = profile.currentScrollDirection != .min ? profile.currentScrollDirection : folioReader.defaultScrollDirection.rawValue
-
-        values["currentMarginTop"] = profile.currentMarginTop != .min ? profile.currentMarginTop : folioReader.defaultMarginTop
-        values["currentMarginBottom"] = profile.currentMarginBottom != .min ? profile.currentMarginBottom : folioReader.defaultMarginBottom
-        values["currentMarginLeft"] = profile.currentMarginLeft != .min ? profile.currentMarginLeft : folioReader.defaultMarginLeft
-        values["currentMarginRight"] = profile.currentMarginRight != .min ? profile.currentMarginRight : folioReader.defaultMarginRight
-
-        values["currentVMarginLinked"] = profile.currentVMarginLinked
-        values["currentHMarginLinked"] = profile.currentHMarginLinked
-
-        values["currentLetterSpacing"] = profile.currentLetterSpacing != .min ? profile.currentLetterSpacing : FolioReader.DefaultLetterSpacing
-        values["currentLineHeight"] = profile.currentLineHeight != .min ? profile.currentLineHeight : FolioReader.DefaultLineHeight
-        values["currentTextIndent"] = profile.currentTextIndent != .min ? profile.currentTextIndent : FolioReader.DefaultTextIndent
-
-        values["doWrapPara"] = profile.doWrapPara
-        values["doClearClass"] = profile.doClearClass
-    }
-
-    private func saveValuesToProfile(_ profile: FolioReaderPreferenceRealm) {
-        profile.nightMode = values["nightMode"] as? Bool ?? false
-        profile.themeMode = values["themeMode"] as? Int ?? FolioReaderThemeMode.serpia.rawValue
-        profile.currentFont = values["currentFont"] as? String ?? "Georgia"
-        profile.currentFontSize = values["currentFontSize"] as? String ?? FolioReader.DefaultFontSize
-        profile.currentFontWeight = values["currentFontWeight"] as? String ?? FolioReader.DefaultFontWeight
-        profile.currentScrollDirection = values["currentScrollDirection"] as? Int ?? folioReader.defaultScrollDirection.rawValue
-        profile.currentMarginTop = values["currentMarginTop"] as? Int ?? folioReader.defaultMarginTop
-        profile.currentMarginBottom = values["currentMarginBottom"] as? Int ?? folioReader.defaultMarginBottom
-        profile.currentMarginLeft = values["currentMarginLeft"] as? Int ?? folioReader.defaultMarginLeft
-        profile.currentMarginRight = values["currentMarginRight"] as? Int ?? folioReader.defaultMarginRight
-        profile.currentVMarginLinked = values["currentVMarginLinked"] as? Bool ?? true
-        profile.currentHMarginLinked = values["currentHMarginLinked"] as? Bool ?? true
-        profile.currentLetterSpacing = values["currentLetterSpacing"] as? Int ?? FolioReader.DefaultLetterSpacing
-        profile.currentLineHeight = values["currentLineHeight"] as? Int ?? FolioReader.DefaultLineHeight
-        profile.currentTextIndent = values["currentTextIndent"] as? Int ?? FolioReader.DefaultTextIndent
-        profile.doWrapPara = values["doWrapPara"] as? Bool ?? false
-        profile.doClearClass = values["doClearClass"] as? Bool ?? true
     }
 }
 

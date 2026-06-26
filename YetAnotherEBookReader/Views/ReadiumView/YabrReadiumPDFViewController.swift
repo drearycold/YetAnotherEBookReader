@@ -9,7 +9,6 @@ import Foundation
 import UIKit
 import ReadiumNavigator
 import ReadiumShared
-import RealmSwift
 
 import ReadiumAdapterGCDWebServer
 
@@ -33,7 +32,7 @@ final class YabrReadiumPDFViewController: YabrReadiumReaderViewController {
         super.viewDidLoad()
     }
     
-    override func applyPreferences(_ prefs: ReadiumPreferenceRealm) {
+    override func applyPreferences(_ prefs: ReadiumPreferenceValue) {
         pdfNavigator.submitPreferences(prefs.toPDFPreferences())
     }
     

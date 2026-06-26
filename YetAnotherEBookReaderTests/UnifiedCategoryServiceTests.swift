@@ -22,6 +22,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
 
     var mockLibrary1: CalibreLibrary!
     var mockLibrary2: CalibreLibrary!
+    var cancellables = Set<AnyCancellable>()
 
     override func setUp() async throws {
         try await super.setUp()
@@ -85,6 +86,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         mergeService = nil
         mockLibrary1 = nil
         mockLibrary2 = nil
+        cancellables.removeAll()
         try await super.tearDown()
     }
 
@@ -333,50 +335,101 @@ class UnifiedCategoryServiceTests: XCTestCase {
         let cached = try repository.fetchLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors")
         XCTAssertNil(cached, "Cache should remain empty/nil on failure")
     }
-}
 
-// MARK: - Mocking Classes
+    func testRealmSearchCacheStoreObserveCategorySummariesPublishesInitialAndUpdatedSnapshots() throws {
+        let (modelData, store) = makeRealmSearchCacheStore()
 
-class MockCategoryCacheRepository: CategoryCacheRepository {
-    var cache: [String: LibraryCategoryResult] = [:]
+        let initialResult = LibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a")],
+            generation: Date(),
+            totalNumber: 1
+        )
+        try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: initialResult)
 
-    func fetchLibraryCategoryResult(libraryId: String, categoryName: String) throws -> LibraryCategoryResult? {
-        return cache["\(libraryId)-\(categoryName)"]
+        let initialExpectation = expectation(description: "initial summaries")
+        let updateExpectation = expectation(description: "updated summaries")
+        var received: [[CategoryCacheSummary]] = []
+
+        store.observeCategorySummaries()
+            .sink { summaries in
+                received.append(summaries)
+                if received.count == 1 {
+                    initialExpectation.fulfill()
+                } else if received.count == 2 {
+                    updateExpectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        wait(for: [initialExpectation], timeout: 1.0)
+        XCTAssertEqual(received.first?.first?.categoryName, "Authors")
+        XCTAssertEqual(received.first?.first?.itemsCount, 1)
+
+        let updatedResult = LibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Authors",
+            items: [
+                LibraryCategoryItem(name: "Author B", averageRating: 5.0, count: 2, url: "b"),
+                LibraryCategoryItem(name: "Author C", averageRating: 3.0, count: 1, url: "c")
+            ],
+            generation: Date(),
+            totalNumber: 2
+        )
+        try store.saveLibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Authors", result: updatedResult)
+
+        wait(for: [updateExpectation], timeout: 1.0)
+        XCTAssertEqual(received.last?.first?.categoryName, "Authors")
+        XCTAssertEqual(received.last?.first?.itemsCount, 3)
+        XCTAssertEqual(received.last?.first?.totalNumber, 3)
+        _ = modelData
     }
 
-    func saveLibraryCategoryResult(libraryId: String, categoryName: String, result: LibraryCategoryResult) throws {
-        cache["\(libraryId)-\(categoryName)"] = result
+    func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() throws {
+        let (_, store) = makeRealmSearchCacheStore()
+
+        let noInitialExpectation = expectation(description: "no initial event")
+        noInitialExpectation.isInverted = true
+        let updateExpectation = expectation(description: "real cache update")
+        var updateCount = 0
+
+        store.observeCategoryCacheUpdates(categoryName: "Authors")
+            .sink {
+                updateCount += 1
+                updateExpectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        wait(for: [noInitialExpectation], timeout: 0.2)
+
+        let seededResult = LibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a")],
+            generation: Date(),
+            totalNumber: 1
+        )
+        try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: seededResult)
+        wait(for: [updateExpectation], timeout: 1.0)
+        XCTAssertEqual(updateCount, 1)
+
+        let noInvalidationExpectation = expectation(description: "generation invalidation does not publish")
+        noInvalidationExpectation.isInverted = true
+        try store.invalidateCategoryCache(libraryId: mockLibrary1.id, categoryName: "Authors")
+        wait(for: [noInvalidationExpectation], timeout: 0.2)
+        XCTAssertEqual(updateCount, 1)
     }
 
-    func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
-        var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
-        for result in cache.values {
-            let name = result.categoryName
-            let current = summariesByName[name] ?? (0, 0)
-            summariesByName[name] = (
-                current.itemsCount + result.items.count,
-                current.totalNumber + result.totalNumber
-            )
-        }
-        return summariesByName.map { name, stats in
-            CategoryCacheSummary(
-                categoryName: name,
-                itemsCount: stats.itemsCount,
-                totalNumber: stats.totalNumber
-            )
-        }.sorted { $0.categoryName < $1.categoryName }
-    }
-
-    func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
-        if let result = cache["\(libraryId)-\(categoryName)"] {
-            let staleResult = LibraryCategoryResult(
-                libraryId: result.libraryId,
-                categoryName: result.categoryName,
-                items: result.items,
-                generation: Date(timeIntervalSince1970: 0),
-                totalNumber: result.totalNumber
-            )
-            cache["\(libraryId)-\(categoryName)"] = staleResult
-        }
+    private func makeRealmSearchCacheStore() -> (ModelData, RealmSearchCacheStore) {
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-RealmStore-\(UUID().uuidString)")
+        DatabaseService.shared.setup(conf: config)
+        let modelData = ModelData(mock: true)
+        modelData.realmConf = config
+        modelData.calibreLibraries = [
+            mockLibrary1.id: mockLibrary1,
+            mockLibrary2.id: mockLibrary2
+        ]
+        return (modelData, RealmSearchCacheStore(config: config, modelData: modelData))
     }
 }

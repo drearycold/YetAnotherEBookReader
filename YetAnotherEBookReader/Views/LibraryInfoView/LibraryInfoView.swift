@@ -69,7 +69,7 @@ struct LibraryInfoView: View {
         .listStyle(PlainListStyle())
         .onAppear {
             viewModel.calibreLibraries = modelData.calibreLibraries
-            viewModel.setupDatabaseObserver()
+            viewModel.setupCategoryObserver()
             
             libraryList = modelData.calibreLibraries.values
                 .filter { $0.hidden == false }

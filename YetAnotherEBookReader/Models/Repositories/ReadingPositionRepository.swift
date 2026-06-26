@@ -11,6 +11,8 @@ import RealmSwift
 protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition?
     func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
+    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
+    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook?
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String)
     func removePosition(deviceName: String, forBookId bookId: String)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String)
@@ -60,7 +62,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     private func getRealm(forBookId bookId: String) -> Realm? {
         guard let config = getRealmConfiguration(forBookId: bookId) else { return nil }
         
-        let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? "default")"
+        let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? config.inMemoryIdentifier ?? "default")"
         if let cachedRealm = Thread.current.threadDictionary[cacheKey] as? Realm {
             cachedRealm.refresh()
             return cachedRealm
@@ -92,6 +94,30 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             .filter(NSPredicate(format: "bookId == %@", bookId))
             .sorted(byKeyPath: "epoch", ascending: false)
         return objects.map { $0.toDomain() }
+    }
+
+    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
+        guard let realm = getRealm(forBookId: bookId) else { return [] }
+
+        let objects = realm.objects(BookDeviceReadingPositionRealm.self)
+            .filter("NOT bookId ENDSWITH ' - History' AND bookId BEGINSWITH %@", bookId)
+            .sorted(byKeyPath: "epoch", ascending: false)
+
+        return objects.map { $0.toDomain() }
+    }
+
+    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
+        let primaryKey = CalibreBookRealm.PrimaryKey(
+            serverUUID: library.server.uuid.uuidString,
+            libraryName: library.name,
+            id: bookId.description
+        )
+
+        guard let realm = Thread.isMainThread ? databaseService.realm : (databaseService.realmConf.flatMap { try? Realm(configuration: $0) }),
+              let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
+        else { return nil }
+
+        return bookRealm.toDomain(library: library)
     }
     
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String) {

@@ -59,7 +59,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         blankActivityView: blankActivityView
     )
     
-    @Published var pdfOptions = PDFOptions() {
+    @Published var pdfOptions = PDFPreferenceValue() {
         didSet {
             PDFPageWithBackground.fillColor = pdfOptions.fillColor
             
@@ -155,8 +155,8 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         pdfView.displayDirection = PDFDisplayDirection.horizontal
         pdfView.interpolationQuality = PDFInterpolationQuality.high
         
-        if let pdfOptions = yabrPDFMetaSource?.yabrPDFOptions(pdfView) {
-            self.pdfOptions = pdfOptions
+        if let preferences = yabrPDFMetaSource?.yabrPDFOptions(pdfView) {
+            self.pdfOptions = preferences
         }
         
         if let position = initialPosition {
@@ -283,9 +283,9 @@ protocol YabrPDFMetaSource {
     
 
     
-    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions?
+    func yabrPDFOptions(_ view: YabrPDFView?) -> PDFPreferenceValue?
     
-    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFOptions)
+    func yabrPDFOptions(_ view: YabrPDFView?, update options: PDFPreferenceValue)
     
     func yabrPDFDictViewer(_ view: YabrPDFView?) -> (String, UINavigationController)?
     

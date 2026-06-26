@@ -8,7 +8,6 @@
 import Foundation
 import Combine
 import SwiftUI
-import RealmSwift
 
 class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
@@ -71,7 +70,6 @@ class BookDetailViewModel: ObservableObject {
     }
     
     private weak var modelData: ModelData?
-    var book: CalibreBookRealm?
     private var fetchTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var readerInfo: ReaderInfo? {
@@ -107,35 +105,27 @@ class BookDetailViewModel: ObservableObject {
         
         modelData.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
         
-        guard let bookRealm = modelData.realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: bookId) else {
-            print("Error: CalibreBookRealm not found for primary key \(bookId)")
+        guard let calibreBook = modelData.bookRepository.getBook(id: bookId) else {
+            print("Error: CalibreBook not found for primary key \(bookId)")
             return
         }
-        self.book = bookRealm
-        
-        let calibreBook = modelData.convert(bookRealm: bookRealm)
         self.calibreBook = calibreBook
         
         if self.listVM == nil {
-            if let calibreBook = calibreBook {
-                self.listVM = ReadingPositionListViewModel(
-                    modelData: modelData, book: calibreBook, positions: modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
-                )
-            }
-        } else if let calibreBook = calibreBook {
+            self.listVM = ReadingPositionListViewModel(
+                modelData: modelData, book: calibreBook, positions: modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
+            )
+        } else {
             self.listVM?.book = calibreBook
             self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
         }
         
-        bookObserverToken = bookRealm.objectWillChange
-            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self, let b = self.book, let modelData = self.modelData else { return }
-                if let updatedCalibreBook = modelData.convert(bookRealm: b) {
-                    self.calibreBook = updatedCalibreBook
-                    self.listVM?.book = updatedCalibreBook
-                    self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
-                }
+        bookObserverToken = modelData.bookRepository.observeBook(id: bookId)
+            .sink { [weak self] updatedCalibreBook in
+                guard let self = self, let modelData = self.modelData, let updatedCalibreBook = updatedCalibreBook else { return }
+                self.calibreBook = updatedCalibreBook
+                self.listVM?.book = updatedCalibreBook
+                self.listVM?.positions = modelData.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
             }
     }
     

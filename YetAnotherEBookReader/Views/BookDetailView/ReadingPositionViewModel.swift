@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import RealmSwift
 
 #if canImport(SwiftUICharts)
 import SwiftUICharts
@@ -239,20 +238,14 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         if let library = library, let bookId = bookId {
             localActivities = modelData.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
             
-            if let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
-               let book = modelData.convert(bookRealm: bookRealm) {
+            if let book = modelData.readingPositionRepository.historyBook(for: library, bookId: bookId) {
                 listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
             } else if let book = modelData.readingBook {
                 listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
             }
             
-            // Debug reading positions
-            if let realm = modelData.realm {
-                let prefix = BookAnnotation.PrefId(library: library, id: bookId)
-                let objs = realm.objects(BookDeviceReadingPositionRealm.self)
-                    .filter("NOT bookId ENDSWITH ' - History' AND bookId BEGINSWITH %@", prefix)
-                self.debugReadingPositions = objs.map { $0.toDomain() }
-            }
+            let prefix = BookAnnotation.PrefId(library: library, id: bookId)
+            self.debugReadingPositions = modelData.readingPositionRepository.debugPositions(forBookId: prefix)
         } else {
             let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in
                 let inShelfId = entry.key
@@ -275,4 +268,3 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         }
     }
 }
-

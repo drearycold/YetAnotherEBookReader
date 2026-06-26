@@ -8,7 +8,6 @@
 import Foundation
 import UIKit
 import SwiftUI
-import RealmSwift
 import ReadiumShared
 import ReadiumNavigator
 import AVFoundation
@@ -135,7 +134,7 @@ class YabrReadiumEPUBViewController: YabrReadiumReaderViewController {
         }
     }
     
-    override func applyPreferences(_ prefs: ReadiumPreferenceRealm) {
+    override func applyPreferences(_ prefs: ReadiumPreferenceValue) {
         self.preferences = prefs.toEPUBPreferences()
         epubNavigator.submitPreferences(self.preferences)
     }

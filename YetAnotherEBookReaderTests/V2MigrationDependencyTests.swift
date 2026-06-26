@@ -45,11 +45,26 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertNotNil(resolved)
         XCTAssertTrue(resolved === (unifiedCategoryService as AnyObject))
     }
+
+    func testUnifiedCategoryViewModelDefaultsToModelDataCategoryCacheRepository() {
+        let modelData = makeModelData()
+        let repository = MockCategoryCacheRepository()
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
+        modelData.categoryCacheRepository = repository
+        modelData.unifiedCategoryService = unifiedCategoryService
+
+        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        let resolved = Mirror(reflecting: viewModel).children.first { $0.label == "categoryCacheRepository" }?.value as AnyObject?
+
+        XCTAssertNotNil(resolved)
+        XCTAssertTrue(resolved === (repository as AnyObject))
+    }
     
     func testLibraryInfoViewModelFetchAvailableCategoriesUsesModelDataCategoryCacheRepository() {
         let modelData = makeModelData()
         let repository = MockCategoryCacheRepository()
         modelData.categoryCacheRepository = repository
+        ModelData.shared = modelData
         
         let result = LibraryCategoryResult(
             libraryId: "library-id",
@@ -66,6 +81,154 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(viewModel.availableCategories.count, 1)
         XCTAssertEqual(viewModel.availableCategories.first?.categoryName, "Authors")
         XCTAssertEqual(viewModel.availableCategories.first?.itemsCount, 1)
+    }
+
+    func testLibraryInfoViewModelSetupCategoryObserverUsesRepositoryPublisher() {
+        let modelData = makeModelData()
+        let repository = MockCategoryCacheRepository()
+        modelData.categoryCacheRepository = repository
+        ModelData.shared = modelData
+
+        let initialResult = LibraryCategoryResult(
+            libraryId: "library-id",
+            categoryName: "Authors",
+            items: [LibraryCategoryItem(name: "Author A", averageRating: 4.5, count: 2, url: "author-a")],
+            generation: Date(),
+            totalNumber: 1
+        )
+        let updated = CategoryCacheSummary(categoryName: "Tags", itemsCount: 3, totalNumber: 4)
+        try? repository.saveLibraryCategoryResult(libraryId: initialResult.libraryId, categoryName: initialResult.categoryName, result: initialResult)
+
+        let viewModel = LibraryInfoView.ViewModel()
+        viewModel.setupCategoryObserver()
+
+        XCTAssertTrue(repository.observeCategorySummariesCalled)
+        XCTAssertEqual(viewModel.availableCategories.first?.categoryName, "Authors")
+        XCTAssertEqual(viewModel.availableCategories.first?.itemsCount, 1)
+
+        repository.sendCategorySummaries([updated])
+
+        XCTAssertEqual(viewModel.availableCategories, [updated])
+    }
+
+    func testUnifiedCategoryViewModelMergeCategoryObservesRepositoryUpdates() async throws {
+        let modelData = makeModelData()
+        let repository = MockCategoryCacheRepository()
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
+        modelData.calibreLibraries = [library.id: library]
+        modelData.categoryCacheRepository = repository
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
+        modelData.unifiedCategoryService = unifiedCategoryService
+        ModelData.shared = modelData
+
+        try repository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+
+        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        viewModel.mergeCategory(categoryName: "Authors", searchString: "")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertTrue(repository.observeCategoryCacheUpdatesCalled)
+        XCTAssertEqual(repository.observeCategoryCacheUpdatesCategoryNameParam, "Authors")
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.categoryName, "Authors")
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.itemsCount, 1)
+
+        try repository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a"),
+                    LibraryCategoryItem(name: "Author B", averageRating: 3.0, count: 2, url: "b")
+                ],
+                generation: Date(),
+                totalNumber: 3
+            )
+        )
+        repository.sendCategoryCacheUpdate(categoryName: "Authors")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.itemsCount, 2)
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.totalNumber, 3)
+    }
+
+    func testUnifiedCategoryViewModelRebindsObserverForNewCategory() async throws {
+        let modelData = makeModelData()
+        let repository = MockCategoryCacheRepository()
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
+        modelData.calibreLibraries = [library.id: library]
+        modelData.categoryCacheRepository = repository
+        let unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
+        modelData.unifiedCategoryService = unifiedCategoryService
+        ModelData.shared = modelData
+
+        try repository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+        try repository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Tags",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Tags",
+                items: [LibraryCategoryItem(name: "Tag A", averageRating: 0.0, count: 2, url: "tag-a")],
+                generation: Date(),
+                totalNumber: 2
+            )
+        )
+
+        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        viewModel.mergeCategory(categoryName: "Authors", searchString: "")
+        try await Task.sleep(nanoseconds: 50_000_000)
+        viewModel.mergeCategory(categoryName: "Tags", searchString: "")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(repository.observeCategoryCacheUpdatesCategoryNameParam, "Tags")
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.categoryName, "Tags")
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.itemsCount, 1)
+    }
+
+    func testUnifiedCategoryViewModelForceRefreshInvalidatesActiveLibraries() {
+        let modelData = makeModelData()
+        let repository = MockCategoryCacheRepository()
+        var activeLibrary = TestFixtures.makeLibrary(server: TestFixtures.makeServer())
+        var hiddenLibrary = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "hidden", name: "Hidden")
+        activeLibrary.hidden = false
+        hiddenLibrary.hidden = true
+        modelData.calibreLibraries = [
+            activeLibrary.id: activeLibrary,
+            hiddenLibrary.id: hiddenLibrary
+        ]
+        modelData.categoryCacheRepository = repository
+        modelData.unifiedCategoryService = UnifiedCategoryService(repository: repository, libraryProvider: modelData)
+        ModelData.shared = modelData
+
+        let viewModel = UnifiedCategoryViewModel(modelData: modelData)
+        viewModel.forceRefreshCategory(categoryName: "Authors")
+
+        XCTAssertTrue(repository.invalidateCategoryCacheCalled)
+        XCTAssertEqual(repository.invalidateCategoryCacheParams.count, 1)
+        XCTAssertEqual(repository.invalidateCategoryCacheParams.first?.libraryId, activeLibrary.id)
+        XCTAssertEqual(repository.invalidateCategoryCacheParams.first?.categoryName, "Authors")
     }
     
     func testShelfRefreshResetsActiveUnifiedSearchLimit() async throws {

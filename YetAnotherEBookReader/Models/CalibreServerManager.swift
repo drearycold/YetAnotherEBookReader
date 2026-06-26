@@ -112,7 +112,7 @@ class CalibreServerManager: ObservableObject {
         return serverRepository.getDSReaderHelper(for: server.id)
     }
     
-    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper, realm: Any? = nil) {
+    func updateServerDSReaderHelper(serverId: String, dsreaderHelper: CalibreServerDSReaderHelper) {
         do {
             try serverRepository.saveDSReaderHelper(dsreaderHelper, for: serverId)
         } catch {

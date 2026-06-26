@@ -7,12 +7,14 @@
 
 import SwiftUI
 import Combine
-import RealmSwift
 
 @MainActor @available(macCatalyst 14.0, *)
 final class SettingsViewModel: ObservableObject {
     let modelData: ModelData
     private var cancellables = Set<AnyCancellable>()
+    private let refreshDatabaseAction: () -> Void
+    private let populateBookShelfAction: () -> Void
+    private let probeServersReachabilityAction: (Set<String>) -> Void
     
     @Published var serverList = [CalibreServer]()
     @Published var serverListDelete: CalibreServer? = nil
@@ -20,8 +22,18 @@ final class SettingsViewModel: ObservableObject {
     @Published var addServerActive = false
     @Published var alertItem: AlertItem?
     
-    init(modelData: ModelData) {
+    init(
+        modelData: ModelData,
+        refreshDatabaseAction: (() -> Void)? = nil,
+        populateBookShelfAction: (() -> Void)? = nil,
+        probeServersReachabilityAction: ((Set<String>) -> Void)? = nil
+    ) {
         self.modelData = modelData
+        self.refreshDatabaseAction = refreshDatabaseAction ?? { modelData.refreshDatabase() }
+        self.populateBookShelfAction = populateBookShelfAction ?? { modelData.populateBookShelf() }
+        self.probeServersReachabilityAction = probeServersReachabilityAction ?? { serverIds in
+            modelData.probeServersReachability(with: serverIds)
+        }
         setupSubscriptions()
     }
     
@@ -121,11 +133,11 @@ final class SettingsViewModel: ObservableObject {
         DispatchQueue(label: "data").async { [weak self] in
             guard let self = self else { return }
             DispatchQueue.main.async {
-                self.modelData.realm.refresh()
+                self.refreshDatabaseAction()
                 self.modelData.booksInShelf.removeAll(keepingCapacity: true)
-                self.modelData.populateBookShelf()
+                self.populateBookShelfAction()
                 self.serverListDelete = nil
-                self.modelData.probeServersReachability(with: [newServer.id])
+                self.probeServersReachabilityAction([newServer.id])
             }
         }
     }
