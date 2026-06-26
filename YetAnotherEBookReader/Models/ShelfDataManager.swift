@@ -249,7 +249,7 @@ class YabrShelfDataModel: ObservableObject {
 
         let books: [ShelfBookItem] = category.unifiedSearchResult?.books.map {
             ShelfBookItem(
-                id: $0.id.description,
+                id: $0.inShelfId,
                 title: $0.title,
                 coverURL: $0.coverURL?.absoluteString ?? "",
                 progress: 0,

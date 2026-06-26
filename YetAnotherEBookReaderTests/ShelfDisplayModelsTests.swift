@@ -143,5 +143,30 @@ import Combine
         XCTAssertEqual(section.title, "Author: Ursula K. Le Guin")
         XCTAssertEqual(section.books.count, 1)
         XCTAssertEqual(section.books.getOrNil(0)?.libraryId, library.id)
+        XCTAssertEqual(section.books.getOrNil(0)?.id, book.inShelfId)
+    }
+
+    func testBuildShelfSectionItemUsesInShelfIdFormat() {
+        // The book id must match the CalibreBookRealm primary key format
+        // ("id^libraryName@serverUUID") so that downstream consumers
+        // (bookExists, getBook, BookDetailView) can find the book.
+        // Using the bare Int32 id would cause `bookExists(forPrimaryKey:)`
+        // to return false and BookDetailView to stay on "Loading...".
+        let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests-buildShelf-format")
+        let shelfDataModel = mockAppContainer.shelfDataModel
+
+        let server = CalibreServer(uuid: UUID(), name: "S", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        let library = CalibreLibrary(server: server, key: "k", name: "My Library")
+        let book = CalibreBook(id: 42, library: library)
+
+        let category = YabrShelfDataModel.CategoryObject(type: .Author, category: "Some Author")
+        category.unifiedSearchResult = UnifiedSearchResult(books: [book])
+
+        let section = shelfDataModel.buildShelfSectionItem(category: category)
+        let bookId = section.books.getOrNil(0)?.id
+
+        XCTAssertNotEqual(bookId, "42", "Bare Int32 id is not the CalibreBookRealm primary key")
+        XCTAssertEqual(bookId, "42^My Library@\(server.uuid.uuidString)")
+        XCTAssertEqual(bookId, book.inShelfId)
     }
 }
