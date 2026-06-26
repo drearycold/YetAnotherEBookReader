@@ -22,13 +22,15 @@ public struct ShelfBookItem: Identifiable, Equatable {
     public let coverURL: String
     public let progress: Int
     public let status: ShelfBookStatus
-    
-    public init(id: String, title: String, coverURL: String, progress: Int, status: ShelfBookStatus) {
+    public let libraryId: String?
+
+    public init(id: String, title: String, coverURL: String, progress: Int, status: ShelfBookStatus, libraryId: String? = nil) {
         self.id = id
         self.title = title
         self.coverURL = coverURL
         self.progress = progress
         self.status = status
+        self.libraryId = libraryId
     }
 }
 

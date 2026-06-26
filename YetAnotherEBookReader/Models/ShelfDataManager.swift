@@ -246,17 +246,18 @@ class YabrShelfDataModel: ObservableObject {
     
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
         let sectionName = "\(category.type.rawValue): \(category.category)"
-        
+
         let books: [ShelfBookItem] = category.unifiedSearchResult?.books.map {
             ShelfBookItem(
-                id: $0.id.description,
+                id: $0.inShelfId,
                 title: $0.title,
                 coverURL: $0.coverURL?.absoluteString ?? "",
                 progress: 0,
-                status: .ready
+                status: .ready,
+                libraryId: $0.library.id
             )
         } ?? []
-        
+
         return ShelfSectionItem(id: sectionName, title: sectionName, books: books)
     }
     
@@ -378,14 +379,5 @@ extension AppContainerProtocol where Self: ObservableObject {
             progress: Int(floor(readerInfo.position.lastProgress)),
             status: status
         )
-    }
-}
-
-extension AppContainerProtocol where Self: ObservableObject {
-    static func parseShelfSectionId(sectionId: String) -> String? {
-        guard let sepRange = sectionId.range(of: " || ")
-        else { return nil }
-        let libraryId = String(sectionId[sectionId.startIndex..<sepRange.lowerBound])
-        return libraryId
     }
 }

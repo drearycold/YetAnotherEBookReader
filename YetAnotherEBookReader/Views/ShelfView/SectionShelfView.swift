@@ -209,5 +209,8 @@ struct SectionShelfView: View {
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        .onAppear {
+            viewModel.bootstrapIfDatabaseReady()
+        }
     }
 }
