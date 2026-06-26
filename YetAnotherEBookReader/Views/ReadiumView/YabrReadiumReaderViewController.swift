@@ -56,10 +56,6 @@ fileprivate extension Array where Element == ReadiumShared.Link {
 }
 
 
-protocol YabrReadiumMetaSource {
-    func yabrReadiumReadPosition(_ viewController: YabrReadiumReaderViewController, update: (Double, Double, [String: Any], String))
-}
-
 class YabrReadiumReaderViewController: 
     UIViewController, Loggable, NavigatorDelegate, VisualNavigatorDelegate, PDFNavigatorDelegate {
 
@@ -71,7 +67,7 @@ class YabrReadiumReaderViewController:
     var popoverNavigationAnchor: UIBarButtonItem?
     var popoverUserconfigurationAnchor: UIBarButtonItem?
 
-    var readiumMetaSource: YabrReadiumMetaSource? = nil
+    weak var readerEngineDelegate: ReaderEngineDelegate? = nil
     
     var readiumPrefs: ReadiumPreferenceRealm?
     var prefsToken: NotificationToken?
@@ -113,7 +109,7 @@ class YabrReadiumReaderViewController:
         if let book = environment.book {
             let config = BookAnnotation.getBookPreferenceServerConfig(book.library.server)
             if let realm = try? Realm(configuration: config) {
-                let bookId = book.readPos.bookPrefId
+                let bookId = book.bookPrefId
                 if let savedPrefs = realm.object(ofType: ReadiumPreferenceRealm.self, forPrimaryKey: bookId) {
                     self.readiumPrefs = savedPrefs
                 } else {
@@ -413,31 +409,30 @@ class YabrReadiumReaderViewController:
         
         Task { [weak self] in
             guard let self = self else { return }
-            var updatedReadingPosition = (Double(), Double(), [String: Any](), "")
             
-            // Extract common metadata
-            updatedReadingPosition.0 = locator.locations.progression ?? 0.0
-            updatedReadingPosition.1 = locator.locations.totalProgression ?? 0.0
+            var pageNumber = 1
+            var maxPage = 1
+            var pageOffsetX = 0
             
             // Format-specific calculations for pageNumber and maxPage
-            if navigator is EPUBNavigatorViewController {
+            if self.navigator is EPUBNavigatorViewController {
                 if let index = self.publication.readingOrder.firstIndexWithHREF(locator.href) {
-                    updatedReadingPosition.2["pageNumber"] = index + 1
+                    pageNumber = index + 1
                 } else {
-                    updatedReadingPosition.2["pageNumber"] = 1
+                    pageNumber = 1
                 }
-                updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
-                updatedReadingPosition.2["pageOffsetX"] = locator.locations.position
-            } else if navigator is PDFNavigatorViewController {
-                updatedReadingPosition.2["pageNumber"] = locator.locations.position
+                maxPage = self.publication.readingOrder.count
+                pageOffsetX = locator.locations.position ?? 0
+            } else if self.navigator is PDFNavigatorViewController {
+                pageNumber = locator.locations.position ?? 1
                 let positionsResult = await self.publication.positionsByReadingOrder()
-                updatedReadingPosition.2["maxPage"] = (try? positionsResult.get())?.first?.count ?? 1
-                updatedReadingPosition.2["pageOffsetX"] = 0
+                maxPage = (try? positionsResult.get())?.first?.count ?? 1
+                pageOffsetX = 0
             } else {
                 // Default fallback (e.g. CBZ)
-                updatedReadingPosition.2["pageNumber"] = locator.locations.position
-                updatedReadingPosition.2["maxPage"] = self.publication.readingOrder.count
-                updatedReadingPosition.2["pageOffsetX"] = 0
+                pageNumber = locator.locations.position ?? 1
+                maxPage = self.publication.readingOrder.count
+                pageOffsetX = 0
             }
             
             // Title resolution
@@ -484,9 +479,18 @@ class YabrReadiumReaderViewController:
                 return "Unknown Title"
             }()
             
-            updatedReadingPosition.3 = currentTitle
+            let enginePos = ReaderEnginePosition(
+                pageNumber: pageNumber,
+                maxPage: maxPage,
+                pageOffsetX: pageOffsetX,
+                pageOffsetY: 0,
+                bookProgress: (locator.locations.totalProgression ?? 0.0) * 100,
+                chapterProgress: (locator.locations.progression ?? 0.0) * 100,
+                chapterName: currentTitle,
+                cfi: locator.locations.fragments.first
+            )
             
-            self.readiumMetaSource?.yabrReadiumReadPosition(self, update: updatedReadingPosition)
+            self.readerEngineDelegate?.readerEngine(self, didUpdatePosition: enginePos)
             
             DispatchQueue.main.async {
                 self.navigationItem.title = currentTitle

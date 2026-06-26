@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 import FolioReaderKit
 import RealmSwift
 
@@ -49,7 +50,7 @@ extension EpubFolioReaderContainer {
             guard let book = modelData?.readingBook,
                   let readerInfo = modelData?.readerInfo
                   else { return FolioReaderNaiveReadPositionProvider() }
-            let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+            let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo, readerEngineDelegate: self.readerEngineDelegate)
             self.folioReaderReadPositionProvider = provider
             
             return provider
@@ -413,44 +414,49 @@ public class FolioReaderYabrHighlightProvider: FolioReaderHighlightProvider {
             completion?(nil)
         }
         
-        book.readPos.highlight(added: highlight.toBookHighlightRealm())
+        ModelData.shared?.annotationRepository.saveHighlight(highlight.toBookHighlight())
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, removedId highlightId: String) {
-        book.readPos.highlight(removedId: highlightId)
+        ModelData.shared?.annotationRepository.removeHighlight(id: highlightId)
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, updateById highlightId: String, type style: FolioReaderHighlightStyle) {
-        book.readPos.highlight(updateById: highlightId, type: style.rawValue)
+        if let existing = ModelData.shared?.annotationRepository.getHighlight(byId: highlightId) {
+            var updated = existing
+            updated.type = style.rawValue
+            updated.date = Date()
+            ModelData.shared?.annotationRepository.saveHighlight(updated)
+        }
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader, getById highlightId: String) -> FolioReaderHighlight? {
-        book.readPos.highlight(getById: highlightId)?.toFolioReaderHighlight()
+        ModelData.shared?.annotationRepository.getHighlight(byId: highlightId)?.toFolioReaderHighlight()
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderHighlight] {
-        book.readPos.highlights(allByBookId: bookId, andPage: page).compactMap {
+        (ModelData.shared?.annotationRepository.getHighlights(forBookId: bookId, excludeRemoved: true) ?? []).filter { page == nil || $0.page == page?.intValue }.compactMap {
             $0.toFolioReaderHighlight()
         }
     }
 
     public func folioReaderHighlight(_ folioReader: FolioReader) -> [FolioReaderHighlight] {
-        book.readPos.highlights().compactMap { $0.toFolioReaderHighlight() }
+        (ModelData.shared?.annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).compactMap { $0.toFolioReaderHighlight() }
     }
     
     public func folioReaderHighlight(_ folioReader: FolioReader, saveNoteFor highlight: FolioReaderHighlight) {
-        book.readPos.highlights(saveNoteFor: highlight.highlightId, with: highlight.noteForHighlight)
+        ModelData.shared?.annotationRepository.updateHighlightNote(id: highlight.highlightId, note: highlight.noteForHighlight)
     }
 }
 
-fileprivate extension BookHighlightRealm {
+fileprivate extension BookHighlight {
     func toFolioReaderHighlight() -> FolioReaderHighlight? {
         guard readerName.isEmpty || readerName == ReaderType.YabrEPUB.rawValue
         else { return nil }
         
         let highlight = FolioReaderHighlight()
         highlight.bookId = bookId
-        highlight.highlightId = highlightId
+        highlight.highlightId = id
         
         highlight.page = page
         highlight.startOffset = startOffset
@@ -476,25 +482,27 @@ fileprivate extension BookHighlightRealm {
 }
 
 fileprivate extension FolioReaderHighlight {
-    func toBookHighlightRealm() -> BookHighlightRealm {
-        let highlight = BookHighlightRealm()
-        highlight.bookId = bookId
-        highlight.highlightId = highlightId
-        highlight.readerName = ReaderType.YabrEPUB.rawValue
-        highlight.page = page
-        highlight.startOffset = startOffset
-        highlight.endOffset = endOffset
-        highlight.date = date
-        highlight.type = type
-        highlight.note = noteForHighlight
-        highlight.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
-        highlight.content = content ?? ""
-        highlight.contentPost = contentPost ?? ""
-        highlight.contentPre = contentPre ?? ""
-        highlight.cfiStart = cfiStart
-        highlight.cfiEnd = cfiEnd
-        highlight.spineName = spineName
-        return highlight
+    func toBookHighlight() -> BookHighlight {
+        return BookHighlight(
+            id: highlightId,
+            bookId: bookId,
+            readerName: ReaderType.YabrEPUB.rawValue,
+            page: page,
+            startOffset: startOffset,
+            endOffset: endOffset,
+            date: date,
+            type: type,
+            note: noteForHighlight,
+            tocFamilyTitles: tocFamilyTitles,
+            content: content ?? "",
+            contentPost: contentPost ?? "",
+            contentPre: contentPre ?? "",
+            cfiStart: cfiStart,
+            cfiEnd: cfiEnd,
+            spineName: spineName,
+            ranges: nil,
+            removed: false
+        )
     }
 }
 
@@ -705,24 +713,27 @@ extension BookDeviceReadingPositionHistory {
 public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvider {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    weak var readerEngineDelegate: ReaderEngineDelegate?
     
-    init(book: CalibreBook, readerInfo: ReaderInfo) {
+    init(book: CalibreBook, readerInfo: ReaderInfo, readerEngineDelegate: ReaderEngineDelegate? = nil) {
         self.book = book
         self.readerInfo = readerInfo
+        self.readerEngineDelegate = readerEngineDelegate
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
-        guard book.readPos.bookPrefId == bookId else { return nil }
+        guard book.bookPrefId == bookId else { return nil }
         
-        return book.readPos.getPosition(nil)?.toFolioReaderReadPosition()
+        return ModelData.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: nil)?.toFolioReaderReadPosition()
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
-        guard book.readPos.bookPrefId == bookId else { return nil }
+        guard book.bookPrefId == bookId else { return nil }
 
-        return book.readPos
-            .getDevices(by: ReaderType.YabrEPUB)
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? [])
             .filter({
+                $0.readerName == ReaderType.YabrEPUB.rawValue
+                &&
                 $0.structuralStyle == FolioReaderStructuralStyle.bundle.rawValue
                 &&
                 $0.structuralRootPageNumber == rootPageNumber
@@ -731,15 +742,34 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, set readPosition: FolioReaderReadPosition, completion: Completion?) {
-        guard book.readPos.bookPrefId == bookId else { return }
+        guard book.bookPrefId == bookId else { return }
         
-        book.readPos.updatePosition(readPosition.toBookDeviceReadingPosition())
+        let bookDevPos = readPosition.toBookDeviceReadingPosition()
+        let enginePos = ReaderEnginePosition(
+            pageNumber: bookDevPos.lastReadPage,
+            maxPage: bookDevPos.maxPage,
+            pageOffsetX: bookDevPos.lastPosition[1],
+            pageOffsetY: bookDevPos.lastPosition[2],
+            bookProgress: bookDevPos.lastProgress,
+            chapterProgress: bookDevPos.lastChapterProgress,
+            chapterName: bookDevPos.lastReadChapter,
+            cfi: bookDevPos.cfi,
+            structuralStyle: bookDevPos.structuralStyle,
+            structuralRootPageNumber: bookDevPos.structuralRootPageNumber,
+            positionTrackingStyle: bookDevPos.positionTrackingStyle
+        )
+        
+        if let delegate = readerEngineDelegate {
+            delegate.readerEngine(self, didUpdatePosition: enginePos)
+        } else {
+            ModelData.shared?.readingPositionRepository.savePosition(bookDevPos, forBookId: book.bookPrefId)
+        }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
-        guard book.readPos.bookPrefId == bookId else { return }
+        guard book.bookPrefId == bookId else { return }
         
-        book.readPos.removePosition(position: readPosition.toBookDeviceReadingPosition())
+        ModelData.shared?.readingPositionRepository.removePosition(position: readPosition.toBookDeviceReadingPosition(), forBookId: book.bookPrefId)
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
@@ -748,24 +778,24 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
-        guard book.readPos.bookPrefId == bookId else { return [] }
+        guard book.bookPrefId == bookId else { return [] }
         
-        return book.readPos.getDevices().map { $0.toFolioReaderReadPosition() }
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? []).map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
-        return book.readPos.getDevices().map { $0.toFolioReaderReadPosition() }
+        return (ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId) ?? []).map { $0.toFolioReaderReadPosition() }
     }
     
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
-        guard book.readPos.bookPrefId == bookId else { return [] }
+        guard book.bookPrefId == bookId else { return [] }
         
-        return book.readPos.sessions(list: nil).map { $0.toFolioReaderReadPositionHistory() }
+        return (ModelData.shared?.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: nil) ?? []).map { $0.toFolioReaderReadPositionHistory() }
     }
     
 }
 
-fileprivate extension BookBookmarkRealm {
+fileprivate extension BookBookmark {
     func toFolioReaderBookmark() -> FolioReaderBookmark {
         let bookmark = FolioReaderBookmark()
         bookmark.bookId = self.bookId
@@ -782,21 +812,20 @@ fileprivate extension BookBookmarkRealm {
 }
 
 fileprivate extension FolioReaderBookmark {
-    func toBookBookmarkRealm() -> BookBookmarkRealm? {
+    func toBookBookmark() -> BookBookmark? {
         guard let pos_type = self.pos_type,
               let pos = self.pos
         else { return nil }
         
-        let bookmark = BookBookmarkRealm()
-        bookmark.bookId = self.bookId
-        bookmark.page = self.page
-        bookmark.pos_type = pos_type
-        bookmark.pos = pos
-        bookmark.title = self.title
-        bookmark.date = self.date
-        bookmark.removed = false
-        
-        return bookmark
+        return BookBookmark(
+            bookId: self.bookId,
+            page: self.page,
+            pos_type: pos_type,
+            pos: pos,
+            title: self.title,
+            date: self.date,
+            removed: false
+        )
     }
 }
 
@@ -815,12 +844,12 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
             completion?(error as NSError?)
         }
         
-        guard let bookBookmark = bookmark.toBookBookmarkRealm() else {
+        guard let bookBookmark = bookmark.toBookBookmark() else {
             error = FolioReaderBookmarkError.emptyError("")
             return
         }
         
-        let result = book.readPos.bookmarks(added: bookBookmark)
+        let result = ModelData.shared?.annotationRepository.saveBookmark(bookBookmark) ?? (-1, nil)
         switch result.0 {
         case 0:
             error = nil
@@ -836,22 +865,27 @@ public class FolioReaderYabrBookmarkProvider: FolioReaderBookmarkProvider {
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, removed bookmarkPos: String) {
-        book.readPos.bookmarks(removed: bookmarkPos)
+        ModelData.shared?.annotationRepository.removeBookmark(pos: bookmarkPos, bookId: book.bookPrefId)
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, updated bookmarkPos: String, title: String) {
-        book.readPos.bookmarks(updated: bookmarkPos, title: title)
+        if let existing = ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: book.bookPrefId) {
+            var updated = existing
+            updated.title = title
+            updated.date = Date()
+            _ = ModelData.shared?.annotationRepository.saveBookmark(updated)
+        }
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, getBy bookmarkPos: String) -> FolioReaderBookmark? {
-        return book.readPos.bookmarks(getBy: bookmarkPos)?.toFolioReaderBookmark()
+        return ModelData.shared?.annotationRepository.getBookmark(byPos: bookmarkPos, bookId: book.bookPrefId)?.toFolioReaderBookmark()
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader, allByBookId bookId: String, andPage page: NSNumber?) -> [FolioReaderBookmark] {
-        return book.readPos.bookmarks(andPage: page).map { $0.toFolioReaderBookmark() }
+        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).filter { page == nil || $0.page == page?.intValue }.map { $0.toFolioReaderBookmark() }
     }
     
     public func folioReaderBookmark(_ folioReader: FolioReader) -> [FolioReaderBookmark] {
-        return book.readPos.bookmarks().map { $0.toFolioReaderBookmark() }
+        return (ModelData.shared?.annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true) ?? []).map { $0.toFolioReaderBookmark() }
     }
 }

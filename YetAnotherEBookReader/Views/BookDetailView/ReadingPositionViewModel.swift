@@ -27,7 +27,7 @@ class ReadingPositionListViewModel: ObservableObject {
     init(modelData: ModelData, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.modelData = modelData
         self.book = book
-        self.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
+        self.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
         
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1
@@ -59,7 +59,7 @@ class ReadingPositionListViewModel: ObservableObject {
     }
     
     func removePosition(_ deviceName: String) {
-        book.readPos.removePosition(deviceName)
+        modelData.readingPositionRepository.removePosition(deviceName: deviceName, forBookId: book.bookPrefId)
         modified = true
     }
 }
@@ -166,8 +166,8 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
         
         if let book = modelData.readingBook {
             listModel.book = book
-            listModel.positions = book.readPos.getDevices().sorted(by: { $0.epoch > $1.epoch })
-            if let position = book.readPos.getPosition(self.position.id) {
+            listModel.positions = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            if let position = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: self.position.id) {
                 self.position = position
             }
         }
@@ -241,9 +241,9 @@ class ReadingPositionHistoryViewModel: ObservableObject {
             
             if let bookRealm = modelData.queryBookRealm(book: CalibreBook(id: bookId, library: library), realm: modelData.realm),
                let book = modelData.convert(bookRealm: bookRealm) {
-                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
+                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
             } else if let book = modelData.readingBook {
-                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: book.readPos.getDevices())
+                listViewModel = ReadingPositionListViewModel(modelData: modelData, book: book, positions: modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
             }
             
             // Debug reading positions

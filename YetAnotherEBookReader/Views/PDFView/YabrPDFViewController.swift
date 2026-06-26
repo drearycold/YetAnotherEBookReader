@@ -44,6 +44,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     let thumbImageView = UIImageView()
     
     var yabrPDFMetaSource: YabrPDFMetaSource?
+    weak var readerEngineDelegate: ReaderEngineDelegate?
+    var initialPosition: ReaderEnginePosition?
+    
+    var annotationManager: PDFAnnotationManager!
+    var bookmarkManager: PDFBookmarkManager!
+    var searchController: PDFSearchController!
     
     @Published var pdfOptions = PDFOptions() {
         didSet {
@@ -147,14 +153,14 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             self.pdfOptions = pdfOptions
         }
         
-        if let position = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
-            let intialPageNum = position.lastPosition[0] > 0 ? position.lastPosition[0] : 1
+        if let position = initialPosition {
+            let intialPageNum = position.pageNumber > 0 ? position.pageNumber : 1
         
             pageViewPositionHistory.removeAll()
             
             pageViewPositionHistory[intialPageNum] = PageViewPosition(
                 scaler: pdfOptions.lastScale,
-                point: CGPoint(x: position.lastPosition[1], y: position.lastPosition[2])
+                point: CGPoint(x: position.pageOffsetX, y: position.pageOffsetY)
             )
         }
         
@@ -163,6 +169,10 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
+        self.annotationManager = PDFAnnotationManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        self.bookmarkManager = PDFBookmarkManager(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
+        self.searchController = PDFSearchController(pdfView: self.pdfView, metaSource: self.yabrPDFMetaSource)
         
         // pdfView.usePageViewController(true, withViewOptions: nil)
         
@@ -198,7 +208,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
 //            self.present(thumbController, animated: true, completion: nil)
             
             let pageController = YabrPDFNavigationPageVC()
-            
+            pageController.pdfViewController = self
             pageController.yabrPDFView = self.pdfView
             pageController.yabrPDFMetaSource = self.yabrPDFMetaSource
             
@@ -327,7 +337,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             UIBarButtonItem(image: UIImage(systemName: "xmark.circle"), style: .done, target: self, action: #selector(finishReading(sender:))),
             UIBarButtonItem(title: "Navigations", image: UIImage(systemName: "list.bullet"), primaryAction: UIAction(handler: { action in
                 let navigationController = YabrPDFNavigationPageVC()
-                
+                navigationController.pdfViewController = self
                 navigationController.yabrPDFView = self.pdfView
                 navigationController.yabrPDFMetaSource = self.yabrPDFMetaSource
                 
@@ -341,7 +351,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             })),
             UIBarButtonItem(title: "Annotations", image: UIImage(systemName: "bookmark"), primaryAction: UIAction(handler: { action in
                 let annotationController = YabrPDFAnnotationPageVC()
-                
+                annotationController.pdfViewController = self
                 annotationController.yabrPDFView = self.pdfView
                 annotationController.yabrPDFMetaSource = self.yabrPDFMetaSource
                 
@@ -522,9 +532,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             
         }
         
-        yabrPDFMetaSource?.yabrPDFHighlights(pdfView).forEach { highlight in
-            pdfView.injectHighlight(highlight: highlight)
-        }
+        self.annotationManager.injectAllHighlights()
         
         
         blankView.contentMode = .scaleAspectFill
@@ -724,7 +732,7 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
     }
     
     @objc private func handlePageChange(notification: Notification) {
-        var titleLabel = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView)?.lastReadChapter
+        var titleLabel = initialPosition?.chapterName
         guard let curPage = pdfView.currentPage else { return }
 
         if var outlineRoot = pdfView.document?.outlineRoot {
@@ -1434,24 +1442,17 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
             }
         }
         
-        if var updatedReadingPosition = yabrPDFMetaSource?.yabrPDFReadPosition(pdfView) {
-            updatedReadingPosition.lastPosition[0] = curPageNum
-            updatedReadingPosition.lastPosition[1] = Int(curPagePos.point.x.rounded())
-            updatedReadingPosition.lastPosition[2] = Int(curPagePos.point.y.rounded())
-            updatedReadingPosition.maxPage = self.pdfView.document?.pageCount ?? 1
-            updatedReadingPosition.lastReadPage = curPageNum
-            updatedReadingPosition.lastChapterProgress = chapterProgress
-            updatedReadingPosition.lastProgress = bookProgress
-            updatedReadingPosition.lastReadChapter = chapterName
-            let docTitle = pdfView.document?.documentAttributes?[PDFDocumentAttribute.titleAttribute] as? String
-            updatedReadingPosition.lastReadBook = docTitle ?? "Unknown Title"
-            updatedReadingPosition.readerName = ReaderType.YabrPDF.rawValue
-            updatedReadingPosition.epoch = Date().timeIntervalSince1970
-            
-            yabrPDFMetaSource?.yabrPDFReadPosition(pdfView, update: updatedReadingPosition)
-            
-            print("\(#function) updatedReadingPosition=\(updatedReadingPosition)")
-        }
+        let enginePos = ReaderEnginePosition(
+            pageNumber: curPageNum,
+            maxPage: self.pdfView.document?.pageCount ?? 1,
+            pageOffsetX: Int(curPagePos.point.x.rounded()),
+            pageOffsetY: Int(curPagePos.point.y.rounded()),
+            bookProgress: bookProgress,
+            chapterProgress: chapterProgress,
+            chapterName: chapterName,
+            cfi: nil
+        )
+        self.readerEngineDelegate?.readerEngine(self, didUpdatePosition: enginePos)
     }
     
 //    @objc func lookupStarDict() {
@@ -1531,34 +1532,12 @@ class YabrPDFViewController: UIViewController, UIGestureRecognizerDelegate, Obse
         } else {
             guard let currentSelection = pdfView.currentSelection else { return }
             
-            var pdfHighlightPageLocations = [PDFHighlight.PageLocation]()
-            currentSelection.pages.forEach { selectionPage in
-                guard let selectionPageNumber = selectionPage.pageRef?.pageNumber else { return }
-                var pdfHighlightPage = PDFHighlight.PageLocation(page: selectionPageNumber, ranges: [])
-                for i in 0..<currentSelection.numberOfTextRanges(on: selectionPage) {
-                    let selectionPageRange = currentSelection.range(at: i, on: selectionPage)
-                    pdfHighlightPage.ranges.append(selectionPageRange)
-                }
-                pdfHighlightPageLocations.append(pdfHighlightPage)
-            }
-            
             var style = BookHighlightStyle.yellow.rawValue
             if (sender as? UIButton) == annotationView.underlineButton {
                 style = BookHighlightStyle.underline.rawValue
             }
-            let pdfHighlight = PDFHighlight(
-                uuid: .init(),
-                pos: pdfHighlightPageLocations,
-                type: style,
-                content: currentSelection.string ?? "No Content",
-                date: .init()
-            )
             
-            yabrPDFMetaSource?.yabrPDFHighlights(pdfView, update: pdfHighlight)
-            pdfView.injectHighlight(highlight: pdfHighlight)
-            
-            print("\(#function) currentSelection=\(currentSelection)")
-            
+            self.annotationManager.addHighlight(style: style, selection: currentSelection)
             self.annotationView.isHidden = true
         }
     }
@@ -1655,9 +1634,7 @@ protocol YabrPDFMetaSource {
 
     func yabrPDFOutline(_ view: YabrPDFView?, for page: Int) -> PDFOutline?
     
-    func yabrPDFReadPosition(_ view: YabrPDFView?) -> BookDeviceReadingPosition?
-    
-    func yabrPDFReadPosition(_ view: YabrPDFView?, update readPosition: BookDeviceReadingPosition)
+
     
     func yabrPDFOptions(_ view: YabrPDFView?) -> PDFOptions?
     

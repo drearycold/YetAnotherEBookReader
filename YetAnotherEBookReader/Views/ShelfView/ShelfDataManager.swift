@@ -292,7 +292,7 @@ extension ModelData {
                         value: $0.value,
                         ts: max(
                             $0.value.lastModified,
-                            $0.value.readPos.getDevices().map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
+                            self.readingPositionRepository.getPositions(forBookId: $0.value.bookPrefId).map{p in Date(timeIntervalSince1970: p.epoch)}.max() ?? $0.value.lastUpdated
                         )
                     )
                 }

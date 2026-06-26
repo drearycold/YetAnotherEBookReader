@@ -221,7 +221,7 @@ struct BookProgressSection: View {
                         .aspectRatio(contentMode: .fit)
                         .frame(width: 20, height: 20)
                     Text("\(readProgressGR)%")
-                } else if let position = book.readPos.getPosition(viewModel.deviceName) ?? book.readPos.getDevices().first {
+                } else if let position = ModelData.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: viewModel.deviceName) ?? ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
                     Image(systemName: "book.circle")
                         .resizable()
                         .aspectRatio(contentMode: .fit)
@@ -232,7 +232,7 @@ struct BookProgressSection: View {
                 } else {
                     Text("No Reading History")
                 }
-            }.disabled(book.readPos.isEmpty)
+            }.disabled(ModelData.shared?.readingPositionRepository.getPositions(forBookId: book.bookPrefId).isEmpty ?? true)
         }.sheet(isPresented: $viewModel.readingPositionHistoryViewPresenting, onDismiss: {
             viewModel.readingPositionHistoryViewPresenting = false
         }, content: {

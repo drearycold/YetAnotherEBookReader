@@ -41,12 +41,15 @@ class FolioReaderViewController: UIViewController {
         let readerConfiguration = self.readerConfiguration()
         readerConfiguration.loadSavedPositionForCurrentBook = true
         
-        let bookReadingPosition = bookDetailView?.book.readPos.getPosition(UIDevice().name)
-        if( bookReadingPosition != nil ) {
+        var bookReadingPosition: BookDeviceReadingPosition? = nil
+        if let book = bookDetailView?.book {
+            bookReadingPosition = ModelData.shared?.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: UIDevice().name)
+        }
+        if let bookReadingPosition = bookReadingPosition {
             var position = [String: Any]()
-            position["pageNumber"] = bookReadingPosition!.lastPosition[0]
-            position["pageOffsetX"] = CGFloat(bookReadingPosition!.lastPosition[1])
-            position["pageOffsetY"] = CGFloat(bookReadingPosition!.lastPosition[2])
+            position["pageNumber"] = bookReadingPosition.lastPosition[0]
+            position["pageOffsetX"] = CGFloat(bookReadingPosition.lastPosition[1])
+            position["pageOffsetY"] = CGFloat(bookReadingPosition.lastPosition[2])
             readerConfiguration.savedPositionForCurrentBook = position
         }
         

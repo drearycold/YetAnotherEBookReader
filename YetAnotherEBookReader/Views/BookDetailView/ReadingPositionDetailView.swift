@@ -121,12 +121,12 @@ struct ReadingPositionDetailView_Previews: PreviewProvider {
     @StateObject static var modelData = ModelData(mock: true)
 
     static var previews: some View {
-        let listModel = ReadingPositionListViewModel(modelData: modelData, book: modelData.readingBook!, positions: modelData.readingBook!.readPos.getDevices())
+        let listModel = ReadingPositionListViewModel(modelData: modelData, book: modelData.readingBook!, positions: modelData.readingPositionRepository.getPositions(forBookId: modelData.readingBook!.bookPrefId))
         ReadingPositionDetailView(
             viewModel: ReadingPositionDetailViewModel(
                 modelData: modelData,
                 listModel: listModel,
-                position: modelData.readingBook!.readPos.getDevices().first!
+                position: modelData.readingPositionRepository.getPositions(forBookId: modelData.readingBook!.bookPrefId).first!
             )
         )
     }

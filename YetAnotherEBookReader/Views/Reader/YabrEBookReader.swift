@@ -104,7 +104,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                         }
                     }() else { return }
                     
-                    readerVC.readiumMetaSource = YabrEBookReaderReadiumMetaSource(book: self.book, readerInfo: self.readerInfo)
+                    readerVC.readerEngineDelegate = context.coordinator
                     readerVC.navigationItem.leftBarButtonItem = UIBarButtonItem(
                         systemItem: .close,
                         primaryAction: UIAction(
@@ -147,6 +147,20 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
                 }
             }
             pdfViewController.yabrPDFMetaSource = metaSource
+            pdfViewController.readerEngineDelegate = context.coordinator
+            pdfViewController.initialPosition = ReaderEnginePosition(
+                pageNumber: readerInfo.position.lastPosition[0],
+                maxPage: readerInfo.position.maxPage,
+                pageOffsetX: readerInfo.position.lastPosition[1],
+                pageOffsetY: readerInfo.position.lastPosition[2],
+                bookProgress: readerInfo.position.lastProgress,
+                chapterProgress: readerInfo.position.lastChapterProgress,
+                chapterName: readerInfo.position.lastReadChapter,
+                cfi: readerInfo.position.cfi,
+                structuralStyle: readerInfo.position.structuralStyle,
+                structuralRootPageNumber: readerInfo.position.structuralRootPageNumber,
+                positionTrackingStyle: readerInfo.position.positionTrackingStyle
+            )
             let ret = pdfViewController.open()
             if ret == 0 {
                 nav.pushViewController(pdfViewController, animated: false)
@@ -182,6 +196,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
 
             epubReaderContainer.modelData = modelData
+            epubReaderContainer.readerEngineDelegate = context.coordinator
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
@@ -201,4 +216,43 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
         // print("EBookReader updateUIViewController \(context)")
     }
     
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, ReaderEngineDelegate {
+        var parent: YabrEBookReaderRepresentable
+        
+        init(_ parent: YabrEBookReaderRepresentable) {
+            self.parent = parent
+        }
+        
+        func readerEngine(_ engine: AnyObject, didUpdatePosition position: ReaderEnginePosition) {
+            var dbPosition = parent.readerInfo.position
+            dbPosition.id = parent.readerInfo.deviceName
+            dbPosition.readerName = parent.readerInfo.readerType.rawValue
+            
+            dbPosition.lastReadPage = position.pageNumber
+            dbPosition.maxPage = position.maxPage
+            dbPosition.lastPosition[0] = position.pageNumber
+            dbPosition.lastPosition[1] = position.pageOffsetX
+            dbPosition.lastPosition[2] = position.pageOffsetY
+            dbPosition.lastProgress = position.bookProgress
+            dbPosition.lastChapterProgress = position.chapterProgress
+            if let chapterName = position.chapterName {
+                dbPosition.lastReadChapter = chapterName
+            }
+            if let cfi = position.cfi {
+                dbPosition.cfi = cfi
+            }
+            
+            dbPosition.structuralStyle = position.structuralStyle
+            dbPosition.structuralRootPageNumber = position.structuralRootPageNumber
+            dbPosition.positionTrackingStyle = position.positionTrackingStyle
+            
+            dbPosition.epoch = Date().timeIntervalSince1970
+            
+            parent.modelData.readingPositionRepository.savePosition(dbPosition, forBookId: parent.book.bookPrefId)
+        }
+    }
 }

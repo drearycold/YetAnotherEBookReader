@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import RealmSwift
 import SwiftUI
 import OSLog
 
@@ -16,6 +15,7 @@ class CalibreLibraryManager: ObservableObject {
     
     weak var modelData: ModelData?
     let databaseService: DatabaseService
+    private let libraryRepository: LibraryRepositoryProtocol
     
     @Published var calibreLibraries = [String: CalibreLibrary]() {
         didSet {
@@ -28,37 +28,17 @@ class CalibreLibraryManager: ObservableObject {
     
     private var calibreCancellables = Set<AnyCancellable>()
     
-    init(modelData: ModelData, databaseService: DatabaseService) {
+    init(modelData: ModelData, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
         self.modelData = modelData
         self.databaseService = databaseService
+        self.libraryRepository = libraryRepository
     }
     
     // MARK: - Migrated Methods
     
     func populateLibraries() {
-        guard let realm = databaseService.realm else { return }
-        let librariesCached = realm.objects(CalibreLibraryRealm.self)
-
-        librariesCached.forEach { libraryRealm in
-            guard let serverUUIDString = libraryRealm.serverUUID,
-                  let calibreServer = modelData?.calibreServers[serverUUIDString]
-            else {
-                return
-            }
-            let calibreLibrary = CalibreLibrary(
-                server: calibreServer,
-                key: libraryRealm.key ?? libraryRealm.name!,
-                name: libraryRealm.name!,
-                autoUpdate: libraryRealm.autoUpdate,
-                discoverable: libraryRealm.discoverable,
-                hidden: libraryRealm.hidden,
-                lastModified: libraryRealm.lastModified,
-                customColumnInfos: {
-                    guard let data = libraryRealm.customColumnsData else { return [:] }
-                    return (try? JSONDecoder().decode([String: CalibreCustomColumnInfo].self, from: data)) ?? [:]
-                }()
-            )
-            
+        let libraries = libraryRepository.getAllLibraries()
+        libraries.forEach { calibreLibrary in
             calibreLibraries[calibreLibrary.id] = calibreLibrary
         }
     }
@@ -101,7 +81,7 @@ class CalibreLibraryManager: ObservableObject {
             calibreLibraries[tmpLibrary.id] = tmpLibrary
             localLibrary = calibreLibraries[tmpLibrary.id]
             do {
-                try updateLibraryRealm(library: localLibrary!, realm: databaseService.realm)
+                try libraryRepository.saveLibrary(localLibrary!)
             } catch {
                 logger.error("Failed to update local library realm: \(error.localizedDescription)")
             }
@@ -158,29 +138,15 @@ class CalibreLibraryManager: ObservableObject {
         }
     }
     
-    func updateLibraryRealm(library: CalibreLibrary, realm: Realm) throws {
-        let libraryRealm = CalibreLibraryRealm()
-        libraryRealm.key = library.key
-        libraryRealm.name = library.name
-        libraryRealm.serverUUID = library.server.uuid.uuidString
-        
-        libraryRealm.customColumnsData = try? JSONEncoder().encode(library.customColumnInfos)
-        
-        libraryRealm.autoUpdate = library.autoUpdate
-        libraryRealm.discoverable = library.discoverable
-        libraryRealm.hidden = library.hidden
-        libraryRealm.lastModified = library.lastModified
-        
-        try realm.write {
-            realm.add(libraryRealm, update: .all)
-        }
+    func updateLibraryRealm(library: CalibreLibrary, realm: Any? = nil) throws {
+        try libraryRepository.saveLibrary(library)
     }
     
     func hideLibrary(libraryId: String) {
         calibreLibraries[libraryId]?.hidden = true
         calibreLibraries[libraryId]?.autoUpdate = false
         if let library = calibreLibraries[libraryId] {
-            try? updateLibraryRealm(library: library, realm: databaseService.realm)
+            try? libraryRepository.saveLibrary(library)
         }
     }
     
@@ -188,17 +154,12 @@ class CalibreLibraryManager: ObservableObject {
         calibreLibraries[libraryId]?.hidden = false
         calibreLibraries[libraryId]?.lastModified = Date(timeIntervalSince1970: 0)
         if let library = calibreLibraries[libraryId] {
-            try? updateLibraryRealm(library: library, realm: databaseService.realm)
+            try? libraryRepository.saveLibrary(library)
         }
     }
     
-    func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Realm) -> Int {
-        return realm.objects(CalibreBookRealm.self).filter(
-            NSPredicate(format: "serverUUID = %@ AND libraryName = %@",
-                        library.server.uuid.uuidString,
-                        library.name
-            )
-        ).count
+    func queryLibraryBookRealmCount(library: CalibreLibrary, realm: Any? = nil) -> Int {
+        return libraryRepository.countBooks(for: library)
     }
     
     func updateServerLibraryInfo(serverInfo: CalibreServerInfo) {
@@ -215,7 +176,7 @@ class CalibreLibraryManager: ObservableObject {
                 calibreLibraries[libraryId] = library
             }
             do {
-                try updateLibraryRealm(library: calibreLibraries[libraryId]!, realm: databaseService.realm)
+                try libraryRepository.saveLibrary(calibreLibraries[libraryId]!)
             } catch {
                 logger.error("Failed to update library realm in updateServerLibraryInfo: \(error.localizedDescription)")
             }
@@ -259,23 +220,7 @@ class CalibreLibraryManager: ObservableObject {
         
         let serverUUIDString = library.server.uuid.uuidString
         let libraryName = library.name
-        let realmConf = modelData.realmConf!
-        
-        await Task.detached(priority: .background) {
-            guard let realm = try? Realm(configuration: realmConf)
-            else { return }
-            
-            //remove library info
-            let predicate = NSPredicate(format: "serverUUID = %@ AND libraryName = %@", serverUUIDString, libraryName)
-            while true {
-                let booksToDelete = realm.objects(CalibreBookRealm.self).filter(predicate).prefix(256).map { $0 }
-                if booksToDelete.isEmpty { break }
-                
-                try? realm.write {
-                    realm.delete(booksToDelete)
-                }
-            }
-        }.value
+        try? libraryRepository.deleteLibrary(serverUUID: serverUUIDString, name: libraryName)
         
         self.librarySyncStatus[library.id]?.isSync = false
     }
@@ -312,7 +257,7 @@ class CalibreLibraryManager: ObservableObject {
                 if lastModified > library.lastModified {
                     library.lastModified = lastModified
                     self.calibreLibraries[result.request.library.id] = library
-                    try! self.updateLibraryRealm(library: library, realm: self.databaseService.realm)
+                    try? self.libraryRepository.saveLibrary(library)
                 }
                 
                 self.modelData?.calibreUpdatedSubject.send(.library(library))
@@ -350,16 +295,11 @@ class CalibreLibraryManager: ObservableObject {
         if shouldSyncBooks {
             var filter = ""
             if request.incremental,
-               let libraryRealm = databaseService.realm.object(
-                ofType: CalibreLibraryRealm.self,
-                forPrimaryKey: CalibreLibraryRealm.PrimaryKey(
-                    serverUUID: result.request.library.server.uuid.uuidString,
-                    libraryName: result.request.library.name)
-               ) {
+               let cachedLib = calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: result.request.library.server.uuid.uuidString, libraryName: result.request.library.name)] {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
                 formatter.timeZone = .current
-                let lastModifiedStr = formatter.string(from: libraryRealm.lastModified)
+                let lastModifiedStr = formatter.string(from: cachedLib.lastModified)
                 filter = "last_modified:\">=\(lastModifiedStr)\""
             }
             
@@ -373,11 +313,11 @@ class CalibreLibraryManager: ObservableObject {
                 
                 await withCheckedContinuation { continuation in
                     ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
-                        guard let self = self, let realmSave = self.modelData?.realmSaveBooksMetadata else {
+                        guard let self = self else {
                             continuation.resume()
                             return
                         }
-                        try? self.updateLibraryRealm(library: library, realm: realmSave)
+                        try? self.libraryRepository.saveLibrary(library)
                         continuation.resume()
                     }
                 }
@@ -470,38 +410,28 @@ class CalibreLibraryManager: ObservableObject {
         
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
-                guard let self = self, let realm = self.modelData?.realmSaveBooksMetadata else {
+                guard let self = self, let bookRepository = self.modelData?.bookRepository else {
                     continuation.resume()
                     return
                 }
                 
                 switch metadataResult.action {
                 case let .save(list):
-                    try? realm.write {
-                        list.forEach {
-                            realm.create(CalibreBookRealm.self, value: $0, update: .modified)
-                        }
-                    }
+                    bookRepository.bulkUpdateBooks(records: list)
                 case let .updateDeleted(last_modified):
-                    let objects = realm.objects(CalibreBookRealm.self).filter(
-                        "serverUUID = %@ AND libraryName = %@", metadataResult.library.server.uuid.uuidString, metadataResult.library.name
+                    metadataResult.bookDeleted = bookRepository.findDeletedBookIds(
+                        serverUUID: metadataResult.library.server.uuid.uuidString,
+                        libraryName: metadataResult.library.name,
+                        activeIds: last_modified
                     )
-                    metadataResult.bookDeleted = objects
-                        .filter {
-                            $0.inShelf == false && last_modified[$0.idInLib.description] == nil
-                        }
-                        .map { $0.idInLib }
                 case .complete:
                     if metadataResult.library.autoUpdate {
-                        let objects = realm.objects(CalibreBookRealm.self).filter(
-                            "serverUUID = %@ AND libraryName = %@", metadataResult.library.server.uuid.uuidString, metadataResult.library.name
+                        let syncInfo = bookRepository.countAndNeedUpdateBooks(
+                            serverUUID: metadataResult.library.server.uuid.uuidString,
+                            libraryName: metadataResult.library.name
                         )
-                        metadataResult.bookCount = objects.count
-                        
-                        let objectsNeedUpdate = objects.filter("lastSynced < lastModified")
-                        metadataResult.bookToUpdate = objectsNeedUpdate
-                            .sorted(byKeyPath: "lastModified", ascending: false)
-                            .map { $0.idInLib }
+                        metadataResult.bookCount = syncInfo.count
+                        metadataResult.bookToUpdate = syncInfo.needUpdateIds
                     }
                 }
                 continuation.resume()
@@ -532,11 +462,11 @@ class CalibreLibraryManager: ObservableObject {
                 self.calibreLibraries[library.id] = libraryUpdated
                 await withCheckedContinuation { continuation in
                     ModelData.SaveBooksMetadataRealmQueue.async { [weak self] in
-                        guard let self = self, let realmSave = self.modelData?.realmSaveBooksMetadata else {
+                        guard let self = self else {
                             continuation.resume()
                             return
                         }
-                        try? self.updateLibraryRealm(library: libraryUpdated, realm: realmSave)
+                        try? self.libraryRepository.saveLibrary(libraryUpdated)
                         continuation.resume()
                     }
                 }

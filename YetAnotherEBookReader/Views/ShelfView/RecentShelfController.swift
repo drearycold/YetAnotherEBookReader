@@ -300,7 +300,7 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         if book.library.server.isLocal {
             //same as options
             onBookOptionsClicked(shelfView, index: index, bookId: bookId, bookTitle: bookTitle, frame: inShelfView)
-        } else if let _ = modelData.getBookRealm(forPrimaryKey: bookId) {
+        } else if modelData.bookExists(forPrimaryKey: bookId) {
             
             let bookDetailView = BookDetailView(bookId: bookId, viewMode: .SHELF)
                 .environmentObject(modelData)
@@ -360,12 +360,12 @@ class RecentShelfController: UIViewController, PlainShelfViewDelegate {
         
         modelData.readingBookInShelfId = bookId
         
-        guard let bookRealm = modelData.getBookRealm(forPrimaryKey: bookId),
-              let book = modelData.readingBook,
-              let bookAnnoRealm = book.readPos.realm
+        guard modelData.bookExists(forPrimaryKey: bookId),
+              let book = modelData.readingBook
         else {
             return
         }
+        let bookAnnoRealm = book.library.server.realmPerf
         
         let readingPositionHistoryView = UIHostingController(
             rootView: ReadingPositionHistoryView(

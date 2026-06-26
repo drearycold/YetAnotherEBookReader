@@ -189,7 +189,7 @@ struct LibraryInfoBookListView: View {
     @ViewBuilder
     private func listEntryView(book: CalibreBook, index: Int) -> some View {
         Group {
-            if let bookRealm = modelData.getBookRealm(forPrimaryKey: book.inShelfId) {
+            if modelData.bookExists(forPrimaryKey: book.inShelfId) {
                 NavigationLink (
                     destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
                     tag: book.inShelfId,

@@ -1,9 +1,14 @@
 # Active Context
 
 ## Current Focus
-The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), and P0-1d (`CalibreBookManager`) to modularize the application state and decouple network/management operations. All 41 unit and UI tests are passing successfully.
+The primary focus is the Modernization of the EBook Reader Architecture. We have completed milestones P0-1a (`CalibreServerManager`), P0-1b (`CalibreLibraryManager`), P0-1d (`CalibreBookManager`), P0-1e (`ReadingSessionManager`), P0-3a (`BookRepository`), P0-3b (`ServerRepository` and `LibraryRepository`), P0-3c (`AnnotationRepository`), P1a-A06 (`ReaderEngineDelegate` position consolidation), and P1b-A03 (Dismantling YabrPDFViewController) to modularize the application state, decouple network/management operations, and separate concerns. All 41 unit and UI tests are passing successfully.
 
 ## Recent Changes & Decisions
+- **Dismantling YabrPDFViewController (Milestone P1b-A03):** Extracted PDF Kit annotation (highlight), bookmark, and search responsibilities from `YabrPDFViewController` into `PDFAnnotationManager`, `PDFBookmarkManager`, and `PDFSearchController`. Added a native asynchronous "Search" tab to the PDF sidebar list (`YabrPDFSearchList` and `YabrPDFSearchListCell`).
+- **AnnotationRepository (Milestone P0-3c):** Introduced `BookBookmark` and `BookHighlight` value types and `RealmAnnotationRepository` to decouple bookmarks and highlights from direct `RealmSwift` database logic. Ported Calibre annotation sync logic from `CalibreData.swift` into the repository.
+- **UI Adapters Decoupling:** Refactored PDF adapter `YabrEBookReaderMetaSource.swift` and FolioReader/EPUB adapter `Providers.swift` to consume decoupled value types `BookBookmark` and `BookHighlight` instead of their Realm model counterparts, keeping UI adapters and rendering pipelines decoupled from Realm entities. Added Calibre serialization extensions directly to the value types.
+- **CalibreBookManager getRealm() Optimization:** Optimized the `getRealm()` helper in `CalibreBookManager.swift` to check `Thread.isMainThread` and return the cached `databaseService.realm` directly, preventing expensive Realm instance allocation on the main thread and ensuring UI reactivity.
+- **ServerRepository and LibraryRepository (Milestone P0-3b):** Decoupled `CalibreServerManager` and `CalibreLibraryManager` completely from Realm database logic. Created `RealmServerRepository` and `RealmLibraryRepository` to isolate CRUD operations for Calibre servers and libraries. Extracted all direct database references from the managers, resulting in the total removal of `import RealmSwift` from both managers.
 - **ReadingPositionService Extraction (Milestone P0-1e):** Successfully migrated format preferences (`defaultFormat`, `formatReaderMap`, `formatList`), reader preference logic, manual progress syncing (`updateCurrentPosition`), and reading session helper methods from `ModelData` into `ReadingSessionManager`. Replaced `@Published var sessionManager` with a `lazy var` and established thread-safe change notification forwarding via Combine.
 - **ModelData Main Thread Notification Forwarding:** Integrated `.receive(on: DispatchQueue.main)` on manager `objectWillChange` subscriptions in `ModelData.init` to ensure all SwiftUI state-propagation updates originating from nested managers are delivered on the main thread, eliminating runtime background thread update warnings.
 - **Realm Thread-Safety Resolution (CalibreBookManager):** Resolved the fatal Realm thread verification crash by replacing direct main-thread `databaseService.realm` references with a thread-safe `getRealm()` helper, ensuring background thread queries dynamically initialize thread-safe Realm instances. Annotated `getBooksMetadata(request:)` with `@MainActor` to ensure UI state updates are published on the main thread.
@@ -61,7 +66,7 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] 36. Fixed `libraryRowBuilder` sync status UI in `ServerDetailView.swift` to display mutually exclusive status text instead of overlapping states.
 - [x] 37. Refactored `ReaderOptionsView.swift` to strictly enforce the MVVM pattern by delegating preferred formats, reader types, and font import/deletion state to `ReaderOptionsViewModel`.
 
-## Active Tasks
+## Completed Refactoring Milestones
 - [x] Extract `CalibreServerManager` out of `ModelData` (Milestone P0-1a).
 - [x] Extract `CalibreLibraryManager` out of `ModelData` (Milestone P0-1b).
 - [x] Extract `CalibreBookManager` out of `ModelData` (Milestone P0-1d).
@@ -72,6 +77,10 @@ The primary focus is the Modernization of the EBook Reader Architecture. We have
 - [x] Fix libraryRowBuilder sync status UI representation.
 - [x] Refactor ReaderOptionsView to MVVM and register project files.
 - [x] Extract ReadingPositionService (Milestone P0-1e) into ReadingSessionManager.
+- [x] Introduce BookRepository (Milestone P0-3a) to encapsulate book database operations and remove presentation layer Realm dependency.
+- [x] Decouple bookmarks and highlights (annotations) into AnnotationRepository (Milestone P0-3c) and refactor reader UI adapters.
+- [x] Consolidate reading position saving logic across Readium, FolioReader, and PDF engines (Milestone P1a-A06).
+- [x] Dismantle PDF God VC by extracting Annotation, Bookmark, and Search managers and implementing a Search tab (Milestone P1b-A03).
 
 ## Active Constraints
 - **Do NOT** introduce CocoaPods or modify workspace files; the project relies entirely on Swift Package Manager.

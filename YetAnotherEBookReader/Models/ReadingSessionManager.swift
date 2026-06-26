@@ -83,16 +83,15 @@ class ReadingSessionManager: ObservableObject {
         var candidatePositions = [BookDeviceReadingPosition]()
 
         //preference: device, latest, selected, any
-        if let position = book.readPos.getPosition(modelData.deviceName) {
+        if let position = modelData.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: modelData.deviceName) {
             candidatePositions.append(position)
         }
-        if let position = book.readPos.getDevices().first {
+        if let position = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
             candidatePositions.append(position)
         }
-//        candidatePositions.append(contentsOf: book.readPos.getDevices())
         if let format = modelData.getPreferredFormat(for: book) {
             candidatePositions.append(
-                book.readPos.createInitial(
+                modelData.readingPositionRepository.createInitial(
                     deviceName: modelData.deviceName,
                     reader: modelData.getPreferredReader(for: format)
                 )
@@ -155,11 +154,11 @@ class ReadingSessionManager: ObservableObject {
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
             if let book = modelData.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: book.readPos.sessions(list: startDateAfter))
+                historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: startDateAfter))
             }
         } else {
             modelData.booksInShelf.forEach {
-                historyList.append(contentsOf: $0.value.readPos.sessions(list: startDateAfter))
+                historyList.append(contentsOf: modelData.readingPositionRepository.sessions(forBookId: $0.value.bookPrefId, list: startDateAfter))
             }
         }
         
@@ -183,7 +182,7 @@ class ReadingSessionManager: ObservableObject {
         
         modelData.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
 
-        guard let updatedReadingPosition = book.readPos.getDevices().first else { return }
+        guard let updatedReadingPosition = modelData.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
 
         if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
            let library = modelData.calibreLibraries[book.library.id],
@@ -206,7 +205,7 @@ class ReadingSessionManager: ObservableObject {
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard let readingBook = self.readingBook,
-              let updatedReadingPosition = readingBook.readPos.getDevices().first,
+              let updatedReadingPosition = modelData?.readingPositionRepository.getPositions(forBookId: readingBook.bookPrefId).first,
               let readerInfo = self.readerInfo
         else {
             return
