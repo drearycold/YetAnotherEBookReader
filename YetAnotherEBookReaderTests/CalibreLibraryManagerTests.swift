@@ -21,7 +21,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
 
     override func setUpWithError() throws {
         // Set up in-memory Realm configuration to isolate each test
-        container = MockAppContainerFactory.makeContainer(testName: "CalibreLibraryManagerTests-\(UUID().uuidString)")
+        container = MockAppContainerFactory.makeContainer(testName: "CalibreLibraryManagerTests")
         
         libraryManager = container.libraryManager
         databaseService = container.databaseService

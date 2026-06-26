@@ -28,7 +28,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        container = MockAppContainerFactory.makeContainer(testName: "UnifiedCategoryServiceTests-\(UUID().uuidString)")
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedCategoryServiceTests")
 
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         mockLibrary1 = CalibreLibrary(server: server1, key: "lib1", name: "Library 1")
@@ -420,9 +420,9 @@ class UnifiedCategoryServiceTests: XCTestCase {
     }
 
     private func makeRealmSearchCacheStore() -> (AppContainer, RealmSearchCacheStore) {
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-RealmStore-\(UUID().uuidString)")
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-RealmStore")
         DatabaseService.shared.setup(conf: config)
-        let container = MockAppContainerFactory.makeContainer(testName: "UnifiedCategoryServiceTests-RealmStore-\(UUID().uuidString)")
+        let container = MockAppContainerFactory.makeContainer(testName: "UnifiedCategoryServiceTests-RealmStore")
         container.libraryManager.calibreLibraries = [
             mockLibrary1.id: mockLibrary1,
             mockLibrary2.id: mockLibrary2

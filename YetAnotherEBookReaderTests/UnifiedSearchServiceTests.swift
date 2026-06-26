@@ -25,10 +25,10 @@ class UnifiedSearchServiceTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests-\(UUID().uuidString)")
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests")
         DatabaseService.shared.setup(conf: config)
         let logger = CalibreActivityLogger(realmConf: config)
-        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchServiceTests-\(UUID().uuidString)")
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchServiceTests")
 
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         mockLibrary1 = CalibreLibrary(server: server1, key: "lib1", name: "Library 1")

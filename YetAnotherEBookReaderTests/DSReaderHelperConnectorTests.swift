@@ -23,7 +23,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
     override func setUp() async throws {
         try await super.setUp()
 
-        container = MockAppContainerFactory.makeContainer(testName: "DSReaderHelperConnectorTests-\(UUID().uuidString)")
+        container = MockAppContainerFactory.makeContainer(testName: "DSReaderHelperConnectorTests")
         service = container.calibreServerService
 
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "user", password: "pass")

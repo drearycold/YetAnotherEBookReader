@@ -15,7 +15,7 @@ class BookDetailViewModelTests: XCTestCase {
     var cancellables = Set<AnyCancellable>()
 
     override func setUpWithError() throws {
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests")
         // AppContainer.shared is set by MockAppContainerFactory.makeContainer
         viewModel = BookDetailViewModel(container: mockAppContainer)
 
@@ -634,8 +634,8 @@ class ReadingPositionViewModelTests: XCTestCase {
     var mockBook: CalibreBook!
     
     override func setUpWithError() throws {
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
-        
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ReadingPositionViewModelTests")
+
         let library = CalibreLibrary(server: CalibreServer(uuid: UUID(), name: "MockServer", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "lib1", name: "Mock Library")
         mockBook = CalibreBook(id: 123, library: library)
         mockBook.title = "Test Book"
@@ -701,7 +701,7 @@ class ActivityListViewModelTests: XCTestCase {
     var mockAppContainer: AppContainer!
     
     override func setUpWithError() throws {
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ActivityListViewModelTests")
     }
     
     override func tearDownWithError() throws {
@@ -768,7 +768,7 @@ class ActivityListViewModelTests: XCTestCase {
 
 class LibraryViewModelTests: XCTestCase {
     func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
-        let container = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
+        let container = MockAppContainerFactory.makeContainer(testName: "LibraryViewModelTests")
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
@@ -789,7 +789,7 @@ class LibraryViewModelTests: XCTestCase {
     }
 
     func testFlagMutationsCallUpdateLibraryFlags() throws {
-        let container = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
+        let container = MockAppContainerFactory.makeContainer(testName: "LibraryViewModelTests")
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
         repository.getLibraryReturn = library
@@ -810,7 +810,7 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     var mockAppContainer: AppContainer!
     
     override func setUpWithError() throws {
-        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "BookDetailViewModelTests-\(UUID().uuidString)")
+        mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ReadingPositionRepositoryThreadingTests")
         try! mockAppContainer.realm!.write {
             mockAppContainer.realm!.deleteAll()
         }

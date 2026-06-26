@@ -21,7 +21,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        container = MockAppContainerFactory.makeContainer(testName: "DatabaseBootstrapperTests-\(UUID().uuidString)")
+        container = MockAppContainerFactory.makeContainer(testName: "DatabaseBootstrapperTests")
         databaseService = container.databaseService
     }
 

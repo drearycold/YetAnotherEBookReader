@@ -13,7 +13,7 @@ import Combine
     
     
     func testRecentShelfViewModelMapping() async throws {
-        let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests-\(UUID().uuidString)")
+        let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests")
         let viewModel = RecentShelfViewModel(container: mockAppContainer)
         
         let item = ShelfBookItem(
@@ -35,7 +35,7 @@ import Combine
     }
     
     func testSectionShelfViewModelMappingAndFilters() async throws {
-        let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests-\(UUID().uuidString)")
+        let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests")
         
         // Setup library config in mockAppContainer
         let uuid = UUID()

@@ -18,10 +18,10 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
 
     override func setUpWithError() throws {
         serverScopedProvider = InMemoryServerScopedRealmConfigurationProvider(
-            identifierPrefix: "ReaderPreferenceRepositoryTests-\(UUID().uuidString)"
+            identifierPrefix: "ReaderPreferenceRepositoryTests"
         )
         folioProfileConfig = Realm.Configuration(
-            inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles-\(UUID().uuidString)",
+            inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles",
             schemaVersion: AppContainer.RealmSchemaVersion,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]

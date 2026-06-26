@@ -278,7 +278,7 @@ final class V2MigrationDependencyTests: XCTestCase {
     }
     
     private func makeAppContainer() -> AppContainer {
-        return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests-\(UUID().uuidString)")
+        return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests")
     }
     
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {

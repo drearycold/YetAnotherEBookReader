@@ -17,7 +17,7 @@ final class ReadingSessionManagerTests: XCTestCase {
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(
-            testName: "ReadingSessionManagerTests-\(UUID().uuidString)"
+            testName: "ReadingSessionManagerTests"
         )
 
         manager = ReadingSessionManager(container: container)

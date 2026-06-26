@@ -31,8 +31,8 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         debugLog("setUpWithError started")
 
         // Setup in-memory Realm for testing
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
-        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchIntegrationTests-\(UUID().uuidString)")
+        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests")
+        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchIntegrationTests")
 
         // Setup mock server and library
         mockServer = CalibreServer(

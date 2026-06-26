@@ -20,7 +20,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(
-            testName: "FolioReaderProviderBookIdTests-\(UUID().uuidString)"
+            testName: "FolioReaderProviderBookIdTests"
         )
 
         guard let library = container.libraryManager.calibreLibraries.first?.value else {

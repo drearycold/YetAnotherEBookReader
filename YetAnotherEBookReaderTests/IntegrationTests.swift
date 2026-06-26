@@ -24,7 +24,7 @@ final class IntegrationTests: XCTestCase {
 
     func testDatabaseInitialization() throws {
         let container = MockAppContainerFactory.makeContainer(
-            testName: "IntegrationTests-DBInit-\(UUID().uuidString)"
+            testName: "IntegrationTests-DBInit"
         )
 
         try container.tryInitializeDatabase { status in
