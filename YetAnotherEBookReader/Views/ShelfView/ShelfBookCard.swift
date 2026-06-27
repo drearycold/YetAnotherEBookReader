@@ -173,45 +173,45 @@ struct ShelfBookCard: View {
                     }
                     .frame(width: ShelfLegacyMetrics.coverWidth, height: ShelfLegacyMetrics.coverHeight)
                 )
-        }
-        .contextMenu {
-            if !isEditing {
-                Button(action: onDetails) {
-                    Label("Details", systemImage: "info.circle")
-                }
-                
-                Button(action: onRefresh) {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                }
-                
-                if let onDelete = onDelete {
-                    Button(role: .destructive, action: onDelete) {
-                        Label("Delete", systemImage: "trash")
+                .contextMenu {
+                    if !isEditing {
+                        Button(action: onDetails) {
+                            Label("Details", systemImage: "info.circle")
+                        }
+                        
+                        Button(action: onRefresh) {
+                            Label("Refresh", systemImage: "arrow.clockwise")
+                        }
+                        
+                        if let onDelete = onDelete {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        
+                        if onGoodreads != nil || onDouban != nil || onHistory != nil {
+                            Divider()
+                        }
+                        
+                        if let onGoodreads = onGoodreads {
+                            Button(action: onGoodreads) {
+                                Label("Goodreads", systemImage: "globe")
+                            }
+                        }
+                        
+                        if let onDouban = onDouban {
+                            Button(action: onDouban) {
+                                Label("Douban", systemImage: "globe")
+                            }
+                        }
+                        
+                        if let onHistory = onHistory {
+                            Button(action: onHistory) {
+                                Label("Progress History", systemImage: "chart.bar.xaxis")
+                            }
+                        }
                     }
                 }
-                
-                if onGoodreads != nil || onDouban != nil || onHistory != nil {
-                    Divider()
-                }
-                
-                if let onGoodreads = onGoodreads {
-                    Button(action: onGoodreads) {
-                        Label("Goodreads", systemImage: "globe")
-                    }
-                }
-                
-                if let onDouban = onDouban {
-                    Button(action: onDouban) {
-                        Label("Douban", systemImage: "globe")
-                    }
-                }
-                
-                if let onHistory = onHistory {
-                    Button(action: onHistory) {
-                        Label("Progress History", systemImage: "chart.bar.xaxis")
-                    }
-                }
-            }
         }
     }
 }
