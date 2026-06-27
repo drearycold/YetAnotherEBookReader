@@ -166,7 +166,7 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
         if let book = container.bookManager.readingBook {
             listModel.book = book
             listModel.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
-            if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: self.position.id) {
+            if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(self.position.id)) {
                 self.position = position
             }
         }

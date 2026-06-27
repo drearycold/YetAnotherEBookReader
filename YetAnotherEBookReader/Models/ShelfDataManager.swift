@@ -294,30 +294,30 @@ extension AppContainerProtocol where Self: ObservableObject {
         calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
             .receive(on: queue)
-            .map { (_: [calibreUpdatedSignal]) -> ([(key: String, value: CalibreBook, ts: Date)], OSSignpostIntervalState) in
+            .map { (_: [calibreUpdatedSignal]) -> ([(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], OSSignpostIntervalState) in
                 let state = AppPerformanceSignpost.begin("RecentShelfRebuild")
                 let booksInShelf: [String: CalibreBook] = self.bookManager.booksInShelf
                 let readingPositionRepository = self.readingPositionRepository
-                var result: [(String, CalibreBook, Date)] = []
+                var result: [(String, CalibreBook, Date, [BookDeviceReadingPosition])] = []
                 for (key, book) in booksInShelf {
                     let positions: [BookDeviceReadingPosition] = readingPositionRepository.getPositions(forBookId: book.bookPrefId)
                     let maxEpoch: Date? = positions.map { p in Date(timeIntervalSince1970: p.epoch) }.max()
                     let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
-                    result.append((key, book, ts))
+                    result.append((key, book, ts, positions))
                 }
                 return (result, state)
             }
-            .map { (books: [(key: String, value: CalibreBook, ts: Date)], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, ts: Date)], OSSignpostIntervalState) in
+            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], OSSignpostIntervalState) in
                 let sorted = books.sorted { lhs, rhs in
                     return lhs.ts > rhs.ts
                 }
                 return (sorted, state)
             }
             .receive(on: DispatchQueue.main)
-            .map { (books: [(key: String, value: CalibreBook, ts: Date)], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, info: ReaderInfo)], OSSignpostIntervalState) in
+            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, info: ReaderInfo)], OSSignpostIntervalState) in
                 let sessionManager = self.sessionManager
-                let mapped = books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
-                    return (inShelfId, book, sessionManager.prepareBookReading(book: book))
+                let mapped = books.map { inShelfId, book, ts, positions -> (key: String, value: CalibreBook, info: ReaderInfo) in
+                    return (inShelfId, book, sessionManager.prepareBookReading(book: book, withLoadedPositions: positions))
                 }
                 return (mapped, state)
             }

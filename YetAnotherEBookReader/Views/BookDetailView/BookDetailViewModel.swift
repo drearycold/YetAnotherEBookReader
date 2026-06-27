@@ -334,7 +334,7 @@ class BookDetailViewModel: ObservableObject {
             return .goodreadsReadDate(readDateGR)
         } else if let readProgressGR = book.readProgressGRDescription {
             return .goodreadsProgress(readProgressGR)
-        } else if let position = repository.getPosition(forBookId: book.bookPrefId, deviceName: deviceName) ?? repository.getPositions(forBookId: book.bookPrefId).first {
+        } else if let position = repository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(deviceName)) ?? repository.getPosition(forBookId: book.bookPrefId, policy: .latest) {
             return .localProgress(percent: position.lastProgress, device: position.id)
         } else {
             return nil

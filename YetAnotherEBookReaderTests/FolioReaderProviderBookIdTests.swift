@@ -84,7 +84,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         container.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
         container.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
 
-        let restored = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName)
+        let restored = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(container.deviceName))
         XCTAssertEqual(restored?.lastReadPage, 17)
         XCTAssertEqual(restored?.lastPosition, [17, 33, 44])
         XCTAssertEqual(restored?.cfi, "epubcfi(/6/34)")
@@ -141,7 +141,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         DispatchQueue.global(qos: .userInitiated).async {
             writerStarted.wait()
             while true {
-                if repository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) == nil {
+                if repository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) == nil {
                     stateLock.lock()
                     sawEmptyPosition = true
                     stateLock.unlock()

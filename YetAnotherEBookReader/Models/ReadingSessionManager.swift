@@ -76,19 +76,28 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
+        let positions = container?.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        return prepareBookReading(book: book, withLoadedPositions: positions)
+    }
+    
+    func prepareBookReading(book: CalibreBook, withLoadedPositions positions: [BookDeviceReadingPosition]?) -> ReaderInfo {
         guard let container = container else {
             return ReaderInfo(deviceName: "", url: URL(fileURLWithPath: "/invalid"), missing: true, format: .UNKNOWN, readerType: .UNSUPPORTED, position: .init(readerName: ReaderType.UNSUPPORTED.id))
         }
         
+        let loadedPositions = positions ?? container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        
         var candidatePositions = [BookDeviceReadingPosition]()
 
-        //preference: device, latest, selected, any
-        if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName) {
+        // preference: device
+        if let position = ReadingPositionSelectionPolicy.latestForDevice(container.deviceName).select(from: loadedPositions) {
             candidatePositions.append(position)
         }
-        if let position = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first {
+        // preference: latest
+        if let position = ReadingPositionSelectionPolicy.latest.select(from: loadedPositions) {
             candidatePositions.append(position)
         }
+        // fallback: preferred format initial position
         if let format = self.getPreferredFormat(for: book) {
             candidatePositions.append(
                 container.readingPositionRepository.createInitial(

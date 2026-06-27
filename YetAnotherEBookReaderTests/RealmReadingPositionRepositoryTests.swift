@@ -33,13 +33,13 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         let position = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 15, epoch: 1000.0)
         
         // 1. Get position initially empty
-        XCTAssertNil(repository.getPosition(forBookId: bookId, deviceName: "device-1"))
+        XCTAssertNil(repository.getPosition(forBookId: bookId, policy: .latestForDevice("device-1")))
         
         // 2. Save
         repository.savePosition(position, forBookId: bookId)
         
         // 3. Get
-        let fetched = try XCTUnwrap(repository.getPosition(forBookId: bookId, deviceName: "device-1"))
+        let fetched = try XCTUnwrap(repository.getPosition(forBookId: bookId, policy: .latestForDevice("device-1")))
         XCTAssertEqual(fetched.id, "device-1")
         XCTAssertEqual(fetched.lastReadPage, 15)
         XCTAssertEqual(fetched.epoch, 1000.0)
@@ -75,7 +75,7 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         // 1. Remove by device name
         repository.removePosition(deviceName: "device-1", forBookId: bookId)
         XCTAssertEqual(repository.getPositions(forBookId: bookId).count, 1)
-        XCTAssertNil(repository.getPosition(forBookId: bookId, deviceName: "device-1"))
+        XCTAssertNil(repository.getPosition(forBookId: bookId, policy: .latestForDevice("device-1")))
         
         // 2. Remove by position object
         repository.removePosition(position: newerPos, forBookId: bookId)
@@ -132,11 +132,11 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         let tasks = repository.syncPositions(entries: entries, forBookId: bookId)
         
         // Verify local state
-        let ipadPos = try XCTUnwrap(repository.getPosition(forBookId: bookId, deviceName: "iPad"))
+        let ipadPos = try XCTUnwrap(repository.getPosition(forBookId: bookId, policy: .latestForDevice("iPad")))
         XCTAssertEqual(ipadPos.lastReadPage, 12)
         XCTAssertEqual(ipadPos.epoch, 2000.0)
         
-        let iphonePos = try XCTUnwrap(repository.getPosition(forBookId: bookId, deviceName: "iPhone"))
+        let iphonePos = try XCTUnwrap(repository.getPosition(forBookId: bookId, policy: .latestForDevice("iPhone")))
         XCTAssertEqual(iphonePos.lastReadPage, 20)
         XCTAssertEqual(iphonePos.epoch, 1500.0)
         

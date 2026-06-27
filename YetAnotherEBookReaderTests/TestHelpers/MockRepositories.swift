@@ -266,7 +266,7 @@ class MockBookRepository: BookRepositoryProtocol {
 class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
     var getPositionCalled = false
     var getPositionBookIdParam: String?
-    var getPositionDeviceNameParam: String?
+    var getPositionPolicyParam: ReadingPositionSelectionPolicy?
     var getPositionReturn: BookDeviceReadingPosition?
     
     var getPositionsCalled = false
@@ -318,10 +318,10 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var historyBookIdParam: Int32?
     var historyBookReturn: CalibreBook?
     
-    func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
+    func getPosition(forBookId bookId: String, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
         getPositionCalled = true
         getPositionBookIdParam = bookId
-        getPositionDeviceNameParam = deviceName
+        getPositionPolicyParam = policy
         return getPositionReturn
     }
     

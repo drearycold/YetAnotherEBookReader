@@ -99,7 +99,7 @@ final class IntegrationTests: XCTestCase {
         XCTAssertNil(container.sessionManager.readingBook)
         
         // Retrieve and assert saved position
-        let retrieved = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container.deviceName)
+        let retrieved = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(container.deviceName))
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.lastReadPage, 12)
         XCTAssertEqual(retrieved?.cfi, "cfi-12")

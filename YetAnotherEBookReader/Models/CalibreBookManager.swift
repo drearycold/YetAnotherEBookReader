@@ -263,7 +263,7 @@ class CalibreBookManager: ObservableObject {
                     logger.error("Failed to remove book \(book.title) from Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
 
-                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container?.deviceName ?? ""), position.lastProgress > 99 {
+                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(container?.deviceName ?? "")), position.lastProgress > 99 {
                     do {
                         try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
                     } catch {

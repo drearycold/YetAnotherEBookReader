@@ -547,7 +547,7 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
         guard bookIdentity.accepts(bookId) else { return nil }
 
-        return AppContainer.shared?.readingPositionRepository.getPosition(forBookId: bookIdentity.canonicalBookId, deviceName: nil)?.toFolioReaderReadPosition()
+        return AppContainer.shared?.readingPositionRepository.getPosition(forBookId: bookIdentity.canonicalBookId, policy: .latest)?.toFolioReaderReadPosition()
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {

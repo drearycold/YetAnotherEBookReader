@@ -10,7 +10,7 @@ import RealmSwift
 import OSLog
 
 protocol ReadingPositionRepositoryProtocol: Sendable {
-    func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition?
+    func getPosition(forBookId bookId: String, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
     func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
     func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
     func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook?
@@ -74,19 +74,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return realm
     }
     
-    func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
-        guard let realm = getRealm(forBookId: bookId) else { return nil }
-        var objects = realm.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-        
-        if let deviceName = deviceName {
-            objects = objects.filter(NSPredicate(format: "deviceId == %@", deviceName))
-        }
-        
-        return objects.filter(NSPredicate(format: "takePrecedence == true"))
-            .map({ $0.toDomain() })
-            .first ?? objects.map({ $0.toDomain() }).first
+    func getPosition(forBookId bookId: String, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
+        let positions = getPositions(forBookId: bookId)
+        return policy.select(from: positions)
     }
     
     func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
@@ -259,7 +249,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 return
             }
             
-            guard let localPosition = self.getPosition(forBookId: bookId, deviceName: remoteEntry.device) else {
+            guard let localPosition = self.getPosition(forBookId: bookId, policy: .latestForDevice(remoteEntry.device)) else {
                 positionsToSave.append(remotePosition)
                 devicesInserted[remoteEntry.device] = remotePosition
                 return

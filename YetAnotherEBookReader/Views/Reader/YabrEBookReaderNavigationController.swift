@@ -59,7 +59,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                 case .YabrEPUB:
                     guard let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() else { break }
                     yabrEPub.folioReader.saveReaderState {
-                        if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) {
+                        if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) {
                             self.container.readingPositionRepository.session(end: position, forBookId: self.book.bookPrefId)
                         }
                     }
@@ -67,7 +67,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                     guard let yabrPDF: YabrPDFViewController = self.findChildViewController() else { break }
                     yabrPDF.updatePageViewPositionHistory()
                     yabrPDF.updateReadingProgress()
-                    if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) {
+                    if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) {
                         self.container.readingPositionRepository.session(end: position, forBookId: self.book.bookPrefId)
                     }
                 case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
@@ -75,7 +75,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
                           let locator = yabrReadium.navigator.currentLocation
                     else { break }
                     yabrReadium.navigator(yabrReadium.navigator, locationDidChange: locator)
-                    if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) {
+                    if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) {
                         self.container.readingPositionRepository.session(end: position, forBookId: self.book.bookPrefId)
                     }
                 case .UNSUPPORTED:
@@ -84,7 +84,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
             case .inactive:
                 break   //trans, do nothing
             case .active:
-                if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName),
+                if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)),
                    position.readerName == self.readerInfo.readerType.rawValue {
                     self.container.readingPositionRepository.session(start: position, forBookId: self.book.bookPrefId)
                 }
@@ -97,7 +97,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     override func viewWillDisappear(_ animated: Bool) {
         activityCancellables.removeAll()
         
-        if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, deviceName: self.container.deviceName) {
+        if let position = self.container.readingPositionRepository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) {
             self.container.readingPositionRepository.session(end: position, forBookId: self.book.bookPrefId)
         }
         
