@@ -22,10 +22,10 @@ struct MainView: View {
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
-    @StateObject var viewModel: MainViewModel
+    @StateObject private var viewModel: MainViewModel
     
-    init(viewModel: MainViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+    init(container: AppContainer) {
+        _viewModel = StateObject(wrappedValue: MainViewModel(container: container, sessionManager: container.sessionManager))
         
         let woodColor = UIColor(ShelfLegacyMetrics.shelfBackgroundColor)
         
@@ -96,7 +96,7 @@ struct MainView: View {
                         .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
-                        SettingsView(viewModel: SettingsViewModel(container: container))
+                        SettingsView(container: container)
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
@@ -370,7 +370,7 @@ struct MainView_Previews: PreviewProvider {
     static private var container = AppContainer()
     
     static var previews: some View {
-        MainView(viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
+        MainView(container: container)
             .environmentObject(container)
             .environmentObject(container.sessionManager)
     }

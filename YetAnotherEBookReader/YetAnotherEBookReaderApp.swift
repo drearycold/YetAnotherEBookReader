@@ -18,7 +18,7 @@ struct YetAnotherEBookReaderApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack {
-                MainView(viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
+                MainView(container: container)
                     .environmentObject(container)
                     .environmentObject(container.downloadManager)
                     .environmentObject(container.sessionManager)
