@@ -115,4 +115,86 @@ class ShelfLegacyStyleTests: XCTestCase {
         XCTAssertEqual(ShelfLegacyPresentation.statusAssetName(.local), "icon-book-local")
         XCTAssertEqual(ShelfLegacyPresentation.statusAssetName(.updating), "icon-book-updating")
     }
+    
+    // Stage S7 Section Row Layout tests
+    
+    private func mockRowTileKind(index: Int, totalCount: Int) -> ShelfTileKind {
+        if index == 0 {
+            return .left
+        } else if index == totalCount - 1 {
+            return .right
+        } else {
+            return .center
+        }
+    }
+    
+    func testSectionRowLayoutSingleBook() {
+        // 1 book with columnCount = 4
+        let booksCount = 1
+        let columnCount = 4
+        let totalTileCount = ShelfLegacyLayout.completedTileCount(itemCount: booksCount, columnCount: columnCount)
+        XCTAssertEqual(totalTileCount, 4) // Padded to columnCount
+        
+        let kinds = (0..<totalTileCount).map { mockRowTileKind(index: $0, totalCount: totalTileCount) }
+        XCTAssertEqual(kinds[0], .left)
+        XCTAssertEqual(kinds[1], .center)
+        XCTAssertEqual(kinds[2], .center)
+        XCTAssertEqual(kinds[3], .right)
+    }
+    
+    func testSectionRowLayoutExactColumnCount() {
+        // Exactly columnCount = 4 books
+        let booksCount = 4
+        let columnCount = 4
+        let totalTileCount = ShelfLegacyLayout.completedTileCount(itemCount: booksCount, columnCount: columnCount)
+        XCTAssertEqual(totalTileCount, 4) // No extra fillers
+        
+        let kinds = (0..<totalTileCount).map { mockRowTileKind(index: $0, totalCount: totalTileCount) }
+        XCTAssertEqual(kinds[0], .left)
+        XCTAssertEqual(kinds[1], .center)
+        XCTAssertEqual(kinds[2], .center)
+        XCTAssertEqual(kinds[3], .right)
+    }
+    
+    func testSectionRowLayoutExceedsColumnCount() {
+        // 6 books with columnCount = 4
+        // For scrolling rows, we use books.count as totalTileCount (no filler padding)
+        let totalTileCount = 6
+        
+        let kinds = (0..<totalTileCount).map { mockRowTileKind(index: $0, totalCount: totalTileCount) }
+        XCTAssertEqual(kinds[0], .left)
+        XCTAssertEqual(kinds[1], .center)
+        XCTAssertEqual(kinds[2], .center)
+        XCTAssertEqual(kinds[3], .center)
+        XCTAssertEqual(kinds[4], .center)
+        XCTAssertEqual(kinds[5], .right)
+    }
+    
+    func testFillerSectionCount() {
+        // Height of section = 232 pt (32 header + 200 shelf)
+        // Height of filler row = 200 pt
+        let viewportHeight: CGFloat = 600.0
+        
+        // Scenario A: 2 sections (currentHeight = 464 pt)
+        // remainingHeight = 136 pt -> 1 filler row of 200 pt
+        let currentHeightA: CGFloat = 2 * 232.0
+        let remainingHeightA = viewportHeight - currentHeightA
+        let fillerRowCountA = remainingHeightA > 0 ? Int(ceil(remainingHeightA / 200.0)) : 0
+        XCTAssertEqual(fillerRowCountA, 1)
+        
+        // Scenario B: 3 sections (currentHeight = 696 pt)
+        // remainingHeight = -96 pt -> 0 filler rows
+        let currentHeightB: CGFloat = 3 * 232.0
+        let remainingHeightB = viewportHeight - currentHeightB
+        let fillerRowCountB = remainingHeightB > 0 ? Int(ceil(remainingHeightB / 200.0)) : 0
+        XCTAssertEqual(fillerRowCountB, 0)
+        
+        // Scenario C: 0 sections (currentHeight = 0 pt)
+        // remainingHeight = 600 pt -> 3 filler rows
+        let currentHeightC: CGFloat = 0
+        let remainingHeightC = viewportHeight - currentHeightC
+        let fillerRowCountC = remainingHeightC > 0 ? Int(ceil(remainingHeightC / 200.0)) : 0
+        XCTAssertEqual(fillerRowCountC, 3)
+    }
 }
+

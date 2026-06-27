@@ -402,6 +402,8 @@
 		E7226E372FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
 		E7226E392FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
 		E7226E3A2FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
+		E7226E3C2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
+		E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -729,6 +731,7 @@
 		E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyleTests.swift; sourceTree = "<group>"; };
 		E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyTile.swift; sourceTree = "<group>"; };
 		E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyCoverView.swift; sourceTree = "<group>"; };
+		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1020,6 +1023,7 @@
 				E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */,
 				E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */,
 				E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */,
+				E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */,
 			);
 			path = ShelfView;
 			sourceTree = "<group>";
@@ -1642,6 +1646,7 @@
 				E7C777A128ED495900939D63 /* YabrPDFChapterList.swift in Sources */,
 				E71F35A02FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
 				E74729C129D4423D007659A1 /* LibraryInfoCategoryListView.swift in Sources */,
+				E7226E3C2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */,
 				E792835828F835FA00EE2FC7 /* YabrPDFThumbnailListCell.swift in Sources */,
 				2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */,
 				2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */,
@@ -1912,6 +1917,7 @@
 				E71F35A32FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
 				E71F35A12FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
+				E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */,
 				6E7B80EC28FBA7AD008B075C /* YabrReadiumReaderViewController.swift in Sources */,
 				6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */,
 				6E7B80EE28FBA7AD008B075C /* BookImportPicker.swift in Sources */,
