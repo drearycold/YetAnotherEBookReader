@@ -33,6 +33,8 @@ struct MainView: View {
         navBarAppearance.configureWithOpaqueBackground()
         navBarAppearance.backgroundColor = woodColor
         navBarAppearance.shadowColor = .clear
+        navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.black]
+        navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.black]
         
         UINavigationBar.appearance().standardAppearance = navBarAppearance
         UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
@@ -42,6 +44,18 @@ struct MainView: View {
         tabBarAppearance.configureWithOpaqueBackground()
         tabBarAppearance.backgroundColor = woodColor
         tabBarAppearance.shadowColor = .clear
+        
+        let normalTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.black.withAlphaComponent(0.6)]
+        let selectedTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.systemBlue]
+        let normalIconColor = UIColor.black.withAlphaComponent(0.5)
+        let selectedIconColor = UIColor.systemBlue
+        
+        for layoutAppearance in [tabBarAppearance.stackedLayoutAppearance, tabBarAppearance.inlineLayoutAppearance, tabBarAppearance.compactInlineLayoutAppearance] {
+            layoutAppearance.normal.iconColor = normalIconColor
+            layoutAppearance.normal.titleTextAttributes = normalTextAttributes
+            layoutAppearance.selected.iconColor = selectedIconColor
+            layoutAppearance.selected.titleTextAttributes = selectedTextAttributes
+        }
         
         UITabBar.appearance().standardAppearance = tabBarAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
