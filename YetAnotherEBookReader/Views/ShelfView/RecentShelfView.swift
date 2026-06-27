@@ -178,6 +178,7 @@ struct RecentShelfView: View {
                 }
             }
             .navigationTitle("Recent")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !viewModel.selectionState.isEditing {
