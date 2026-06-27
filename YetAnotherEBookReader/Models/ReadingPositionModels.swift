@@ -248,3 +248,33 @@ extension BookDeviceReadingPositionHistory {
         return result
     }
 }
+
+enum ReadingPositionSelectionPolicy: Equatable, Sendable {
+    case latest
+    case latestForDevice(String)
+    
+    func select(from positions: [BookDeviceReadingPosition]) -> BookDeviceReadingPosition? {
+        switch self {
+        case .latest:
+            guard !positions.isEmpty else { return nil }
+            var best = positions[0]
+            for position in positions.dropFirst() {
+                if position.epoch > best.epoch {
+                    best = position
+                }
+            }
+            return best
+            
+          case .latestForDevice(let deviceName):
+            let devicePositions = positions.filter { $0.id == deviceName }
+            guard !devicePositions.isEmpty else { return nil }
+            var best = devicePositions[0]
+            for position in devicePositions.dropFirst() {
+                if position.epoch > best.epoch {
+                    best = position
+                }
+            }
+            return best
+        }
+    }
+}
