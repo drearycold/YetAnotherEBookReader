@@ -404,6 +404,8 @@
 		E7226E3A2FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
 		E7226E3C2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
 		E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
+		E7226E3F2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */; };
+		E7226E402FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -732,6 +734,7 @@
 		E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyTile.swift; sourceTree = "<group>"; };
 		E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyCoverView.swift; sourceTree = "<group>"; };
 		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
+		E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPerformanceSignpost.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1196,6 +1199,7 @@
 				E71F35392FE4F2F8007AB0B1 /* Realm */,
 				E7226E1A2FED26E5009D3BB3 /* AppContainer.swift */,
 				E7226E282FED5677009D3BB3 /* Testing */,
+				E7226E3E2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -1740,6 +1744,7 @@
 				E71F355D2FE4F39C007AB0B1 /* ReadiumPreferenceAdapter.swift in Sources */,
 				E71F355A2FE4F38C007AB0B1 /* BookReadingPositionRealm.swift in Sources */,
 				E7C777A328ED495900939D63 /* YabrPDFChapterListCell.swift in Sources */,
+				E7226E3F2FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */,
 				E71F34D92FDC5529007AB0B1 /* LibraryViewModel.swift in Sources */,
 				2ABB9154261F1A47004AA7C0 /* LibraryInfoView.swift in Sources */,
 				E7C777A728ED495900939D63 /* YabrPDFHighlightList.swift in Sources */,
@@ -2011,6 +2016,7 @@
 				E70B00032F00000000000003 /* DatabaseBootstrapper.swift in Sources */,
 				E70B00062F00000000000006 /* AppContainerProtocol.swift in Sources */,
 				E71F355C2FE4F39C007AB0B1 /* ReadiumPreferenceAdapter.swift in Sources */,
+				E7226E402FEFC88E009D3BB3 /* AppPerformanceSignpost.swift in Sources */,
 				E71F34C22FDA9290007AB0B1 /* UnifiedSearchViewModel.swift in Sources */,
 				E71F35592FE4F38C007AB0B1 /* BookReadingPositionRealm.swift in Sources */,
 				2ADCD80A26F4B96200FBAE11 /* YabrReadiumEPUBViewController.swift in Sources */,

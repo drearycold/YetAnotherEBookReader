@@ -557,11 +557,21 @@ class CalibreBookManager: ObservableObject {
 
         var task = calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) ?? CalibreBooksTask(request: request)
 
+        let fetchSignpost = AppPerformanceSignpost.begin("MetadataHTTPFetch", "Library: \(request.library.id), Books: \(books.count)")
         task = await calibreServerService.getBooksMetadata(task: task)
 
         if task.request.getAnnotations {
             task = await calibreServerService.getAnnotations(task: task)
         }
+
+        var annotationCount = 0
+        if let annotationsResult = task.booksAnnotationsEntry {
+            for (_, entry) in annotationsResult {
+                annotationCount += (entry.annotations_map.bookmark?.count ?? 0)
+                annotationCount += (entry.annotations_map.highlight?.count ?? 0)
+            }
+        }
+        AppPerformanceSignpost.end("MetadataHTTPFetch", fetchSignpost, "Library: \(request.library.id), Books: \(books.count), Annotations: \(annotationCount)")
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             AppContainer.SaveBooksMetadataRealmQueue.async {
@@ -574,6 +584,7 @@ class CalibreBookManager: ObservableObject {
 
                 let serverUUID = task.library.server.uuid.uuidString
                 let libraryName = task.library.name
+                let saveSignpost = AppPerformanceSignpost.begin("MetadataRealmSave", "Library: \(task.library.id), Books: \(task.books.count)")
                 try? realmSaveBooksMetadata.write {
                     task.books.map {
                         (
@@ -602,6 +613,7 @@ class CalibreBookManager: ObservableObject {
                         }
                     }
                 }
+                AppPerformanceSignpost.end("MetadataRealmSave", saveSignpost, "Library: \(task.library.id), Books: \(task.books.count)")
                 continuation.resume()
             }
         }

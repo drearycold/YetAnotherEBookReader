@@ -7,6 +7,7 @@
 
 import Foundation
 import RealmSwift
+import OSLog
 
 protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition?
@@ -241,6 +242,10 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     }
     
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
+        let state = AppPerformanceSignpost.begin("PositionMerge", "Entries: \(lastReadPositions.count)")
+        defer {
+            AppPerformanceSignpost.end("PositionMerge", state, "Entries: \(lastReadPositions.count)")
+        }
         guard let realm = getRealm(forBookId: bookId) else { return [] }
         
         var devicesUpdated = [String: BookDeviceReadingPosition]()

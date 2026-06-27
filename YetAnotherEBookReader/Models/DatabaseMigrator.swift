@@ -8,6 +8,7 @@
 
 import Foundation
 import RealmSwift
+import OSLog
 
 final class DatabaseMigrator {
     /// Build a fully-configured Realm.Configuration with all v42→v140 migration
@@ -250,7 +251,9 @@ final class DatabaseMigrator {
         }
 
         // Force migration to run by opening the realm once.
+        let migrationSignpost = AppPerformanceSignpost.begin("DatabaseMigration")
         let _ = try Realm(configuration: conf)
+        AppPerformanceSignpost.end("DatabaseMigration", migrationSignpost)
         conf.migrationBlock = nil
 
         Realm.Configuration.defaultConfiguration = conf

@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import RealmSwift
+import OSLog
 
 struct ActivityLogUIEntry: Identifiable, Hashable {
     let id: String
@@ -283,6 +284,10 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     
     // MARK: - Remote Sync (Calibre Server Merges)
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
+        let state = AppPerformanceSignpost.begin("BookmarkMerge", "Entries: \(entries.count)")
+        defer {
+            AppPerformanceSignpost.end("BookmarkMerge", state, "Entries: \(entries.count)")
+        }
         guard let realm = getRealm() else { return 0 }
         
         let dateFormatter = ISO8601DateFormatter()
@@ -382,6 +387,10 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     }
     
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int {
+        let state = AppPerformanceSignpost.begin("HighlightMerge", "Entries: \(entries.count)")
+        defer {
+            AppPerformanceSignpost.end("HighlightMerge", state, "Entries: \(entries.count)")
+        }
         guard let realm = getRealm() else { return 0 }
         
         var pending = realm.objects(BookHighlightRealm.self).filter("bookId == %@", bookId).count

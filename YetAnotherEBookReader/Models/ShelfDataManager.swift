@@ -8,6 +8,7 @@
 import Foundation
 import Combine
 import RealmSwift
+import OSLog
 
 class YabrShelfDataModel: ObservableObject {
     
@@ -289,10 +290,12 @@ class YabrShelfDataModel: ObservableObject {
 extension AppContainerProtocol where Self: ObservableObject {
     func registerRecentShelfUpdater() {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
+        let box = RecentShelfFirstPublishBox()
         calibreUpdatedSubject.receive(on: queue)
             .collect(.byTime(RunLoop.main, .seconds(1)))
             .receive(on: queue)
-            .map { (_: [calibreUpdatedSignal]) -> [(key: String, value: CalibreBook, ts: Date)] in
+            .map { (_: [calibreUpdatedSignal]) -> ([(key: String, value: CalibreBook, ts: Date)], OSSignpostIntervalState) in
+                let state = AppPerformanceSignpost.begin("RecentShelfRebuild")
                 let booksInShelf: [String: CalibreBook] = self.bookManager.booksInShelf
                 let readingPositionRepository = self.readingPositionRepository
                 var result: [(String, CalibreBook, Date)] = []
@@ -302,26 +305,34 @@ extension AppContainerProtocol where Self: ObservableObject {
                     let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
                     result.append((key, book, ts))
                 }
-                return result
+                return (result, state)
             }
-            .map { (books: [(key: String, value: CalibreBook, ts: Date)]) -> [(key: String, value: CalibreBook, ts: Date)] in
-                return books.sorted { lhs, rhs in
+            .map { (books: [(key: String, value: CalibreBook, ts: Date)], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, ts: Date)], OSSignpostIntervalState) in
+                let sorted = books.sorted { lhs, rhs in
                     return lhs.ts > rhs.ts
                 }
+                return (sorted, state)
             }
             .receive(on: DispatchQueue.main)
-            .map { books -> [(key: String, value: CalibreBook, info: ReaderInfo)] in
+            .map { (books: [(key: String, value: CalibreBook, ts: Date)], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, info: ReaderInfo)], OSSignpostIntervalState) in
                 let sessionManager = self.sessionManager
-                return books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
+                let mapped = books.map { inShelfId, book, ts -> (key: String, value: CalibreBook, info: ReaderInfo) in
                     return (inShelfId, book, sessionManager.prepareBookReading(book: book))
                 }
+                return (mapped, state)
             }
             .receive(on: queue)
-            .map { books -> [ShelfBookItem] in
-                books.map(self.buildShelfBookItem)
+            .map { (books: [(key: String, value: CalibreBook, info: ReaderInfo)], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
+                let items = books.map(self.buildShelfBookItem)
+                return (items, state)
             }
             .receive(on: RunLoop.main)
-            .sink(receiveValue: { displayBooks in
+            .sink(receiveValue: { (displayBooks, state) in
+                AppPerformanceSignpost.end("RecentShelfRebuild", state)
+                if box.isFirstPublish {
+                    box.isFirstPublish = false
+                    AppPerformanceSignpost.emit("FirstRecentShelfPublish")
+                }
                 self.recentShelfItemsSubject.send(displayBooks)
             })
             .store(in: &calibreCancellables)
@@ -380,4 +391,8 @@ extension AppContainerProtocol where Self: ObservableObject {
             status: status
         )
     }
+}
+
+class RecentShelfFirstPublishBox {
+    var isFirstPublish = true
 }
