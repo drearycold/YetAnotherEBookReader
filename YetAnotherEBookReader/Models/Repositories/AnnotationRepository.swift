@@ -299,6 +299,14 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             partialResult.insert(object.pos)
         }
         
+        var localBookmarksByPos = [String: [BookBookmarkRealm]]()
+        for obj in bookObjects {
+            localBookmarksByPos[obj.pos, default: []].append(obj)
+        }
+        for (pos, objs) in localBookmarksByPos {
+            localBookmarksByPos[pos] = objs.sorted(by: { $0.date > $1.date })
+        }
+        
         let bookmarksByPos = entries.reduce(into: [String: [CalibreBookAnnotationBookmarkEntry]]()) { partialResult, entry in
             guard entry.type == "bookmark",
                   dateFormatter.date(from: entry.timestamp) != nil
@@ -320,11 +328,8 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                 guard let entryNewest = entries.first,
                       let entryNewestDate = dateFormatter.date(from: entryNewest.timestamp) else { return }
                 
-                let objects = bookObjects
-                    .filter(NSPredicate(format: "pos = %@", pos))
-                    .sorted(byKeyPath: "date", ascending: false)
-                
-                let objectsVisible = objects.filter(NSPredicate(format: "removed != true"))
+                let objects = localBookmarksByPos[pos] ?? []
+                var hasVisible = !objects.filter({ !$0.removed }).isEmpty
                 
                 if let objectNewest = objects.first {
                     if objectNewest.date == entryNewestDate
@@ -337,11 +342,14 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                         pending.remove(pos)
                     } else if objectNewest.date < entryNewestDate + 0.1 {
                         //server has newer entry, remove all local entries
-                        while( objectsVisible.isEmpty == false ) {
-                            objectsVisible.first?.date += 0.001
-                            objectsVisible.first?.removed = true
+                        for obj in objects {
+                            if !obj.removed {
+                                obj.date += 0.001
+                                obj.removed = true
+                            }
                         }
                         pending.remove(pos)
+                        hasVisible = false
                     } else if entryNewestDate < objectNewest.date + 0.1 {
                         //local has newer entry, ignore server one
                     } else {
@@ -350,7 +358,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                     }
                 }
                 
-                guard objectsVisible.isEmpty,
+                guard !hasVisible,
                       entryNewest.removed != true
                 else {
                     // only insert newest visible entry
@@ -380,6 +388,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                 object.page = firstStep / 2
                 
                 realm.add(object)
+                localBookmarksByPos[pos, default: []].insert(object, at: 0)
             }
         }
         
@@ -393,7 +402,15 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         guard let realm = getRealm() else { return 0 }
         
-        var pending = realm.objects(BookHighlightRealm.self).filter("bookId == %@", bookId).count
+        let highlightObjects = realm.objects(BookHighlightRealm.self).filter("bookId == %@", bookId)
+        var localHighlightsById = [String: BookHighlightRealm]()
+        for obj in highlightObjects {
+            localHighlightsById[obj.highlightId] = obj
+        }
+        
+        var pending = highlightObjects.count
+        var processedHighlightIds = Set<String>()
+        
         try? realm.write {
             let dateFormatter = ISO8601DateFormatter()
             dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
@@ -404,8 +421,11 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                       let date = dateFormatter.date(from: hl.timestamp)
                 else { return }
                 
+                guard !processedHighlightIds.contains(highlightId) else { return }
+                processedHighlightIds.insert(highlightId)
+                
                 guard hl.removed != true else {
-                    if let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId) {
+                    if let object = localHighlightsById[highlightId] {
                         if object.date <= date + 0.1 {
                             object.removed = true
                             object.date = date
@@ -421,7 +441,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                 
                 guard let spineIndex = hl.spineIndex else { return }
                 
-                if let object = realm.object(ofType: BookHighlightRealm.self, forPrimaryKey: highlightId) {
+                if let object = localHighlightsById[highlightId] {
                     if object.date <= date + 0.1 {
                         object.date = date
                         object.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
@@ -456,6 +476,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                     }
                     
                     realm.add(highlightRealm, update: .all)
+                    localHighlightsById[highlightId] = highlightRealm
                 }
             }
         }
