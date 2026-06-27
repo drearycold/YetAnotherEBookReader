@@ -37,20 +37,25 @@ final class SectionShelfViewModel: ObservableObject {
     init(container: AppContainer) {
         self.container = container
         setupSubscriptions()
-        bootstrapShelfDataModelIfNeeded()
+        bootstrapIfDatabaseReady()
     }
-    
-    private func bootstrapShelfDataModelIfNeeded() {
+
+    /// Idempotent bootstrap of the lazy `shelfDataModel`. Safe to call from
+    /// `init`, from the `calibreUpdatedSubject` sink, and from the view's
+    /// `.onAppear` to cover the case where the user first lands directly
+    /// on the Discover tab and the database-ready signal has not yet
+    /// been routed through the subject pipeline.
+    func bootstrapIfDatabaseReady() {
         guard container.logger != nil else { return }
-        
-        // Force lazy initialization of shelfDataModel and seed initial items if any
+        guard allDisplaySections.isEmpty else { return }
+
         let initialItems = container.shelfDataModel.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
         if !initialItems.isEmpty {
             self.allDisplaySections = initialItems
             self.applyFiltering()
         }
     }
-    
+
     private func setupSubscriptions() {
         container.discoverShelfItemsSubject
             .sink { [weak self] sections in
@@ -59,17 +64,15 @@ final class SectionShelfViewModel: ObservableObject {
                 self.applyFiltering()
             }
             .store(in: &cancellables)
-            
+
         container.calibreUpdatedSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] signal in
                 guard let self = self else { return }
-                
+
                 // If database just finished initializing, bootstrap shelfDataModel
-                if self.container.logger != nil && self.allDisplaySections.isEmpty {
-                    self.bootstrapShelfDataModelIfNeeded()
-                }
-                
+                self.bootstrapIfDatabaseReady()
+
                 if case .deleted(let deletedId) = signal {
                     if self.presentingBookDetailId == deletedId {
                         self.presentingBookDetailId = nil
@@ -147,19 +150,22 @@ final class SectionShelfViewModel: ObservableObject {
     }
     
     private func applyFiltering() {
+        // Aggregate the set of libraries actually present in the section
+        // book items. Sections are cross-library by category (e.g. "Author: A"),
+        // so the libraryId lives on each ShelfBookItem, not on the section id.
         let availableLibraryIds = Set(
-            allDisplaySections.compactMap { AppContainer.parseShelfSectionId(sectionId: $0.id) }
+            allDisplaySections.flatMap { $0.books.compactMap { $0.libraryId } }
         )
-        pickedLibraries.formIntersection(availableLibraryIds)
-        
-        let librarySet = Set<CalibreLibrary>(
-            allDisplaySections.compactMap { section -> CalibreLibrary? in
-                guard let libraryId = AppContainer.parseShelfSectionId(sectionId: section.id) else { return nil }
-                return container.libraryManager.calibreLibraries[libraryId]
-            }
-        )
-        let libraryList = librarySet.sorted(by: { $0.name < $1.name })
-        
+        // Prune picked libraries that no longer exist in the calibre library
+        // dictionary, but keep picked libraries that simply have no books in
+        // the current section set — those should still hide every section.
+        pickedLibraries.formIntersection(Set(container.libraryManager.calibreLibraries.keys))
+
+        let libraryList = container.libraryManager.calibreLibraries
+            .values
+            .filter { availableLibraryIds.contains($0.id) }
+            .sorted(by: { $0.name < $1.name })
+
         libraryFilters = libraryList.map { library in
             ShelfLibraryFilterItem(
                 id: library.id,
@@ -168,10 +174,19 @@ final class SectionShelfViewModel: ObservableObject {
                 isSelected: pickedLibraries.contains(library.id)
             )
         }
-        
-        displaySections = allDisplaySections.filter { section in
-            guard let libraryId = AppContainer.parseShelfSectionId(sectionId: section.id) else { return false }
-            return pickedLibraries.isEmpty || pickedLibraries.contains(libraryId)
+
+        if pickedLibraries.isEmpty {
+            displaySections = allDisplaySections
+            return
+        }
+
+        displaySections = allDisplaySections.compactMap { section in
+            let filteredBooks = section.books.filter { book in
+                guard let bookLibraryId = book.libraryId else { return false }
+                return pickedLibraries.contains(bookLibraryId)
+            }
+            guard !filteredBooks.isEmpty else { return nil }
+            return ShelfSectionItem(id: section.id, title: section.title, books: filteredBooks)
         }
     }
 }
