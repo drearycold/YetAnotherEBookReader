@@ -395,6 +395,15 @@
 		E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */; };
 		E7226E2D2FED56CB009D3BB3 /* MockAppContainerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E2C2FED56CB009D3BB3 /* MockAppContainerFactory.swift */; };
 		E7226E2F2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */; };
+		E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
+		E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */; };
+		E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */; };
+		E7226E362FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
+		E7226E372FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */; };
+		E7226E392FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
+		E7226E3A2FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */; };
+		E7226E3C2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
+		E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */; };
 		E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */; };
 		E732E3ED2A3F03350075D1AC /* BookDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCD29D138980066BD43 /* BookDetailView.swift */; };
 		E732E3EE2A3F03350075D1AC /* LibraryInfoBookListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7804CCF29D28B360066BD43 /* LibraryInfoBookListView.swift */; };
@@ -718,6 +727,11 @@
 		E7226E292FED5677009D3BB3 /* TestRealmEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestRealmEnvironment.swift; sourceTree = "<group>"; };
 		E7226E2C2FED56CB009D3BB3 /* MockAppContainerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppContainerFactory.swift; sourceTree = "<group>"; };
 		E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAppContainerFactoryTests.swift; sourceTree = "<group>"; };
+		E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyle.swift; sourceTree = "<group>"; };
+		E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyStyleTests.swift; sourceTree = "<group>"; };
+		E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyTile.swift; sourceTree = "<group>"; };
+		E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacyCoverView.swift; sourceTree = "<group>"; };
+		E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelfLegacySectionHeader.swift; sourceTree = "<group>"; };
 		E730405728E865550013BA01 /* YabrEBookReaderMetaSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrEBookReaderMetaSource.swift; sourceTree = "<group>"; };
 		E74729C029D4423D007659A1 /* LibraryInfoCategoryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoCategoryListView.swift; sourceTree = "<group>"; };
 		E74729C229D52F5E007659A1 /* LibraryInfoBookListInfoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryInfoBookListInfoView.swift; sourceTree = "<group>"; };
@@ -1006,6 +1020,10 @@
 				E71F35942FE8EC1F007AB0B1 /* RecentShelfView.swift */,
 				E71F35972FE8EE30007AB0B1 /* ShelfBookCard.swift */,
 				E71F359A2FE8EE7B007AB0B1 /* SectionShelfView.swift */,
+				E7226E302FEF69A5009D3BB3 /* ShelfLegacyStyle.swift */,
+				E7226E352FEF6A05009D3BB3 /* ShelfLegacyTile.swift */,
+				E7226E382FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift */,
+				E7226E3B2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift */,
 			);
 			path = ShelfView;
 			sourceTree = "<group>";
@@ -1123,6 +1141,7 @@
 				E71F35DD2FEBBF9C007AB0B1 /* IntegrationTests.swift */,
 				E7226E1D2FED348F009D3BB3 /* DatabaseBootstrapperTests.swift */,
 				E7226E2E2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift */,
+				E7226E332FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift */,
 			);
 			path = YetAnotherEBookReaderTests;
 			sourceTree = "<group>";
@@ -1612,6 +1631,7 @@
 				E71F35952FE8EC1F007AB0B1 /* RecentShelfView.swift in Sources */,
 				E70A25CB2F7BDC8D004F006E /* YabrReaderSettingsView.swift in Sources */,
 				2AC3EC1C25BDBC10004A6633 /* YetAnotherEBookReaderApp.swift in Sources */,
+				E7226E362FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */,
 				2A890571260076780072B580 /* YabrPDFOptionView.swift in Sources */,
 				E71F34DC2FDC555A007AB0B1 /* ServerViewModel.swift in Sources */,
 				E7C777A628ED495900939D63 /* YabrPDFBookmarkList.swift in Sources */,
@@ -1626,6 +1646,7 @@
 				E7C777A128ED495900939D63 /* YabrPDFChapterList.swift in Sources */,
 				E71F35A02FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
 				E74729C129D4423D007659A1 /* LibraryInfoCategoryListView.swift in Sources */,
+				E7226E3C2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */,
 				E792835828F835FA00EE2FC7 /* YabrPDFThumbnailListCell.swift in Sources */,
 				2AA07E9526DB4AEC008CE451 /* BookPreviewViewModel.swift in Sources */,
 				2A84650E269AE555000638B2 /* MyFolioReaderCenterDelegate.swift in Sources */,
@@ -1682,6 +1703,7 @@
 				E71F351F2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift in Sources */,
 				E71F35822FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,
 				E71F35272FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
+				E7226E322FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
 				E71F352A2FDFC180007AB0B1 /* YabrPDFViewController+Sharing.swift in Sources */,
 				E71F352D2FDFC260007AB0B1 /* YabrPDFViewController+Chrome.swift in Sources */,
 				2A47581727B9EF8400642AD1 /* ServerDetailView.swift in Sources */,
@@ -1732,6 +1754,7 @@
 				E7226E242FED5410009D3BB3 /* DefaultServerScopedRealmConfigurationProvider.swift in Sources */,
 				E71F35282FE3B38A007AB0B1 /* CalibreSyncModels.swift in Sources */,
 				A04D200130C0000100000002 /* CalibreServerService+LibrarySync.swift in Sources */,
+				E7226E392FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */,
 				A04D200130C0000100000003 /* CalibreServerService+Metadata.swift in Sources */,
 				A04D200130C0000100000005 /* CalibreServerService+ReadingPosition.swift in Sources */,
 				2ABB9143261ED7E5004AA7C0 /* Constants.swift in Sources */,
@@ -1772,6 +1795,7 @@
 				E71F35AE2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift in Sources */,
 				E7226E2F2FED6C4E009D3BB3 /* MockAppContainerFactoryTests.swift in Sources */,
 				E71F35DE2FEBBF9C007AB0B1 /* IntegrationTests.swift in Sources */,
+				E7226E342FEF69A8009D3BB3 /* ShelfLegacyStyleTests.swift in Sources */,
 				E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */,
 				E71F35BC2FEA95D3007AB0B1 /* CalibreBookManagerTests.swift in Sources */,
 				E7226E1E2FED348F009D3BB3 /* DatabaseBootstrapperTests.swift in Sources */,
@@ -1878,6 +1902,7 @@
 				6E7B80E128FBA7AD008B075C /* YabrPDFHighlightListCell.swift in Sources */,
 				E71F35962FE8EC1F007AB0B1 /* RecentShelfView.swift in Sources */,
 				6E7B80E228FBA7AD008B075C /* YabrPDFReferenceList.swift in Sources */,
+				E7226E372FEF6A05009D3BB3 /* ShelfLegacyTile.swift in Sources */,
 				6E7B80E328FBA7AD008B075C /* YabrPDFReferenceListCell.swift in Sources */,
 				6E7B80E428FBA7AD008B075C /* YabrPDFTableViewController.swift in Sources */,
 				E71F34DD2FDC555A007AB0B1 /* ServerViewModel.swift in Sources */,
@@ -1892,6 +1917,7 @@
 				E71F35A32FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
 				E71F35A12FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
+				E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */,
 				6E7B80EC28FBA7AD008B075C /* YabrReadiumReaderViewController.swift in Sources */,
 				6E7B80ED28FBA7AD008B075C /* AppInfoView.swift in Sources */,
 				6E7B80EE28FBA7AD008B075C /* BookImportPicker.swift in Sources */,
@@ -1948,6 +1974,7 @@
 				E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
 				E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
 				E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
+				E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
 				E71F35832FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,
 				E71F35282FDFC180007AB0B1 /* YabrPDFViewController+Selection.swift in Sources */,
 				E71F351E2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift in Sources */,
@@ -1998,6 +2025,7 @@
 				E7226E232FED5410009D3BB3 /* DefaultServerScopedRealmConfigurationProvider.swift in Sources */,
 				E71F35622FE77EFE007AB0B1 /* BookMetadataSection.swift in Sources */,
 				2ADCD81C26F4B96200FBAE11 /* BookPreference.swift in Sources */,
+				E7226E3A2FEF6A55009D3BB3 /* ShelfLegacyCoverView.swift in Sources */,
 				E71F35272FE3B38A007AB0B1 /* CalibreSyncModels.swift in Sources */,
 				2ADCD82326F4B96200FBAE11 /* ImageRequest.swift in Sources */,
 				2ADCD82826F4B96200FBAE11 /* LibraryInfoBookRow.swift in Sources */,

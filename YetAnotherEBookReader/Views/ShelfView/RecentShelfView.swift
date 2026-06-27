@@ -13,44 +13,66 @@ struct IdentifiableString: Identifiable {
     var id: String { value }
 }
 
+fileprivate enum RecentShelfRenderItem: Identifiable {
+    case book(ShelfBookItem)
+    case filler(id: String)
+    
+    var id: String {
+        switch self {
+        case .book(let book):
+            return book.id
+        case .filler(let id):
+            return id
+        }
+    }
+}
+
 @available(macCatalyst 14.0, *)
 struct RecentShelfView: View {
     @ObservedObject var viewModel: RecentShelfViewModel
     
-    private let columns = [
-        GridItem(.adaptive(minimum: 110, maximum: 150), spacing: 20)
-    ]
-    
     var body: some View {
         NavigationView {
             ZStack {
-                Color(.systemGroupedBackground)
+                ShelfLegacyMetrics.shelfBackgroundColor
                     .ignoresSafeArea()
                 
-                if viewModel.displayBooks.isEmpty {
-                    VStack(spacing: 12) {
-                        Image(systemName: "books.vertical")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
-                        Text("Your reading shelf is empty")
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                        Text("Add books by star-toggling or downloading from Browse tab")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 32)
-                    }
-                    .padding()
-                } else {
-                    VStack(spacing: 0) {
-                        ScrollView {
-                            LazyVGrid(columns: columns, spacing: 20) {
-                                ForEach(viewModel.displayBooks) { book in
+                GeometryReader { geometry in
+                    let containerWidth = geometry.size.width
+                    let viewportHeight = geometry.size.height
+                    let columnCount = ShelfLegacyLayout.columnCount(containerWidth: containerWidth)
+                    let tileWidth = ShelfLegacyLayout.tileWidth(containerWidth: containerWidth)
+                    let totalTileCount = ShelfLegacyLayout.viewportTileCount(
+                        itemCount: viewModel.displayBooks.count,
+                        columnCount: columnCount,
+                        viewportHeight: viewportHeight
+                    )
+                    
+                    let books = viewModel.displayBooks
+                    let fillerCount = max(0, totalTileCount - books.count)
+                    
+                    let renderItems: [RecentShelfRenderItem] = {
+                        var items = books.map { RecentShelfRenderItem.book($0) }
+                        for i in 0..<fillerCount {
+                            items.append(.filler(id: "filler-\(i)"))
+                        }
+                        return items
+                    }()
+                    
+                    let gridColumns = Array(repeating: GridItem(.fixed(tileWidth), spacing: 0), count: columnCount)
+                    
+                    ScrollView {
+                        LazyVGrid(columns: gridColumns, spacing: 0) {
+                            ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                                let kind = ShelfLegacyLayout.tileKind(index: index, columnCount: columnCount)
+                                switch item {
+                                case .book(let book):
                                     ShelfBookCard(
                                         book: book,
                                         isEditing: viewModel.selectionState.isEditing,
                                         isSelected: viewModel.selectionState.selectedBookIds.contains(book.id),
+                                        tileKind: kind,
+                                        tileWidth: tileWidth,
                                         onTap: {
                                             viewModel.tapBook(bookId: book.id)
                                         },
@@ -78,15 +100,42 @@ struct RecentShelfView: View {
                                             viewModel.presentingHistoryBookId = book.id
                                         }
                                     )
-                                    .transition(.scale.combined(with: .opacity))
+                                case .filler:
+                                    ShelfLegacyFillerTile(kind: kind, width: tileWidth)
                                 }
                             }
-                            .padding(20)
                         }
-                        .refreshable {
-                            viewModel.refreshShelf()
+                    }
+                    .refreshable {
+                        viewModel.refreshShelf()
+                    }
+                    .overlay(
+                        Group {
+                            if books.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "books.vertical")
+                                        .font(.system(size: 60))
+                                        .foregroundColor(.gray)
+                                    Text("Your reading shelf is empty")
+                                        .font(.headline)
+                                        .foregroundColor(.secondary)
+                                    Text("Add books by star-toggling or downloading from Browse tab")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 32)
+                                }
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color(UIColor.systemBackground).opacity(0.8))
+                                        .shadow(radius: 10)
+                                )
+                                .padding(32)
+                            }
                         }
-                        
+                    )
+                    .safeAreaInset(edge: .bottom) {
                         if viewModel.selectionState.isEditing {
                             HStack {
                                 Button("Select All") {
@@ -129,6 +178,7 @@ struct RecentShelfView: View {
                 }
             }
             .navigationTitle("Recent")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !viewModel.selectionState.isEditing {

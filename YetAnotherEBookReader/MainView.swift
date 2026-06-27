@@ -20,11 +20,45 @@ struct MainView: View {
     @EnvironmentObject var container: AppContainer
     @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
+    @Environment(\.horizontalSizeClass) var originalSizeClass
 
     @StateObject var viewModel: MainViewModel
     
     init(viewModel: MainViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        
+        let woodColor = UIColor(ShelfLegacyMetrics.shelfBackgroundColor)
+        
+        let navBarAppearance = UINavigationBarAppearance()
+        navBarAppearance.configureWithOpaqueBackground()
+        navBarAppearance.backgroundColor = woodColor
+        navBarAppearance.shadowColor = .clear
+        navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.black]
+        navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.black]
+        
+        UINavigationBar.appearance().standardAppearance = navBarAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
+        UINavigationBar.appearance().compactAppearance = navBarAppearance
+        
+        let tabBarAppearance = UITabBarAppearance()
+        tabBarAppearance.configureWithOpaqueBackground()
+        tabBarAppearance.backgroundColor = woodColor
+        tabBarAppearance.shadowColor = .clear
+        
+        let normalTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.black.withAlphaComponent(0.6)]
+        let selectedTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.systemBlue]
+        let normalIconColor = UIColor.black.withAlphaComponent(0.5)
+        let selectedIconColor = UIColor.systemBlue
+        
+        for layoutAppearance in [tabBarAppearance.stackedLayoutAppearance, tabBarAppearance.inlineLayoutAppearance, tabBarAppearance.compactInlineLayoutAppearance] {
+            layoutAppearance.normal.iconColor = normalIconColor
+            layoutAppearance.normal.titleTextAttributes = normalTextAttributes
+            layoutAppearance.selected.iconColor = selectedIconColor
+            layoutAppearance.selected.titleTextAttributes = selectedTextAttributes
+        }
+        
+        UITabBar.appearance().standardAppearance = tabBarAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
     }
 
     private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
@@ -34,6 +68,7 @@ struct MainView: View {
             if let realmConf = container.realmConf {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "doc.text.fill")
                             Text("Recent")
@@ -44,6 +79,7 @@ struct MainView: View {
                         }
                         
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "books.vertical.fill")
                             Text("Discover")
@@ -51,6 +87,7 @@ struct MainView: View {
                         .tag(1)
                     
                     LibraryInfoView()
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "building.columns.fill")
                             Text("Browse")
@@ -63,12 +100,14 @@ struct MainView: View {
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
+                    .environment(\.horizontalSizeClass, originalSizeClass)
                     .tabItem {
                         Image(systemName: "gearshape.fill")
                         Text("Settings")
                     }
                     .tag(3)
                 }
+                .environment(\.horizontalSizeClass, .compact)
             } else {
                 Color.clear
             }
