@@ -20,6 +20,7 @@ struct MainView: View {
     @EnvironmentObject var container: AppContainer
     @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
+    @Environment(\.horizontalSizeClass) var originalSizeClass
 
     @StateObject var viewModel: MainViewModel
     
@@ -34,6 +35,7 @@ struct MainView: View {
             if let realmConf = container.realmConf {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "doc.text.fill")
                             Text("Recent")
@@ -44,6 +46,7 @@ struct MainView: View {
                         }
                         
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "books.vertical.fill")
                             Text("Discover")
@@ -51,6 +54,7 @@ struct MainView: View {
                         .tag(1)
                     
                     LibraryInfoView()
+                        .environment(\.horizontalSizeClass, originalSizeClass)
                         .tabItem {
                             Image(systemName: "building.columns.fill")
                             Text("Browse")
@@ -63,12 +67,14 @@ struct MainView: View {
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
+                    .environment(\.horizontalSizeClass, originalSizeClass)
                     .tabItem {
                         Image(systemName: "gearshape.fill")
                         Text("Settings")
                     }
                     .tag(3)
                 }
+                .environment(\.horizontalSizeClass, .compact)
             } else {
                 Color.clear
             }
