@@ -60,9 +60,6 @@ struct ShelfBookCard: View {
                 .onTapGesture {
                     onTap()
                 }
-                .onLongPressGesture {
-                    onLongPress()
-                }
                 .overlay(
                     ZStack {
                         if isEditing {
