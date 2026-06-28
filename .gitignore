@@ -96,3 +96,4 @@ gha-creds-*.json
 .agents/skills
 .agents/skills_library
 .agents/screenshots
+.agents/instruments

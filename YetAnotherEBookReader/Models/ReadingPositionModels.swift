@@ -278,3 +278,13 @@ enum ReadingPositionSelectionPolicy: Equatable, Sendable {
         }
     }
 }
+
+public struct ReadingSessionHandle: Hashable, Sendable {
+    public let bookId: String
+    public let historyId: String
+    
+    public init(bookId: String, historyId: String) {
+        self.bookId = bookId
+        self.historyId = historyId
+    }
+}

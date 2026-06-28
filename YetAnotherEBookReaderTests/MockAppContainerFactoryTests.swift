@@ -164,14 +164,15 @@ final class MockAppContainerFactoryTests: XCTestCase {
                 epoch: 1500.0
             )
 
-            _ = container.readingPositionRepository.session(
-                start: startPos,
+            if let handle = container.readingPositionRepository.beginSession(
+                at: startPos,
                 forBookId: book.bookPrefId
-            )
-            container.readingPositionRepository.session(
-                end: endPos,
-                forBookId: book.bookPrefId
-            )
+            ) {
+                container.readingPositionRepository.endSession(
+                    handle,
+                    at: endPos
+                )
+            }
             return container.readingPositionRepository.sessions(
                 forBookId: book.bookPrefId,
                 list: nil

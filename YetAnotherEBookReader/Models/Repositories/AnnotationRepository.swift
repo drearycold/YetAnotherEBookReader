@@ -409,20 +409,32 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         
         var pending = highlightObjects.count
-        var processedHighlightIds = Set<String>()
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        // Pre-reduce duplicates by UUID using the newest timestamp
+        var latestEntries = [String: (entry: CalibreBookAnnotationHighlightEntry, date: Date)]()
+        entries.forEach { entry in
+            guard entry.type == "highlight",
+                  let highlightId = uuidCalibreToFolio(entry.uuid),
+                  let date = dateFormatter.date(from: entry.timestamp)
+            else { return }
+            if let existing = latestEntries[highlightId] {
+                if date > existing.date {
+                    latestEntries[highlightId] = (entry, date)
+                }
+            } else {
+                latestEntries[highlightId] = (entry, date)
+            }
+        }
+        let deduplicatedEntries = latestEntries.values.map { $0.entry }
         
         try? realm.write {
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-            
-            entries.forEach { hl in
-                guard hl.type == "highlight",
-                      let highlightId = uuidCalibreToFolio(hl.uuid),
+            deduplicatedEntries.forEach { hl in
+                guard let highlightId = uuidCalibreToFolio(hl.uuid),
                       let date = dateFormatter.date(from: hl.timestamp)
                 else { return }
-                
-                guard !processedHighlightIds.contains(highlightId) else { return }
-                processedHighlightIds.insert(highlightId)
                 
                 guard hl.removed != true else {
                     if let object = localHighlightsById[highlightId] {

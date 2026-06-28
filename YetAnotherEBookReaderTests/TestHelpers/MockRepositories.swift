@@ -295,14 +295,14 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var sessionsStartDateAfterParam: Date?
     var sessionsReturn: [BookDeviceReadingPositionHistory] = []
     
-    var sessionStartCalled = false
-    var sessionStartReadPositionParam: BookDeviceReadingPosition?
-    var sessionStartBookIdParam: String?
-    var sessionStartReturn: Date?
+    var beginSessionCalled = false
+    var beginSessionPositionParam: BookDeviceReadingPosition?
+    var beginSessionBookIdParam: String?
+    var beginSessionReturn: ReadingSessionHandle?
     
-    var sessionEndCalled = false
-    var sessionEndReadPositionParam: BookDeviceReadingPosition?
-    var sessionEndBookIdParam: String?
+    var endSessionCalled = false
+    var endSessionHandleParam: ReadingSessionHandle?
+    var endSessionPositionParam: BookDeviceReadingPosition?
     
     var syncPositionsCalled = false
     var syncPositionsEntriesParam: [CalibreBookLastReadPositionEntry]?
@@ -376,17 +376,17 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         return sessionsReturn
     }
     
-    func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date? {
-        sessionStartCalled = true
-        sessionStartReadPositionParam = readPosition
-        sessionStartBookIdParam = bookId
-        return sessionStartReturn
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle? {
+        beginSessionCalled = true
+        beginSessionPositionParam = position
+        beginSessionBookIdParam = bookId
+        return beginSessionReturn
     }
     
-    func session(end readPosition: BookDeviceReadingPosition, forBookId bookId: String) {
-        sessionEndCalled = true
-        sessionEndReadPositionParam = readPosition
-        sessionEndBookIdParam = bookId
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition) {
+        endSessionCalled = true
+        endSessionHandleParam = handle
+        endSessionPositionParam = position
     }
     
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {

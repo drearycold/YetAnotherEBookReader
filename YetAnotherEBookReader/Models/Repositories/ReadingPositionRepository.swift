@@ -19,14 +19,15 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
     func sessions(forBookId bookId: String, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
-    func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date?
-    func session(end readPosition: BookDeviceReadingPosition, forBookId bookId: String)
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle?
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition)
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry]
 }
 
 final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
     private let databaseService: DatabaseService
     private weak var container: AppContainerProtocol?
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingPositionRepository")
 
     init(databaseService: DatabaseService = .shared, container: AppContainerProtocol? = nil) {
         self.databaseService = databaseService
@@ -186,47 +187,64 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return results.map { $0.toDomain() }
     }
     
-    func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date? {
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle? {
         guard let realm = getRealm(forBookId: bookId) else { return nil }
-        let startDatetime = Date()
+        let now = Date()
         
         let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
+            .filter("bookId == %@", bookId)
             .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
             .first
-        
-        try? realm.write {
-            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
+            
+        if let historyEntry = historyEntryFirst {
+            let historyIdStr = historyEntry._id.stringValue
+            // 1. If endPosition exists, check if its end epoch is less than 60s ago
+            if let endPosition = historyEntry.endPosition {
+                if now.timeIntervalSince1970 < endPosition.epoch + 60 {
+                    return ReadingSessionHandle(bookId: bookId, historyId: historyIdStr)
+                }
             } else {
-                let historyEntry = BookDeviceReadingPositionHistoryRealm()
-                historyEntry.bookId = bookId
-                historyEntry.startDatetime = startDatetime
-                historyEntry.startPosition = readPosition.makeRealmObject(bookId: "\(bookId) - History")
-                realm.add(historyEntry)
+                // 2. If endPosition is nil, check if startDatetime is less than 300s ago
+                if now.timeIntervalSince(historyEntry.startDatetime) < 300 {
+                    return ReadingSessionHandle(bookId: bookId, historyId: historyIdStr)
+                }
             }
         }
-        return startDatetime
+        
+        // Create new history entry
+        let historyEntry = BookDeviceReadingPositionHistoryRealm()
+        historyEntry.bookId = bookId
+        historyEntry.startDatetime = now
+        historyEntry.startPosition = position.makeRealmObject(bookId: "\(bookId) - History")
+        
+        do {
+            try realm.write {
+                realm.add(historyEntry)
+            }
+            return ReadingSessionHandle(bookId: bookId, historyId: historyEntry._id.stringValue)
+        } catch {
+            return nil
+        }
     }
     
-    func session(end readPosition: BookDeviceReadingPosition, forBookId bookId: String) {
-        guard let realm = getRealm(forBookId: bookId) else { return }
-        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-            .first else { return }
-            
-        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition) {
+        guard let realm = getRealm(forBookId: handle.bookId) else { return }
+        guard let objectId = try? ObjectId(string: handle.historyId) else { return }
+        guard let historyEntry = realm.object(ofType: BookDeviceReadingPositionHistoryRealm.self, forPrimaryKey: objectId) else { return }
+        guard historyEntry.bookId == handle.bookId else { return }
+        
+        // If endPosition already exists, verify new position is not older
+        if let existingEnd = historyEntry.endPosition, position.epoch < existingEnd.epoch {
+            return
+        }
         
         try? realm.write {
-            let newEndPositionObject = readPosition.makeRealmObject(bookId: "\(bookId) - History")
-            if let endPositionObject = historyEntry.endPosition {
-                newEndPositionObject._id = endPositionObject._id
-                realm.add(newEndPositionObject, update: .modified)
+            let newEnd = position.makeRealmObject(bookId: "\(handle.bookId) - History")
+            if let existingEnd = historyEntry.endPosition {
+                newEnd._id = existingEnd._id
+                realm.add(newEnd, update: .modified)
             } else {
-                historyEntry.endPosition = newEndPositionObject
+                historyEntry.endPosition = newEnd
             }
         }
     }
@@ -237,6 +255,14 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             AppPerformanceSignpost.end("PositionMerge", state, "Entries: \(lastReadPositions.count)")
         }
         guard let realm = getRealm(forBookId: bookId) else { return [] }
+        
+        let localPositions = self.getPositions(forBookId: bookId)
+        var latestLocalByDevice = [String: BookDeviceReadingPosition]()
+        for pos in localPositions {
+            if latestLocalByDevice[pos.id] == nil {
+                latestLocalByDevice[pos.id] = pos
+            }
+        }
         
         var devicesUpdated = [String: BookDeviceReadingPosition]()
         var devicesInserted = [String: BookDeviceReadingPosition]()
@@ -249,7 +275,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                 return
             }
             
-            guard let localPosition = self.getPosition(forBookId: bookId, policy: .latestForDevice(remoteEntry.device)) else {
+            guard let localPosition = latestLocalByDevice[remoteEntry.device] else {
                 positionsToSave.append(remotePosition)
                 devicesInserted[remoteEntry.device] = remotePosition
                 return
@@ -265,7 +291,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             devicesUpdated[remoteEntry.device] = remotePosition
         }
         
-        self.getPositions(forBookId: bookId).forEach { localPos in
+        localPositions.forEach { localPos in
             guard devicesInserted[localPos.id] == nil else {
                 return
             }
@@ -306,7 +332,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
                             NSNumber(value: position.structuralRootPageNumber)
                         ))
                     if exactMatch.isEmpty {
-                        realm.add(position.managedObject(bookId: bookId))
+                        realm.add(position.makeRealmObject(bookId: bookId))
                     }
                 }
             }

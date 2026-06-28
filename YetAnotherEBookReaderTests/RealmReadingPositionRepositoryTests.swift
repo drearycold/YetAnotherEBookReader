@@ -16,7 +16,7 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
     
     override func setUpWithError() throws {
         realmConfig = MockDatabaseService.inMemoryConfiguration()
-        databaseService = DatabaseService.shared
+        databaseService = DatabaseService()
         databaseService.setup(conf: realmConfig)
         repository = RealmReadingPositionRepository(databaseService: databaseService)
     }
@@ -90,8 +90,8 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         let pos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 5, epoch: 500.0)
         
         // 1. Start Session
-        let startDate = repository.session(start: pos, forBookId: bookId)
-        XCTAssertNotNil(startDate)
+        let handle = try XCTUnwrap(repository.beginSession(at: pos, forBookId: bookId))
+        XCTAssertEqual(handle.bookId, bookId)
         
         let sessionsInitially = repository.sessions(forBookId: bookId, list: nil)
         // Note: sessions() returns only those with endPosition != nil
@@ -99,7 +99,7 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         
         // 2. End Session
         let endPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 25, epoch: 1500.0)
-        repository.session(end: endPos, forBookId: bookId)
+        repository.endSession(handle, at: endPos)
         
         // 3. Fetch Session
         let sessions = repository.sessions(forBookId: bookId, list: nil)
@@ -109,6 +109,27 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         let endPosition = try XCTUnwrap(firstSession.endPosition)
         XCTAssertEqual(startPosition.lastReadPage, 5)
         XCTAssertEqual(endPosition.lastReadPage, 25)
+    }
+    
+    @MainActor
+    func testSessionReuseWindow() throws {
+        let bookId = "session_reuse^test_lib@server-uuid"
+        let pos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 5, epoch: 500.0)
+        
+        // 1. First session
+        let handle1 = try XCTUnwrap(repository.beginSession(at: pos, forBookId: bookId))
+        
+        // 2. Immediate beginSession when end is nil (should reuse since < 300s)
+        let handle2 = try XCTUnwrap(repository.beginSession(at: pos, forBookId: bookId))
+        XCTAssertEqual(handle1, handle2)
+        
+        // 3. End session
+        let endPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 25, epoch: Date().timeIntervalSince1970)
+        repository.endSession(handle1, at: endPos)
+        
+        // 4. Begin session again (should reuse since end epoch is less than 60s ago)
+        let handle3 = try XCTUnwrap(repository.beginSession(at: pos, forBookId: bookId))
+        XCTAssertEqual(handle1, handle3)
     }
     
     @MainActor

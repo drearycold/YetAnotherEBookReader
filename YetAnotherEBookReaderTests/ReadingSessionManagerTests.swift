@@ -76,7 +76,7 @@ final class ReadingSessionManagerTests: XCTestCase {
         let book = CalibreBook(id: 777, library: library)
         let pos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 12, epoch: 500.0)
         
-        let startResult = container.readingPositionRepository.session(start: pos, forBookId: book.bookPrefId)
+        let startResult = container.readingPositionRepository.beginSession(at: pos, forBookId: book.bookPrefId)
         XCTAssertNotNil(startResult)
     }
     
@@ -86,8 +86,8 @@ final class ReadingSessionManagerTests: XCTestCase {
         let startPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 5, epoch: 500.0)
         let endPos = TestFixtures.makeReadingPosition(id: "device-1", lastReadPage: 15, epoch: 1500.0)
         
-        _ = container.readingPositionRepository.session(start: startPos, forBookId: book.bookPrefId)
-        container.readingPositionRepository.session(end: endPos, forBookId: book.bookPrefId)
+        let handle = try XCTUnwrap(container.readingPositionRepository.beginSession(at: startPos, forBookId: book.bookPrefId))
+        container.readingPositionRepository.endSession(handle, at: endPos)
         
         let sessions = container.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: nil)
         XCTAssertEqual(sessions.count, 1)
