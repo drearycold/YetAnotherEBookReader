@@ -307,88 +307,106 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             localBookmarksByPos[pos] = objs.sorted(by: { $0.date > $1.date })
         }
         
-        let bookmarksByPos = entries.reduce(into: [String: [CalibreBookAnnotationBookmarkEntry]]()) { partialResult, entry in
-            guard entry.type == "bookmark",
-                  dateFormatter.date(from: entry.timestamp) != nil
-            else { return }
-            
-            if partialResult[entry.pos] != nil {
-                partialResult[entry.pos]?.append(entry)
-            } else {
-                partialResult[entry.pos] = [entry]
-            }
-        }.map { posEntry in
-            (key: posEntry.key, value: posEntry.value.sorted(by: { lhs, rhs in
-                (dateFormatter.date(from: lhs.timestamp) ?? .distantPast) > (dateFormatter.date(from: rhs.timestamp) ?? .distantPast)
-            }))
+        struct RemoteNewestBookmark {
+            let entry: CalibreBookAnnotationBookmarkEntry
+            let date: Date
         }
         
-        try? realm.write {
-            bookmarksByPos.forEach { pos, entries in
-                guard let entryNewest = entries.first,
-                      let entryNewestDate = dateFormatter.date(from: entryNewest.timestamp) else { return }
-                
-                let objects = localBookmarksByPos[pos] ?? []
-                var hasVisible = !objects.filter({ !$0.removed }).isEmpty
-                
-                if let objectNewest = objects.first {
-                    if objectNewest.date == entryNewestDate
-                        || (
-                            (objectNewest.date < entryNewestDate + 0.1)
-                            &&
-                            (entryNewestDate < objectNewest.date + 0.1)
-                        ) {
-                        //same date, ignore server one
-                        pending.remove(pos)
-                    } else if objectNewest.date < entryNewestDate + 0.1 {
-                        //server has newer entry, remove all local entries
+        var newestRemoteByPos = [String: RemoteNewestBookmark]()
+        for entry in entries {
+            guard entry.type == "bookmark",
+                  let date = dateFormatter.date(from: entry.timestamp)
+            else { continue }
+            
+            if let existing = newestRemoteByPos[entry.pos] {
+                if date > existing.date {
+                    newestRemoteByPos[entry.pos] = RemoteNewestBookmark(entry: entry, date: date)
+                }
+            } else {
+                newestRemoteByPos[entry.pos] = RemoteNewestBookmark(entry: entry, date: date)
+            }
+        }
+        
+        struct BookmarkAction {
+            enum ActionType {
+                case remove(objects: [BookBookmarkRealm])
+                case add(pos: String, posType: String, title: String, date: Date, removed: Bool, page: Int)
+            }
+            let type: ActionType
+        }
+        
+        var actions = [BookmarkAction]()
+        
+        for (pos, newestRemote) in newestRemoteByPos {
+            let entryNewest = newestRemote.entry
+            let entryNewestDate = newestRemote.date
+            
+            let objects = localBookmarksByPos[pos] ?? []
+            var hasVisible = !objects.filter({ !$0.removed }).isEmpty
+            
+            if let objectNewest = objects.first {
+                let diff = objectNewest.date.timeIntervalSince(entryNewestDate)
+                if abs(diff) < 0.1 {
+                    // same date/approximate, ignore server
+                    pending.remove(pos)
+                } else if diff < -0.1 {
+                    // server is newer by at least 0.1s -> remove local visible
+                    let visibleObjects = objects.filter { !$0.removed }
+                    if !visibleObjects.isEmpty {
+                        actions.append(BookmarkAction(type: .remove(objects: visibleObjects)))
+                    }
+                    pending.remove(pos)
+                    hasVisible = false
+                } else {
+                    // local is newer by at least 0.1s -> ignore server, keep pos in pending
+                }
+            }
+            
+            guard !hasVisible, entryNewest.removed != true else { continue }
+            
+            // Validate CFI and parse page before transaction
+            guard entryNewest.pos_type == "epubcfi",
+                  entryNewest.pos.starts(with: "epubcfi(/") else { continue }
+            let firstStepStartIndex = entryNewest.pos.index(entryNewest.pos.startIndex, offsetBy: 9)
+            guard let firstStepEndIndex = entryNewest.pos[firstStepStartIndex..<entryNewest.pos.endIndex].firstIndex(where: { elem in
+                elem == "/" || elem == ")"
+            }) else { continue }
+            
+            guard let firstStep = Int(entryNewest.pos[firstStepStartIndex..<firstStepEndIndex]) else { continue }
+            let page = firstStep / 2
+            
+            actions.append(BookmarkAction(type: .add(
+                pos: pos,
+                posType: entryNewest.pos_type,
+                title: entryNewest.title,
+                date: entryNewestDate,
+                removed: entryNewest.removed ?? false,
+                page: page
+            )))
+        }
+        
+        if !actions.isEmpty {
+            try? realm.write {
+                for action in actions {
+                    switch action.type {
+                    case .remove(let objects):
                         for obj in objects {
-                            if !obj.removed {
-                                obj.date += 0.001
-                                obj.removed = true
-                            }
+                            obj.date += 0.001
+                            obj.removed = true
                         }
-                        pending.remove(pos)
-                        hasVisible = false
-                    } else if entryNewestDate < objectNewest.date + 0.1 {
-                        //local has newer entry, ignore server one
-                    } else {
-                        //same date, ignore server one
-                        pending.remove(pos)
+                    case .add(let pos, let posType, let title, let date, let removed, let page):
+                        let object = BookBookmarkRealm()
+                        object.bookId = bookId
+                        object.pos_type = posType
+                        object.pos = pos
+                        object.title = title
+                        object.date = date
+                        object.removed = removed
+                        object.page = page
+                        
+                        realm.add(object)
                     }
                 }
-                
-                guard !hasVisible,
-                      entryNewest.removed != true
-                else {
-                    // only insert newest visible entry
-                    // either local has no corresponding entry,
-                    // or we have removed all existing ones (which means they are older)
-                    return
-                }
-                
-                let object = BookBookmarkRealm()
-                object.bookId = bookId
-                
-                object.pos_type = entryNewest.pos_type
-                object.pos = entryNewest.pos
-                
-                object.title = entryNewest.title
-                object.date = entryNewestDate
-                object.removed = entryNewest.removed ?? false
-                
-                guard object.pos_type == "epubcfi",
-                      object.pos.starts(with: "epubcfi(/") else { return }
-                let firstStepStartIndex = object.pos.index(object.pos.startIndex, offsetBy: 9)
-                guard let firstStepEndIndex = object.pos[firstStepStartIndex..<object.pos.endIndex].firstIndex(where: { elem in
-                    elem == "/" || elem == ")"
-                }) else { return }
-                
-                guard let firstStep = Int(object.pos[firstStepStartIndex..<firstStepEndIndex]) else { return }
-                object.page = firstStep / 2
-                
-                realm.add(object)
-                localBookmarksByPos[pos, default: []].insert(object, at: 0)
             }
         }
         
@@ -442,65 +460,89 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         let deduplicatedEntries = Array(latestEntries.values)
         
-        try? realm.write {
-            deduplicatedEntries.forEach { hl in
-                let highlightId = hl.highlightId
-                let date = hl.date
-                let entry = hl.entry
-                
-                guard entry.removed != true else {
-                    if let object = localHighlightsById[highlightId] {
-                        if object.date <= date + 0.1 {
-                            object.removed = true
-                            object.date = date
-                            pending -= 1
-                        } else if date <= object.date + 0.1 {
-                            
-                        } else {
-                            pending -= 1
-                        }
-                    }
-                    return
-                }
-                
-                guard let spineIndex = entry.spineIndex else { return }
-                
+        struct HighlightAction {
+            let existingObject: BookHighlightRealm?
+            let date: Date
+            let entry: CalibreBookAnnotationHighlightEntry
+            let isUpdate: Bool
+        }
+        
+        var actions = [HighlightAction]()
+        
+        deduplicatedEntries.forEach { hl in
+            let highlightId = hl.highlightId
+            let date = hl.date
+            let entry = hl.entry
+            
+            if entry.removed == true {
                 if let object = localHighlightsById[highlightId] {
                     if object.date <= date + 0.1 {
-                        object.date = date
-                        object.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
-                        object.note = entry.notes
-                        object.removed = false
+                        actions.append(HighlightAction(existingObject: object, date: date, entry: entry, isUpdate: true))
                         pending -= 1
                     } else if date <= object.date + 0.1 {
-                        
+                        // no-op
+                    } else {
+                        pending -= 1
+                    }
+                }
+            } else {
+                if let object = localHighlightsById[highlightId] {
+                    if object.date <= date + 0.1 {
+                        actions.append(HighlightAction(existingObject: object, date: date, entry: entry, isUpdate: true))
+                        pending -= 1
+                    } else if date <= object.date + 0.1 {
+                        // no-op
                     } else {
                         pending -= 1
                     }
                 } else {
-                    let highlightRealm = BookHighlightRealm()
+                    actions.append(HighlightAction(existingObject: nil, date: date, entry: entry, isUpdate: false))
+                }
+            }
+        }
+        
+        if !actions.isEmpty {
+            try? realm.write {
+                for action in actions {
+                    let date = action.date
+                    let entry = action.entry
                     
-                    highlightRealm.bookId = bookId
-                    highlightRealm.content = entry.highlightedText ?? "Unspecified"
-                    highlightRealm.contentPost = ""
-                    highlightRealm.contentPre = ""
-                    highlightRealm.date = date
-                    highlightRealm.highlightId = highlightId
-                    highlightRealm.page = spineIndex + 1
-                    highlightRealm.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
-                    highlightRealm.startOffset = 0
-                    highlightRealm.endOffset = 0
-                    highlightRealm.ranges = entry.ranges
-                    highlightRealm.note = entry.notes
-                    highlightRealm.cfiStart = entry.startCfi
-                    highlightRealm.cfiEnd = entry.endCfi
-                    highlightRealm.spineName = entry.spineName
-                    if let tocFamilyTitles = entry.tocFamilyTitles {
-                        highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+                    if action.isUpdate, let object = action.existingObject {
+                        if entry.removed == true {
+                            object.removed = true
+                            object.date = date
+                        } else {
+                            object.date = date
+                            object.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
+                            object.note = entry.notes
+                            object.removed = false
+                        }
+                    } else {
+                        guard let spineIndex = entry.spineIndex else { continue }
+                        let highlightId = uuidCalibreToFolio(entry.uuid) ?? ""
+                        
+                        let highlightRealm = BookHighlightRealm()
+                        highlightRealm.bookId = bookId
+                        highlightRealm.content = entry.highlightedText ?? "Unspecified"
+                        highlightRealm.contentPost = ""
+                        highlightRealm.contentPre = ""
+                        highlightRealm.date = date
+                        highlightRealm.highlightId = highlightId
+                        highlightRealm.page = spineIndex + 1
+                        highlightRealm.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
+                        highlightRealm.startOffset = 0
+                        highlightRealm.endOffset = 0
+                        highlightRealm.ranges = entry.ranges
+                        highlightRealm.note = entry.notes
+                        highlightRealm.cfiStart = entry.startCfi
+                        highlightRealm.cfiEnd = entry.endCfi
+                        highlightRealm.spineName = entry.spineName
+                        if let tocFamilyTitles = entry.tocFamilyTitles {
+                            highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
+                        }
+                        
+                        realm.add(highlightRealm, update: .all)
                     }
-                    
-                    realm.add(highlightRealm, update: .all)
-                    localHighlightsById[highlightId] = highlightRealm
                 }
             }
         }
