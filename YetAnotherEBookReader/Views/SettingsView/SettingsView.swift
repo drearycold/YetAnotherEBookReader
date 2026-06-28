@@ -10,12 +10,12 @@ import Combine
 
 struct SettingsView: View {
     @EnvironmentObject var container: AppContainer
-    @StateObject private var viewModel: SettingsViewModel
+    @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var addServerViewModel: ServerViewModel
     
-    init(container: AppContainer) {
-        _viewModel = StateObject(wrappedValue: SettingsViewModel(container: container))
-        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: container, server: nil))
+    init(viewModel: SettingsViewModel) {
+        self.viewModel = viewModel
+        _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: viewModel.container, server: nil))
     }
     
     var body: some View {
@@ -186,7 +186,7 @@ struct SettingsView_Previews: PreviewProvider {
 
     static var previews: some View {
         NavigationView {
-            SettingsView(container: container)
+            SettingsView(viewModel: SettingsViewModel(container: container))
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .environmentObject(container)

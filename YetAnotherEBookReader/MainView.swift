@@ -22,43 +22,10 @@ struct MainView: View {
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
-    @StateObject private var viewModel: MainViewModel
+    @ObservedObject var viewModel: MainViewModel
     
-    init(container: AppContainer) {
-        _viewModel = StateObject(wrappedValue: MainViewModel(container: container, sessionManager: container.sessionManager))
-        
-        let woodColor = UIColor(ShelfLegacyMetrics.shelfBackgroundColor)
-        
-        let navBarAppearance = UINavigationBarAppearance()
-        navBarAppearance.configureWithOpaqueBackground()
-        navBarAppearance.backgroundColor = woodColor
-        navBarAppearance.shadowColor = .clear
-        navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.black]
-        navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.black]
-        
-        UINavigationBar.appearance().standardAppearance = navBarAppearance
-        UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
-        UINavigationBar.appearance().compactAppearance = navBarAppearance
-        
-        let tabBarAppearance = UITabBarAppearance()
-        tabBarAppearance.configureWithOpaqueBackground()
-        tabBarAppearance.backgroundColor = woodColor
-        tabBarAppearance.shadowColor = .clear
-        
-        let normalTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.black.withAlphaComponent(0.6)]
-        let selectedTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.systemBlue]
-        let normalIconColor = UIColor.black.withAlphaComponent(0.5)
-        let selectedIconColor = UIColor.systemBlue
-        
-        for layoutAppearance in [tabBarAppearance.stackedLayoutAppearance, tabBarAppearance.inlineLayoutAppearance, tabBarAppearance.compactInlineLayoutAppearance] {
-            layoutAppearance.normal.iconColor = normalIconColor
-            layoutAppearance.normal.titleTextAttributes = normalTextAttributes
-            layoutAppearance.selected.iconColor = selectedIconColor
-            layoutAppearance.selected.titleTextAttributes = selectedTextAttributes
-        }
-        
-        UITabBar.appearance().standardAppearance = tabBarAppearance
-        UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+    init(container: AppContainer, viewModel: MainViewModel) {
+        self.viewModel = viewModel
     }
 
     private let issueURL = "https://github.com/drearycold/YetAnotherEBookReader/issues/new?labels=bug&assignees=drearycold"
@@ -96,7 +63,7 @@ struct MainView: View {
                         .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
-                        SettingsView(container: container)
+                        SettingsView(viewModel: viewModel.settingsViewModel)
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.realmConfiguration, realmConf)
@@ -370,7 +337,7 @@ struct MainView_Previews: PreviewProvider {
     static private var container = AppContainer()
     
     static var previews: some View {
-        MainView(container: container)
+        MainView(container: container, viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
             .environmentObject(container)
             .environmentObject(container.sessionManager)
     }
