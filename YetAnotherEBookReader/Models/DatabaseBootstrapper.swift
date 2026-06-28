@@ -44,6 +44,7 @@ final class DatabaseBootstrapper {
         do {
             container.realm = try Realm(configuration: realmConf)
         } catch {
+            container.resetDatabaseBootstrapState(clearConfiguration: false)
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
@@ -57,6 +58,7 @@ final class DatabaseBootstrapper {
                     configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
                 )
             } catch {
+                container.resetDatabaseBootstrapState(clearConfiguration: false)
                 logger.error("Failed to open metadata Realm: \(error.localizedDescription)")
                 throw DatabaseBootstrapError.metadataRealmOpenFailed(underlying: error)
             }

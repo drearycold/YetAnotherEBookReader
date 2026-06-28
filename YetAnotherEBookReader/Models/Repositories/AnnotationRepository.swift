@@ -161,16 +161,22 @@ protocol AnnotationRepositoryProtocol {
     // Remote Sync (Calibre Server Merges)
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int
+    
+    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int
+    func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int
+    func getRealm(forBookId bookId: String) -> Realm?
 }
 
 class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     private let databaseService: DatabaseService
+    private let logger = Logger(subsystem: "io.github.drearycold.DSReader", category: "AnnotationRepository")
+    private let highlightWriteQueue = DispatchQueue(label: "annotation-repository.highlight-write", qos: .userInitiated)
     
     init(databaseService: DatabaseService = .shared) {
         self.databaseService = databaseService
     }
     
-    private func getRealm() -> Realm? {
+    func getRealm(forBookId bookId: String) -> Realm? {
         if Thread.isMainThread {
             return databaseService.realm
         }
@@ -183,6 +189,53 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
             return realm
         }
         return nil
+    }
+    
+    private func getRealm() -> Realm? {
+        return getRealm(forBookId: "")
+    }
+
+    private func parseAnnotationDate(_ timestamp: String) -> Date? {
+        parseLastModified(timestamp)
+    }
+
+    private func resetCachedBackgroundRealm() {
+        Thread.current.threadDictionary.removeObject(forKey: "AnnotationRepositoryRealm")
+    }
+
+    private func openFreshRealmForWrite() -> Realm? {
+        guard let conf = databaseService.realmConf else { return nil }
+        return try? Realm(configuration: conf)
+    }
+
+    private func performWriteWithRetry(
+        in realm: Realm?,
+        operation: (Realm) throws -> Void
+    ) {
+        guard let realm else { return }
+
+        do {
+            try realm.write {
+                try operation(realm)
+            }
+            return
+        } catch {
+            logger.error("Annotation write failed, retrying with a fresh Realm: \(error.localizedDescription)")
+        }
+
+        resetCachedBackgroundRealm()
+
+        guard let conf = databaseService.realmConf else { return }
+
+        do {
+            let freshRealm = try Realm(configuration: conf)
+            Thread.current.threadDictionary["AnnotationRepositoryRealm"] = freshRealm
+            try freshRealm.write {
+                try operation(freshRealm)
+            }
+        } catch {
+            logger.fault("Annotation write retry failed: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Bookmarks CRUD
@@ -255,10 +308,11 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     }
     
     func saveHighlight(_ highlight: BookHighlight) {
-        guard let realm = getRealm() else { return }
         let highlightRealm = highlight.makeRealmObject()
-        try? realm.write {
-            realm.add(highlightRealm, update: .all)
+        highlightWriteQueue.sync {
+            performWriteWithRetry(in: openFreshRealmForWrite()) { realm in
+                realm.add(highlightRealm, update: .all)
+            }
         }
     }
     
@@ -284,14 +338,15 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     
     // MARK: - Remote Sync (Calibre Server Merges)
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
+        guard let realm = getRealm(forBookId: bookId) else { return 0 }
+        return syncBookmarks(entries: entries, forBookId: bookId, in: realm)
+    }
+    
+    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int {
         let state = AppPerformanceSignpost.begin("BookmarkMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("BookmarkMerge", state, "Entries: \(entries.count)")
         }
-        guard let realm = getRealm() else { return 0 }
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
         
         let bookObjects = realm.objects(BookBookmarkRealm.self).filter("bookId == %@", bookId)
         
@@ -315,7 +370,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         var newestRemoteByPos = [String: RemoteNewestBookmark]()
         for entry in entries {
             guard entry.type == "bookmark",
-                  let date = dateFormatter.date(from: entry.timestamp)
+                  let date = parseAnnotationDate(entry.timestamp)
             else { continue }
             
             if let existing = newestRemoteByPos[entry.pos] {
@@ -386,7 +441,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         
         if !actions.isEmpty {
-            try? realm.write {
+            let changesBlock = {
                 for action in actions {
                     switch action.type {
                     case .remove(let objects):
@@ -408,17 +463,29 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                     }
                 }
             }
+            
+            if realm.isInWriteTransaction {
+                changesBlock()
+            } else {
+                try? realm.write {
+                    changesBlock()
+                }
+            }
         }
         
         return pending.count
     }
     
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int {
+        guard let realm = getRealm(forBookId: bookId) else { return 0 }
+        return syncHighlights(entries: entries, forBookId: bookId, in: realm)
+    }
+    
+    func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int {
         let state = AppPerformanceSignpost.begin("HighlightMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("HighlightMerge", state, "Entries: \(entries.count)")
         }
-        guard let realm = getRealm() else { return 0 }
         
         let highlightObjects = realm.objects(BookHighlightRealm.self).filter("bookId == %@", bookId)
         var localHighlightsById = [String: BookHighlightRealm]()
@@ -427,9 +494,6 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         
         var pending = highlightObjects.count
-        
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
         
         struct DeduplicatedHighlight {
             let entry: CalibreBookAnnotationHighlightEntry
@@ -442,7 +506,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         entries.forEach { entry in
             guard entry.type == "highlight",
                   let highlightId = uuidCalibreToFolio(entry.uuid),
-                  let date = dateFormatter.date(from: entry.timestamp)
+                  let date = parseAnnotationDate(entry.timestamp)
             else { return }
             
             // Exclude invalid non-removed entries: non-removed highlights must have spineIndex
@@ -502,7 +566,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         }
         
         if !actions.isEmpty {
-            try? realm.write {
+            let changesBlock = {
                 for action in actions {
                     let date = action.date
                     let entry = action.entry
@@ -543,6 +607,14 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                         
                         realm.add(highlightRealm, update: .all)
                     }
+                }
+            }
+            
+            if realm.isInWriteTransaction {
+                changesBlock()
+            } else {
+                try? realm.write {
+                    changesBlock()
                 }
             }
         }

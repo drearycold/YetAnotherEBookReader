@@ -104,6 +104,30 @@ final class DatabaseBootstrapperTests: XCTestCase {
         }
     }
 
+    func testResetDatabaseBootstrapStateClearsPartialInitialization() throws {
+        let config = MockDatabaseService.inMemoryConfiguration(identifier: "DatabaseBootstrapperTests-PartialState")
+        let realm = try Realm(configuration: config)
+        let metadataRealm = try Realm(configuration: config)
+
+        container.realm = realm
+        container.realmSaveBooksMetadata = metadataRealm
+        let logger = CalibreActivityLogger(realmConf: config)
+        container.logger = logger
+        container.calibreServerService.logger = logger
+        container.databaseService.setup(conf: config)
+
+        XCTAssertTrue(container.isDatabaseReady)
+
+        container.resetDatabaseBootstrapState(clearConfiguration: false)
+
+        XCTAssertNil(container.realm)
+        XCTAssertNil(container.realmSaveBooksMetadata)
+        XCTAssertNil(container.logger)
+        XCTAssertNil(container.databaseService.realm)
+        XCTAssertNotNil(container.databaseService.realmConf)
+        XCTAssertFalse(container.isDatabaseReady)
+    }
+
     // MARK: - Metadata Realm open failure
     //
     // The metadata-Realm error path is wired with the same

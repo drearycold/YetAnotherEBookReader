@@ -107,8 +107,11 @@ struct YetAnotherEBookReaderApp: App {
             switch(newScenePhase) {
             case .active:
                 guard !bootstrapInFlight else { return }
-                
-                if container.realm == nil {
+
+                if case .ready = launchState, container.isDatabaseReady {
+                    enableProbeTimer()
+                    container.bookReaderActivitySubject.send(newScenePhase)
+                } else {
                     bootstrapInFlight = true
                     launchState = .initializing(status: "Initializing...")
                     
@@ -139,10 +142,6 @@ struct YetAnotherEBookReaderApp: App {
                             }
                         }
                     }
-                } else {
-                    launchState = .ready
-                    enableProbeTimer()
-                    container.bookReaderActivitySubject.send(newScenePhase)
                 }
             case .inactive:
                 break

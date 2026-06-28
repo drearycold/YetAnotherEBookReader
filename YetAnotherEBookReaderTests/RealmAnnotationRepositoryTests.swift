@@ -267,6 +267,48 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
         
         XCTAssertEqual(pendingCount, 0)
     }
+
+    func testSyncAnnotations_acceptsNonFractionalISO8601Timestamps() throws {
+        let bookId = "sync_non_fractional^test_lib@server-uuid"
+
+        let bookmarkEntry = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: "2026-06-28T09:00:00Z",
+            pos_type: "epubcfi",
+            pos: "epubcfi(/4/2/4)",
+            title: "bookmark",
+            removed: false
+        )
+
+        let highlightEntry = CalibreBookAnnotationHighlightEntry(
+            type: "highlight",
+            timestamp: "2026-06-28T09:00:00Z",
+            uuid: "AAAAAAAAAAAAAAAAAAAAAA",
+            removed: false,
+            ranges: nil,
+            startCfi: "/6/4",
+            endCfi: "/6/6",
+            highlightedText: "text",
+            style: nil,
+            spineName: "chap-1",
+            spineIndex: 2,
+            tocFamilyTitles: nil,
+            notes: nil
+        )
+
+        let bookmarkPending = repository.syncBookmarks(entries: [bookmarkEntry], forBookId: bookId)
+        let highlightPending = repository.syncHighlights(entries: [highlightEntry], forBookId: bookId)
+
+        let bookmarks = repository.getBookmarks(forBookId: bookId, excludeRemoved: true)
+        let highlights = repository.getHighlights(forBookId: bookId, excludeRemoved: true)
+
+        XCTAssertEqual(bookmarkPending, 0)
+        XCTAssertEqual(highlightPending, 0)
+        XCTAssertEqual(bookmarks.count, 1)
+        XCTAssertEqual(bookmarks.first?.pos, "epubcfi(/4/2/4)")
+        XCTAssertEqual(highlights.count, 1)
+        XCTAssertEqual(highlights.first?.content, "text")
+    }
     
     func testSyncHighlights_duplicateAndInvalidEntriesBehavior() throws {
         let bookId = "sync_hl_duplicates^test_lib@server-uuid"

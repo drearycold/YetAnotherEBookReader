@@ -170,7 +170,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @Published var fontsManager = FontsManager()
 
     var isDatabaseReady: Bool {
-        databaseService.realm != nil
+        realm != nil && realmSaveBooksMetadata != nil && databaseService.realm != nil
     }
 
     func getBook(for primaryKey: String) -> CalibreBook? {
@@ -180,6 +180,17 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @MainActor
     func refreshDatabase() {
         databaseService.realm?.refresh()
+    }
+
+    func resetDatabaseBootstrapState(clearConfiguration: Bool = false) {
+        realm = nil
+        realmSaveBooksMetadata = nil
+        logger = nil
+        databaseService.realm = nil
+        if clearConfiguration {
+            realmConf = nil
+            databaseService.realmConf = nil
+        }
     }
 
     init(

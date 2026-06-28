@@ -48,6 +48,20 @@ final class BookMetadataSyncWorker: @unchecked Sendable {
         self.readingPositionRepository = readingPositionRepository
         self.annotationRepository = annotationRepository
     }
+
+    private func sharesStore(_ lhs: Realm, _ rhs: Realm) -> Bool {
+        if let lhsURL = lhs.configuration.fileURL?.standardizedFileURL,
+           let rhsURL = rhs.configuration.fileURL?.standardizedFileURL {
+            return lhsURL == rhsURL
+        }
+
+        if let lhsIdentifier = lhs.configuration.inMemoryIdentifier,
+           let rhsIdentifier = rhs.configuration.inMemoryIdentifier {
+            return lhsIdentifier == rhsIdentifier
+        }
+
+        return false
+    }
     
     func executeSync(jobs: [SyncJob]) async -> SyncOutcome {
         await withCheckedContinuation { continuation in
@@ -58,11 +72,54 @@ final class BookMetadataSyncWorker: @unchecked Sendable {
                     let format = job.format
                     let entry = job.entry
                     
-                    // 1. Sync Positions
-                    let pendingPositions = self.readingPositionRepository.syncPositions(
-                        entries: entry.last_read_positions,
-                        forBookId: book.bookPrefId
-                    )
+                    var pendingPositions = [CalibreBookLastReadPositionEntry]()
+                    var highlightPending = 0
+                    var bookmarkPending = 0
+                    
+                    let remoteHighlights = entry.annotations_map.highlight ?? []
+                    let remoteBookmarks = entry.annotations_map.bookmark ?? []
+                    let shouldMergeAnnotations = job.needUpload || !remoteHighlights.isEmpty || !remoteBookmarks.isEmpty
+                    
+                    let positionRealm = self.readingPositionRepository.getRealm(forBookId: book.bookPrefId)
+                    let annotationRealm = shouldMergeAnnotations ? self.annotationRepository.getRealm(forBookId: book.bookPrefId) : nil
+                    
+                    if let pRealm = positionRealm {
+                        pendingPositions = self.readingPositionRepository.syncPositions(
+                            entries: entry.last_read_positions,
+                            forBookId: book.bookPrefId,
+                            in: pRealm
+                        )
+
+                        if let aRealm = annotationRealm {
+                            let annotationWriteRealm = self.sharesStore(pRealm, aRealm) ? pRealm : aRealm
+                            highlightPending = self.annotationRepository.syncHighlights(
+                                entries: remoteHighlights,
+                                forBookId: book.bookPrefId,
+                                in: annotationWriteRealm
+                            )
+                            bookmarkPending = self.annotationRepository.syncBookmarks(
+                                entries: remoteBookmarks,
+                                forBookId: book.bookPrefId,
+                                in: annotationWriteRealm
+                            )
+                        }
+                    } else {
+                        // Fallback (e.g. mock repositories in tests where getRealm returns nil)
+                        pendingPositions = self.readingPositionRepository.syncPositions(
+                            entries: entry.last_read_positions,
+                            forBookId: book.bookPrefId
+                        )
+                        if shouldMergeAnnotations {
+                            highlightPending = self.annotationRepository.syncHighlights(
+                                entries: remoteHighlights,
+                                forBookId: book.bookPrefId
+                            )
+                            bookmarkPending = self.annotationRepository.syncBookmarks(
+                                entries: remoteBookmarks,
+                                forBookId: book.bookPrefId
+                            )
+                        }
+                    }
                     
                     if job.needUpload && !pendingPositions.isEmpty {
                         outcome.positionsToUpload.append(
@@ -74,41 +131,25 @@ final class BookMetadataSyncWorker: @unchecked Sendable {
                         )
                     }
                     
-                    // 2. Sync Annotations
-                    let remoteHighlights = entry.annotations_map.highlight ?? []
-                    let remoteBookmarks = entry.annotations_map.bookmark ?? []
-                    
-                    if !remoteHighlights.isEmpty || !remoteBookmarks.isEmpty {
-                        // Always run sync for both highlights and bookmarks without short-circuiting
-                        let highlightPending = self.annotationRepository.syncHighlights(
-                            entries: remoteHighlights,
-                            forBookId: book.bookPrefId
-                        )
-                        let bookmarkPending = self.annotationRepository.syncBookmarks(
-                            entries: remoteBookmarks,
-                            forBookId: book.bookPrefId
-                        )
+                    if shouldMergeAnnotations && job.needUpload && (highlightPending > 0 || bookmarkPending > 0) {
+                        let highlightsToUpload = self.annotationRepository.getHighlights(
+                            forBookId: book.bookPrefId,
+                            excludeRemoved: false
+                        ).compactMap { $0.toCalibreBookAnnotationHighlightEntry() }
                         
-                        if job.needUpload && (highlightPending > 0 || bookmarkPending > 0) {
-                            let highlightsToUpload = self.annotationRepository.getHighlights(
-                                forBookId: book.bookPrefId,
-                                excludeRemoved: false
-                            ).compactMap { $0.toCalibreBookAnnotationHighlightEntry() }
-                            
-                            let bookmarksToUpload = self.annotationRepository.getBookmarks(
-                                forBookId: book.bookPrefId,
-                                excludeRemoved: true
-                            ).map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                            
-                            outcome.annotationsToUpload.append(
-                                SyncOutcome.UploadAnnotations(
-                                    book: book,
-                                    format: format,
-                                    highlights: highlightsToUpload,
-                                    bookmarks: bookmarksToUpload
-                                )
+                        let bookmarksToUpload = self.annotationRepository.getBookmarks(
+                            forBookId: book.bookPrefId,
+                            excludeRemoved: true
+                        ).map { $0.toCalibreBookAnnotationBookmarkEntry() }
+                        
+                        outcome.annotationsToUpload.append(
+                            SyncOutcome.UploadAnnotations(
+                                book: book,
+                                format: format,
+                                highlights: highlightsToUpload,
+                                bookmarks: bookmarksToUpload
                             )
-                        }
+                        )
                     }
                 }
                 continuation.resume(returning: outcome)
