@@ -68,18 +68,20 @@ class CalibreServerManager: ObservableObject {
             }
             return $0.username < $1.username
         })
+        var tempServers = [String: CalibreServer]()
         servers.forEach { calibreServer in
             guard calibreServer.removed == false,
                   calibreServer.baseUrl.isEmpty == false
             else { return }
             
-            calibreServers[calibreServer.id] = calibreServer
+            tempServers[calibreServer.id] = calibreServer
             
             if calibreServer.username.isEmpty == false && calibreServer.password.isEmpty == false {
                 configureCredentials(for: calibreServer.baseUrl, server: calibreServer)
                 configureCredentials(for: calibreServer.publicUrl, server: calibreServer)
             }
         }
+        calibreServers = tempServers
     }
     
     func addServer(server: CalibreServer, libraries: [CalibreLibrary]) {

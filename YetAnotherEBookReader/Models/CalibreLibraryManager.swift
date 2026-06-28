@@ -38,9 +38,11 @@ class CalibreLibraryManager: ObservableObject {
     
     func populateLibraries() {
         let libraries = libraryRepository.getAllLibraries()
+        var tempLibraries = [String: CalibreLibrary]()
         libraries.forEach { calibreLibrary in
-            calibreLibraries[calibreLibrary.id] = calibreLibrary
+            tempLibraries[calibreLibrary.id] = calibreLibrary
         }
+        calibreLibraries = tempLibraries
     }
     
     func populateLocalLibraryBooks() {

@@ -112,11 +112,15 @@ class CalibreBookManager: ObservableObject {
 
     func populateBookShelf() {
         let books = bookRepository.getAllBooksInShelf()
-        books.forEach { book in
+        var tempBooks = [String: CalibreBook]()
+        
+        for book in books {
             var updatedBook = book
-            updatedBook.formats.forEach { formatRaw, formatInfo in
+            var needsSave = false
+            
+            for (formatRaw, formatInfo) in updatedBook.formats {
                 guard let format = Format(rawValue: formatRaw) else {
-                    return
+                    continue
                 }
                 var formatInfoNew = formatInfo
                 if let cacheInfo = getCacheInfo(book: updatedBook, format: format),
@@ -132,13 +136,21 @@ class CalibreBookManager: ObservableObject {
 
                 if formatInfoNew.cached != formatInfo.cached {
                     updatedBook.formats[formatRaw] = formatInfoNew
-                    self.updateBook(book: updatedBook)
+                    needsSave = true
                 }
             }
-
-            self.booksInShelf[updatedBook.inShelfId] = updatedBook
-            print("booksInShelfRealm \(updatedBook.inShelfId)")
+            
+            if needsSave {
+                bookRepository.saveBook(updatedBook)
+                if readingBook?.inShelfId == updatedBook.inShelfId {
+                    readingBook = updatedBook
+                }
+            }
+            
+            tempBooks[updatedBook.inShelfId] = updatedBook
         }
+        
+        booksInShelf = tempBooks
     }
 
     // MARK: - Realm Converters
