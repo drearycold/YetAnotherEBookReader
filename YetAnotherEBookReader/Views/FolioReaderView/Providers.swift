@@ -416,60 +416,6 @@ extension FolioReaderHighlight {
     }
 }
 
-extension BookDeviceReadingPositionRealm {
-    func fromFolioReaderReadPosition(_ position: FolioReaderReadPosition, bookId: String) {
-        self.bookId = bookId
-        self.deviceId = position.deviceId
-
-        self.readerName = ReaderType.YabrEPUB.rawValue
-        self.maxPage = position.maxPage
-        self.lastReadPage = position.pageNumber
-        self.lastReadChapter = position.chapterName
-        self.lastChapterProgress = position.chapterProgress
-        self.lastProgress = position.bookProgress
-
-        self.lastPosition.removeAll()
-        self.lastPosition.append(objectsIn: [self.lastReadPage, Int(position.pageOffset.x), Int(position.pageOffset.y)])
-
-        self.cfi = position.cfi
-        self.epoch = position.epoch.timeIntervalSince1970
-
-        self.structuralStyle = position.structuralStyle.rawValue
-        self.structuralRootPageNumber = position.structuralRootPageNumber
-        self.positionTrackingStyle = position.positionTrackingStyle.rawValue
-
-        self.lastReadBook = position.bookName
-        self.lastBundleProgress = position.bundleProgress
-
-        self.takePrecedence = position.takePrecedence
-    }
-
-    func toFolioReaderReadPosition() -> FolioReaderReadPosition? {
-        let position = FolioReaderReadPosition(
-            deviceId: deviceId,
-            structuralStyle: FolioReaderStructuralStyle(rawValue: structuralStyle) ?? .atom,
-            positionTrackingStyle: FolioReaderPositionTrackingStyle(rawValue: positionTrackingStyle) ?? .linear,
-            structuralRootPageNumber: structuralRootPageNumber,
-            pageNumber: lastReadPage,
-            cfi: cfi
-        )
-
-        position.maxPage = self.maxPage
-        position.pageOffset = CGPoint(x: self.lastPosition[1], y: self.lastPosition[2])
-
-        position.chapterProgress = self.lastChapterProgress
-        position.chapterName = self.lastReadChapter
-        position.bookProgress = self.lastProgress
-        position.bookName = self.lastReadBook
-        position.bundleProgress = self.lastBundleProgress
-
-        position.epoch = Date(timeIntervalSince1970: self.epoch)
-        position.takePrecedence = self.takePrecedence
-
-        return position
-    }
-}
-
 extension BookDeviceReadingPosition {
     func toFolioReaderReadPosition() -> FolioReaderReadPosition {
         let position = FolioReaderReadPosition(

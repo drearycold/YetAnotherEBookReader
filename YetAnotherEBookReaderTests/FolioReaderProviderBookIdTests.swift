@@ -725,6 +725,29 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(bookmarks.count, 100)
     }
 
+    func testFolioReaderPrecedenceIgnoredInDomain() throws {
+        // 1. Domain to Folio conversion must set takePrecedence to false (not propagate to Folio)
+        let domainPos = makePosition(page: 12)
+        let folioPos = domainPos.toFolioReaderReadPosition()
+        XCTAssertFalse(folioPos.takePrecedence)
+        
+        // 2. Folio to Domain conversion does not hold takePrecedence because domain model has no such field
+        let folioPosWithPrecedence = FolioReaderReadPosition(
+            deviceId: "test-device",
+            structuralStyle: .atom,
+            positionTrackingStyle: .linear,
+            structuralRootPageNumber: 1,
+            pageNumber: 5,
+            cfi: "cfi"
+        )
+        folioPosWithPrecedence.takePrecedence = true
+        
+        let convertedDomainPos = folioPosWithPrecedence.toBookDeviceReadingPosition()
+        XCTAssertEqual(convertedDomainPos.lastReadPage, 5)
+        // Check that domain pos converts back to folio without setting takePrecedence to true
+        let finalFolioPos = convertedDomainPos.toFolioReaderReadPosition()
+        XCTAssertFalse(finalFolioPos.takePrecedence)
+    }
 
     private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
         let config = Realm.Configuration(

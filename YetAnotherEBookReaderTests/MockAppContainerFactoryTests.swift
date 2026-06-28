@@ -237,7 +237,6 @@ final class MockAppContainerFactoryTests: XCTestCase {
             object.epoch = 1234.0
             object.lastReadPage = 7
             object.maxPage = 99
-            object.takePrecedence = true
             realmA.add(object)
         }
 
@@ -264,7 +263,6 @@ final class MockAppContainerFactoryTests: XCTestCase {
             object.epoch = 5678.0
             object.lastReadPage = 14
             object.maxPage = 99
-            object.takePrecedence = true
             realmB.add(object)
         }
         XCTAssertEqual(
