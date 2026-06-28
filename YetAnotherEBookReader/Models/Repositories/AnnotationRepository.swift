@@ -413,30 +413,42 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
         
+        struct DeduplicatedHighlight {
+            let entry: CalibreBookAnnotationHighlightEntry
+            let highlightId: String
+            let date: Date
+        }
+        
         // Pre-reduce duplicates by UUID using the newest timestamp
-        var latestEntries = [String: (entry: CalibreBookAnnotationHighlightEntry, date: Date)]()
+        var latestEntries = [String: DeduplicatedHighlight]()
         entries.forEach { entry in
             guard entry.type == "highlight",
                   let highlightId = uuidCalibreToFolio(entry.uuid),
                   let date = dateFormatter.date(from: entry.timestamp)
             else { return }
+            
+            // Exclude invalid non-removed entries: non-removed highlights must have spineIndex
+            if entry.removed != true {
+                guard entry.spineIndex != nil else { return }
+            }
+            
             if let existing = latestEntries[highlightId] {
                 if date > existing.date {
-                    latestEntries[highlightId] = (entry, date)
+                    latestEntries[highlightId] = DeduplicatedHighlight(entry: entry, highlightId: highlightId, date: date)
                 }
             } else {
-                latestEntries[highlightId] = (entry, date)
+                latestEntries[highlightId] = DeduplicatedHighlight(entry: entry, highlightId: highlightId, date: date)
             }
         }
-        let deduplicatedEntries = latestEntries.values.map { $0.entry }
+        let deduplicatedEntries = Array(latestEntries.values)
         
         try? realm.write {
             deduplicatedEntries.forEach { hl in
-                guard let highlightId = uuidCalibreToFolio(hl.uuid),
-                      let date = dateFormatter.date(from: hl.timestamp)
-                else { return }
+                let highlightId = hl.highlightId
+                let date = hl.date
+                let entry = hl.entry
                 
-                guard hl.removed != true else {
+                guard entry.removed != true else {
                     if let object = localHighlightsById[highlightId] {
                         if object.date <= date + 0.1 {
                             object.removed = true
@@ -451,13 +463,13 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                     return
                 }
                 
-                guard let spineIndex = hl.spineIndex else { return }
+                guard let spineIndex = entry.spineIndex else { return }
                 
                 if let object = localHighlightsById[highlightId] {
                     if object.date <= date + 0.1 {
                         object.date = date
-                        object.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
-                        object.note = hl.notes
+                        object.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
+                        object.note = entry.notes
                         object.removed = false
                         pending -= 1
                     } else if date <= object.date + 0.1 {
@@ -469,21 +481,21 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
                     let highlightRealm = BookHighlightRealm()
                     
                     highlightRealm.bookId = bookId
-                    highlightRealm.content = hl.highlightedText ?? "Unspecified"
+                    highlightRealm.content = entry.highlightedText ?? "Unspecified"
                     highlightRealm.contentPost = ""
                     highlightRealm.contentPre = ""
                     highlightRealm.date = date
                     highlightRealm.highlightId = highlightId
                     highlightRealm.page = spineIndex + 1
-                    highlightRealm.type = BookHighlightStyle.styleForClass(hl.style?["which"] ?? "yellow").rawValue
+                    highlightRealm.type = BookHighlightStyle.styleForClass(entry.style?["which"] ?? "yellow").rawValue
                     highlightRealm.startOffset = 0
                     highlightRealm.endOffset = 0
-                    highlightRealm.ranges = hl.ranges
-                    highlightRealm.note = hl.notes
-                    highlightRealm.cfiStart = hl.startCfi
-                    highlightRealm.cfiEnd = hl.endCfi
-                    highlightRealm.spineName = hl.spineName
-                    if let tocFamilyTitles = hl.tocFamilyTitles {
+                    highlightRealm.ranges = entry.ranges
+                    highlightRealm.note = entry.notes
+                    highlightRealm.cfiStart = entry.startCfi
+                    highlightRealm.cfiEnd = entry.endCfi
+                    highlightRealm.spineName = entry.spineName
+                    if let tocFamilyTitles = entry.tocFamilyTitles {
                         highlightRealm.tocFamilyTitles.append(objectsIn: tocFamilyTitles)
                     }
                     
