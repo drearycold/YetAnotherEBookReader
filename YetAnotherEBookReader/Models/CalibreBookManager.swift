@@ -60,6 +60,7 @@ class CalibreBookManager: ObservableObject {
     let bookRepository: BookRepositoryProtocol
     let readingPositionRepository: ReadingPositionRepositoryProtocol
     let annotationRepository: AnnotationRepositoryProtocol
+    private let metadataSyncWorker: BookMetadataSyncWorker
 
     init(
         container: AppContainerProtocol? = nil,
@@ -91,6 +92,11 @@ class CalibreBookManager: ObservableObject {
         } else {
             self.annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
         }
+
+        self.metadataSyncWorker = BookMetadataSyncWorker(
+            readingPositionRepository: self.readingPositionRepository,
+            annotationRepository: self.annotationRepository
+        )
     }
 
     private func getRealm() -> Realm? {
@@ -627,52 +633,78 @@ class CalibreBookManager: ObservableObject {
         }
 
         if task.request.getAnnotations, let annotationsResult = task.booksAnnotationsEntry {
+            var jobs = [BookMetadataSyncWorker.SyncJob]()
+            
             for book in task.booksInShelf {
                 for (formatKey, _) in book.formats {
                     guard let format = Format(rawValue: formatKey),
                           let entry = annotationsResult["\(book.id):\(formatKey)"]
                     else { continue }
-
-                    let positions = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
-                    for pos in positions {
-                        do {
-                            let setTask = try calibreServerService.buildSetLastReadPositionTask(library: task.library, bookId: book.id, format: format, entry: pos)
-                            Task {
-                                await calibreServerService.setLastReadPositionByTask(task: setTask)
-                            }
-                        } catch {
-                            logger.error("Failed to build set last read position task: \(error.localizedDescription)")
+                    jobs.append(
+                        BookMetadataSyncWorker.SyncJob(
+                            book: book,
+                            formatKey: formatKey,
+                            format: format,
+                            entry: entry,
+                            needUpload: true
+                        )
+                    )
+                }
+            }
+            
+            for book in task.booksAnnotation {
+                for (formatKey, _) in book.formats {
+                    guard let format = Format(rawValue: formatKey),
+                          let entry = annotationsResult["\(book.id):\(formatKey)"]
+                    else { continue }
+                    jobs.append(
+                        BookMetadataSyncWorker.SyncJob(
+                            book: book,
+                            formatKey: formatKey,
+                            format: format,
+                            entry: entry,
+                            needUpload: false
+                        )
+                    )
+                }
+            }
+            
+            let outcome = await metadataSyncWorker.executeSync(jobs: jobs)
+            
+            // Trigger uploads for positions
+            for posUpload in outcome.positionsToUpload {
+                for pos in posUpload.entries {
+                    do {
+                        let setTask = try calibreServerService.buildSetLastReadPositionTask(
+                            library: task.library,
+                            bookId: posUpload.book.id,
+                            format: posUpload.format,
+                            entry: pos
+                        )
+                        Task {
+                            await calibreServerService.setLastReadPositionByTask(task: setTask)
                         }
-                    }
-
-                    if annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId) > 0 || annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId) > 0 {
-                        do {
-                            let updateTask = try calibreServerService.buildUpdateAnnotationsTask(
-                                 library: task.library,
-                                 bookId: book.id,
-                                 format: format,
-                                 highlights: annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() },
-                                 bookmarks: annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                            )
-                            Task {
-                                await calibreServerService.updateAnnotationByTask(task: updateTask)
-                            }
-                        } catch {
-                            logger.error("Failed to build update annotations task: \(error.localizedDescription)")
-                        }
+                    } catch {
+                        logger.error("Failed to build set last read position task: \(error.localizedDescription)")
                     }
                 }
             }
-
-            for book in task.booksAnnotation {
-                for (formatKey, _) in book.formats {
-                    guard let _ = Format(rawValue: formatKey),
-                          let entry = annotationsResult["\(book.id):\(formatKey)"]
-                    else { continue }
-
-                    _ = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
-                    _ = annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId)
-                    _ = annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId)
+            
+            // Trigger uploads for annotations
+            for annUpload in outcome.annotationsToUpload {
+                do {
+                    let updateTask = try calibreServerService.buildUpdateAnnotationsTask(
+                        library: task.library,
+                        bookId: annUpload.book.id,
+                        format: annUpload.format,
+                        highlights: annUpload.highlights,
+                        bookmarks: annUpload.bookmarks
+                    )
+                    Task {
+                        await calibreServerService.updateAnnotationByTask(task: updateTask)
+                    }
+                } catch {
+                    logger.error("Failed to build update annotations task: \(error.localizedDescription)")
                 }
             }
         }
