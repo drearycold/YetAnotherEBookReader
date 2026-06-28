@@ -256,7 +256,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
         guard let realm = getRealm(forBookId: bookId) else { return [] }
         
-        let localPositions = self.getPositions(forBookId: bookId)
+        let localRealms = Array(realm.objects(BookDeviceReadingPositionRealm.self).filter("bookId == %@", bookId))
+        let localPositions = localRealms.map { $0.toDomain() }.sorted(by: { $0.epoch > $1.epoch })
+        
         var latestLocalByDevice = [String: BookDeviceReadingPosition]()
         for pos in localPositions {
             if latestLocalByDevice[pos.id] == nil {
@@ -303,41 +305,91 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             }
         }
         
-        if !positionsToSave.isEmpty {
+        // Index local realms by identity
+        var localRealmsByIdentity = [PositionIdentity: [BookDeviceReadingPositionRealm]]()
+        for obj in localRealms {
+            let identity = obj.identity
+            localRealmsByIdentity[identity, default: []].append(obj)
+        }
+        // Sort each by epoch descending
+        for (identity, objs) in localRealmsByIdentity {
+            localRealmsByIdentity[identity] = objs.sorted(by: { $0.epoch > $1.epoch })
+        }
+        
+        // Deduplicate positionsToSave by identity
+        var uniquePositionsToSave = [PositionIdentity: BookDeviceReadingPosition]()
+        for pos in positionsToSave {
+            let id = pos.identity
+            if let existing = uniquePositionsToSave[id] {
+                if pos.epoch > existing.epoch {
+                    uniquePositionsToSave[id] = pos
+                }
+            } else {
+                uniquePositionsToSave[id] = pos
+            }
+        }
+        
+        if !uniquePositionsToSave.isEmpty {
             try? realm.write {
-                for position in positionsToSave {
-                    let existingToRemove = realm.objects(BookDeviceReadingPositionRealm.self)
-                        .filter(NSPredicate(
-                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@ AND epoch < %@",
-                            bookId,
-                            position.id,
-                            position.readerName,
-                            NSNumber(value: position.structuralStyle),
-                            NSNumber(value: position.positionTrackingStyle),
-                            NSNumber(value: position.structuralRootPageNumber),
-                            NSNumber(value: position.epoch)
-                        ))
-                    if !existingToRemove.isEmpty {
-                        realm.delete(existingToRemove)
-                    }
+                var realmsToDelete = [BookDeviceReadingPositionRealm]()
+                var realmsToAdd = [BookDeviceReadingPositionRealm]()
+                
+                for (_, position) in uniquePositionsToSave {
+                    let identity = position.identity
+                    let realmsForIdentity = localRealmsByIdentity[identity] ?? []
                     
-                    let exactMatch = realm.objects(BookDeviceReadingPositionRealm.self)
-                        .filter(NSPredicate(
-                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
-                            bookId,
-                            position.id,
-                            position.readerName,
-                            NSNumber(value: position.structuralStyle),
-                            NSNumber(value: position.positionTrackingStyle),
-                            NSNumber(value: position.structuralRootPageNumber)
-                        ))
-                    if exactMatch.isEmpty {
-                        realm.add(position.makeRealmObject(bookId: bookId))
+                    let toDelete = realmsForIdentity.filter { $0.epoch < position.epoch }
+                    realmsToDelete.append(contentsOf: toDelete)
+                    
+                    let hasNewerOrEqual = realmsForIdentity.contains { $0.epoch >= position.epoch }
+                    if !hasNewerOrEqual {
+                        realmsToAdd.append(position.makeRealmObject(bookId: bookId))
                     }
+                }
+                
+                if !realmsToDelete.isEmpty {
+                    realm.delete(realmsToDelete)
+                }
+                for newObj in realmsToAdd {
+                    realm.add(newObj)
                 }
             }
         }
         
         return tasks
+    }
+}
+
+// MARK: - Position Identity Helpers
+
+struct PositionIdentity: Hashable, Equatable {
+    let deviceId: String
+    let readerName: String
+    let structuralStyle: Int
+    let positionTrackingStyle: Int
+    let structuralRootPageNumber: Int
+}
+
+extension BookDeviceReadingPosition {
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: id,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
+    }
+}
+
+extension BookDeviceReadingPositionRealm {
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: deviceId,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
     }
 }

@@ -168,6 +168,70 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         XCTAssertTrue(tasks.isEmpty)
     }
     
+    @MainActor
+    func testSyncPositionsLinearizationSpecialCases() throws {
+        let bookId = "linear_sync^test_lib@server-uuid"
+        
+        // 1. Setup local position
+        let localIPad = TestFixtures.makeReadingPosition(id: "iPad", readerName: "YabrEPUB", lastReadPage: 10, epoch: 1000.0)
+        repository.savePosition(localIPad, forBookId: bookId)
+        
+        // 2. Setup local position for iPhone (which will be newer than its remote)
+        let localIPhone = TestFixtures.makeReadingPosition(id: "iPhone", readerName: "YabrPDF", lastReadPage: 2, epoch: 1200.0)
+        repository.savePosition(localIPhone, forBookId: bookId)
+        
+        // 3. Prepare sync entries:
+        // - remoteIPadEPUBNewer: newer epoch for iPad identity -> should update
+        // - remoteIPhoneOlder: older epoch for iPhone identity -> should trigger local upload tasks
+        // - remoteNewDevice: new device -> should insert
+        // - duplicateNewDevice: duplicate entry in same sync list -> should deduplicate
+        let remoteIPadEPUBNewer = TestFixtures.makeReadingPosition(id: "iPad", readerName: "YabrEPUB", lastReadPage: 15, epoch: 1500.0)
+        let remoteIPhoneOlder = TestFixtures.makeReadingPosition(id: "iPhone", readerName: "YabrPDF", lastReadPage: 1, epoch: 800.0)
+        let remoteNewDevice = TestFixtures.makeReadingPosition(id: "Kindle", readerName: "YabrEPUB", lastReadPage: 50, epoch: 3000.0)
+        let duplicateNewDevice = TestFixtures.makeReadingPosition(id: "Kindle", readerName: "YabrEPUB", lastReadPage: 55, epoch: 3100.0)
+        
+        let entries = [
+            remoteIPadEPUBNewer.toEntry(),
+            remoteIPhoneOlder.toEntry(),
+            remoteNewDevice.toEntry(),
+            duplicateNewDevice.toEntry()
+        ]
+        
+        let tasks = repository.syncPositions(entries: entries, forBookId: bookId)
+        
+        // Verify iPad EPUB was updated to newer remote epoch
+        let epubPos = try XCTUnwrap(repository.getPosition(forBookId: bookId, policy: .latestForDevice("iPad")))
+        XCTAssertEqual(epubPos.lastReadPage, 15)
+        XCTAssertEqual(epubPos.epoch, 1500.0)
+        
+        // Verify Kindle has the newest deduplicated state
+        let kindlePos = try XCTUnwrap(repository.getPosition(forBookId: bookId, policy: .latestForDevice("Kindle")))
+        XCTAssertEqual(kindlePos.lastReadPage, 55)
+        XCTAssertEqual(kindlePos.epoch, 3100.0)
+        
+        // Tasks should contain upload entry for iPhone since local was newer (epoch 1200.0 vs remote 800.0)
+        XCTAssertEqual(tasks.count, 1)
+        XCTAssertEqual(tasks.first?.device, "iPhone")
+        XCTAssertTrue(tasks.first?.cfi.contains("vndYabr_epoch=1200.0") == true)
+    }
+    
+    @MainActor
+    func testSyncPositionsStressCheck() throws {
+        let bookId = "stress_sync^test_lib@server-uuid"
+        
+        var entries = [CalibreBookLastReadPositionEntry]()
+        for i in 1...500 {
+            let pos = TestFixtures.makeReadingPosition(id: "device-\(i)", epoch: Double(i))
+            entries.append(pos.toEntry())
+        }
+        
+        let tasks = repository.syncPositions(entries: entries, forBookId: bookId)
+        XCTAssertTrue(tasks.isEmpty)
+        
+        let positions = repository.getPositions(forBookId: bookId)
+        XCTAssertEqual(positions.count, 500)
+    }
+    
     func testReadingPositionThreading() throws {
         // Use a bookId that does not contain '@' or '^' to avoid accessing actor-isolated AppContainer.shared from background thread
         let bookId = "thread_test_book"
