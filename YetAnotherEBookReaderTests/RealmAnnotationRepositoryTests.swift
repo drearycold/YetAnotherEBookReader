@@ -17,7 +17,7 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
     
     override func setUpWithError() throws {
         realmConfig = MockDatabaseService.inMemoryConfiguration()
-        databaseService = DatabaseService.shared
+        databaseService = DatabaseService()
         databaseService.setup(conf: realmConfig)
         repository = RealmAnnotationRepository(databaseService: databaseService)
     }
@@ -264,6 +264,111 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
         XCTAssertEqual(hl2?.note, "New Note")
         XCTAssertEqual(hl2?.page, 6) // spineIndex 5 + 1
         XCTAssertEqual(hl2?.type, BookHighlightStyle.yellow.rawValue)
+        
+        XCTAssertEqual(pendingCount, 0)
+    }
+    
+    func testSyncHighlights_duplicateAndInvalidEntriesBehavior() throws {
+        let bookId = "sync_hl_duplicates^test_lib@server-uuid"
+        
+        let calibreId1 = "CCCCCCCCCCCCCCCCCCCCCC"
+        let folioId1 = try XCTUnwrap(uuidCalibreToFolio(calibreId1))
+        
+        let calibreId2 = "DDDDDDDDDDDDDDDDDDDDDD"
+        let folioId2 = try XCTUnwrap(uuidCalibreToFolio(calibreId2))
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        let baseDate = Date()
+        let dateOlder = baseDate.addingTimeInterval(-60)
+        let dateNewer = baseDate
+        
+        let entries = [
+            // 1. Older duplicate for ID1 (valid)
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateOlder),
+                uuid: calibreId1,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/4",
+                endCfi: "/6/6",
+                highlightedText: "Older valid highlight text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 2,
+                tocFamilyTitles: nil,
+                notes: "Older valid note"
+            ),
+            // 2. Newer duplicate for ID1 (valid) -> should win over the older duplicate
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateNewer),
+                uuid: calibreId1,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/4",
+                endCfi: "/6/6",
+                highlightedText: "Newer valid highlight text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 2,
+                tocFamilyTitles: nil,
+                notes: "Newer valid note"
+            ),
+            // 3. Valid older duplicate for ID2
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateOlder),
+                uuid: calibreId2,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/8",
+                endCfi: "/6/10",
+                highlightedText: "Older valid ID2 text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 3,
+                tocFamilyTitles: nil,
+                notes: "Older valid ID2 note"
+            ),
+            // 4. Newer duplicate for ID2 with missing spineIndex (invalid normal entry)
+            // -> This newer duplicate should be excluded before deduplication,
+            // so the older valid duplicate for ID2 is kept and wins.
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateNewer),
+                uuid: calibreId2,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/8",
+                endCfi: "/6/10",
+                highlightedText: "Newer invalid ID2 text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: nil,
+                tocFamilyTitles: nil,
+                notes: "Newer invalid ID2 note"
+            )
+        ]
+        
+        let pendingCount = repository.syncHighlights(entries: entries, forBookId: bookId)
+        
+        let highlights = repository.getHighlights(forBookId: bookId, excludeRemoved: true)
+        XCTAssertEqual(highlights.count, 2)
+        
+        // ID1 check: newest valid wins ("Newer valid highlight text")
+        let hl1 = repository.getHighlight(byId: folioId1)
+        XCTAssertNotNil(hl1)
+        XCTAssertEqual(hl1?.note, "Newer valid note")
+        XCTAssertEqual(hl1?.content, "Newer valid highlight text")
+        
+        // ID2 check: newer invalid is filtered, so older valid wins ("Older valid ID2 text")
+        let hl2 = repository.getHighlight(byId: folioId2)
+        XCTAssertNotNil(hl2)
+        XCTAssertEqual(hl2?.note, "Older valid ID2 note")
+        XCTAssertEqual(hl2?.content, "Older valid ID2 text")
         
         XCTAssertEqual(pendingCount, 0)
     }
