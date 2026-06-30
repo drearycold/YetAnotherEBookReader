@@ -396,33 +396,9 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         syncPositionsBookIdParam = bookId
         return syncPositionsReturn
     }
-    
-    var syncPositionsInRealmCalled = false
-    var syncPositionsInRealmEntriesParam: [CalibreBookLastReadPositionEntry]?
-    var syncPositionsInRealmBookIdParam: String?
-    var syncPositionsInRealmRealmParam: Realm?
-    var syncPositionsInRealmReturn: [CalibreBookLastReadPositionEntry] = []
-    
-    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, in realm: Realm) -> [CalibreBookLastReadPositionEntry] {
-        syncPositionsInRealmCalled = true
-        syncPositionsInRealmEntriesParam = lastReadPositions
-        syncPositionsInRealmBookIdParam = bookId
-        syncPositionsInRealmRealmParam = realm
-        return syncPositionsInRealmReturn
-    }
-    
-    var getRealmCalled = false
-    var getRealmBookIdParam: String?
-    var getRealmReturn: Realm?
-    
-    func getRealm(forBookId bookId: String) -> Realm? {
-        getRealmCalled = true
-        getRealmBookIdParam = bookId
-        return getRealmReturn
-    }
 }
 
-class MockAnnotationRepository: AnnotationRepositoryProtocol {
+class MockAnnotationRepository: AnnotationRepositoryProtocol, @unchecked Sendable {
     var getBookmarksCalled = false
     var getBookmarksBookIdParam: String?
     var getBookmarksExcludeRemovedParam: Bool?
@@ -537,44 +513,6 @@ class MockAnnotationRepository: AnnotationRepositoryProtocol {
         syncHighlightsEntriesParam = entries
         syncHighlightsBookIdParam = bookId
         return syncHighlightsReturn
-    }
-    
-    var syncBookmarksInRealmCalled = false
-    var syncBookmarksInRealmEntriesParam: [CalibreBookAnnotationBookmarkEntry]?
-    var syncBookmarksInRealmBookIdParam: String?
-    var syncBookmarksInRealmRealmParam: Realm?
-    var syncBookmarksInRealmReturn: Int = 0
-    
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int {
-        syncBookmarksInRealmCalled = true
-        syncBookmarksInRealmEntriesParam = entries
-        syncBookmarksInRealmBookIdParam = bookId
-        syncBookmarksInRealmRealmParam = realm
-        return syncBookmarksInRealmReturn
-    }
-    
-    var syncHighlightsInRealmCalled = false
-    var syncHighlightsInRealmEntriesParam: [CalibreBookAnnotationHighlightEntry]?
-    var syncHighlightsInRealmBookIdParam: String?
-    var syncHighlightsInRealmRealmParam: Realm?
-    var syncHighlightsInRealmReturn: Int = 0
-    
-    func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int {
-        syncHighlightsInRealmCalled = true
-        syncHighlightsInRealmEntriesParam = entries
-        syncHighlightsInRealmBookIdParam = bookId
-        syncHighlightsInRealmRealmParam = realm
-        return syncHighlightsInRealmReturn
-    }
-    
-    var getRealmCalled = false
-    var getRealmBookIdParam: String?
-    var getRealmReturn: Realm?
-    
-    func getRealm(forBookId bookId: String) -> Realm? {
-        getRealmCalled = true
-        getRealmBookIdParam = bookId
-        return getRealmReturn
     }
 }
 

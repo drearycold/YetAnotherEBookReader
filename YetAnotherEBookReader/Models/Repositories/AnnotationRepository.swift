@@ -161,13 +161,9 @@ protocol AnnotationRepositoryProtocol {
     // Remote Sync (Calibre Server Merges)
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int
-    
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int
-    func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int
-    func getRealm(forBookId bookId: String) -> Realm?
 }
 
-class RealmAnnotationRepository: AnnotationRepositoryProtocol {
+final class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     private let databaseService: DatabaseService
     private let logger = Logger(subsystem: "io.github.drearycold.DSReader", category: "AnnotationRepository")
     private let highlightWriteQueue = DispatchQueue(label: "annotation-repository.highlight-write", qos: .userInitiated)
@@ -176,7 +172,7 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
         self.databaseService = databaseService
     }
     
-    func getRealm(forBookId bookId: String) -> Realm? {
+    private func getRealm(forBookId bookId: String) -> Realm? {
         if Thread.isMainThread {
             return databaseService.realm
         }
@@ -339,10 +335,10 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     // MARK: - Remote Sync (Calibre Server Merges)
     func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
         guard let realm = getRealm(forBookId: bookId) else { return 0 }
-        return syncBookmarks(entries: entries, forBookId: bookId, in: realm)
+        return syncBookmarks(entries: entries, forBookId: bookId, using: realm)
     }
     
-    func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int {
+    private func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, using realm: Realm) -> Int {
         let state = AppPerformanceSignpost.begin("BookmarkMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("BookmarkMerge", state, "Entries: \(entries.count)")
@@ -478,10 +474,10 @@ class RealmAnnotationRepository: AnnotationRepositoryProtocol {
     
     func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int {
         guard let realm = getRealm(forBookId: bookId) else { return 0 }
-        return syncHighlights(entries: entries, forBookId: bookId, in: realm)
+        return syncHighlights(entries: entries, forBookId: bookId, using: realm)
     }
     
-    func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int {
+    private func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, using realm: Realm) -> Int {
         let state = AppPerformanceSignpost.begin("HighlightMerge", "Entries: \(entries.count)")
         defer {
             AppPerformanceSignpost.end("HighlightMerge", state, "Entries: \(entries.count)")

@@ -655,7 +655,6 @@ class CalibreBookManager: ObservableObject {
                     jobs.append(
                         BookMetadataSyncWorker.SyncJob(
                             book: book,
-                            formatKey: formatKey,
                             format: format,
                             entry: entry,
                             needUpload: true
@@ -672,7 +671,6 @@ class CalibreBookManager: ObservableObject {
                     jobs.append(
                         BookMetadataSyncWorker.SyncJob(
                             book: book,
-                            formatKey: formatKey,
                             format: format,
                             entry: entry,
                             needUpload: false

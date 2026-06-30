@@ -22,8 +22,6 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition)
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry]
-    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, in realm: Realm) -> [CalibreBookLastReadPositionEntry]
-    func getRealm(forBookId bookId: String) -> Realm?
 }
 
 final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
@@ -63,7 +61,7 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return databaseService.realmConf
     }
     
-    func getRealm(forBookId bookId: String) -> Realm? {
+    private func getRealm(forBookId bookId: String) -> Realm? {
         guard let config = getRealmConfiguration(forBookId: bookId) else { return nil }
         
         let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? config.inMemoryIdentifier ?? "default")"
@@ -253,10 +251,10 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
     
     func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
         guard let realm = getRealm(forBookId: bookId) else { return [] }
-        return syncPositions(entries: lastReadPositions, forBookId: bookId, in: realm)
+        return syncPositions(entries: lastReadPositions, forBookId: bookId, using: realm)
     }
     
-    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, in realm: Realm) -> [CalibreBookLastReadPositionEntry] {
+    private func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, using realm: Realm) -> [CalibreBookLastReadPositionEntry] {
         let state = AppPerformanceSignpost.begin("PositionMerge", "Entries: \(lastReadPositions.count)")
         defer {
             AppPerformanceSignpost.end("PositionMerge", state, "Entries: \(lastReadPositions.count)")

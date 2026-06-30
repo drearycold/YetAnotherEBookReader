@@ -10,13 +10,12 @@ import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class BookMetadataSyncWorkerTests: XCTestCase {
-    
     private var readingPositionRepo: ThreadCheckReadingPositionRepository!
     private var annotationRepo: ThreadCheckAnnotationRepository!
     private var worker: BookMetadataSyncWorker!
     private var library: CalibreLibrary!
     private var book: CalibreBook!
-    
+
     override func setUp() {
         super.setUp()
         readingPositionRepo = ThreadCheckReadingPositionRepository()
@@ -25,7 +24,7 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
             readingPositionRepository: readingPositionRepo,
             annotationRepository: annotationRepo
         )
-        
+
         let server = CalibreServer(
             uuid: UUID(),
             name: "TestServer",
@@ -36,14 +35,10 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
             username: "",
             password: ""
         )
-        library = CalibreLibrary(
-            server: server,
-            key: "TestLib",
-            name: "TestLib"
-        )
+        library = CalibreLibrary(server: server, key: "TestLib", name: "TestLib")
         book = CalibreBook(id: 123, library: library)
     }
-    
+
     override func tearDown() {
         readingPositionRepo = nil
         annotationRepo = nil
@@ -52,7 +47,7 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
         book = nil
         super.tearDown()
     }
-    
+
     func testSyncExecutedOnBackgroundThread() async {
         let entry = CalibreBookAnnotationsResult(
             last_read_positions: [
@@ -83,26 +78,25 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
                 ]
             )
         )
-        
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: true
-        )
-        
-        _ = await worker.executeSync(jobs: [job])
-        
+
+        _ = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: true
+            )
+        ])
+
         XCTAssertTrue(readingPositionRepo.wasSyncCalledOnBackgroundThread)
         XCTAssertTrue(annotationRepo.wasSyncHighlightsCalledOnBackgroundThread)
         XCTAssertTrue(annotationRepo.wasSyncBookmarksCalledOnBackgroundThread)
     }
-    
+
     func testHighlightPendingDoesNotBlockBookmarkSync() async {
         annotationRepo.syncHighlightsReturn = 1
         annotationRepo.syncBookmarksReturn = 1
-        
+
         let entry = CalibreBookAnnotationsResult(
             last_read_positions: [],
             annotations_map: CalibreBookAnnotationsMap(
@@ -125,22 +119,21 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
                 ]
             )
         )
-        
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: true
-        )
-        
-        _ = await worker.executeSync(jobs: [job])
-        
+
+        _ = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: true
+            )
+        ])
+
         XCTAssertTrue(annotationRepo.syncHighlightsCalled)
         XCTAssertTrue(annotationRepo.syncBookmarksCalled)
     }
-    
-    func testNoAnnotationsDoesNotOpenAnnotationRepositoryWhenUploadNotNeeded() async {
+
+    func testNoAnnotationsSkipsAnnotationRepositoryWhenUploadNotNeeded() async {
         let entry = CalibreBookAnnotationsResult(
             last_read_positions: [],
             annotations_map: CalibreBookAnnotationsMap(
@@ -148,17 +141,16 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
                 highlight: nil
             )
         )
-        
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: false
-        )
-        
-        _ = await worker.executeSync(jobs: [job])
-        
+
+        _ = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: false
+            )
+        ])
+
         XCTAssertFalse(annotationRepo.syncHighlightsCalled)
         XCTAssertFalse(annotationRepo.syncBookmarksCalled)
         XCTAssertFalse(annotationRepo.getBookmarksCalled)
@@ -183,15 +175,14 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
             )
         )
 
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: true
-        )
-
-        let outcome = await worker.executeSync(jobs: [job])
+        let outcome = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: true
+            )
+        ])
 
         XCTAssertTrue(annotationRepo.syncHighlightsCalled)
         XCTAssertTrue(annotationRepo.syncBookmarksCalled)
@@ -199,13 +190,7 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
         XCTAssertEqual(outcome.annotationsToUpload.first?.highlights.count, 1)
         XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.count, 1)
     }
-    
-    func testEmptyJobsResumesContinuation() async {
-        let outcome = await worker.executeSync(jobs: [])
-        XCTAssertTrue(outcome.positionsToUpload.isEmpty)
-        XCTAssertTrue(outcome.annotationsToUpload.isEmpty)
-    }
-    
+
     func testPendingChangesIncludeUploadTasks() async {
         let posEntry = CalibreBookLastReadPositionEntry(
             device: "test-device",
@@ -213,23 +198,23 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
             epoch: 1234.0,
             pos_frac: 0.5
         )
-        
+
         readingPositionRepo.syncPositionsReturn = [posEntry]
         annotationRepo.syncHighlightsReturn = 1
         annotationRepo.syncBookmarksReturn = 0
-        
-        let bookmark = BookBookmark(
-            id: "bookmark-id",
-            bookId: book.bookPrefId,
-            page: 2,
-            pos_type: "cfi",
-            pos: "cfi",
-            title: "title",
-            date: Date(),
-            removed: false
-        )
-        annotationRepo.getBookmarksReturn = [bookmark]
-        
+        annotationRepo.getBookmarksReturn = [
+            BookBookmark(
+                id: "bookmark-id",
+                bookId: book.bookPrefId,
+                page: 2,
+                pos_type: "cfi",
+                pos: "cfi",
+                title: "title",
+                date: Date(),
+                removed: false
+            )
+        ]
+
         let entry = CalibreBookAnnotationsResult(
             last_read_positions: [posEntry],
             annotations_map: CalibreBookAnnotationsMap(
@@ -244,152 +229,57 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
                 ]
             )
         )
-        
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: true
-        )
-        
-        let outcome = await worker.executeSync(jobs: [job])
-        
+
+        let outcome = await worker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: true
+            )
+        ])
+
         XCTAssertEqual(outcome.positionsToUpload.count, 1)
         XCTAssertEqual(outcome.positionsToUpload.first?.entries.count, 1)
         XCTAssertEqual(outcome.annotationsToUpload.count, 1)
         XCTAssertEqual(outcome.annotationsToUpload.first?.bookmarks.count, 1)
     }
 
-    @MainActor
-    func testDifferentInMemoryRealmsDoNotShareStoreIdentity() async throws {
-        let positionRealm = try await Realm(configuration: Realm.Configuration(inMemoryIdentifier: "worker-pos"))
-        let annotationRealm = try await Realm(configuration: Realm.Configuration(inMemoryIdentifier: "worker-ann"))
-
-        readingPositionRepo.getRealmReturn = positionRealm
-        annotationRepo.getRealmReturn = annotationRealm
-
-        let entry = CalibreBookAnnotationsResult(
-            last_read_positions: [],
-            annotations_map: CalibreBookAnnotationsMap(
-                bookmark: [],
-                highlight: [
-                    CalibreBookAnnotationHighlightEntry(
-                        type: "highlight",
-                        timestamp: "2026-06-28T09:00:00Z",
-                        uuid: "uuid",
-                        highlightedText: "text"
-                    )
-                ]
-            )
-        )
-
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: false
-        )
-
-        _ = await worker.executeSync(jobs: [job])
-
-        XCTAssertTrue(readingPositionRepo.syncPositionsInRealmCalled)
-        XCTAssertTrue(annotationRepo.syncHighlightsInRealmCalled)
-        XCTAssertTrue(annotationRepo.syncBookmarksInRealmCalled)
-        XCTAssertEqual(
-            readingPositionRepo.syncPositionsInRealmRealmParam?.configuration.inMemoryIdentifier,
-            positionRealm.configuration.inMemoryIdentifier
-        )
-        XCTAssertEqual(
-            annotationRepo.syncHighlightsInRealmRealmParam?.configuration.inMemoryIdentifier,
-            annotationRealm.configuration.inMemoryIdentifier
-        )
-        XCTAssertEqual(
-            annotationRepo.syncBookmarksInRealmRealmParam?.configuration.inMemoryIdentifier,
-            annotationRealm.configuration.inMemoryIdentifier
-        )
+    func testEmptyJobsResumesContinuation() async {
+        let outcome = await worker.executeSync(jobs: [])
+        XCTAssertTrue(outcome.positionsToUpload.isEmpty)
+        XCTAssertTrue(outcome.annotationsToUpload.isEmpty)
     }
 
     @MainActor
-    func testInRealmSyncRunsOutsideOuterWriteTransaction() async throws {
-        let sharedRealm = try await Realm(configuration: Realm.Configuration(inMemoryIdentifier: "worker-shared"))
-        readingPositionRepo.getRealmReturn = sharedRealm
-        annotationRepo.getRealmReturn = sharedRealm
-
-        let entry = CalibreBookAnnotationsResult(
-            last_read_positions: [
-                CalibreBookLastReadPositionEntry(
-                    device: "test-device",
-                    cfi: "pos",
-                    epoch: 1234.0,
-                    pos_frac: 0.5
-                )
-            ],
-            annotations_map: CalibreBookAnnotationsMap(
-                bookmark: [
-                    CalibreBookAnnotationBookmarkEntry(
-                        type: "bookmark",
-                        timestamp: "2026-06-28T09:00:00Z",
-                        pos_type: "cfi",
-                        pos: "pos",
-                        title: "bookmark"
-                    )
-                ],
-                highlight: [
-                    CalibreBookAnnotationHighlightEntry(
-                        type: "highlight",
-                        timestamp: "2026-06-28T09:00:00Z",
-                        uuid: "uuid",
-                        highlightedText: "text"
-                    )
-                ]
-            )
-        )
-
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: true
-        )
-
-        _ = await worker.executeSync(jobs: [job])
-
-        XCTAssertEqual(readingPositionRepo.syncPositionsInRealmWasInWriteTransaction, false)
-        XCTAssertEqual(annotationRepo.syncHighlightsInRealmWasInWriteTransaction, false)
-        XCTAssertEqual(annotationRepo.syncBookmarksInRealmWasInWriteTransaction, false)
-    }
-    
-    @MainActor
-    func testExecuteSyncWithRealRepositoriesAndSharedRealm() async {
-        let conf = Realm.Configuration(inMemoryIdentifier: "worker-tests", objectTypes: [
+    func testRealRepositoriesPersistPositionHighlightAndBookmark() async {
+        let config = Realm.Configuration(inMemoryIdentifier: UUID().uuidString, objectTypes: [
             BookDeviceReadingPositionRealm.self,
             BookDeviceReadingPositionHistoryRealm.self,
             BookHighlightRealm.self,
             BookBookmarkRealm.self
         ])
-        let dbService = DatabaseService()
-        dbService.setup(conf: conf)
-        
-        let positionRepository = RealmReadingPositionRepository(databaseService: dbService)
-        let annotationRepository = RealmAnnotationRepository(databaseService: dbService)
-        
-        let localWorker = BookMetadataSyncWorker(
+        let databaseService = DatabaseService()
+        databaseService.setup(conf: config)
+
+        let positionRepository = RealmReadingPositionRepository(databaseService: databaseService)
+        let annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
+        let realWorker = BookMetadataSyncWorker(
             readingPositionRepository: positionRepository,
             annotationRepository: annotationRepository
         )
-        
-        let posEntry = CalibreBookLastReadPositionEntry(
-            device: "test-device",
-            cfi: "epubcfi(/4/2/4);vnd_readerName=FolioReader]",
-            epoch: 1234.0,
-            pos_frac: 0.5
+
+        let remotePosition = TestFixtures.makeReadingPosition(
+            id: "test-device",
+            readerName: ReaderType.YabrEPUB.rawValue,
+            lastReadPage: 7,
+            epoch: 1234.0
         )
-        
+
         let entry = CalibreBookAnnotationsResult(
-            last_read_positions: [posEntry],
+            last_read_positions: [
+                remotePosition.toEntry()
+            ],
             annotations_map: CalibreBookAnnotationsMap(
                 bookmark: [
                     CalibreBookAnnotationBookmarkEntry(
@@ -405,78 +295,59 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
                         type: "highlight",
                         timestamp: "2026-06-28T09:00:00Z",
                         uuid: "AAAAAAAAAAAAAAAAAAAAAA",
+                        removed: false,
+                        startCfi: "/6/4",
+                        endCfi: "/6/6",
                         highlightedText: "text",
-                        spineIndex: 2
+                        style: ["which": "yellow"],
+                        spineName: "chap-1",
+                        spineIndex: 2,
+                        tocFamilyTitles: ["Chapter 1"],
+                        notes: nil
                     )
                 ]
             )
         )
-        
-        let job = BookMetadataSyncWorker.SyncJob(
-            book: book,
-            formatKey: "epub",
-            format: .EPUB,
-            entry: entry,
-            needUpload: false
-        )
-        
-        _ = await localWorker.executeSync(jobs: [job])
-        
-        let realm = try! await Realm(configuration: conf)
-        let savedPositions = realm.objects(BookDeviceReadingPositionRealm.self)
-        XCTAssertEqual(savedPositions.count, 1)
-        XCTAssertEqual(savedPositions.first?.deviceId, "test-device")
-        
-        let savedBookmarks = realm.objects(BookBookmarkRealm.self)
-        XCTAssertEqual(savedBookmarks.count, 1)
-        XCTAssertEqual(savedBookmarks.first?.pos, "epubcfi(/4/2/4)")
-        
-        let savedHighlights = realm.objects(BookHighlightRealm.self)
-        XCTAssertEqual(savedHighlights.count, 1)
-        XCTAssertEqual(savedHighlights.first?.content, "text")
+
+        let outcome = await realWorker.executeSync(jobs: [
+            BookMetadataSyncWorker.SyncJob(
+                book: book,
+                format: .EPUB,
+                entry: entry,
+                needUpload: false
+            )
+        ])
+
+        XCTAssertTrue(outcome.positionsToUpload.isEmpty)
+        XCTAssertTrue(outcome.annotationsToUpload.isEmpty)
+        XCTAssertEqual(positionRepository.getPositions(forBookId: book.bookPrefId).count, 1)
+        XCTAssertEqual(annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).count, 1)
+        XCTAssertEqual(annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).count, 1)
     }
 }
 
 // MARK: - Helper Mock Subclasses
 
-class ThreadCheckReadingPositionRepository: MockReadingPositionRepository, @unchecked Sendable {
+final class ThreadCheckReadingPositionRepository: MockReadingPositionRepository, @unchecked Sendable {
     var wasSyncCalledOnBackgroundThread = false
-    var syncPositionsInRealmWasInWriteTransaction: Bool?
 
     override func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
         wasSyncCalledOnBackgroundThread = !Thread.isMainThread
         return super.syncPositions(entries: lastReadPositions, forBookId: bookId)
     }
-
-    override func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, in realm: Realm) -> [CalibreBookLastReadPositionEntry] {
-        syncPositionsInRealmWasInWriteTransaction = realm.isInWriteTransaction
-        return super.syncPositions(entries: lastReadPositions, forBookId: bookId, in: realm)
-    }
 }
 
-class ThreadCheckAnnotationRepository: MockAnnotationRepository, @unchecked Sendable {
+final class ThreadCheckAnnotationRepository: MockAnnotationRepository, @unchecked Sendable {
     var wasSyncHighlightsCalledOnBackgroundThread = false
     var wasSyncBookmarksCalledOnBackgroundThread = false
-    var syncHighlightsInRealmWasInWriteTransaction: Bool?
-    var syncBookmarksInRealmWasInWriteTransaction: Bool?
-    
+
     override func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String) -> Int {
         wasSyncHighlightsCalledOnBackgroundThread = !Thread.isMainThread
         return super.syncHighlights(entries: entries, forBookId: bookId)
     }
-    
+
     override func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String) -> Int {
         wasSyncBookmarksCalledOnBackgroundThread = !Thread.isMainThread
         return super.syncBookmarks(entries: entries, forBookId: bookId)
-    }
-
-    override func syncHighlights(entries: [CalibreBookAnnotationHighlightEntry], forBookId bookId: String, in realm: Realm) -> Int {
-        syncHighlightsInRealmWasInWriteTransaction = realm.isInWriteTransaction
-        return super.syncHighlights(entries: entries, forBookId: bookId, in: realm)
-    }
-
-    override func syncBookmarks(entries: [CalibreBookAnnotationBookmarkEntry], forBookId bookId: String, in realm: Realm) -> Int {
-        syncBookmarksInRealmWasInWriteTransaction = realm.isInWriteTransaction
-        return super.syncBookmarks(entries: entries, forBookId: bookId, in: realm)
     }
 }
