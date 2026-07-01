@@ -13,37 +13,37 @@ class SectionShelfViewModelTests: XCTestCase {
     var viewModel: SectionShelfViewModel!
     var mockAppContainer: AppContainer!
     var cancellables: Set<AnyCancellable>!
-    
+
     override func setUpWithError() throws {
         try super.setUpWithError()
-        
+
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests")
-        
+
         viewModel = SectionShelfViewModel(container: mockAppContainer)
         cancellables = []
     }
-    
+
     override func tearDownWithError() throws {
         viewModel = nil
         mockAppContainer = nil
         cancellables = nil
         try super.tearDownWithError()
     }
-    
+
     func testInitialization() {
         XCTAssertEqual(viewModel.displaySections.count, 0)
         XCTAssertEqual(viewModel.pickedLibraries.count, 0)
     }
-    
+
     func testRefreshShelf() {
         viewModel.refreshShelf()
     }
-    
+
     func testDownloadSelectedBooks() {
         viewModel.downloadSelectedBooks(bookIds: [])
         viewModel.downloadSelectedBooks(bookIds: ["non-existent"])
     }
-    
+
     func testUpdateShelfModels() {
         let uuid = UUID()
         let server = CalibreServer(uuid: uuid, name: "Mock Server", baseUrl: "http://localhost:8080", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -68,32 +68,32 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.id, "Author: testSection")
     }
-    
+
     func testTapBook() throws {
         viewModel.tapBook(bookId: "non-existent")
         XCTAssertNil(viewModel.presentingBookDetailId)
-        
+
         viewModel.selectionState.isEditing = true
         viewModel.tapBook(bookId: "test-id")
         XCTAssertTrue(viewModel.selectionState.selectedBookIds.contains("test-id"))
         viewModel.tapBook(bookId: "test-id")
         XCTAssertFalse(viewModel.selectionState.selectedBookIds.contains("test-id"))
     }
-    
+
     func testDownloadSelectedBooksWrapper() throws {
         viewModel.selectionState.selectedBookIds = ["test-book-id"]
         viewModel.selectionState.isEditing = true
-        
+
         viewModel.downloadSelectedBooks()
-        
+
         XCTAssertTrue(viewModel.selectionState.selectedBookIds.isEmpty)
         XCTAssertFalse(viewModel.selectionState.isEditing)
     }
-    
+
     func testCalibreUpdatedDeletionDismissal() throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
         mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
-        
+
         let expectation = XCTestExpectation(description: "Detail dismissed")
         DispatchQueue.main.async {
             XCTAssertNil(self.viewModel.presentingBookDetailId)
@@ -101,7 +101,7 @@ class SectionShelfViewModelTests: XCTestCase {
         }
         self.wait(for: [expectation], timeout: 1.0)
     }
-    
+
     func testSelectAllAndClear() throws {
         let item = ShelfBookItem(id: "book-1", title: "Book 1", coverURL: "", progress: 50, status: .ready)
         let section = ShelfSectionItem(id: "section-1", title: "Section 1", books: [item])
@@ -205,5 +205,25 @@ class SectionShelfViewModelTests: XCTestCase {
         freshVM.bootstrapIfDatabaseReady()
 
         XCTAssertEqual(freshVM.displaySections.count, 0)
+    }
+
+    func testInitialLoadCompleteTracking() throws {
+        XCTAssertFalse(viewModel.isInitialLoadComplete)
+
+        let shelfDataModel = mockAppContainer.shelfDataModel
+
+        let expectation = XCTestExpectation(description: "Wait for isInitialLoadComplete")
+        let cancellable = viewModel.$isInitialLoadComplete
+            .sink { isComplete in
+                if isComplete {
+                    expectation.fulfill()
+                }
+            }
+
+        shelfDataModel.isInitialLoadComplete = true
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertTrue(viewModel.isInitialLoadComplete)
+        cancellable.cancel()
     }
 }

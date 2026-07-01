@@ -11,59 +11,65 @@ import RealmSwift
 import OSLog
 
 class YabrShelfDataModel: ObservableObject {
-    
+
     enum CategoryType: String {
         case Last
         case Author
         case Series
         case Tag
     }
-    
+
     class CategoryObject: ObservableObject, Hashable {
-        
+
         let type: CategoryType
         let category: String
-        
+
         var inShelfBookIds: Set<String> = []
-        
+
         var unifiedSearchResult: UnifiedSearchResult?
-        
+
         var cancellables: Set<AnyCancellable> = []
-        
+
         init(type: CategoryType, category: String) {
             self.type = type
             self.category = category
         }
-        
+
         func hash(into: inout Hasher) {
             into.combine(type)
             into.combine(category)
         }
-        
+
         static func == (lhs: YabrShelfDataModel.CategoryObject, rhs: YabrShelfDataModel.CategoryObject) -> Bool {
             lhs.type == rhs.type && lhs.category == rhs.category
         }
-        
+
     }
     private let unifiedSearchService: UnifiedSearchService
     private let container: AppContainerProtocol
-    
+
     var categories: Set<CategoryObject> = []
-    
+
     @Published var discoverShelfItems = [String: ShelfSectionItem]()
-    
+
     let addToShelfSubject = PassthroughSubject<CalibreBookRealm, Never>()
-    
+
     var cancellables: Set<AnyCancellable> = []
-    
+
     let dispatchQueue = DispatchQueue(label: "shelf-queue")
-    
+
+    @Published var isInitialLoadComplete = false
+    private var initialCategories = Set<String>()
+    private var completedInitialCategories = Set<String>()
+    private var realmScanComplete = false
+    private var isInitialLoadCompleteFlag = false
+
     var realmOnQueue: Realm!
-    
+
     init(unifiedSearchService: UnifiedSearchService, container: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
         self.container = container
-        
+
         dispatchQueue.sync {
             guard let realmConf = self.container.realmConf,
                   let realmOnQueue = try? Realm(configuration: realmConf, queue: dispatchQueue) else {
@@ -71,18 +77,36 @@ class YabrShelfDataModel: ObservableObject {
             }
             self.realmOnQueue = realmOnQueue
 
+            // Synchronously scan initial books and construct categories
+            let initialBooks = realmOnQueue.objects(CalibreBookRealm.self).filter("inShelf == true")
+            var initialKeys = Set<String>()
+            for book in initialBooks {
+                for author in [book.authorFirst, book.authorSecond, book.authorThird].compactMap({ $0 }) {
+                    initialKeys.insert("Author: \(author)")
+                }
+            }
+            self.initialCategories = initialKeys
+            self.realmScanComplete = true
+
+            if initialKeys.isEmpty {
+                self.isInitialLoadCompleteFlag = true
+                DispatchQueue.main.async {
+                    self.isInitialLoadComplete = true
+                }
+            }
+
+            initialBooks.forEach {
+                self.addToShelf(book: $0)
+            }
+
+            // Observe subsequent updates only
             realmOnQueue.objects(CalibreBookRealm.self)
                 .changesetPublisher(keyPaths: ["inShelf"])
                 .subscribe(on: dispatchQueue)
                 .sink { changes in
                     switch changes {
-                    case .initial(let results):
-                        results.where({
-                            $0.inShelf == true
-                        })
-                        .forEach {
-                            self.addToShelfSubject.send($0)
-                        }
+                    case .initial:
+                        // Ignored since we manually populated above
                         break
                     case .update(let results, deletions: _, insertions: _, modifications: let modifications):
                         modifications
@@ -100,37 +124,14 @@ class YabrShelfDataModel: ObservableObject {
                     }
                 }
                 .store(in: &cancellables)
-            
+
             addToShelfSubject.receive(on: dispatchQueue)
                 .sink { book in
                     self.addToShelf(book: book)
                 }.store(in: &cancellables)
         }
-        
-//        service.container.$booksInShelf
-//            .receive(on: DispatchQueue.main)
-//            .sink { books in
-//                books.forEach {
-//                    self.addToShelf(book: $0.value)
-//                }
-//            }
-//            .store(in: &cancellables)
-        
-//        service.container.booksInShelf.forEach {
-//            self.addToShelf(book: $0.value)
-//        }
-        
-        /*
-        Timer.publish(every: 600, on: .main, in: .default)
-            .autoconnect()
-            .receive(on: self.searchManager.cacheRealmQueue)
-            .sink { timer in
-                self.searchManager.refreshSearchResults()
-            }
-            .store(in: &cancellables)
-         */
     }
-    
+
     /**
      run on dispatchQueue
      */
@@ -140,39 +141,22 @@ class YabrShelfDataModel: ObservableObject {
         else {
             return
         }
-        
+
         for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
             guard let categoryName = categoryName
             else {
                 return
             }
-            
+
             let category = CategoryObject(type: .Author, category: categoryName)
             if let index = categories.firstIndex(of: category) {
                 categories[index].inShelfBookIds.insert(inShelfId)
                 return
             }
-            
+
             category.inShelfBookIds.insert(inShelfId)
             categories.insert(category)
-            
-//            guard let unifiedSearchObjectId = searchManager.getUnifiedResultObjectIdForSwiftUI(
-//                libraryIds: [],
-//                searchCriteria: .init(
-//                    searchString: "",
-//                    sortCriteria: .init(),
-//                    filterCriteriaCategory: ["Authors" : Set([categoryName])]
-//                )
-//            )
-//            else {
-//                return
-//            }
-//
-//            guard let unifiedSearchObject = self.realmOnQueue.object(ofType: CalibreUnifiedSearchObject.self, forPrimaryKey: unifiedSearchObjectId)
-//            else {
-//                return
-//            }
-            
+
             let key = SearchCriteriaMergedKey(
                 libraryIds: [],
                 criteria: SearchCriteria(
@@ -181,15 +165,38 @@ class YabrShelfDataModel: ObservableObject {
                     filterCriteriaCategory: ["Authors" : Set([categoryName])]
                 )
             )
-            
-            unifiedSearchService.publisher(for: key)
+
+            let categoryKey = "Author: \(categoryName)"
+
+            unifiedSearchService.searchUpdatePublisher(for: key)
                 .receive(on: dispatchQueue)
-                .sink { [weak self, weak category] result in
+                .sink { [weak self, weak category] update in
                     guard let self = self, let category = category else { return }
                     dispatchPrecondition(condition: .onQueue(self.dispatchQueue))
-                    category.unifiedSearchResult = result
-                    
+                    category.unifiedSearchResult = update.result
+
                     let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
+
+                    // Track category loading completion
+                    let searchLibraryIds = self.container.libraryManager.calibreLibraries.filter {
+                        !$0.value.hidden && !$0.value.server.removed
+                    }.keys
+
+                    let isDone: Bool = {
+                        if searchLibraryIds.isEmpty {
+                            return true
+                        }
+                        if update.statuses.isEmpty {
+                            return false
+                        }
+                        return update.statuses.values.allSatisfy { !$0.loading }
+                    }()
+
+                    if isDone && self.initialCategories.contains(categoryKey) {
+                        self.completedInitialCategories.insert(categoryKey)
+                        self.checkInitialLoadCompletion()
+                    }
+
                     DispatchQueue.main.async {
                         if discoverShelfSectionItem.books.count > 1 {
                             if self.discoverShelfItems[discoverShelfSectionItem.id] != discoverShelfSectionItem {
@@ -206,47 +213,61 @@ class YabrShelfDataModel: ObservableObject {
                 .store(in: &category.cancellables)
         }
     }
-    
+
+    private func checkInitialLoadCompletion() {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+        guard realmScanComplete else { return }
+        guard !isInitialLoadCompleteFlag else { return }
+
+        let remaining = initialCategories.subtracting(completedInitialCategories)
+        if remaining.isEmpty {
+            isInitialLoadCompleteFlag = true
+            DispatchQueue.main.async {
+                self.isInitialLoadComplete = true
+            }
+        }
+    }
+
     func removeFromShelf(book: CalibreBookRealm) {
         dispatchPrecondition(condition: .onQueue(dispatchQueue))
         guard let inShelfId = book.primaryKey
         else {
             return
         }
-        
+
         for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
             guard let categoryName = categoryName
             else {
                 return
             }
-            
+
             guard let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName))
             else {
                 return
             }
-            
+
             let category = categories[index]
             category.inShelfBookIds.remove(inShelfId)
-            
+
             guard category.inShelfBookIds.isEmpty
             else {
                 return
             }
-            
+
             category.cancellables.removeAll()
             category.unifiedSearchResult = nil
-            
+
             let sectionName = "\(category.type.rawValue): \(category.category)"
             DispatchQueue.main.async {
                 if self.discoverShelfItems.removeValue(forKey: sectionName) != nil {
                     self.notifyDiscoverShelfChanged()
                 }
             }
-            
+
             categories.remove(at: index)
         }
     }
-    
+
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
         let sectionName = "\(category.type.rawValue): \(category.category)"
 
@@ -263,13 +284,13 @@ class YabrShelfDataModel: ObservableObject {
 
         return ShelfSectionItem(id: sectionName, title: sectionName, books: books)
     }
-    
+
     @MainActor
     private func notifyDiscoverShelfChanged() {
         let displaySections = self.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
         self.container.discoverShelfItemsSubject.send(displaySections)
     }
-    
+
     func refresh() {
         dispatchQueue.async {
             self.categories.forEach { category in
@@ -343,7 +364,7 @@ extension AppContainerProtocol where Self: ObservableObject {
         let inShelfId = entry.key
         let book = entry.value
         let positions = entry.positions
-        
+
         let formats: [String: FormatInfo] = book.formats
         let formatArray: [(String, FormatInfo)] = Array(formats)
 

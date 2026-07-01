@@ -167,8 +167,8 @@ struct SectionShelfView: View {
                     }
                     .overlay(
                         Group {
-                            if !viewModel.container.bookManager.isShelfLoaded {
-                                ProgressView("Loading Libraries...")
+                            if sections.isEmpty && !viewModel.isInitialLoadComplete {
+                                ProgressView("Loading Discover Shelf...")
                                     .padding()
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
@@ -176,12 +176,12 @@ struct SectionShelfView: View {
                                             .shadow(radius: 10)
                                     )
                                     .padding(32)
-                            } else if sections.isEmpty {
+                            } else if sections.isEmpty && viewModel.isInitialLoadComplete {
                                 VStack(spacing: 12) {
                                     Image(systemName: "books.vertical")
                                         .font(.system(size: 60))
                                         .foregroundColor(.gray)
-                                    Text("No libraries available")
+                                    Text("No recommendations available")
                                         .font(.headline)
                                         .foregroundColor(.secondary)
                                     Text("Configure calibre servers in Settings to download books")
