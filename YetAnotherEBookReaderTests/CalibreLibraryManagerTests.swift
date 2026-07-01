@@ -383,11 +383,18 @@ final class CalibreLibraryManagerTests: XCTestCase {
         let testBookFile = localLibraryURL.appendingPathComponent("TestBook.epub")
         try? "EPUB Content".write(to: testBookFile, atomically: true, encoding: .utf8)
         
-        libraryManager.populateLocalLibraryBooks()
-        
+        var completionCount = 0
+        var completionWasOnMainThread = false
+        libraryManager.populateLocalLibraryBooks {
+            completionCount += 1
+            completionWasOnMainThread = Thread.isMainThread
+        }
+
         XCTAssertNotNil(libraryManager.localLibrary)
         XCTAssertEqual(libraryManager.localLibrary?.name, "Local Library")
-        
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertTrue(completionWasOnMainThread)
+
         try? FileManager.default.removeItem(at: testBookFile)
     }
 }

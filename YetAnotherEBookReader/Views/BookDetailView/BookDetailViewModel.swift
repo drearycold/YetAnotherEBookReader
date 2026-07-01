@@ -113,11 +113,11 @@ class BookDetailViewModel: ObservableObject {
         
         if self.listVM == nil {
             self.listVM = ReadingPositionListViewModel(
-                container: container, book: calibreBook, positions: container.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
+                container: container, book: calibreBook, positions: container.readingPositionRepository.getPositions(for: calibreBook)
             )
         } else {
             self.listVM?.book = calibreBook
-            self.listVM?.positions = container.readingPositionRepository.getPositions(forBookId: calibreBook.bookPrefId)
+            self.listVM?.positions = container.readingPositionRepository.getPositions(for: calibreBook)
         }
         
         bookObserverToken = container.bookRepository.observeBook(id: bookId)
@@ -125,7 +125,7 @@ class BookDetailViewModel: ObservableObject {
                 guard let self = self, let container = self.container, let updatedCalibreBook = updatedCalibreBook else { return }
                 self.calibreBook = updatedCalibreBook
                 self.listVM?.book = updatedCalibreBook
-                self.listVM?.positions = container.readingPositionRepository.getPositions(forBookId: updatedCalibreBook.bookPrefId)
+                self.listVM?.positions = container.readingPositionRepository.getPositions(for: updatedCalibreBook)
             }
     }
     
@@ -217,11 +217,11 @@ class BookDetailViewModel: ObservableObject {
         guard let container = container else { return }
         if listVM == nil {
             listVM = ReadingPositionListViewModel(
-                container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+                container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book)
             )
         } else {
             listVM?.book = book
-            listVM?.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            listVM?.positions = container.readingPositionRepository.getPositions(for: book)
         }
     }
     
@@ -334,7 +334,8 @@ class BookDetailViewModel: ObservableObject {
             return .goodreadsReadDate(readDateGR)
         } else if let readProgressGR = book.readProgressGRDescription {
             return .goodreadsProgress(readProgressGR)
-        } else if let position = repository.getPosition(forBookId: book.bookPrefId, deviceName: deviceName) ?? repository.getPositions(forBookId: book.bookPrefId).first {
+        } else if let position = repository.getPosition(for: book, policy: .latestForDevice(deviceName))
+                    ?? repository.getPosition(for: book, policy: .latest) {
             return .localProgress(percent: position.lastProgress, device: position.id)
         } else {
             return nil
@@ -343,7 +344,7 @@ class BookDetailViewModel: ObservableObject {
     
     func hasReadingHistory(for book: CalibreBook) -> Bool {
         guard let repository = container?.readingPositionRepository else { return false }
-        return !repository.getPositions(forBookId: book.bookPrefId).isEmpty
+        return !repository.getPositions(for: book).isEmpty
     }
     
     func isFormatDownloading(bookId: Int32, format: Format) -> Bool {

@@ -282,7 +282,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             
             dbPosition.epoch = Date().timeIntervalSince1970
             
-            parent.container.readingPositionRepository.savePosition(dbPosition, forBookId: parent.book.bookPrefId)
+            parent.container.readingPositionRepository.savePosition(dbPosition, for: parent.book)
         }
         
         func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {

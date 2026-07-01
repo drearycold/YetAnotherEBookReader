@@ -70,7 +70,7 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
             return
         }
         
-        let bookPrefId = BookAnnotation.PrefId(library: library, id: idInLib)
+        let book = CalibreBook(id: idInLib, library: library)
         
         deviceMapDict.forEach { key, value in
             guard let deviceName = key as? String,
@@ -110,7 +110,7 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
             deviceReadingPosition.lastReadBook = deviceReadingPositionDict["lastReadBook"] as? String ?? .init()
             deviceReadingPosition.lastBundleProgress = deviceReadingPositionDict["lastBundleProgress"] as? Double ?? .zero
             
-            repository.savePosition(deviceReadingPosition, forBookId: bookPrefId)
+            repository.savePosition(deviceReadingPosition, for: book)
         }
     }
     

@@ -67,7 +67,7 @@ struct ServerDetailView: View {
             }
 
             NavigationLink(
-                destination: libraryRestoreHiddenView(),
+                destination: LazyView(libraryRestoreHiddenView()),
                 isActive: $viewModel.libraryRestoreListActive,
                 label: {
                     Text("Restore Hidden Libraries")
@@ -122,10 +122,12 @@ struct ServerDetailView: View {
     
     @ViewBuilder
     private func libraryEntryDestination(library: CalibreLibrary) -> some View {
-        LibraryDetailView(
-            container: container,
-            library: library
-        ).navigationTitle(library.name)
+        LazyView(
+            LibraryDetailView(
+                container: container,
+                library: library
+            ).navigationTitle(library.name)
+        )
     }
     
     @ViewBuilder

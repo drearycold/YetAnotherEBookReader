@@ -63,7 +63,8 @@ struct RecentShelfView: View {
                     
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 0) {
-                            ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                            ForEach(0..<renderItems.count, id: \.self) { index in
+                                let item = renderItems[index]
                                 let kind = ShelfLegacyLayout.tileKind(index: index, columnCount: columnCount)
                                 switch item {
                                 case .book(let book):
@@ -111,7 +112,16 @@ struct RecentShelfView: View {
                     }
                     .overlay(
                         Group {
-                            if books.isEmpty {
+                            if viewModel.loadedBooks == nil {
+                                ProgressView("Loading Reading Progress...")
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color(UIColor.systemBackground).opacity(0.8))
+                                            .shadow(radius: 10)
+                                    )
+                                    .padding(32)
+                            } else if viewModel.loadedBooks?.isEmpty == true {
                                 VStack(spacing: 12) {
                                     Image(systemName: "books.vertical")
                                         .font(.system(size: 60))

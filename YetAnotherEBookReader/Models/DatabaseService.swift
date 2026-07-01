@@ -17,7 +17,7 @@ class DatabaseService: ObservableObject {
     
     static let shared = DatabaseService()
     
-    private init() {}
+    init() {}
     
     func setup(conf: Realm.Configuration) {
         self.realmConf = conf

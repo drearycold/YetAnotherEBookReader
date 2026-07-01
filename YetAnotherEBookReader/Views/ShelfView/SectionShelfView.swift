@@ -54,7 +54,7 @@ struct SectionShelfView: View {
                     let fillerRowCount = remainingHeight > 0 ? Int(ceil(remainingHeight / 200.0)) : 0
                     
                     ScrollView {
-                        VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
                             ForEach(sections) { section in
                                 VStack(spacing: 0) {
                                     ShelfLegacySectionHeader(title: section.title)
@@ -76,7 +76,8 @@ struct SectionShelfView: View {
                                         }()
                                         
                                         HStack(spacing: 0) {
-                                            ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                                            ForEach(0..<renderItems.count, id: \.self) { index in
+                                                let item = renderItems[index]
                                                 let kind = rowTileKind(index: index, totalCount: totalTileCount)
                                                 switch item {
                                                 case .book(let book):
@@ -112,8 +113,9 @@ struct SectionShelfView: View {
                                         let renderItems = books.map { SectionShelfRenderItem.book($0) }
                                         
                                         ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 0) {
-                                                ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                                            LazyHStack(spacing: 0) {
+                                                ForEach(0..<renderItems.count, id: \.self) { index in
+                                                    let item = renderItems[index]
                                                     let kind = rowTileKind(index: index, totalCount: totalTileCount)
                                                     switch item {
                                                     case .book(let book):
@@ -161,16 +163,25 @@ struct SectionShelfView: View {
                         }
                     }
                     .refreshable {
-                        viewModel.refreshShelf()
+                        await viewModel.refreshShelf()
                     }
                     .overlay(
                         Group {
-                            if sections.isEmpty {
+                            if sections.isEmpty && !viewModel.isInitialLoadComplete {
+                                ProgressView("Loading Discover Shelf...")
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color(UIColor.systemBackground).opacity(0.8))
+                                            .shadow(radius: 10)
+                                    )
+                                    .padding(32)
+                            } else if sections.isEmpty && viewModel.isInitialLoadComplete {
                                 VStack(spacing: 12) {
                                     Image(systemName: "books.vertical")
                                         .font(.system(size: 60))
                                         .foregroundColor(.gray)
-                                    Text("No libraries available")
+                                    Text("No recommendations available")
                                         .font(.headline)
                                         .foregroundColor(.secondary)
                                     Text("Configure calibre servers in Settings to download books")
@@ -265,9 +276,14 @@ struct SectionShelfView: View {
                 
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !viewModel.selectionState.isEditing {
-                        Button(action: { viewModel.refreshShelf() }) {
+                        Button {
+                            Task {
+                                await viewModel.refreshShelf()
+                            }
+                        } label: {
                             Image(systemName: "arrow.clockwise")
                         }
+                        .disabled(viewModel.isRefreshing)
                     }
                 }
                 

@@ -26,6 +26,7 @@ class CalibreBookManager: ObservableObject {
 
     @Published var booksInShelf = [String: CalibreBook]()
     @Published var booksAnnotation = [String: CalibreBook]()
+    @Published var isShelfLoaded = false
 
     @Published var selectedBookId: String? = nil {
         didSet {
@@ -60,6 +61,7 @@ class CalibreBookManager: ObservableObject {
     let bookRepository: BookRepositoryProtocol
     let readingPositionRepository: ReadingPositionRepositoryProtocol
     let annotationRepository: AnnotationRepositoryProtocol
+    private let metadataSyncWorker: BookMetadataSyncWorker
 
     init(
         container: AppContainerProtocol? = nil,
@@ -83,7 +85,11 @@ class CalibreBookManager: ObservableObject {
         if let repo = readingPositionRepository {
             self.readingPositionRepository = repo
         } else {
-            self.readingPositionRepository = RealmReadingPositionRepository(databaseService: databaseService, container: container)
+            self.readingPositionRepository = RealmReadingPositionRepository(
+                databaseService: databaseService,
+                realmConfigurationProvider: container?.serverScopedRealmProvider
+                    ?? DefaultServerScopedRealmConfigurationProvider()
+            )
         }
 
         if let repo = annotationRepository {
@@ -91,6 +97,11 @@ class CalibreBookManager: ObservableObject {
         } else {
             self.annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
         }
+
+        self.metadataSyncWorker = BookMetadataSyncWorker(
+            readingPositionRepository: self.readingPositionRepository,
+            annotationRepository: self.annotationRepository
+        )
     }
 
     private func getRealm() -> Realm? {
@@ -104,34 +115,85 @@ class CalibreBookManager: ObservableObject {
 
     // MARK: - Initialization & Realm Sync
 
-    func populateBookShelf() {
-        let books = bookRepository.getAllBooksInShelf()
-        books.forEach { book in
-            var updatedBook = book
-            updatedBook.formats.forEach { formatRaw, formatInfo in
-                guard let format = Format(rawValue: formatRaw) else {
-                    return
-                }
-                var formatInfoNew = formatInfo
-                if let cacheInfo = getCacheInfo(book: updatedBook, format: format),
-                   let modified = cacheInfo.1 {
-                    formatInfoNew.cached = true
-                    formatInfoNew.cacheSize = cacheInfo.0
-                    formatInfoNew.cacheMTime = modified
-                } else {
-                    formatInfoNew.cached = false
-                    formatInfoNew.cacheSize = 0
-                    formatInfoNew.cacheMTime = Date.distantPast
-                }
-
-                if formatInfoNew.cached != formatInfo.cached {
-                    updatedBook.formats[formatRaw] = formatInfoNew
-                    self.updateBook(book: updatedBook)
+    func populateBookShelf(sendShelfUpdate: Bool = true, completion: (() -> Void)? = nil) {
+        let finish = {
+            if Thread.isMainThread {
+                completion?()
+            } else {
+                DispatchQueue.main.async {
+                    completion?()
                 }
             }
+        }
 
-            self.booksInShelf[updatedBook.inShelfId] = updatedBook
-            print("booksInShelfRealm \(updatedBook.inShelfId)")
+        let work = { [weak self] in
+            guard let self = self else {
+                finish()
+                return
+            }
+            let books = self.bookRepository.getAllBooksInShelf()
+            var tempBooks = [String: CalibreBook]()
+            var changedBooks = [CalibreBook]()
+
+            for book in books {
+                var updatedBook = book
+                var needsSave = false
+
+                for (formatRaw, formatInfo) in updatedBook.formats {
+                    guard let format = Format(rawValue: formatRaw) else {
+                        continue
+                    }
+                    var formatInfoNew = formatInfo
+                    if let cacheInfo = self.getCacheInfo(book: updatedBook, format: format),
+                       let modified = cacheInfo.1 {
+                        formatInfoNew.cached = true
+                        formatInfoNew.cacheSize = cacheInfo.0
+                        formatInfoNew.cacheMTime = modified
+                    } else {
+                        formatInfoNew.cached = false
+                        formatInfoNew.cacheSize = 0
+                        formatInfoNew.cacheMTime = Date.distantPast
+                    }
+
+                    if formatInfoNew.cached != formatInfo.cached {
+                        updatedBook.formats[formatRaw] = formatInfoNew
+                        needsSave = true
+                    }
+                }
+
+                if needsSave {
+                    self.bookRepository.saveBook(updatedBook)
+                    changedBooks.append(updatedBook)
+                }
+
+                tempBooks[updatedBook.inShelfId] = updatedBook
+            }
+
+            let publish = {
+                self.booksInShelf = tempBooks
+                for updatedBook in changedBooks {
+                    if self.readingBook?.inShelfId == updatedBook.inShelfId {
+                        self.readingBook = updatedBook
+                    }
+                }
+                self.isShelfLoaded = true
+                if sendShelfUpdate {
+                    self.container?.calibreUpdatedSubject.send(.shelf)
+                }
+                finish()
+            }
+
+            if Thread.isMainThread {
+                publish()
+            } else {
+                DispatchQueue.main.async(execute: publish)
+            }
+        }
+
+        if NSClassFromString("XCTestCase") != nil {
+            work()
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async(execute: work)
         }
     }
 
@@ -163,11 +225,20 @@ class CalibreBookManager: ObservableObject {
     func updateBook(book: CalibreBook) {
         bookRepository.saveBook(book)
 
-        if readingBook?.inShelfId == book.inShelfId {
-            readingBook = book
+        let publish = { [weak self] in
+            guard let self = self else { return }
+            if self.readingBook?.inShelfId == book.inShelfId {
+                self.readingBook = book
+            }
+            if book.inShelf {
+                self.booksInShelf[book.inShelfId] = book
+            }
         }
-        if book.inShelf {
-            booksInShelf[book.inShelfId] = book
+
+        if Thread.isMainThread {
+            publish()
+        } else {
+            DispatchQueue.main.async(execute: publish)
         }
     }
 
@@ -249,7 +320,7 @@ class CalibreBookManager: ObservableObject {
 
         booksInShelf.removeValue(forKey: inShelfId)
 
-        if readingPositionRepository.getPositions(forBookId: book.bookPrefId).first?.id == container?.deviceName,
+        if readingPositionRepository.getPositions(for: book).first?.id == container?.deviceName,
            let calibreServerService = container?.calibreServerService,
            let library = container?.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
@@ -263,7 +334,7 @@ class CalibreBookManager: ObservableObject {
                     logger.error("Failed to remove book \(book.title) from Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
 
-                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, deviceName: container?.deviceName ?? ""), position.lastProgress > 99 {
+                if let position = readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container?.deviceName ?? "")), position.lastProgress > 99 {
                     do {
                         try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
                     } catch {
@@ -557,11 +628,21 @@ class CalibreBookManager: ObservableObject {
 
         var task = calibreServerService.buildBooksMetadataTask(library: request.library, books: books, getAnnotations: request.getAnnotations) ?? CalibreBooksTask(request: request)
 
+        let fetchSignpost = AppPerformanceSignpost.begin("MetadataHTTPFetch", "Library: \(request.library.id), Books: \(books.count)")
         task = await calibreServerService.getBooksMetadata(task: task)
 
         if task.request.getAnnotations {
             task = await calibreServerService.getAnnotations(task: task)
         }
+
+        var annotationCount = 0
+        if let annotationsResult = task.booksAnnotationsEntry {
+            for (_, entry) in annotationsResult {
+                annotationCount += (entry.annotations_map.bookmark?.count ?? 0)
+                annotationCount += (entry.annotations_map.highlight?.count ?? 0)
+            }
+        }
+        AppPerformanceSignpost.end("MetadataHTTPFetch", fetchSignpost, "Library: \(request.library.id), Books: \(books.count), Annotations: \(annotationCount)")
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             AppContainer.SaveBooksMetadataRealmQueue.async {
@@ -574,6 +655,7 @@ class CalibreBookManager: ObservableObject {
 
                 let serverUUID = task.library.server.uuid.uuidString
                 let libraryName = task.library.name
+                let saveSignpost = AppPerformanceSignpost.begin("MetadataRealmSave", "Library: \(task.library.id), Books: \(task.books.count)")
                 try? realmSaveBooksMetadata.write {
                     task.books.map {
                         (
@@ -602,65 +684,89 @@ class CalibreBookManager: ObservableObject {
                         }
                     }
                 }
+                AppPerformanceSignpost.end("MetadataRealmSave", saveSignpost, "Library: \(task.library.id), Books: \(task.books.count)")
                 continuation.resume()
             }
         }
 
         task.booksInShelf.forEach { newBook in
             self.booksInShelf[newBook.inShelfId] = newBook
-            container?.calibreUpdatedSubject.send(.book(newBook))
         }
         task.booksAnnotation.forEach { newBook in
             self.booksAnnotation[newBook.inShelfId] = newBook
         }
 
         if task.request.getAnnotations, let annotationsResult = task.booksAnnotationsEntry {
+            var jobs = [BookMetadataSyncWorker.SyncJob]()
+
             for book in task.booksInShelf {
                 for (formatKey, _) in book.formats {
                     guard let format = Format(rawValue: formatKey),
                           let entry = annotationsResult["\(book.id):\(formatKey)"]
                     else { continue }
-
-                    let positions = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
-                    for pos in positions {
-                        do {
-                            let setTask = try calibreServerService.buildSetLastReadPositionTask(library: task.library, bookId: book.id, format: format, entry: pos)
-                            Task {
-                                await calibreServerService.setLastReadPositionByTask(task: setTask)
-                            }
-                        } catch {
-                            logger.error("Failed to build set last read position task: \(error.localizedDescription)")
-                        }
-                    }
-
-                    if annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId) > 0 || annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId) > 0 {
-                        do {
-                            let updateTask = try calibreServerService.buildUpdateAnnotationsTask(
-                                 library: task.library,
-                                 bookId: book.id,
-                                 format: format,
-                                 highlights: annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: false).compactMap { $0.toCalibreBookAnnotationHighlightEntry() },
-                                 bookmarks: annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).map { $0.toCalibreBookAnnotationBookmarkEntry() }
-                            )
-                            Task {
-                                await calibreServerService.updateAnnotationByTask(task: updateTask)
-                            }
-                        } catch {
-                            logger.error("Failed to build update annotations task: \(error.localizedDescription)")
-                        }
-                    }
+                    jobs.append(
+                        BookMetadataSyncWorker.SyncJob(
+                            book: book,
+                            format: format,
+                            entry: entry,
+                            needUpload: true
+                        )
+                    )
                 }
             }
 
             for book in task.booksAnnotation {
                 for (formatKey, _) in book.formats {
-                    guard let _ = Format(rawValue: formatKey),
+                    guard let format = Format(rawValue: formatKey),
                           let entry = annotationsResult["\(book.id):\(formatKey)"]
                     else { continue }
+                    jobs.append(
+                        BookMetadataSyncWorker.SyncJob(
+                            book: book,
+                            format: format,
+                            entry: entry,
+                            needUpload: false
+                        )
+                    )
+                }
+            }
 
-                    _ = readingPositionRepository.syncPositions(entries: entry.last_read_positions, forBookId: book.bookPrefId)
-                    _ = annotationRepository.syncHighlights(entries: entry.annotations_map.highlight ?? [], forBookId: book.bookPrefId)
-                    _ = annotationRepository.syncBookmarks(entries: entry.annotations_map.bookmark ?? [], forBookId: book.bookPrefId)
+            let outcome = await metadataSyncWorker.executeSync(jobs: jobs)
+
+            // Trigger uploads for positions
+            for posUpload in outcome.positionsToUpload {
+                for pos in posUpload.entries {
+                    do {
+                        let setTask = try calibreServerService.buildSetLastReadPositionTask(
+                            library: task.library,
+                            bookId: posUpload.book.id,
+                            format: posUpload.format,
+                            entry: pos
+                        )
+                        Task {
+                            await calibreServerService.setLastReadPositionByTask(task: setTask)
+                        }
+                    } catch {
+                        logger.error("Failed to build set last read position task: \(error.localizedDescription)")
+                    }
+                }
+            }
+
+            // Trigger uploads for annotations
+            for annUpload in outcome.annotationsToUpload {
+                do {
+                    let updateTask = try calibreServerService.buildUpdateAnnotationsTask(
+                        library: task.library,
+                        bookId: annUpload.book.id,
+                        format: annUpload.format,
+                        highlights: annUpload.highlights,
+                        bookmarks: annUpload.bookmarks
+                    )
+                    Task {
+                        await calibreServerService.updateAnnotationByTask(task: updateTask)
+                    }
+                } catch {
+                    logger.error("Failed to build update annotations task: \(error.localizedDescription)")
                 }
             }
         }
@@ -685,15 +791,18 @@ class CalibreBookManager: ObservableObject {
 
         container?.librarySyncStatus[task.library.id]?.isUpd = false
 
-        if request.books.count == 1,
-           let book = self.getBook(
-            for: CalibreBookRealm.PrimaryKey(
-                serverUUID: task.library.server.uuid.uuidString,
-                libraryName: task.library.name,
-                id: task.request.books.first!.description
-            )
-           ) {
-            container?.calibreUpdatedSubject.send(.book(book))
+        if request.books.count == 1 {
+            if let book = self.getBook(
+                for: CalibreBookRealm.PrimaryKey(
+                    serverUUID: task.library.server.uuid.uuidString,
+                    libraryName: task.library.name,
+                    id: task.request.books.first!.description
+                )
+               ) {
+                container?.calibreUpdatedSubject.send(.book(book))
+            }
+        } else if !task.booksInShelf.isEmpty {
+            container?.calibreUpdatedSubject.send(.shelf)
         }
     }
 

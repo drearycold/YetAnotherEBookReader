@@ -8,6 +8,22 @@
 import Foundation
 import CryptoKit
 
+private struct DownloadDirCache {
+    static let url: URL? = {
+        guard let docURL = try? FileManager.default.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ) else { return nil }
+        let dirURL = docURL.appendingPathComponent("Downloaded Books", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: dirURL.path) {
+            try? FileManager.default.createDirectory(at: dirURL, withIntermediateDirectories: true, attributes: nil)
+        }
+        return dirURL
+    }()
+}
+
 func getBookBaseUrl(id: Int32, library: CalibreLibrary, localFilename: String? = nil) -> URL? {
     if library.server.isLocal {
         guard let localBaseUrl = library.server.localBaseUrl,
@@ -18,15 +34,7 @@ func getBookBaseUrl(id: Int32, library: CalibreLibrary, localFilename: String? =
                     .appendingPathComponent(library.key, isDirectory: true)
                     .appendingPathComponent(localFilename, isDirectory: false)
     }
-    guard let downloadBaseURL =
-        try? FileManager.default.url(for: .documentDirectory,
-                                in: .userDomainMask,
-                                appropriateFor: nil,
-                                create: false)
-            .appendingPathComponent("Downloaded Books", isDirectory: true) else { return nil }
-    try? FileManager.default.createDirectory(at: downloadBaseURL, withIntermediateDirectories: true, attributes: nil)
-    
-    guard FileManager.default.fileExists(atPath: downloadBaseURL.path) else { return nil }
+    guard let downloadBaseURL = DownloadDirCache.url else { return nil }
     
     return downloadBaseURL.appendingPathComponent("\(library.key) - \(id)")
 }
@@ -41,25 +49,11 @@ func getSavedUrl(book: CalibreBook, format: Format) -> URL? {
                     .appendingPathComponent(localFilename, isDirectory: false)
         }
     } else {
-        if let downloadBaseURL =
-            try? FileManager.default.url(for: .documentDirectory,
-                                    in: .userDomainMask,
-                                    appropriateFor: nil,
-                                    create: false)
-            .appendingPathComponent("Downloaded Books", isDirectory: true) {
-            if FileManager.default.fileExists(atPath: downloadBaseURL.path) == false {
-                do {
-                    try FileManager.default.createDirectory(at: downloadBaseURL, withIntermediateDirectories: true, attributes: nil)
-                } catch {
-                    print(error)
-                    return nil
-                }
-            }
-            let savedURL = downloadBaseURL
-                .appendingPathComponent("\(book.library.key) - \(book.id).\(format.rawValue.lowercased())")
-            
-            return savedURL
-        }
+        guard let downloadBaseURL = DownloadDirCache.url else { return nil }
+        let savedURL = downloadBaseURL
+            .appendingPathComponent("\(book.library.key) - \(book.id).\(format.rawValue.lowercased())")
+        
+        return savedURL
     }
     book.formats.sorted {
         $0.key < $1.key

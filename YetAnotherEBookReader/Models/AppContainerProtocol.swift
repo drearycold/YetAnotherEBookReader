@@ -104,6 +104,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
 
     @MainActor
     func refreshDatabase()
+    func resetDatabaseBootstrapState(clearConfiguration: Bool)
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws
     func initializeDatabase() throws

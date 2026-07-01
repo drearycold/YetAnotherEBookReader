@@ -32,7 +32,10 @@ class UnifiedSearchIntegrationTests: XCTestCase {
 
         // Setup in-memory Realm for testing
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchIntegrationTests")
-        container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchIntegrationTests")
+        container = MockAppContainerFactory.makeContainer(
+            mainRealmConfiguration: config,
+            testName: "UnifiedSearchIntegrationTests"
+        )
 
         // Setup mock server and library
         mockServer = CalibreServer(
@@ -303,6 +306,86 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         XCTAssertEqual(finalResult?.books.count, 1)
         XCTAssertEqual(finalResult?.books.first?.title, "Quick Start Guide")
         XCTAssertEqual(finalResult?.books.first?.authors.first, "John Schember")
+    }
+
+    func testSearchCacheSaveInsertsMissingDomainBooks() throws {
+        let config = Realm.Configuration(inMemoryIdentifier: "SearchCacheMissingBookInsert-\(UUID().uuidString)")
+        let store = RealmSearchCacheStore(config: config, container: container)
+        var book = CalibreBook(id: 42, library: mockLibrary)
+        book.title = "Cache-only Book"
+
+        try store.saveLibrarySourceResult(
+            libraryId: mockLibrary.id,
+            search: "cache-only",
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "test-source",
+            result: LibrarySourceSearchResult(
+                generation: Date(timeIntervalSince1970: 123),
+                totalNumber: 1,
+                bookIds: [book.id],
+                books: [book]
+            )
+        )
+
+        let realm = try Realm(configuration: config)
+        let primaryKey = CalibreBookRealm.PrimaryKey(
+            serverUUID: mockLibrary.server.uuid.uuidString,
+            libraryName: mockLibrary.name,
+            id: book.id.description
+        )
+        XCTAssertEqual(
+            realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)?.title,
+            book.title
+        )
+        XCTAssertEqual(realm.objects(CalibreLibrarySearchObject.self).count, 1)
+    }
+
+    func testSearchCacheSaveSkipsIdenticalSourceUpdate() throws {
+        let config = Realm.Configuration(inMemoryIdentifier: "SearchCacheNoOp-\(UUID().uuidString)")
+        let store = RealmSearchCacheStore(config: config, container: container)
+        let result = LibrarySourceSearchResult(
+            generation: Date(timeIntervalSince1970: 456),
+            totalNumber: 2,
+            bookIds: [1, 2],
+            books: []
+        )
+
+        try store.saveLibrarySourceResult(
+            libraryId: mockLibrary.id,
+            search: "same",
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "test-source",
+            result: result
+        )
+
+        let realm = try Realm(configuration: config)
+        let source = try XCTUnwrap(
+            realm.objects(CalibreLibrarySearchObject.self).first?.sources["test-source"] ?? nil
+        )
+        let unexpectedChange = expectation(description: "Identical cache save must not modify Realm")
+        unexpectedChange.isInverted = true
+        let token = source.observe { change in
+            if case .change = change {
+                unexpectedChange.fulfill()
+            }
+        }
+
+        try store.saveLibrarySourceResult(
+            libraryId: mockLibrary.id,
+            search: "same",
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "test-source",
+            result: result
+        )
+
+        wait(for: [unexpectedChange], timeout: 0.2)
+        token.invalidate()
     }
 
     func testUnifiedSearchFailureHttpStatus() async throws {

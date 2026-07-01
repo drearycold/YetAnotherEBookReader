@@ -30,7 +30,10 @@ final class RecentShelfViewModel: ObservableObject {
     let container: AppContainer
     private var cancellables = Set<AnyCancellable>()
     
-    @Published var displayBooks = [ShelfBookItem]()
+    @Published private(set) var loadedBooks: [ShelfBookItem]? = nil
+    var displayBooks: [ShelfBookItem] {
+        loadedBooks ?? []
+    }
     @Published var selectionState = ShelfSelectionState()
     
     @Published var presentingBookDetailId: String? = nil
@@ -46,7 +49,7 @@ final class RecentShelfViewModel: ObservableObject {
         container.recentShelfItemsSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] displayBooks in
-                self?.displayBooks = displayBooks
+                self?.loadedBooks = displayBooks
             }
             .store(in: &cancellables)
             

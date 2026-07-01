@@ -7,97 +7,145 @@
 
 import Foundation
 import RealmSwift
+import OSLog
 
 protocol ReadingPositionRepositoryProtocol: Sendable {
-    func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition?
-    func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
-    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition]
+    func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
+    func getPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
+    func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
     func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook?
-    func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String)
-    func removePosition(deviceName: String, forBookId bookId: String)
-    func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String)
+    func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
+    func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
+    func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
-    func sessions(forBookId bookId: String, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
-    func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date?
-    func session(end readPosition: BookDeviceReadingPosition, forBookId bookId: String)
-    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry]
+    func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
+    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, server: CalibreServer?) -> [CalibreBookLastReadPositionEntry]
+}
+
+extension ReadingPositionRepositoryProtocol {
+    func getPosition(forBookId bookId: String, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
+        getPosition(forBookId: bookId, server: nil, policy: policy)
+    }
+
+    func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
+        getPositions(forBookId: bookId, server: nil)
+    }
+
+    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
+        debugPositions(forBookId: bookId, server: nil)
+    }
+
+    func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String) {
+        savePosition(position, forBookId: bookId, server: nil)
+    }
+
+    func removePosition(deviceName: String, forBookId bookId: String) {
+        removePosition(deviceName: deviceName, forBookId: bookId, server: nil)
+    }
+
+    func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String) {
+        removePosition(position: position, forBookId: bookId, server: nil)
+    }
+
+    func sessions(forBookId bookId: String, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        sessions(forBookId: bookId, server: nil, list: startDateAfter)
+    }
+
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String) -> ReadingSessionHandle? {
+        beginSession(at: position, forBookId: bookId, server: nil)
+    }
+
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition) {
+        endSession(handle, at: position, server: nil)
+    }
+
+    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
+        syncPositions(entries: lastReadPositions, forBookId: bookId, server: nil)
+    }
+
+    func getPosition(for book: CalibreBook, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
+        getPosition(forBookId: book.bookPrefId, server: book.library.server, policy: policy)
+    }
+
+    func getPositions(for book: CalibreBook) -> [BookDeviceReadingPosition] {
+        getPositions(forBookId: book.bookPrefId, server: book.library.server)
+    }
+
+    func savePosition(_ position: BookDeviceReadingPosition, for book: CalibreBook) {
+        savePosition(position, forBookId: book.bookPrefId, server: book.library.server)
+    }
+
+    func removePosition(deviceName: String, for book: CalibreBook) {
+        removePosition(deviceName: deviceName, forBookId: book.bookPrefId, server: book.library.server)
+    }
+
+    func removePosition(position: BookDeviceReadingPosition, for book: CalibreBook) {
+        removePosition(position: position, forBookId: book.bookPrefId, server: book.library.server)
+    }
+
+    func sessions(for book: CalibreBook, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        sessions(forBookId: book.bookPrefId, server: book.library.server, list: startDateAfter)
+    }
+
+    func beginSession(at position: BookDeviceReadingPosition, for book: CalibreBook) -> ReadingSessionHandle? {
+        beginSession(at: position, forBookId: book.bookPrefId, server: book.library.server)
+    }
+
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, for book: CalibreBook) {
+        endSession(handle, at: position, server: book.library.server)
+    }
+
+    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], for book: CalibreBook) -> [CalibreBookLastReadPositionEntry] {
+        syncPositions(entries: lastReadPositions, forBookId: book.bookPrefId, server: book.library.server)
+    }
 }
 
 final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @unchecked Sendable {
     private let databaseService: DatabaseService
-    private weak var container: AppContainerProtocol?
+    private let realmConfigurationProvider: ServerScopedRealmConfigurationProviding
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingPositionRepository")
 
-    init(databaseService: DatabaseService = .shared, container: AppContainerProtocol? = nil) {
+    init(
+        databaseService: DatabaseService = .shared,
+        realmConfigurationProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
+    ) {
         self.databaseService = databaseService
-        self.container = container
+        self.realmConfigurationProvider = realmConfigurationProvider
     }
-    
-    private func getRealmConfiguration(forBookId bookId: String) -> Realm.Configuration? {
-        let actualAppContainer = container ?? AppContainer.shared
 
-        // 1. If bookId is inShelfId (id^libraryName@serverUUID)
-        if bookId.contains("@") && bookId.contains("^") {
-            let components = bookId.components(separatedBy: "@")
-            if components.count > 1 {
-                let serverUUID = components[1]
-                if let server = actualAppContainer?.calibreServers[serverUUID] {
-                    return actualAppContainer?.serverScopedRealmProvider.configuration(for: server)
-                }
-            }
-        }
+    private func getRealm(server: CalibreServer?) -> Realm? {
+        let configuration = server.map(realmConfigurationProvider.configuration(for:))
+            ?? databaseService.realmConf
+        guard let config = configuration else { return nil }
 
-        // 2. If bookId is bookPrefId (libraryKey - id)
-        let components = bookId.components(separatedBy: " - ")
-        if components.count > 1 {
-            let libraryKey = components[0]
-            if let library = actualAppContainer?.calibreLibraries.values.first(where: { $0.key == libraryKey }) {
-                return actualAppContainer?.serverScopedRealmProvider.configuration(for: library.server)
-            }
-        }
-
-        // Fallback
-        return databaseService.realmConf
-    }
-    
-    private func getRealm(forBookId bookId: String) -> Realm? {
-        guard let config = getRealmConfiguration(forBookId: bookId) else { return nil }
-        
         let cacheKey = "ReadingPositionRepositoryRealm-\(config.fileURL?.path ?? config.inMemoryIdentifier ?? "default")"
         if let cachedRealm = Thread.current.threadDictionary[cacheKey] as? Realm {
             cachedRealm.refresh()
             return cachedRealm
         }
-        
+
         guard let realm = try? Realm(configuration: config) else { return nil }
         Thread.current.threadDictionary[cacheKey] = realm
         return realm
     }
-    
-    func getPosition(forBookId bookId: String, deviceName: String?) -> BookDeviceReadingPosition? {
-        guard let realm = getRealm(forBookId: bookId) else { return nil }
-        var objects = realm.objects(BookDeviceReadingPositionRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
-            .sorted(byKeyPath: "epoch", ascending: false)
-        
-        if let deviceName = deviceName {
-            objects = objects.filter(NSPredicate(format: "deviceId == %@", deviceName))
-        }
-        
-        return objects.filter(NSPredicate(format: "takePrecedence == true"))
-            .map({ $0.toDomain() })
-            .first ?? objects.map({ $0.toDomain() }).first
+
+    func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
+        let positions = getPositions(forBookId: bookId, server: server)
+        return policy.select(from: positions)
     }
-    
-    func getPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
-        guard let realm = getRealm(forBookId: bookId) else { return [] }
+
+    func getPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition] {
+        guard let realm = getRealm(server: server) else { return [] }
         let objects = realm.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId == %@", bookId))
             .sorted(byKeyPath: "epoch", ascending: false)
         return objects.map { $0.toDomain() }
     }
 
-    func debugPositions(forBookId bookId: String) -> [BookDeviceReadingPosition] {
-        guard let realm = getRealm(forBookId: bookId) else { return [] }
+    func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition] {
+        guard let realm = getRealm(server: server) else { return [] }
 
         let objects = realm.objects(BookDeviceReadingPositionRealm.self)
             .filter("NOT bookId ENDSWITH ' - History' AND bookId BEGINSWITH %@", bookId)
@@ -119,9 +167,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
         return bookRealm.toDomain(library: library)
     }
-    
-    func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String) {
-        guard let realm = getRealm(forBookId: bookId) else { return }
+
+    func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {
+        guard let realm = getRealm(server: server) else { return }
         try? realm.write {
             let existing = realm.objects(BookDeviceReadingPositionRealm.self)
                 .filter(NSPredicate(
@@ -139,9 +187,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             }
         }
     }
-    
-    func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String) {
-        guard let realm = getRealm(forBookId: bookId) else { return }
+
+    func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {
+        guard let realm = getRealm(server: server) else { return }
 
         try? realm.write {
             let identityPredicate = NSPredicate(
@@ -167,9 +215,9 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             }
         }
     }
-    
-    func removePosition(deviceName: String, forBookId bookId: String) {
-        guard let realm = getRealm(forBookId: bookId) else { return }
+
+    func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?) {
+        guard let realm = getRealm(server: server) else { return }
         let objs = realm.objects(BookDeviceReadingPositionRealm.self)
             .filter(NSPredicate(format: "bookId == %@ AND deviceId == %@", bookId, deviceName))
         if !objs.isEmpty {
@@ -178,13 +226,13 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             }
         }
     }
-    
+
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition {
         return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
     }
-    
-    func sessions(forBookId bookId: String, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
-        guard let realm = getRealm(forBookId: bookId) else { return [] }
+
+    func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        guard let realm = getRealm(server: server) else { return [] }
         let results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
             .filter(
                 startDateAfter == nil
@@ -194,129 +242,222 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
             .filter { $0.endPosition != nil }
         return results.map { $0.toDomain() }
     }
-    
-    func session(start readPosition: BookDeviceReadingPosition, forBookId bookId: String) -> Date? {
-        guard let realm = getRealm(forBookId: bookId) else { return nil }
-        let startDatetime = Date()
-        
+
+    func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle? {
+        guard let realm = getRealm(server: server) else { return nil }
+        let now = Date()
+
         let historyEntryFirst = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
+            .filter("bookId == %@", bookId)
             .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
             .first
-        
-        try? realm.write {
-            if let endPosition = historyEntryFirst?.endPosition, startDatetime.timeIntervalSince1970 < endPosition.epoch + 60 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
-            } else if let startPosition = historyEntryFirst?.startPosition, startDatetime.timeIntervalSince1970 < startPosition.epoch + 300 {
-                historyEntryFirst?.endPosition?.takePrecedence = true
+
+        if let historyEntry = historyEntryFirst {
+            let historyIdStr = historyEntry._id.stringValue
+            // 1. If endPosition exists, check if its end epoch is less than 60s ago
+            if let endPosition = historyEntry.endPosition {
+                if now.timeIntervalSince1970 < endPosition.epoch + 60 {
+                    return ReadingSessionHandle(bookId: bookId, historyId: historyIdStr)
+                }
             } else {
-                let historyEntry = BookDeviceReadingPositionHistoryRealm()
-                historyEntry.bookId = bookId
-                historyEntry.startDatetime = startDatetime
-                historyEntry.startPosition = readPosition.makeRealmObject(bookId: "\(bookId) - History")
+                // 2. If endPosition is nil, check if startDatetime is less than 300s ago
+                if now.timeIntervalSince(historyEntry.startDatetime) < 300 {
+                    return ReadingSessionHandle(bookId: bookId, historyId: historyIdStr)
+                }
+            }
+        }
+
+        // Create new history entry
+        let historyEntry = BookDeviceReadingPositionHistoryRealm()
+        historyEntry.bookId = bookId
+        historyEntry.startDatetime = now
+        historyEntry.startPosition = position.makeRealmObject(bookId: "\(bookId) - History")
+
+        do {
+            try realm.write {
                 realm.add(historyEntry)
             }
+            return ReadingSessionHandle(bookId: bookId, historyId: historyEntry._id.stringValue)
+        } catch {
+            return nil
         }
-        return startDatetime
     }
-    
-    func session(end readPosition: BookDeviceReadingPosition, forBookId bookId: String) {
-        guard let realm = getRealm(forBookId: bookId) else { return }
-        guard let historyEntry = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
-            .filter(NSPredicate(format: "bookId == %@", bookId))
-            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-            .first else { return }
-            
-        guard historyEntry.endPosition == nil || historyEntry.endPosition?.takePrecedence == true else { return }
-        
+
+    func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?) {
+        guard let realm = getRealm(server: server) else { return }
+        guard let objectId = try? ObjectId(string: handle.historyId) else { return }
+        guard let historyEntry = realm.object(ofType: BookDeviceReadingPositionHistoryRealm.self, forPrimaryKey: objectId) else { return }
+        guard historyEntry.bookId == handle.bookId else { return }
+
+        // If endPosition already exists, verify new position is not older
+        if let existingEnd = historyEntry.endPosition, position.epoch < existingEnd.epoch {
+            return
+        }
+
         try? realm.write {
-            let newEndPositionObject = readPosition.makeRealmObject(bookId: "\(bookId) - History")
-            if let endPositionObject = historyEntry.endPosition {
-                newEndPositionObject._id = endPositionObject._id
-                realm.add(newEndPositionObject, update: .modified)
+            let newEnd = position.makeRealmObject(bookId: "\(handle.bookId) - History")
+            if let existingEnd = historyEntry.endPosition {
+                newEnd._id = existingEnd._id
+                realm.add(newEnd, update: .modified)
             } else {
-                historyEntry.endPosition = newEndPositionObject
+                historyEntry.endPosition = newEnd
             }
         }
     }
-    
-    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
-        guard let realm = getRealm(forBookId: bookId) else { return [] }
-        
+
+    func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, server: CalibreServer?) -> [CalibreBookLastReadPositionEntry] {
+        guard let realm = getRealm(server: server) else { return [] }
+        return syncPositions(entries: lastReadPositions, forBookId: bookId, using: realm)
+    }
+
+    private func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String, using realm: Realm) -> [CalibreBookLastReadPositionEntry] {
+        let state = AppPerformanceSignpost.begin("PositionMerge", "Entries: \(lastReadPositions.count)")
+        defer {
+            AppPerformanceSignpost.end("PositionMerge", state, "Entries: \(lastReadPositions.count)")
+        }
+
+        let localRealms = Array(realm.objects(BookDeviceReadingPositionRealm.self).filter("bookId == %@", bookId))
+        let localPositions = localRealms.map { $0.toDomain() }.sorted(by: { $0.epoch > $1.epoch })
+
+        var latestLocalByDevice = [String: BookDeviceReadingPosition]()
+        for pos in localPositions {
+            if latestLocalByDevice[pos.id] == nil {
+                latestLocalByDevice[pos.id] = pos
+            }
+        }
+
         var devicesUpdated = [String: BookDeviceReadingPosition]()
         var devicesInserted = [String: BookDeviceReadingPosition]()
         var tasks = [CalibreBookLastReadPositionEntry]()
-        
+
         var positionsToSave = [BookDeviceReadingPosition]()
-        
+
         lastReadPositions.forEach { remoteEntry in
             guard let remotePosition = BookDeviceReadingPosition(entry: remoteEntry) else {
                 return
             }
-            
-            guard let localPosition = self.getPosition(forBookId: bookId, deviceName: remoteEntry.device) else {
+
+            guard let localPosition = latestLocalByDevice[remoteEntry.device] else {
                 positionsToSave.append(remotePosition)
                 devicesInserted[remoteEntry.device] = remotePosition
                 return
             }
-            
+
             guard localPosition.epoch < remotePosition.epoch else {
                 if localPosition.epoch == remotePosition.epoch {
                     devicesUpdated[remoteEntry.device] = remotePosition
                 }
                 return
             }
-            
+
             devicesUpdated[remoteEntry.device] = remotePosition
         }
-        
-        self.getPositions(forBookId: bookId).forEach { localPos in
+
+        localPositions.forEach { localPos in
             guard devicesInserted[localPos.id] == nil else {
                 return
             }
-            
+
             if let position = devicesUpdated[localPos.id] {
                 positionsToSave.append(position)
             } else {
                 tasks.append(localPos.toEntry())
             }
         }
-        
-        if !positionsToSave.isEmpty {
-            try? realm.write {
-                for position in positionsToSave {
-                    let existingToRemove = realm.objects(BookDeviceReadingPositionRealm.self)
-                        .filter(NSPredicate(
-                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@ AND epoch < %@",
-                            bookId,
-                            position.id,
-                            position.readerName,
-                            NSNumber(value: position.structuralStyle),
-                            NSNumber(value: position.positionTrackingStyle),
-                            NSNumber(value: position.structuralRootPageNumber),
-                            NSNumber(value: position.epoch)
-                        ))
-                    if !existingToRemove.isEmpty {
-                        realm.delete(existingToRemove)
+
+        // Index local realms by identity
+        var localRealmsByIdentity = [PositionIdentity: [BookDeviceReadingPositionRealm]]()
+        for obj in localRealms {
+            let identity = obj.identity
+            localRealmsByIdentity[identity, default: []].append(obj)
+        }
+        // Sort each by epoch descending
+        for (identity, objs) in localRealmsByIdentity {
+            localRealmsByIdentity[identity] = objs.sorted(by: { $0.epoch > $1.epoch })
+        }
+
+        // Deduplicate positionsToSave by identity
+        var uniquePositionsToSave = [PositionIdentity: BookDeviceReadingPosition]()
+        for pos in positionsToSave {
+            let id = pos.identity
+            if let existing = uniquePositionsToSave[id] {
+                if pos.epoch > existing.epoch {
+                    uniquePositionsToSave[id] = pos
+                }
+            } else {
+                uniquePositionsToSave[id] = pos
+            }
+        }
+
+        if !uniquePositionsToSave.isEmpty {
+            let changesBlock = {
+                var realmsToDelete = [BookDeviceReadingPositionRealm]()
+                var realmsToAdd = [BookDeviceReadingPositionRealm]()
+
+                for (_, position) in uniquePositionsToSave {
+                    let identity = position.identity
+                    let realmsForIdentity = localRealmsByIdentity[identity] ?? []
+
+                    let toDelete = realmsForIdentity.filter { $0.epoch < position.epoch }
+                    realmsToDelete.append(contentsOf: toDelete)
+
+                    let hasNewerOrEqual = realmsForIdentity.contains { $0.epoch >= position.epoch }
+                    if !hasNewerOrEqual {
+                        realmsToAdd.append(position.makeRealmObject(bookId: bookId))
                     }
-                    
-                    let exactMatch = realm.objects(BookDeviceReadingPositionRealm.self)
-                        .filter(NSPredicate(
-                            format: "bookId == %@ AND deviceId == %@ AND readerName == %@ AND structuralStyle == %@ AND positionTrackingStyle == %@ AND structuralRootPageNumber == %@",
-                            bookId,
-                            position.id,
-                            position.readerName,
-                            NSNumber(value: position.structuralStyle),
-                            NSNumber(value: position.positionTrackingStyle),
-                            NSNumber(value: position.structuralRootPageNumber)
-                        ))
-                    if exactMatch.isEmpty {
-                        realm.add(position.managedObject(bookId: bookId))
-                    }
+                }
+
+                if !realmsToDelete.isEmpty {
+                    realm.delete(realmsToDelete)
+                }
+                for newObj in realmsToAdd {
+                    realm.add(newObj)
+                }
+            }
+
+            if realm.isInWriteTransaction {
+                changesBlock()
+            } else {
+                try? realm.write {
+                    changesBlock()
                 }
             }
         }
-        
+
         return tasks
+    }
+}
+
+// MARK: - Position Identity Helpers
+
+struct PositionIdentity: Hashable, Equatable {
+    let deviceId: String
+    let readerName: String
+    let structuralStyle: Int
+    let positionTrackingStyle: Int
+    let structuralRootPageNumber: Int
+}
+
+extension BookDeviceReadingPosition {
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: id,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
+    }
+}
+
+extension BookDeviceReadingPositionRealm {
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: deviceId,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
     }
 }

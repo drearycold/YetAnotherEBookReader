@@ -10,11 +10,11 @@ import Combine
 
 struct SettingsView: View {
     @EnvironmentObject var container: AppContainer
-    @StateObject var viewModel: SettingsViewModel
+    @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var addServerViewModel: ServerViewModel
     
     init(viewModel: SettingsViewModel) {
-        _viewModel = StateObject(wrappedValue: viewModel)
+        self.viewModel = viewModel
         _addServerViewModel = StateObject(wrappedValue: ServerViewModel(container: viewModel.container, server: nil))
     }
     

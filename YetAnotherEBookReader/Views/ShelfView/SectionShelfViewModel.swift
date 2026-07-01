@@ -10,7 +10,7 @@ import Combine
 
 enum SectionShelfAlert: Identifiable {
     case downloadConfirm(bookIds: Set<String>)
-    
+
     var id: String {
         switch self {
         case .downloadConfirm:
@@ -23,17 +23,20 @@ enum SectionShelfAlert: Identifiable {
 final class SectionShelfViewModel: ObservableObject {
     let container: AppContainer
     private var cancellables = Set<AnyCancellable>()
-    
+
     private var allDisplaySections = [ShelfSectionItem]()
-    
+    private var isSubscribedToInitialLoad = false
+
     @Published var pickedLibraries = Set<String>()
     @Published var displaySections = [ShelfSectionItem]()
     @Published var libraryFilters = [ShelfLibraryFilterItem]()
-    
+
     @Published var presentingBookDetailId: String? = nil
     @Published var activeAlert: SectionShelfAlert? = nil
     @Published var selectionState = ShelfSelectionState()
-    
+    @Published private(set) var isInitialLoadComplete = false
+    @Published private(set) var isRefreshing = false
+
     init(container: AppContainer) {
         self.container = container
         setupSubscriptions()
@@ -47,6 +50,17 @@ final class SectionShelfViewModel: ObservableObject {
     /// been routed through the subject pipeline.
     func bootstrapIfDatabaseReady() {
         guard container.logger != nil else { return }
+
+        if !isSubscribedToInitialLoad {
+            isSubscribedToInitialLoad = true
+            container.shelfDataModel.$isInitialLoadComplete
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] isComplete in
+                    self?.isInitialLoadComplete = isComplete
+                }
+                .store(in: &cancellables)
+        }
+
         guard allDisplaySections.isEmpty else { return }
 
         let initialItems = container.shelfDataModel.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
@@ -81,11 +95,14 @@ final class SectionShelfViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
-    func refreshShelf() {
-        container.shelfDataModel.refresh()
+
+    func refreshShelf() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await container.shelfDataModel.refresh()
     }
-    
+
     func downloadSelectedBooks(bookIds: Set<String>) {
         bookIds.forEach { bookId in
             guard let book = container.bookManager.getBook(for: bookId),
@@ -104,7 +121,7 @@ final class SectionShelfViewModel: ObservableObject {
         guard container.bookManager.bookExists(forPrimaryKey: bookId) else { return }
         presentingBookDetailId = bookId
     }
-    
+
     func toggleSelection(bookId: String) {
         if selectionState.selectedBookIds.contains(bookId) {
             selectionState.selectedBookIds.remove(bookId)
@@ -112,23 +129,23 @@ final class SectionShelfViewModel: ObservableObject {
             selectionState.selectedBookIds.insert(bookId)
         }
     }
-    
+
     func selectAllBooks() {
         let allIds = displaySections.flatMap { $0.books.map { $0.id } }
         selectionState.selectedBookIds = Set(allIds)
     }
-    
+
     func clearSelection() {
         selectionState.selectedBookIds.removeAll()
     }
-    
+
     func downloadSelectedBooks() {
         let targets = selectionState.selectedBookIds
         downloadSelectedBooks(bookIds: targets)
         selectionState.selectedBookIds.removeAll()
         selectionState.isEditing = false
     }
-    
+
     func refreshBookFormats(bookId: String) {
         guard let book = container.bookManager.booksInShelf[bookId] else { return }
         book.formats.filter {
@@ -138,17 +155,17 @@ final class SectionShelfViewModel: ObservableObject {
             self.container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
         }
     }
-    
+
     func toggleLibraryFilter(libraryId: String) {
         pickedLibraries.formSymmetricDifference([libraryId])
         applyFiltering()
     }
-    
+
     func resetLibraryFilters() {
         pickedLibraries.removeAll(keepingCapacity: true)
         applyFiltering()
     }
-    
+
     private func applyFiltering() {
         // Aggregate the set of libraries actually present in the section
         // book items. Sections are cross-library by category (e.g. "Author: A"),

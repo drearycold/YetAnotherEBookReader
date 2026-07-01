@@ -314,6 +314,67 @@ class UnifiedSearchServiceTests: XCTestCase {
         XCTAssertEqual(finalResult.books.getOrNil(0)?.title, "Apple")
         XCTAssertEqual(finalResult.books.getOrNil(1)?.title, "Banana")
     }
+
+    func testResetSearchAndWaitReturnsAfterForcedNetworkRequestCompletes() async throws {
+        let criteria = SearchCriteria(
+            searchString: "awaitable-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteria)
+        let requestLock = NSLock()
+        var completedRequestCount = 0
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            Thread.sleep(forTimeInterval: 0.05)
+
+            requestLock.lock()
+            completedRequestCount += 1
+            requestLock.unlock()
+
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let searchResultJSON = """
+            {
+                "total_num": 0,
+                "sort_order": "asc",
+                "num_books_without_search": 0,
+                "offset": 0,
+                "num": 0,
+                "sort": "title",
+                "base_url": "/ajax/search/lib1",
+                "query": "",
+                "library_id": "lib1",
+                "book_ids": [],
+                "vl": ""
+            }
+            """
+            return (response, searchResultJSON.data(using: .utf8)!)
+        }
+
+        let stream = await manager.search(key: key)
+        for await update in stream {
+            if update.statuses[mockLibrary1.id]?.loading == false {
+                break
+            }
+        }
+
+        requestLock.lock()
+        let requestsBeforeRefresh = completedRequestCount
+        requestLock.unlock()
+
+        await manager.resetSearchAndWait(for: key, force: true)
+
+        requestLock.lock()
+        let requestsAfterRefresh = completedRequestCount
+        requestLock.unlock()
+        XCTAssertGreaterThan(requestsAfterRefresh, requestsBeforeRefresh)
+    }
     
     func testExpandLimitAndResetSearch() async throws {
         let criteria = SearchCriteria(
@@ -785,7 +846,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
     
     private var _cachedLibraryResults: [String: LibraryCachedResult] = [:]
     private var librarySubjects: [String: CurrentValueSubject<LibraryCachedResult, Error>] = [:]
-    
+
     private func makeKey(libraryId: String, search: String, sortBy: SortCriteria, sortAsc: Bool, filters: [String: Set<String>]) -> String {
         let filterStr = filters.keys.sorted().map { "\($0):\(filters[$0]?.sorted() ?? [])" }.joined(separator: ",")
         return "\(libraryId)|\(search)|\(sortBy.rawValue)|\(sortAsc)|\(filterStr)"

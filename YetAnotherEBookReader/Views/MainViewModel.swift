@@ -28,12 +28,14 @@ final class MainViewModel: ObservableObject {
     
     let recentShelfViewModel: RecentShelfViewModel
     let sectionShelfViewModel: SectionShelfViewModel
+    let settingsViewModel: SettingsViewModel
     
     init(container: AppContainer, sessionManager: ReadingSessionManager) {
         self.container = container
         self.sessionManager = sessionManager
         self.recentShelfViewModel = RecentShelfViewModel(container: container)
         self.sectionShelfViewModel = SectionShelfViewModel(container: container)
+        self.settingsViewModel = SettingsViewModel(container: container)
         
         setupSubscriptions()
     }
@@ -58,7 +60,7 @@ final class MainViewModel: ObservableObject {
     }
     
     var showWelcome: Bool {
-        activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty
+        activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
     }
 
     var presentingEBookReaderFromShelf: Bool {

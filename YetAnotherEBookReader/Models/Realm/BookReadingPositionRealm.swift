@@ -27,6 +27,8 @@ class BookDeviceReadingPositionRealm: Object, ObjectKeyIdentifiable {
     @Persisted var cfi = "/"
     @Persisted var epoch = 0.0
     
+    /// Legacy/inert field from old synchronization/FolioReader logic.
+    /// Do not use for new features; session lifecycle and position selection are now policy-based.
     @Persisted var takePrecedence: Bool = false
     
     //for non-linear book structure

@@ -84,20 +84,56 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         result: LibrarySourceSearchResult
     ) throws {
         let realm = try getRealm()
-        
-        try realm.write {
-            // Find or create CalibreLibrarySearchObject
-            var searchObj = realm.objects(CalibreLibrarySearchObject.self)
-                .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
-                .filter { $0.sortBy == sortBy }
-                .first { cacheObj in
-                    let objFilters = cacheObj.filters.reduce(into: [String: Set<String>]()) { partial, filter in
-                        if let values = filter.value?.values {
-                            partial[filter.key] = Set(values)
-                        }
+
+        let existingSearchObject = realm.objects(CalibreLibrarySearchObject.self)
+            .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
+            .filter { $0.sortBy == sortBy }
+            .first { cacheObj in
+                let objFilters = cacheObj.filters.reduce(into: [String: Set<String>]()) { partial, filter in
+                    if let values = filter.value?.values {
+                        partial[filter.key] = Set(values)
                     }
-                    return objFilters == filters
                 }
+                return objFilters == filters
+            }
+
+        let missingBooks = result.books.filter { book in
+            let primaryKey = CalibreBookRealm.PrimaryKey(
+                serverUUID: book.library.server.uuid.uuidString,
+                libraryName: book.library.name,
+                id: book.id.description
+            )
+            return realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) == nil
+        }
+        let sourceUnchanged: Bool
+        if let existingSource = existingSearchObject?.sources[sourceUrl] ?? nil {
+            sourceUnchanged = existingSource.generation == result.generation
+                && existingSource.totalNumber == result.totalNumber
+                && Array(existingSource.bookIds) == result.bookIds
+        } else {
+            sourceUnchanged = false
+        }
+
+        if sourceUnchanged && missingBooks.isEmpty {
+            return
+        }
+
+        try realm.write {
+            for book in missingBooks {
+                let primaryKey = CalibreBookRealm.PrimaryKey(
+                    serverUUID: book.library.server.uuid.uuidString,
+                    libraryName: book.library.name,
+                    id: book.id.description
+                )
+                if realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) == nil {
+                    realm.add(book.makeRealmObject())
+                }
+            }
+
+            guard !sourceUnchanged else { return }
+
+            // Find or create CalibreLibrarySearchObject
+            var searchObj = existingSearchObject
                 
             if searchObj == nil {
                 let newObj = CalibreLibrarySearchObject()
@@ -131,11 +167,6 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             
             sObj.bookIds.removeAll()
             sObj.bookIds.append(objectsIn: result.bookIds)
-            
-            for book in result.books {
-                let bookRealm = book.makeRealmObject()
-                _ = realm.create(CalibreBookRealm.self, value: bookRealm, update: .modified)
-            }
         }
     }
     

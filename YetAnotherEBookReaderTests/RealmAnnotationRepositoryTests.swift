@@ -17,7 +17,7 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
     
     override func setUpWithError() throws {
         realmConfig = MockDatabaseService.inMemoryConfiguration()
-        databaseService = DatabaseService.shared
+        databaseService = DatabaseService()
         databaseService.setup(conf: realmConfig)
         repository = RealmAnnotationRepository(databaseService: databaseService)
     }
@@ -266,5 +266,289 @@ final class RealmAnnotationRepositoryTests: XCTestCase {
         XCTAssertEqual(hl2?.type, BookHighlightStyle.yellow.rawValue)
         
         XCTAssertEqual(pendingCount, 0)
+    }
+
+    func testSyncAnnotations_acceptsNonFractionalISO8601Timestamps() throws {
+        let bookId = "sync_non_fractional^test_lib@server-uuid"
+
+        let bookmarkEntry = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: "2026-06-28T09:00:00Z",
+            pos_type: "epubcfi",
+            pos: "epubcfi(/4/2/4)",
+            title: "bookmark",
+            removed: false
+        )
+
+        let highlightEntry = CalibreBookAnnotationHighlightEntry(
+            type: "highlight",
+            timestamp: "2026-06-28T09:00:00Z",
+            uuid: "AAAAAAAAAAAAAAAAAAAAAA",
+            removed: false,
+            ranges: nil,
+            startCfi: "/6/4",
+            endCfi: "/6/6",
+            highlightedText: "text",
+            style: nil,
+            spineName: "chap-1",
+            spineIndex: 2,
+            tocFamilyTitles: nil,
+            notes: nil
+        )
+
+        let bookmarkPending = repository.syncBookmarks(entries: [bookmarkEntry], forBookId: bookId)
+        let highlightPending = repository.syncHighlights(entries: [highlightEntry], forBookId: bookId)
+
+        let bookmarks = repository.getBookmarks(forBookId: bookId, excludeRemoved: true)
+        let highlights = repository.getHighlights(forBookId: bookId, excludeRemoved: true)
+
+        XCTAssertEqual(bookmarkPending, 0)
+        XCTAssertEqual(highlightPending, 0)
+        XCTAssertEqual(bookmarks.count, 1)
+        XCTAssertEqual(bookmarks.first?.pos, "epubcfi(/4/2/4)")
+        XCTAssertEqual(highlights.count, 1)
+        XCTAssertEqual(highlights.first?.content, "text")
+    }
+    
+    func testSyncHighlights_duplicateAndInvalidEntriesBehavior() throws {
+        let bookId = "sync_hl_duplicates^test_lib@server-uuid"
+        
+        let calibreId1 = "CCCCCCCCCCCCCCCCCCCCCC"
+        let folioId1 = try XCTUnwrap(uuidCalibreToFolio(calibreId1))
+        
+        let calibreId2 = "DDDDDDDDDDDDDDDDDDDDDD"
+        let folioId2 = try XCTUnwrap(uuidCalibreToFolio(calibreId2))
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        let baseDate = Date()
+        let dateOlder = baseDate.addingTimeInterval(-60)
+        let dateNewer = baseDate
+        
+        let entries = [
+            // 1. Older duplicate for ID1 (valid)
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateOlder),
+                uuid: calibreId1,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/4",
+                endCfi: "/6/6",
+                highlightedText: "Older valid highlight text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 2,
+                tocFamilyTitles: nil,
+                notes: "Older valid note"
+            ),
+            // 2. Newer duplicate for ID1 (valid) -> should win over the older duplicate
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateNewer),
+                uuid: calibreId1,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/4",
+                endCfi: "/6/6",
+                highlightedText: "Newer valid highlight text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 2,
+                tocFamilyTitles: nil,
+                notes: "Newer valid note"
+            ),
+            // 3. Valid older duplicate for ID2
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateOlder),
+                uuid: calibreId2,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/8",
+                endCfi: "/6/10",
+                highlightedText: "Older valid ID2 text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 3,
+                tocFamilyTitles: nil,
+                notes: "Older valid ID2 note"
+            ),
+            // 4. Newer duplicate for ID2 with missing spineIndex (invalid normal entry)
+            // -> This newer duplicate should be excluded before deduplication,
+            // so the older valid duplicate for ID2 is kept and wins.
+            CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: dateNewer),
+                uuid: calibreId2,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/8",
+                endCfi: "/6/10",
+                highlightedText: "Newer invalid ID2 text",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: nil,
+                tocFamilyTitles: nil,
+                notes: "Newer invalid ID2 note"
+            )
+        ]
+        
+        let pendingCount = repository.syncHighlights(entries: entries, forBookId: bookId)
+        
+        let highlights = repository.getHighlights(forBookId: bookId, excludeRemoved: true)
+        XCTAssertEqual(highlights.count, 2)
+        
+        // ID1 check: newest valid wins ("Newer valid highlight text")
+        let hl1 = repository.getHighlight(byId: folioId1)
+        XCTAssertNotNil(hl1)
+        XCTAssertEqual(hl1?.note, "Newer valid note")
+        XCTAssertEqual(hl1?.content, "Newer valid highlight text")
+        
+        // ID2 check: newer invalid is filtered, so older valid wins ("Older valid ID2 text")
+        let hl2 = repository.getHighlight(byId: folioId2)
+        XCTAssertNotNil(hl2)
+        XCTAssertEqual(hl2?.note, "Older valid ID2 note")
+        XCTAssertEqual(hl2?.content, "Older valid ID2 text")
+        
+        XCTAssertEqual(pendingCount, 0)
+    }
+    
+    @MainActor
+    func testSyncHighlightsStressCheck() throws {
+        let bookId = "stress_hl^test_lib@server-uuid"
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        var entries = [CalibreBookAnnotationHighlightEntry]()
+        let baseDate = Date()
+        for i in 1...500 {
+            let uuid = UUID()
+            var uuidBytes = uuid.uuid
+            let data = Data(bytes: &uuidBytes, count: 16)
+            let calibreId = data.base64EncodedString()
+                .replacingOccurrences(of: "+", with: "-")
+                .replacingOccurrences(of: "/", with: "_")
+                .replacingOccurrences(of: "=", with: "")
+            
+            entries.append(CalibreBookAnnotationHighlightEntry(
+                type: "highlight",
+                timestamp: dateFormatter.string(from: baseDate.addingTimeInterval(Double(i))),
+                uuid: calibreId,
+                removed: false,
+                ranges: nil,
+                startCfi: "/6/4",
+                endCfi: "/6/6",
+                highlightedText: "Text \(i)",
+                style: nil,
+                spineName: "chap-1",
+                spineIndex: 2,
+                tocFamilyTitles: nil,
+                notes: "Note \(i)"
+            ))
+        }
+        
+        let pending = repository.syncHighlights(entries: entries, forBookId: bookId)
+        XCTAssertEqual(pending, 0)
+        
+        let highlights = repository.getHighlights(forBookId: bookId, excludeRemoved: true)
+        XCTAssertEqual(highlights.count, 500)
+    }
+    
+    @MainActor
+    func testSyncBookmarksLinearizationSpecialCases() throws {
+        let bookId = "sync_bm_special^test_lib@server-uuid"
+        let pos1 = "epubcfi(/4/2/2/1:0)"
+        let pos2 = "epubcfi(/6/2/4/1:0)"
+        
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        let dateLocal = Date().addingTimeInterval(-3600)
+        let dateServerNewer = Date()
+        let dateServerOlder = Date().addingTimeInterval(-7200)
+        
+        // 1. Save local bookmark
+        let localBookmark = TestFixtures.makeBookmark(bookId: bookId, page: 2, pos: pos1, title: "Local", date: dateLocal)
+        _ = repository.saveBookmark(localBookmark)
+        
+        // 2. Sync entries:
+        // - remoteNewer: newer server timestamp -> should update
+        // - remoteOlder: older server timestamp -> should be ignored (local is newer)
+        // - remoteInvalidCFI: invalid CFI -> should be ignored
+        // - duplicateRemote: duplicate entry with older timestamp -> should be ignored (only newest remote evaluated)
+        let remoteNewer = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: dateFormatter.string(from: dateServerNewer),
+            pos_type: "epubcfi",
+            pos: pos1,
+            title: "Newer Server Title",
+            removed: false
+        )
+        let remoteOlder = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: dateFormatter.string(from: dateServerOlder),
+            pos_type: "epubcfi",
+            pos: pos1,
+            title: "Older Server Title",
+            removed: false
+        )
+        let remoteInvalidCFI = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: dateFormatter.string(from: dateServerNewer),
+            pos_type: "epubcfi",
+            pos: "invalid_cfi",
+            title: "Invalid CFI Title",
+            removed: false
+        )
+        let remoteNewPos = CalibreBookAnnotationBookmarkEntry(
+            type: "bookmark",
+            timestamp: dateFormatter.string(from: dateServerNewer),
+            pos_type: "epubcfi",
+            pos: pos2,
+            title: "New Pos Title",
+            removed: false
+        )
+        
+        let entries = [remoteNewer, remoteOlder, remoteInvalidCFI, remoteNewPos]
+        let pending = repository.syncBookmarks(entries: entries, forBookId: bookId)
+        
+        let bookmarks = repository.getBookmarks(forBookId: bookId, excludeRemoved: true)
+        XCTAssertEqual(bookmarks.count, 2)
+        
+        let bm1 = bookmarks.first(where: { $0.pos == pos1 })
+        XCTAssertEqual(bm1?.title, "Newer Server Title")
+        
+        let bm2 = bookmarks.first(where: { $0.pos == pos2 })
+        XCTAssertEqual(bm2?.title, "New Pos Title")
+        
+        XCTAssertEqual(pending, 0)
+    }
+    
+    @MainActor
+    func testSyncBookmarksStressCheck() throws {
+        let bookId = "stress_bm^test_lib@server-uuid"
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
+        
+        var entries = [CalibreBookAnnotationBookmarkEntry]()
+        let baseDate = Date()
+        for i in 1...500 {
+            entries.append(CalibreBookAnnotationBookmarkEntry(
+                type: "bookmark",
+                timestamp: dateFormatter.string(from: baseDate.addingTimeInterval(Double(i))),
+                pos_type: "epubcfi",
+                pos: "epubcfi(/\(i * 2)/2/2/1:0)",
+                title: "Bookmark \(i)",
+                removed: false
+            ))
+        }
+        
+        let pending = repository.syncBookmarks(entries: entries, forBookId: bookId)
+        XCTAssertEqual(pending, 0)
+        
+        let bookmarks = repository.getBookmarks(forBookId: bookId, excludeRemoved: true)
+        XCTAssertEqual(bookmarks.count, 500)
     }
 }

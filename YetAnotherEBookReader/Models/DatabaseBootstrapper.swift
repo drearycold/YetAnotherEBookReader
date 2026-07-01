@@ -37,9 +37,14 @@ final class DatabaseBootstrapper {
     /// cannot be opened. On throw, the caller should leave `AppContainer.realm`
     /// nil so the upgrade UI stays visible.
     func bootstrap(realmConf: Realm.Configuration) throws {
+        let bootstrapSignpost = AppPerformanceSignpost.begin("DatabaseBootstrap")
+        defer {
+            AppPerformanceSignpost.end("DatabaseBootstrap", bootstrapSignpost)
+        }
         do {
             container.realm = try Realm(configuration: realmConf)
         } catch {
+            container.resetDatabaseBootstrapState(clearConfiguration: false)
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
@@ -53,6 +58,7 @@ final class DatabaseBootstrapper {
                     configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
                 )
             } catch {
+                container.resetDatabaseBootstrapState(clearConfiguration: false)
                 logger.error("Failed to open metadata Realm: \(error.localizedDescription)")
                 throw DatabaseBootstrapError.metadataRealmOpenFailed(underlying: error)
             }
@@ -60,10 +66,11 @@ final class DatabaseBootstrapper {
 
         container.serverManager.populateServers()
         container.libraryManager.populateLibraries()
-        container.bookManager.populateBookShelf()
-        container.libraryManager.populateLocalLibraryBooks()
-
-        container.calibreUpdatedSubject.send(.shelf)
+        container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
+            container?.libraryManager.populateLocalLibraryBooks {
+                container?.calibreUpdatedSubject.send(.shelf)
+            }
+        }
         container.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
 
         migrateLegacyReadPosData()

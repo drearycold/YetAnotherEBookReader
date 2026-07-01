@@ -31,12 +31,12 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     @Persisted(primaryKey: true) var _id: ObjectId
     
     //search criteria
-    @Persisted var libraryId = ""
+    @Persisted(indexed: true) var libraryId = ""
     
-    @Persisted var search = ""
+    @Persisted(indexed: true) var search = ""
     
     @Persisted var sortBy = SortCriteria.Modified
-    @Persisted var sortAsc = false
+    @Persisted(indexed: true) var sortAsc = false
     
     @Persisted var filters: Map<String, CalibreLibrarySearchFilterValues?>
     

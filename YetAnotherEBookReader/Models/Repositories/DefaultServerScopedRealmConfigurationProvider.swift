@@ -12,7 +12,34 @@ import Foundation
 import RealmSwift
 
 final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConfigurationProviding {
+    private struct CacheKey: Hashable {
+        let serverUUID: String
+        let schemaVersion: UInt64
+    }
+    
+    private var cache = [CacheKey: Realm.Configuration]()
+    private let lock = NSLock()
+    
     func configuration(for server: CalibreServer) -> Realm.Configuration {
-        BookAnnotation.getBookPreferenceServerConfig(server)
+        let key = CacheKey(serverUUID: server.uuid.uuidString, schemaVersion: AppContainer.RealmSchemaVersion)
+        
+        lock.lock()
+        if let cachedConfig = cache[key] {
+            lock.unlock()
+            return cachedConfig
+        }
+        lock.unlock()
+        
+        let newConfig = BookAnnotation.getBookPreferenceServerConfig(server)
+        
+        lock.lock()
+        if let cachedConfig = cache[key] {
+            lock.unlock()
+            return cachedConfig
+        }
+        cache[key] = newConfig
+        lock.unlock()
+        
+        return newConfig
     }
 }
