@@ -54,7 +54,7 @@ struct SectionShelfView: View {
                     let fillerRowCount = remainingHeight > 0 ? Int(ceil(remainingHeight / 200.0)) : 0
                     
                     ScrollView {
-                        VStack(spacing: 0) {
+                        LazyVStack(spacing: 0) {
                             ForEach(sections) { section in
                                 VStack(spacing: 0) {
                                     ShelfLegacySectionHeader(title: section.title)
@@ -76,7 +76,8 @@ struct SectionShelfView: View {
                                         }()
                                         
                                         HStack(spacing: 0) {
-                                            ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                                            ForEach(0..<renderItems.count, id: \.self) { index in
+                                                let item = renderItems[index]
                                                 let kind = rowTileKind(index: index, totalCount: totalTileCount)
                                                 switch item {
                                                 case .book(let book):
@@ -112,8 +113,9 @@ struct SectionShelfView: View {
                                         let renderItems = books.map { SectionShelfRenderItem.book($0) }
                                         
                                         ScrollView(.horizontal, showsIndicators: false) {
-                                            HStack(spacing: 0) {
-                                                ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                                            LazyHStack(spacing: 0) {
+                                                ForEach(0..<renderItems.count, id: \.self) { index in
+                                                    let item = renderItems[index]
                                                     let kind = rowTileKind(index: index, totalCount: totalTileCount)
                                                     switch item {
                                                     case .book(let book):

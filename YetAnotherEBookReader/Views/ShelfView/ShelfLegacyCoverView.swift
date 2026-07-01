@@ -7,6 +7,7 @@
 
 import SwiftUI
 import KingfisherSwiftUI
+import Kingfisher
 
 public enum ShelfCoverLoadState {
     case loading
@@ -14,7 +15,7 @@ public enum ShelfCoverLoadState {
     case failure
 }
 
-public struct ShelfLegacyCoverView: View {
+public struct ShelfLegacyCoverView: SwiftUI.View {
     public let bookId: String
     public let coverURL: String
     public let fallbackTitle: String
@@ -27,10 +28,15 @@ public struct ShelfLegacyCoverView: View {
         self.fallbackTitle = fallbackTitle
     }
     
-    public var body: some View {
+    public var body: some SwiftUI.View {
         ZStack {
             if let url = URL(string: coverURL), !coverURL.isEmpty {
-                KFImage(url)
+                KFImage(url, options: [
+                    .processor(DownsamplingImageProcessor(size: CGSize(width: ShelfLegacyMetrics.coverWidth, height: ShelfLegacyMetrics.coverHeight))),
+                    .scaleFactor(UIScreen.main.scale),
+                    .backgroundDecode,
+                    .cacheOriginalImage
+                ])
                     .onSuccess { _ in
                         loadState = .success
                     }
@@ -77,7 +83,7 @@ public struct ShelfLegacyCoverView: View {
         }
     }
     
-    private var fallbackView: some View {
+    private var fallbackView: some SwiftUI.View {
         ZStack {
             Color.gray.opacity(0.15)
             Text(fallbackTitle)

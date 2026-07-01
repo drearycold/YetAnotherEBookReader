@@ -63,7 +63,8 @@ struct RecentShelfView: View {
                     
                     ScrollView {
                         LazyVGrid(columns: gridColumns, spacing: 0) {
-                            ForEach(Array(renderItems.enumerated()), id: \.element.id) { index, item in
+                            ForEach(0..<renderItems.count, id: \.self) { index in
+                                let item = renderItems[index]
                                 let kind = ShelfLegacyLayout.tileKind(index: index, columnCount: columnCount)
                                 switch item {
                                 case .book(let book):
