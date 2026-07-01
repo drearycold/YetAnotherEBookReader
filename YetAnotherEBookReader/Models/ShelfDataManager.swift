@@ -216,8 +216,108 @@ private actor ShelfCategoryStore {
     }
 }
 
+private actor RecentShelfBuilder {
+    struct BuildContext: Sendable {
+        let deviceName: String
+        let reachableServerIds: Set<String>
+        let downloadingBookIds: Set<String>
+    }
+
+    struct AutoDownloadRequest: Hashable, Sendable {
+        let inShelfId: String
+        let formatRawValue: String
+    }
+
+    struct BuildResult: Sendable {
+        let books: [ShelfBookItem]
+        let autoDownloadRequests: [AutoDownloadRequest]
+    }
+
+    func rebuild(
+        booksInShelf: [String: CalibreBook],
+        readingPositionRepository: ReadingPositionRepositoryProtocol,
+        context: BuildContext
+    ) -> BuildResult {
+        var booksWithTS: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])] = []
+        for (key, book) in booksInShelf {
+            let positions = readingPositionRepository.getPositions(for: book)
+            let maxEpoch = positions.map { Date(timeIntervalSince1970: $0.epoch) }.max()
+            let ts = max(book.lastModified, maxEpoch ?? book.lastUpdated)
+            booksWithTS.append((key, book, ts, positions))
+        }
+
+        var autoDownloadRequests = [AutoDownloadRequest]()
+        let books = booksWithTS
+            .sorted { $0.ts > $1.ts }
+            .map { entry in
+                buildShelfBookItem(
+                    entry: entry,
+                    context: context,
+                    autoDownloadRequests: &autoDownloadRequests
+                )
+            }
+        return BuildResult(books: books, autoDownloadRequests: autoDownloadRequests)
+    }
+
+    private func buildShelfBookItem(
+        entry: (key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition]),
+        context: BuildContext,
+        autoDownloadRequests: inout [AutoDownloadRequest]
+    ) -> ShelfBookItem {
+        let inShelfId = entry.key
+        let book = entry.value
+        let positions = entry.positions
+        let formatArray = Array(book.formats)
+
+        let bookUptoDate = formatArray.allSatisfy { _, formatInfo in
+            formatInfo.cached == false || (formatInfo.cached && formatInfo.cacheUptoDate)
+        }
+        let missingFormats = formatArray.filter { _, formatInfo in
+            formatInfo.selected == true && formatInfo.cached == false
+        }
+
+        var status = ShelfBookStatus.ready
+        if !context.reachableServerIds.contains(book.library.server.id) {
+            status = .noConnect
+        } else {
+            for (formatRawValue, _) in missingFormats {
+                autoDownloadRequests.append(.init(inShelfId: inShelfId, formatRawValue: formatRawValue))
+            }
+
+            if !bookUptoDate {
+                status = .hasUpdate
+            }
+            if context.downloadingBookIds.contains(inShelfId) {
+                status = .downloading
+            }
+        }
+        if book.library.server.isLocal {
+            status = .local
+        }
+
+        var lastProgress = 0.0
+        if let position = ReadingPositionSelectionPolicy.latestForDevice(context.deviceName).select(from: positions) {
+            lastProgress = position.lastProgress
+        } else if let position = ReadingPositionSelectionPolicy.latest.select(from: positions) {
+            lastProgress = position.lastProgress
+        }
+
+        return ShelfBookItem(
+            id: inShelfId,
+            title: book.title,
+            coverURL: book.coverURL?.absoluteString ?? "",
+            progress: Int(floor(lastProgress)),
+            status: status
+        )
+    }
+}
+
 @MainActor
 class YabrShelfDataModel: ObservableObject {
+
+    struct RecentShelfSnapshot: Equatable, Sendable {
+        let books: [ShelfBookItem]
+    }
 
     struct DiscoverShelfSnapshot: Equatable, Sendable {
         let sections: [ShelfSectionItem]
@@ -258,14 +358,20 @@ class YabrShelfDataModel: ObservableObject {
     private let unifiedSearchService: UnifiedSearchService
     private let container: AppContainerProtocol
     private let categoryStore = ShelfCategoryStore()
+    private let recentShelfBuilder = RecentShelfBuilder()
 
+    @Published var recentShelfItems = [ShelfBookItem]()
     @Published var discoverShelfItems = [String: ShelfSectionItem]()
 
     private var eventTask: Task<Void, Never>?
     private var initialSnapshotTask: Task<Void, Never>?
+    private var recentRebuildTask: Task<Void, Never>?
     private var categorySearchTasks = [String: Task<Void, Never>]()
+    private var recentSnapshotContinuations = [UUID: AsyncStream<RecentShelfSnapshot>.Continuation]()
     private var snapshotContinuations = [UUID: AsyncStream<DiscoverShelfSnapshot>.Continuation]()
+    private var lastPublishedRecentSnapshot: RecentShelfSnapshot?
     private var lastPublishedSnapshot: DiscoverShelfSnapshot?
+    private var isFirstRecentShelfPublish = true
 
     @Published var isInitialLoadComplete = false
 
@@ -277,8 +383,10 @@ class YabrShelfDataModel: ObservableObject {
         initialSnapshotTask = Task { [weak self] in
             await Task.yield()
             guard let self = self else { return }
-            guard let snapshot = self.booksInShelfSnapshotIfNeeded(for: .shelf) else { return }
-            await self.rebuildShelfCategories(from: snapshot)
+            if let snapshot = self.booksInShelfSnapshotIfNeeded(for: .shelf) {
+                await self.rebuildShelfCategories(from: snapshot)
+            }
+            self.scheduleRecentShelfRebuildIfNeeded()
         }
     }
 
@@ -295,8 +403,26 @@ class YabrShelfDataModel: ObservableObject {
     deinit {
         eventTask?.cancel()
         initialSnapshotTask?.cancel()
+        recentRebuildTask?.cancel()
         categorySearchTasks.values.forEach { $0.cancel() }
+        recentSnapshotContinuations.values.forEach { $0.finish() }
         snapshotContinuations.values.forEach { $0.finish() }
+    }
+
+    func recentSnapshots() -> AsyncStream<RecentShelfSnapshot> {
+        let id = UUID()
+        let initialSnapshot = currentRecentSnapshot()
+
+        return AsyncStream { [weak self] continuation in
+            continuation.yield(initialSnapshot)
+            self?.recentSnapshotContinuations[id] = continuation
+
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.recentSnapshotContinuations.removeValue(forKey: id)
+                }
+            }
+        }
     }
 
     func snapshots() -> AsyncStream<DiscoverShelfSnapshot> {
@@ -326,8 +452,76 @@ class YabrShelfDataModel: ObservableObject {
     }
 
     private func handleCalibreUpdated(_ signal: calibreUpdatedSignal) async {
-        guard let snapshot = booksInShelfSnapshotIfNeeded(for: signal) else { return }
-        await rebuildShelfCategories(from: snapshot)
+        if let snapshot = booksInShelfSnapshotIfNeeded(for: signal) {
+            await rebuildShelfCategories(from: snapshot)
+        }
+        scheduleRecentShelfRebuildIfNeeded()
+    }
+
+    private func scheduleRecentShelfRebuildIfNeeded() {
+        guard container.bookManager.isShelfLoaded else { return }
+
+        let booksInShelf = container.bookManager.booksInShelf
+        let context = makeRecentShelfBuildContext(booksInShelf: booksInShelf)
+        let readingPositionRepository = container.readingPositionRepository
+        let builder = recentShelfBuilder
+        let state = AppPerformanceSignpost.begin("RecentShelfRebuild")
+
+        recentRebuildTask?.cancel()
+        recentRebuildTask = Task { [weak self, booksInShelf, context, readingPositionRepository, builder, state] in
+            let result = await builder.rebuild(
+                booksInShelf: booksInShelf,
+                readingPositionRepository: readingPositionRepository,
+                context: context
+            )
+            guard !Task.isCancelled else {
+                AppPerformanceSignpost.end("RecentShelfRebuild", state)
+                return
+            }
+            self?.applyRecentShelfBuildResult(result, booksInShelf: booksInShelf, state: state)
+        }
+    }
+
+    private func makeRecentShelfBuildContext(booksInShelf: [String: CalibreBook]) -> RecentShelfBuilder.BuildContext {
+        let reachableServerIds = Set(
+            booksInShelf.values.compactMap { book in
+                container.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil
+                    ? nil
+                    : book.library.server.id
+            }
+        )
+        let downloadingBookIds = Set(
+            container.downloadManager.activeDownloads.values.compactMap { download in
+                download.isDownloading ? download.book.inShelfId : nil
+            }
+        )
+        return .init(
+            deviceName: container.deviceName,
+            reachableServerIds: reachableServerIds,
+            downloadingBookIds: downloadingBookIds
+        )
+    }
+
+    private func applyRecentShelfBuildResult(
+        _ result: RecentShelfBuilder.BuildResult,
+        booksInShelf: [String: CalibreBook],
+        state: OSSignpostIntervalState
+    ) {
+        AppPerformanceSignpost.end("RecentShelfRebuild", state)
+        if isFirstRecentShelfPublish {
+            isFirstRecentShelfPublish = false
+            AppPerformanceSignpost.emit("FirstRecentShelfPublish")
+        }
+
+        for request in result.autoDownloadRequests {
+            guard let book = booksInShelf[request.inShelfId],
+                  let format = Format(rawValue: request.formatRawValue)
+            else { continue }
+            container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+        }
+
+        recentShelfItems = result.books
+        publishRecentShelfSnapshot(sendLegacySubject: true)
     }
 
     private func rebuildShelfCategories(from booksInShelf: [String: CalibreBook]) async {
@@ -444,6 +638,11 @@ class YabrShelfDataModel: ObservableObject {
         publishDiscoverShelfSnapshot(sendLegacySubject: sendLegacySubject)
     }
 
+    func setRecentShelfSnapshotForTesting(_ snapshot: RecentShelfSnapshot, sendLegacySubject: Bool = true) {
+        recentShelfItems = snapshot.books
+        publishRecentShelfSnapshot(sendLegacySubject: sendLegacySubject)
+    }
+
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
         let sectionName = "\(category.type.rawValue): \(category.category)"
 
@@ -465,11 +664,28 @@ class YabrShelfDataModel: ObservableObject {
         publishDiscoverShelfSnapshot(sendLegacySubject: true)
     }
 
+    private func currentRecentSnapshot() -> RecentShelfSnapshot {
+        RecentShelfSnapshot(books: recentShelfItems)
+    }
+
     private func currentSnapshot() -> DiscoverShelfSnapshot {
         DiscoverShelfSnapshot(
             sections: discoverShelfItems.values.sorted(by: { $0.title < $1.title }),
             isInitialLoadComplete: isInitialLoadComplete
         )
+    }
+
+    private func publishRecentShelfSnapshot(sendLegacySubject: Bool) {
+        let snapshot = currentRecentSnapshot()
+        if lastPublishedRecentSnapshot != snapshot {
+            lastPublishedRecentSnapshot = snapshot
+            for continuation in recentSnapshotContinuations.values {
+                continuation.yield(snapshot)
+            }
+        }
+        if sendLegacySubject {
+            container.recentShelfItemsSubject.send(snapshot.books)
+        }
     }
 
     private func publishDiscoverShelfSnapshot(sendLegacySubject: Bool) {
@@ -492,118 +708,4 @@ class YabrShelfDataModel: ObservableObject {
             await unifiedSearchService.resetSearchAndWait(for: key, force: true)
         }
     }
-}
-
-extension AppContainerProtocol where Self: ObservableObject {
-    func registerRecentShelfUpdater() {
-        let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
-        let box = RecentShelfFirstPublishBox()
-        calibreUpdatedSubject
-            .receive(on: RunLoop.main)
-            .compactMap { [weak self] _ -> ([String: CalibreBook], OSSignpostIntervalState)? in
-                guard let self = self else { return nil }
-                guard self.bookManager.isShelfLoaded else {
-                    return nil
-                }
-                let snapshot = self.bookManager.booksInShelf
-                let state = AppPerformanceSignpost.begin("RecentShelfRebuild")
-                return (snapshot, state)
-            }
-            .receive(on: queue)
-            .map { [weak self] (booksInShelf: [String: CalibreBook], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
-                guard let self = self else { return ([], state) }
-                let readingPositionRepository = self.readingPositionRepository
-                var booksWithTS: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])] = []
-                for (key, book) in booksInShelf {
-                    let positions = readingPositionRepository.getPositions(for: book)
-                    let maxEpoch: Date? = positions.map { p in Date(timeIntervalSince1970: p.epoch) }.max()
-                    let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
-                    booksWithTS.append((key, book, ts, positions))
-                }
-
-                let sorted = booksWithTS.sorted { lhs, rhs in
-                    return lhs.ts > rhs.ts
-                }
-
-                let items = sorted.map { entry in
-                    self.buildShelfBookItem(entry: entry)
-                }
-                return (items, state)
-            }
-            .receive(on: RunLoop.main)
-            .sink(receiveValue: { (displayBooks, state) in
-                AppPerformanceSignpost.end("RecentShelfRebuild", state)
-                if box.isFirstPublish {
-                    box.isFirstPublish = false
-                    AppPerformanceSignpost.emit("FirstRecentShelfPublish")
-                }
-                self.recentShelfItemsSubject.send(displayBooks)
-            })
-            .store(in: &calibreCancellables)
-    }
-}
-
-extension AppContainerProtocol where Self: ObservableObject {
-    private func buildShelfBookItem(entry: (key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])) -> ShelfBookItem {
-        let inShelfId = entry.key
-        let book = entry.value
-        let positions = entry.positions
-
-        let formats: [String: FormatInfo] = book.formats
-        let formatArray: [(String, FormatInfo)] = Array(formats)
-
-        var bookUptoDate = true
-        for (_, formatInfo) in formatArray {
-            if !(formatInfo.cached == false || (formatInfo.cached && formatInfo.cacheUptoDate)) {
-                bookUptoDate = false
-                break
-            }
-        }
-
-        var missingFormats: [String: FormatInfo] = [:]
-        for (key, formatInfo) in formatArray where formatInfo.selected == true && formatInfo.cached == false {
-            missingFormats[key] = formatInfo
-        }
-
-        var status = ShelfBookStatus.ready
-        if self.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil {
-            status = .noConnect
-        } else {
-            missingFormats.forEach {
-                guard let format = Format(rawValue: $0.key) else { return }
-                self.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
-            }
-
-            if !bookUptoDate {
-                status = .hasUpdate
-            }
-            if self.downloadManager.activeDownloads.contains(where: { (url, download) in
-                download.isDownloading && download.book.inShelfId == inShelfId
-            }) {
-                status = .downloading
-            }
-        }
-        if book.library.server.isLocal {
-            status = .local
-        }
-
-        var lastProgress = 0.0
-        if let position = ReadingPositionSelectionPolicy.latestForDevice(self.deviceName).select(from: positions) {
-            lastProgress = position.lastProgress
-        } else if let position = ReadingPositionSelectionPolicy.latest.select(from: positions) {
-            lastProgress = position.lastProgress
-        }
-
-        return ShelfBookItem(
-            id: inShelfId,
-            title: book.title,
-            coverURL: book.coverURL?.absoluteString ?? "",
-            progress: Int(floor(lastProgress)),
-            status: status
-        )
-    }
-}
-
-class RecentShelfFirstPublishBox {
-    var isFirstPublish = true
 }

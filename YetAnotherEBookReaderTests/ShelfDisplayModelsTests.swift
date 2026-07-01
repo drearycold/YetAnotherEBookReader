@@ -12,8 +12,9 @@ import Combine
 @MainActor class ShelfDisplayModelsTests: XCTestCase {
     
     
-    func testRecentShelfViewModelMapping() throws {
+    func testRecentShelfViewModelMapping() async {
         let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests")
+        mockAppContainer.bookManager.isShelfLoaded = false
         let viewModel = RecentShelfViewModel(container: mockAppContainer)
         
         let item = ShelfBookItem(
@@ -23,24 +24,18 @@ import Combine
             progress: 42,
             status: .ready
         )
-        
-        let expectation = XCTestExpectation(description: "Wait for Combine")
-        let cancellable = viewModel.$loadedBooks
-            .dropFirst()
-            .sink { books in
-                if books?.first?.id == "test-id" {
-                    expectation.fulfill()
-                }
-            }
-        
-        mockAppContainer.recentShelfItemsSubject.send([item])
-        
-        wait(for: [expectation], timeout: 1.0)
-        
+
+        mockAppContainer.shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [item]),
+            sendLegacySubject: false
+        )
+        await waitForViewModelUpdate {
+            viewModel.displayBooks.first?.id == "test-id"
+        }
+
         XCTAssertEqual(viewModel.displayBooks.count, 1)
         XCTAssertEqual(viewModel.displayBooks[0].id, "test-id")
         XCTAssertEqual(viewModel.displayBooks[0].title, "Test Title")
-        cancellable.cancel()
     }
     
     func testSectionShelfViewModelMappingAndFilters() async {

@@ -311,7 +311,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// `init` body stays focused on `objectWillChange` plumbing).
     private func wireCrossManagerSubscriptions() {
         libraryManager.registerProbeLibraryLastModifiedCancellable()
-        registerRecentShelfUpdater()
 
         downloadManager.bookDownloadedSubject.sink { [weak self] book in
             self?.calibreUpdatedSubject.send(.book(book))

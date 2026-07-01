@@ -614,6 +614,222 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await fulfillment(of: [expectation], timeout: 1.0)
     }
+
+    func testShelfDataModelRecentSnapshotsYieldCurrentSnapshotToNewSubscriber() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.bookManager.isShelfLoaded = false
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let item = makeRecentBookItem(id: "recent-current")
+
+        shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [item]),
+            sendLegacySubject: false
+        )
+
+        var iterator = shelfDataModel.recentSnapshots().makeAsyncIterator()
+        let snapshot = await iterator.next()
+
+        XCTAssertEqual(snapshot?.books, [item])
+    }
+
+    func testShelfDataModelRecentSnapshotsYieldBookUpdates() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.bookManager.isShelfLoaded = false
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let item = makeRecentBookItem(id: "recent-updated")
+
+        var snapshots = [YabrShelfDataModel.RecentShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.recentSnapshots() {
+                snapshots.append(snapshot)
+                if snapshots.count == 2 { break }
+            }
+        }
+
+        await Task.yield()
+        shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [item]),
+            sendLegacySubject: false
+        )
+        await waitForSnapshotCount(2, in: { snapshots.count })
+        task.cancel()
+
+        XCTAssertEqual(snapshots.last?.books, [item])
+    }
+
+    func testShelfDataModelRecentSnapshotTerminationStopsUpdates() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.bookManager.isShelfLoaded = false
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        var snapshots = [YabrShelfDataModel.RecentShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.recentSnapshots() {
+                snapshots.append(snapshot)
+            }
+        }
+
+        await waitForSnapshotCount(1, in: { snapshots.count })
+        task.cancel()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [makeRecentBookItem(id: "recent-cancelled")]),
+            sendLegacySubject: false
+        )
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(snapshots.count, 1)
+    }
+
+    func testShelfDataModelLegacyRecentSubjectStillReceivesPublishedBooks() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.bookManager.isShelfLoaded = false
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let item = makeRecentBookItem(id: "recent-legacy")
+
+        let expectation = XCTestExpectation(description: "Legacy recent subject receives books")
+        container.recentShelfItemsSubject
+            .sink { books in
+                if books == [item] {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [item]),
+            sendLegacySubject: true
+        )
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
+
+    func testShelfDataModelRecentRebuildSortsAndMapsStatuses() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.isShelfLoaded = false
+
+        let reachableServer = TestFixtures.makeServer(
+            uuid: UUID(),
+            name: "Reachable",
+            baseUrl: "http://localhost/reachable"
+        )
+        let unreachableServer = TestFixtures.makeServer(
+            uuid: UUID(),
+            name: "Unreachable",
+            baseUrl: "http://localhost/unreachable"
+        )
+        let localServer = TestFixtures.makeServer(
+            uuid: CalibreServer.LocalServerUUID,
+            name: "Local",
+            baseUrl: "."
+        )
+        let reachableLibrary = TestFixtures.makeLibrary(server: reachableServer, key: "reachable", name: "Reachable")
+        let unreachableLibrary = TestFixtures.makeLibrary(server: unreachableServer, key: "unreachable", name: "Unreachable")
+        let localLibrary = TestFixtures.makeLibrary(server: localServer, key: "local", name: "Local")
+
+        var progressBook = TestFixtures.makeBook(id: 501, library: reachableLibrary)
+        progressBook.title = "Progress Book"
+        progressBook.lastModified = Date(timeIntervalSince1970: 10)
+
+        var downloadingBook = TestFixtures.makeBook(id: 502, library: reachableLibrary)
+        downloadingBook.title = "Downloading Book"
+        downloadingBook.lastModified = Date(timeIntervalSince1970: 4_000)
+
+        var hasUpdateBook = TestFixtures.makeBook(id: 503, library: reachableLibrary)
+        hasUpdateBook.title = "Has Update Book"
+        hasUpdateBook.lastModified = Date(timeIntervalSince1970: 3_000)
+        hasUpdateBook.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "update.epub",
+            serverSize: 1,
+            serverMTime: Date(timeIntervalSince1970: 2_000),
+            cached: true,
+            cacheSize: 1,
+            cacheMTime: Date(timeIntervalSince1970: 1_000),
+            manifest: nil
+        )
+
+        var noConnectBook = TestFixtures.makeBook(id: 504, library: unreachableLibrary)
+        noConnectBook.title = "No Connect Book"
+        noConnectBook.lastModified = Date(timeIntervalSince1970: 2_000)
+
+        var localBook = TestFixtures.makeBook(id: 505, library: localLibrary)
+        localBook.title = "Local Book"
+        localBook.lastModified = Date(timeIntervalSince1970: 1_000)
+
+        let probeRequest = CalibreProbeServerRequest(
+            server: reachableServer,
+            isPublic: false,
+            updateLibrary: false,
+            autoUpdateOnly: false,
+            incremental: false
+        )
+        let reachableInfo = CalibreServerInfo(
+            server: reachableServer,
+            isPublic: false,
+            url: URL(string: reachableServer.baseUrl)!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: reachableLibrary.id,
+            libraryMap: [reachableLibrary.id: reachableLibrary.name],
+            request: probeRequest
+        )
+        container.calibreServerInfoStaging[reachableServer.uuid.uuidString] = reachableInfo
+
+        let downloadURL = URL(string: "http://localhost/download.epub")!
+        container.downloadManager.activeDownloads[downloadURL] = BookFormatDownload(
+            isDownloading: true,
+            progress: 0,
+            book: downloadingBook,
+            format: .EPUB,
+            startDatetime: Date(),
+            sourceURL: downloadURL,
+            savedURL: URL(fileURLWithPath: "/tmp/download.epub"),
+            modificationDate: Date()
+        )
+
+        let position = TestFixtures.makeReadingPosition(
+            id: container.deviceName,
+            lastProgress: 42,
+            epoch: 5_000
+        )
+        container.readingPositionRepository.savePosition(position, for: progressBook)
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        container.bookManager.booksInShelf = [
+            progressBook.inShelfId: progressBook,
+            downloadingBook.inShelfId: downloadingBook,
+            hasUpdateBook.inShelfId: hasUpdateBook,
+            noConnectBook.inShelfId: noConnectBook,
+            localBook.inShelfId: localBook
+        ]
+        container.bookManager.isShelfLoaded = true
+        container.calibreUpdatedSubject.send(.shelf)
+
+        await waitForRecentBooksCount(5, in: shelfDataModel)
+        let books = shelfDataModel.recentShelfItems
+
+        XCTAssertEqual(books.map(\.id), [
+            progressBook.inShelfId,
+            downloadingBook.inShelfId,
+            hasUpdateBook.inShelfId,
+            noConnectBook.inShelfId,
+            localBook.inShelfId
+        ])
+        XCTAssertEqual(books.first?.progress, 42)
+        XCTAssertEqual(books.first(where: { $0.id == downloadingBook.inShelfId })?.status, .downloading)
+        XCTAssertEqual(books.first(where: { $0.id == hasUpdateBook.inShelfId })?.status, .hasUpdate)
+        XCTAssertEqual(books.first(where: { $0.id == noConnectBook.inShelfId })?.status, .noConnect)
+        XCTAssertEqual(books.first(where: { $0.id == localBook.inShelfId })?.status, .local)
+    }
     
     private func makeAppContainer() -> AppContainer {
         return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests")
@@ -639,6 +855,29 @@ final class V2MigrationDependencyTests: XCTestCase {
                 )
             ]
         )
+    }
+
+    private func makeRecentBookItem(id: String) -> ShelfBookItem {
+        ShelfBookItem(
+            id: id,
+            title: "\(id) Book",
+            coverURL: "",
+            progress: 0,
+            status: .ready
+        )
+    }
+
+    private func waitForRecentBooksCount(
+        _ expectedCount: Int,
+        in shelfDataModel: YabrShelfDataModel,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if shelfDataModel.recentShelfItems.count >= expectedCount { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertGreaterThanOrEqual(shelfDataModel.recentShelfItems.count, expectedCount, file: file, line: line)
     }
 
     private func waitForSnapshotCount(
