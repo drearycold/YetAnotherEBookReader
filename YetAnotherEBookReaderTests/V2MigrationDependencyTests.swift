@@ -376,6 +376,109 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(categoryNames, ["Initial Author"])
     }
 
+    func testShelfDataModelEmptyShelfSnapshotCompletesInitialLoad() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.booksInShelf = [:]
+        container.bookManager.isShelfLoaded = true
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        container.calibreUpdatedSubject.send(.shelf)
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
+        XCTAssertTrue(storeInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+    }
+
+    func testShelfDataModelPendingInitialCategoryKeepsInitialLoadIncomplete() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        await shelfDataModel.seedCategoriesForTesting([
+            YabrShelfDataModel.CategoryObject(type: .Author, category: "Pending Author")
+        ])
+
+        let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
+        XCTAssertFalse(storeInitialLoadComplete)
+        XCTAssertFalse(shelfDataModel.isInitialLoadComplete)
+    }
+
+    func testShelfDataModelInitialLoadCompletesWhenPendingCategorySearchCompletes() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        await shelfDataModel.seedCategoriesForTesting([
+            YabrShelfDataModel.CategoryObject(type: .Author, category: "Finished Author")
+        ])
+
+        let isComplete = await shelfDataModel.markInitialCategoryCompleteForTesting(category: "Finished Author")
+        let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
+
+        XCTAssertTrue(isComplete)
+        XCTAssertTrue(storeInitialLoadComplete)
+    }
+
+    func testShelfDataModelDeletingPendingInitialCategoryCompletesInitialLoad() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.isShelfLoaded = false
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        await shelfDataModel.seedCategoriesForTesting([
+            YabrShelfDataModel.CategoryObject(type: .Author, category: "Removed Pending Author")
+        ])
+
+        container.bookManager.booksInShelf = [:]
+        container.bookManager.isShelfLoaded = true
+        container.calibreUpdatedSubject.send(.deleted("removed-pending-book-id"))
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
+        XCTAssertTrue(storeInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+    }
+
+    func testShelfDataModelCompletedInitialLoadDoesNotRegressWhenCategoriesChange() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.booksInShelf = [:]
+        container.bookManager.isShelfLoaded = true
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        container.calibreUpdatedSubject.send(.shelf)
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "terminal-state", name: "Terminal State")
+        var book = TestFixtures.makeBook(id: 401, library: library)
+        book.title = "Terminal State Title"
+        book.authors = ["Terminal Author"]
+        book.inShelf = true
+
+        container.libraryManager.calibreLibraries = [library.id: library]
+        container.bookManager.booksInShelf = [book.inShelfId: book]
+        container.calibreUpdatedSubject.send(.book(book))
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        let storeInitialLoadCompleteAfterAdd = await shelfDataModel.initialLoadCompleteForTesting()
+        XCTAssertTrue(storeInitialLoadCompleteAfterAdd)
+        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+
+        container.bookManager.booksInShelf = [:]
+        container.calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        let storeInitialLoadCompleteAfterDelete = await shelfDataModel.initialLoadCompleteForTesting()
+        XCTAssertTrue(storeInitialLoadCompleteAfterDelete)
+        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+    }
+
     func testShelfDataModelDeinitStopsShelfSignalConsumption() async throws {
         let container = makeAppContainer()
         let unifiedSearchService = try await makeUnifiedSearchService(container: container)

@@ -61,11 +61,39 @@ private actor ShelfCategoryStore {
         }
     }
 
+    private enum InitialLoadState {
+        case waitingForShelfSnapshot
+        case loading(pendingCategoryKeys: Set<String>)
+        case complete
+
+        var isComplete: Bool {
+            if case .complete = self {
+                return true
+            }
+            return false
+        }
+
+        mutating func observeShelfSnapshot(categoryKeys: Set<String>) {
+            switch self {
+            case .waitingForShelfSnapshot:
+                self = categoryKeys.isEmpty ? .complete : .loading(pendingCategoryKeys: categoryKeys)
+            case .loading(let pendingCategoryKeys):
+                let remaining = pendingCategoryKeys.intersection(categoryKeys)
+                self = remaining.isEmpty ? .complete : .loading(pendingCategoryKeys: remaining)
+            case .complete:
+                break
+            }
+        }
+
+        mutating func markCategoryComplete(_ categoryKey: String) {
+            guard case .loading(let pendingCategoryKeys) = self else { return }
+            let remaining = pendingCategoryKeys.subtracting([categoryKey])
+            self = remaining.isEmpty ? .complete : .loading(pendingCategoryKeys: remaining)
+        }
+    }
+
     private var categories = [String: CategoryState]()
-    private var initialCategories = Set<String>()
-    private var completedInitialCategories = Set<String>()
-    private var shelfSnapshotComplete = false
-    private var isInitialLoadComplete = false
+    private var initialLoadState: InitialLoadState = .waitingForShelfSnapshot
 
     func rebuild(from booksInShelf: [String: CalibreBook]) -> RebuildResult {
         var categoryBookIds = [String: Set<String>]()
@@ -94,17 +122,13 @@ private actor ShelfCategoryStore {
             }
         }
 
-        let initialKeys = Set(desiredCategoryNames.map { CategoryDescriptor(category: $0).categoryKey })
-        initialCategories = initialKeys
-        completedInitialCategories.formIntersection(initialKeys)
-        shelfSnapshotComplete = true
-
-        let initialLoadComplete = computeInitialLoadComplete()
+        let desiredCategoryKeys = Set(desiredCategoryNames.map { CategoryDescriptor(category: $0).categoryKey })
+        initialLoadState.observeShelfSnapshot(categoryKeys: desiredCategoryKeys)
         return RebuildResult(
             categoriesToStart: categoryNamesToStart.sorted().map { CategoryDescriptor(category: $0) },
             categoryKeysToCancel: Set(categoryNamesToRemove.map { CategoryDescriptor(category: $0).categoryKey }),
             sectionIdsToRemove: Set(categoryNamesToRemove.map { CategoryDescriptor(category: $0).categoryKey }),
-            initialLoadComplete: initialLoadComplete
+            initialLoadComplete: initialLoadState.isComplete
         )
     }
 
@@ -123,13 +147,13 @@ private actor ShelfCategoryStore {
             return update.statuses.values.allSatisfy { !$0.loading }
         }()
 
-        if isDone && initialCategories.contains(state.sectionId) {
-            completedInitialCategories.insert(state.sectionId)
+        if isDone {
+            initialLoadState.markCategoryComplete(state.sectionId)
         }
 
         return UpdateResult(
             sectionItem: buildShelfSectionItem(from: state),
-            initialLoadComplete: computeInitialLoadComplete()
+            initialLoadComplete: initialLoadState.isComplete
         )
     }
 
@@ -154,23 +178,21 @@ private actor ShelfCategoryStore {
                 )
             }
         )
-        initialCategories = Set(categories.values.map(\.sectionId))
-        completedInitialCategories = []
-        shelfSnapshotComplete = true
-        isInitialLoadComplete = categories.isEmpty
+        let categoryKeys = Set(categories.values.map(\.sectionId))
+        initialLoadState = categoryKeys.isEmpty ? .complete : .loading(pendingCategoryKeys: categoryKeys)
     }
 
     func categoryNamesForTesting() -> Set<String> {
         Set(categories.keys)
     }
 
-    private func computeInitialLoadComplete() -> Bool {
-        guard shelfSnapshotComplete else { return false }
-        guard !isInitialLoadComplete else { return true }
-        if initialCategories.subtracting(completedInitialCategories).isEmpty {
-            isInitialLoadComplete = true
-        }
-        return isInitialLoadComplete
+    func initialLoadCompleteForTesting() -> Bool {
+        initialLoadState.isComplete
+    }
+
+    func markInitialCategoryCompleteForTesting(category: String) -> Bool {
+        initialLoadState.markCategoryComplete(CategoryDescriptor(category: category).categoryKey)
+        return initialLoadState.isComplete
     }
 
     private func authorCategories(for book: CalibreBook) -> [String] {
@@ -402,6 +424,14 @@ class YabrShelfDataModel: ObservableObject {
 
     func categoryNamesForTesting() async -> Set<String> {
         await categoryStore.categoryNamesForTesting()
+    }
+
+    func initialLoadCompleteForTesting() async -> Bool {
+        await categoryStore.initialLoadCompleteForTesting()
+    }
+
+    func markInitialCategoryCompleteForTesting(category: String) async -> Bool {
+        await categoryStore.markInitialCategoryCompleteForTesting(category: category)
     }
 
     func categorySearchTaskKeysForTesting() -> Set<String> {
