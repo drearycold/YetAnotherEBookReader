@@ -112,7 +112,7 @@ struct RecentShelfView: View {
                     }
                     .overlay(
                         Group {
-                            if !viewModel.container.bookManager.isShelfLoaded {
+                            if viewModel.loadedBooks == nil {
                                 ProgressView("Loading Reading Progress...")
                                     .padding()
                                     .background(
@@ -121,7 +121,7 @@ struct RecentShelfView: View {
                                             .shadow(radius: 10)
                                     )
                                     .padding(32)
-                            } else if books.isEmpty {
+                            } else if viewModel.loadedBooks?.isEmpty == true {
                                 VStack(spacing: 12) {
                                     Image(systemName: "books.vertical")
                                         .font(.system(size: 60))

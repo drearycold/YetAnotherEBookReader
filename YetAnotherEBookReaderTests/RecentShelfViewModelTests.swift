@@ -25,7 +25,24 @@ import Combine
     }
     
     func testInitialization() throws {
+        XCTAssertNil(viewModel.loadedBooks)
         XCTAssertEqual(viewModel.displayBooks.count, 0)
+    }
+    
+    func testLoadedBooksPublication() throws {
+        XCTAssertNil(viewModel.loadedBooks)
+        
+        let item = ShelfBookItem(id: "1", title: "Book", coverURL: "", progress: 0, status: .ready)
+        mockAppContainer.recentShelfItemsSubject.send([item])
+        
+        let expectation = XCTestExpectation(description: "Wait for loadedBooks to update")
+        DispatchQueue.main.async {
+            XCTAssertNotNil(self.viewModel.loadedBooks)
+            XCTAssertEqual(self.viewModel.loadedBooks?.count, 1)
+            XCTAssertEqual(self.viewModel.displayBooks.count, 1)
+            expectation.fulfill()
+        }
+        wait(for: [expectation], timeout: 1.0)
     }
     
     func testRefreshShelf() throws {

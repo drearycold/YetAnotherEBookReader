@@ -662,7 +662,6 @@ class CalibreBookManager: ObservableObject {
 
         task.booksInShelf.forEach { newBook in
             self.booksInShelf[newBook.inShelfId] = newBook
-            container?.calibreUpdatedSubject.send(.book(newBook))
         }
         task.booksAnnotation.forEach { newBook in
             self.booksAnnotation[newBook.inShelfId] = newBook
@@ -763,15 +762,18 @@ class CalibreBookManager: ObservableObject {
 
         container?.librarySyncStatus[task.library.id]?.isUpd = false
 
-        if request.books.count == 1,
-           let book = self.getBook(
-            for: CalibreBookRealm.PrimaryKey(
-                serverUUID: task.library.server.uuid.uuidString,
-                libraryName: task.library.name,
-                id: task.request.books.first!.description
-            )
-           ) {
-            container?.calibreUpdatedSubject.send(.book(book))
+        if request.books.count == 1 {
+            if let book = self.getBook(
+                for: CalibreBookRealm.PrimaryKey(
+                    serverUUID: task.library.server.uuid.uuidString,
+                    libraryName: task.library.name,
+                    id: task.request.books.first!.description
+                )
+               ) {
+                container?.calibreUpdatedSubject.send(.book(book))
+            }
+        } else if !task.booksInShelf.isEmpty {
+            container?.calibreUpdatedSubject.send(.shelf)
         }
     }
 

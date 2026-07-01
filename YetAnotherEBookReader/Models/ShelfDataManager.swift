@@ -48,7 +48,7 @@ class YabrShelfDataModel: ObservableObject {
     private let unifiedSearchService: UnifiedSearchService
     private let container: AppContainerProtocol
     
-    @Published var categories: Set<CategoryObject> = []
+    var categories: Set<CategoryObject> = []
     
     @Published var discoverShelfItems = [String: ShelfSectionItem]()
     
@@ -135,6 +135,7 @@ class YabrShelfDataModel: ObservableObject {
      run on dispatchQueue
      */
     func addToShelf(book: CalibreBookRealm) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
         guard let inShelfId = book.primaryKey
         else {
             return
@@ -182,32 +183,32 @@ class YabrShelfDataModel: ObservableObject {
             )
             
             unifiedSearchService.publisher(for: key)
-                .receive(on: DispatchQueue.main)
+                .receive(on: dispatchQueue)
                 .sink { [weak self, weak category] result in
                     guard let self = self, let category = category else { return }
+                    dispatchPrecondition(condition: .onQueue(self.dispatchQueue))
                     category.unifiedSearchResult = result
                     
                     let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
-                    Task { @MainActor in
+                    DispatchQueue.main.async {
                         if discoverShelfSectionItem.books.count > 1 {
-                            self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
-                            self.notifyDiscoverShelfChanged()
+                            if self.discoverShelfItems[discoverShelfSectionItem.id] != discoverShelfSectionItem {
+                                self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
+                                self.notifyDiscoverShelfChanged()
+                            }
+                        } else {
+                            if self.discoverShelfItems.removeValue(forKey: discoverShelfSectionItem.id) != nil {
+                                self.notifyDiscoverShelfChanged()
+                            }
                         }
                     }
                 }
                 .store(in: &category.cancellables)
-                
-            let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
-            Task { @MainActor in
-                if discoverShelfSectionItem.books.count > 1 {
-                    self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
-                    self.notifyDiscoverShelfChanged()
-                }
-            }
         }
     }
     
     func removeFromShelf(book: CalibreBookRealm) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
         guard let inShelfId = book.primaryKey
         else {
             return
@@ -236,9 +237,10 @@ class YabrShelfDataModel: ObservableObject {
             category.unifiedSearchResult = nil
             
             let sectionName = "\(category.type.rawValue): \(category.category)"
-            Task { @MainActor in
-                self.discoverShelfItems.removeValue(forKey: sectionName)
-                self.notifyDiscoverShelfChanged()
+            DispatchQueue.main.async {
+                if self.discoverShelfItems.removeValue(forKey: sectionName) != nil {
+                    self.notifyDiscoverShelfChanged()
+                }
             }
             
             categories.remove(at: index)
@@ -291,30 +293,34 @@ extension AppContainerProtocol where Self: ObservableObject {
     func registerRecentShelfUpdater() {
         let queue = DispatchQueue(label: "recent-shelf-updater", qos: .userInitiated)
         let box = RecentShelfFirstPublishBox()
-        calibreUpdatedSubject.receive(on: queue)
-            .collect(.byTime(RunLoop.main, .seconds(1)))
-            .receive(on: queue)
-            .map { (_: [calibreUpdatedSignal]) -> ([(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], OSSignpostIntervalState) in
+        calibreUpdatedSubject
+            .receive(on: RunLoop.main)
+            .compactMap { [weak self] _ -> ([String: CalibreBook], OSSignpostIntervalState)? in
+                guard let self = self else { return nil }
+                guard self.bookManager.isShelfLoaded else {
+                    return nil
+                }
+                let snapshot = self.bookManager.booksInShelf
                 let state = AppPerformanceSignpost.begin("RecentShelfRebuild")
-                let booksInShelf: [String: CalibreBook] = self.bookManager.booksInShelf
+                return (snapshot, state)
+            }
+            .receive(on: queue)
+            .map { [weak self] (booksInShelf: [String: CalibreBook], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
+                guard let self = self else { return ([], state) }
                 let readingPositionRepository = self.readingPositionRepository
-                var result: [(String, CalibreBook, Date, [BookDeviceReadingPosition])] = []
+                var booksWithTS: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])] = []
                 for (key, book) in booksInShelf {
                     let positions: [BookDeviceReadingPosition] = readingPositionRepository.getPositions(forBookId: book.bookPrefId)
                     let maxEpoch: Date? = positions.map { p in Date(timeIntervalSince1970: p.epoch) }.max()
                     let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
-                    result.append((key, book, ts, positions))
+                    booksWithTS.append((key, book, ts, positions))
                 }
-                return (result, state)
-            }
-            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], OSSignpostIntervalState) in
-                let sorted = books.sorted { lhs, rhs in
+
+                let sorted = booksWithTS.sorted { lhs, rhs in
                     return lhs.ts > rhs.ts
                 }
-                return (sorted, state)
-            }
-            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
-                let items = books.map { entry in
+
+                let items = sorted.map { entry in
                     self.buildShelfBookItem(entry: entry)
                 }
                 return (items, state)

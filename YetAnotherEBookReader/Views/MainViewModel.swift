@@ -60,7 +60,7 @@ final class MainViewModel: ObservableObject {
     }
     
     var showWelcome: Bool {
-        activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty
+        activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
     }
 
     var presentingEBookReaderFromShelf: Bool {
