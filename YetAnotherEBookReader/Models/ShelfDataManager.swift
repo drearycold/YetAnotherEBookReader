@@ -9,6 +9,192 @@ import Foundation
 import Combine
 import OSLog
 
+private actor ShelfCategoryStore {
+    struct CategoryDescriptor: Hashable {
+        let category: String
+
+        var categoryKey: String {
+            "Author: \(category)"
+        }
+
+        var searchKey: SearchCriteriaMergedKey {
+            SearchCriteriaMergedKey(
+                libraryIds: [],
+                criteria: SearchCriteria(
+                    searchString: "",
+                    sortCriteria: .init(),
+                    filterCriteriaCategory: ["Authors": Set([category])]
+                )
+            )
+        }
+    }
+
+    struct RebuildResult {
+        let categoriesToStart: [CategoryDescriptor]
+        let categoryKeysToCancel: Set<String>
+        let sectionIdsToRemove: Set<String>
+        let initialLoadComplete: Bool
+    }
+
+    struct UpdateResult {
+        let sectionItem: ShelfSectionItem
+        let initialLoadComplete: Bool
+    }
+
+    struct CategorySeed: Sendable {
+        let category: String
+        let inShelfBookIds: Set<String>
+        let unifiedSearchResult: UnifiedSearchResult?
+    }
+
+    private struct CategoryState {
+        let category: String
+        var inShelfBookIds: Set<String>
+        var unifiedSearchResult: UnifiedSearchResult?
+
+        var descriptor: CategoryDescriptor {
+            CategoryDescriptor(category: category)
+        }
+
+        var sectionId: String {
+            descriptor.categoryKey
+        }
+    }
+
+    private var categories = [String: CategoryState]()
+    private var initialCategories = Set<String>()
+    private var completedInitialCategories = Set<String>()
+    private var shelfSnapshotComplete = false
+    private var isInitialLoadComplete = false
+
+    func rebuild(from booksInShelf: [String: CalibreBook]) -> RebuildResult {
+        var categoryBookIds = [String: Set<String>]()
+        for (inShelfId, book) in booksInShelf {
+            for categoryName in authorCategories(for: book) {
+                categoryBookIds[categoryName, default: []].insert(inShelfId)
+            }
+        }
+
+        let existingCategoryNames = Set(categories.keys)
+        let desiredCategoryNames = Set(categoryBookIds.keys)
+        let categoryNamesToRemove = existingCategoryNames.subtracting(desiredCategoryNames)
+        let categoryNamesToStart = desiredCategoryNames.subtracting(existingCategoryNames)
+
+        for categoryName in categoryNamesToRemove {
+            categories.removeValue(forKey: categoryName)
+        }
+
+        for categoryName in desiredCategoryNames {
+            let bookIds = categoryBookIds[categoryName] ?? []
+            if var state = categories[categoryName] {
+                state.inShelfBookIds = bookIds
+                categories[categoryName] = state
+            } else {
+                categories[categoryName] = CategoryState(category: categoryName, inShelfBookIds: bookIds)
+            }
+        }
+
+        let initialKeys = Set(desiredCategoryNames.map { CategoryDescriptor(category: $0).categoryKey })
+        initialCategories = initialKeys
+        completedInitialCategories.formIntersection(initialKeys)
+        shelfSnapshotComplete = true
+
+        let initialLoadComplete = computeInitialLoadComplete()
+        return RebuildResult(
+            categoriesToStart: categoryNamesToStart.sorted().map { CategoryDescriptor(category: $0) },
+            categoryKeysToCancel: Set(categoryNamesToRemove.map { CategoryDescriptor(category: $0).categoryKey }),
+            sectionIdsToRemove: Set(categoryNamesToRemove.map { CategoryDescriptor(category: $0).categoryKey }),
+            initialLoadComplete: initialLoadComplete
+        )
+    }
+
+    func apply(update: SearchUpdate, category: String, activeLibraryIds: Set<String>) -> UpdateResult? {
+        guard var state = categories[category] else { return nil }
+        state.unifiedSearchResult = update.result
+        categories[category] = state
+
+        let isDone: Bool = {
+            if activeLibraryIds.isEmpty {
+                return true
+            }
+            if update.statuses.isEmpty {
+                return false
+            }
+            return update.statuses.values.allSatisfy { !$0.loading }
+        }()
+
+        if isDone && initialCategories.contains(state.sectionId) {
+            completedInitialCategories.insert(state.sectionId)
+        }
+
+        return UpdateResult(
+            sectionItem: buildShelfSectionItem(from: state),
+            initialLoadComplete: computeInitialLoadComplete()
+        )
+    }
+
+    func categoryKeysForRefresh() -> [SearchCriteriaMergedKey] {
+        categories.values
+            .sorted {
+                $0.category < $1.category
+            }
+            .map { $0.descriptor.searchKey }
+    }
+
+    func seedCategoriesForTesting(_ seeds: [CategorySeed]) {
+        categories = Dictionary(
+            uniqueKeysWithValues: seeds.map { seed in
+                (
+                    seed.category,
+                    CategoryState(
+                        category: seed.category,
+                        inShelfBookIds: seed.inShelfBookIds,
+                        unifiedSearchResult: seed.unifiedSearchResult
+                    )
+                )
+            }
+        )
+        initialCategories = Set(categories.values.map(\.sectionId))
+        completedInitialCategories = []
+        shelfSnapshotComplete = true
+        isInitialLoadComplete = categories.isEmpty
+    }
+
+    func categoryNamesForTesting() -> Set<String> {
+        Set(categories.keys)
+    }
+
+    private func computeInitialLoadComplete() -> Bool {
+        guard shelfSnapshotComplete else { return false }
+        guard !isInitialLoadComplete else { return true }
+        if initialCategories.subtracting(completedInitialCategories).isEmpty {
+            isInitialLoadComplete = true
+        }
+        return isInitialLoadComplete
+    }
+
+    private func authorCategories(for book: CalibreBook) -> [String] {
+        let authors = book.authors.isEmpty ? ["Unknown"] : book.authors
+        return Array(authors.prefix(3))
+    }
+
+    private func buildShelfSectionItem(from state: CategoryState) -> ShelfSectionItem {
+        let books: [ShelfBookItem] = state.unifiedSearchResult?.books.map {
+            ShelfBookItem(
+                id: $0.inShelfId,
+                title: $0.title,
+                coverURL: $0.coverURL?.absoluteString ?? "",
+                progress: 0,
+                status: .ready,
+                libraryId: $0.library.id
+            )
+        } ?? []
+
+        return ShelfSectionItem(id: state.sectionId, title: state.sectionId, books: books)
+    }
+}
+
+@MainActor
 class YabrShelfDataModel: ObservableObject {
 
     enum CategoryType: String {
@@ -27,8 +213,6 @@ class YabrShelfDataModel: ObservableObject {
 
         var unifiedSearchResult: UnifiedSearchResult?
 
-        var cancellables: Set<AnyCancellable> = []
-
         init(type: CategoryType, category: String) {
             self.type = type
             self.category = category
@@ -46,43 +230,26 @@ class YabrShelfDataModel: ObservableObject {
     }
     private let unifiedSearchService: UnifiedSearchService
     private let container: AppContainerProtocol
-
-    var categories: Set<CategoryObject> = []
+    private let categoryStore = ShelfCategoryStore()
 
     @Published var discoverShelfItems = [String: ShelfSectionItem]()
 
-    var cancellables: Set<AnyCancellable> = []
-
-    let dispatchQueue = DispatchQueue(label: "shelf-queue")
+    private var eventTask: Task<Void, Never>?
+    private var initialSnapshotTask: Task<Void, Never>?
+    private var categorySearchTasks = [String: Task<Void, Never>]()
 
     @Published var isInitialLoadComplete = false
-    private var initialCategories = Set<String>()
-    private var completedInitialCategories = Set<String>()
-    private var shelfSnapshotComplete = false
-    private var isInitialLoadCompleteFlag = false
 
     init(unifiedSearchService: UnifiedSearchService, container: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
         self.container = container
 
-        container.calibreUpdatedSubject
-            .receive(on: RunLoop.main)
-            .compactMap { [weak self] signal -> [String: CalibreBook]? in
-                self?.booksInShelfSnapshotIfNeeded(for: signal)
-            }
-            .receive(on: dispatchQueue)
-            .sink { [weak self] booksInShelf in
-                self?.rebuildShelfCategories(from: booksInShelf)
-            }
-            .store(in: &cancellables)
-
-        DispatchQueue.main.async { [weak self] in
+        startEventTask()
+        initialSnapshotTask = Task { [weak self] in
+            await Task.yield()
             guard let self = self else { return }
-            guard self.container.bookManager.isShelfLoaded else { return }
-            let snapshot = self.container.bookManager.booksInShelf
-            self.dispatchQueue.async {
-                self.rebuildShelfCategories(from: snapshot)
-            }
+            guard let snapshot = self.booksInShelfSnapshotIfNeeded(for: .shelf) else { return }
+            await self.rebuildShelfCategories(from: snapshot)
         }
     }
 
@@ -97,202 +264,123 @@ class YabrShelfDataModel: ObservableObject {
     }
 
     deinit {
-        cancellables.removeAll()
-        categories.forEach { $0.cancellables.removeAll() }
+        eventTask?.cancel()
+        initialSnapshotTask?.cancel()
+        categorySearchTasks.values.forEach { $0.cancel() }
     }
 
-    /**
-     run on dispatchQueue
-     */
-    func addToShelf(book: CalibreBook) {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
-
-        for categoryName in authorCategories(for: book) {
-            addToShelf(inShelfId: book.inShelfId, categoryName: categoryName)
+    private func startEventTask() {
+        let signals = container.calibreUpdatedSubject.values
+        eventTask = Task { [weak self] in
+            for await signal in signals {
+                guard !Task.isCancelled else { return }
+                await self?.handleCalibreUpdated(signal)
+            }
         }
     }
 
-    private func rebuildShelfCategories(from booksInShelf: [String: CalibreBook]) {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+    private func handleCalibreUpdated(_ signal: calibreUpdatedSignal) async {
+        guard let snapshot = booksInShelfSnapshotIfNeeded(for: signal) else { return }
+        await rebuildShelfCategories(from: snapshot)
+    }
 
-        var categoryBookIds = [String: Set<String>]()
-        for (inShelfId, book) in booksInShelf {
-            for categoryName in authorCategories(for: book) {
-                categoryBookIds[categoryName, default: []].insert(inShelfId)
-            }
-        }
-
-        let desiredCategoryNames = Set(categoryBookIds.keys)
-        let existingCategories = categories
-
-        for category in existingCategories where !desiredCategoryNames.contains(category.category) {
-            removeCategory(category)
-        }
-
-        for categoryName in desiredCategoryNames.sorted() {
-            guard let inShelfBookIds = categoryBookIds[categoryName] else { continue }
-            if let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName)) {
-                categories[index].inShelfBookIds = inShelfBookIds
-            } else {
-                addToShelf(inShelfIds: inShelfBookIds, categoryName: categoryName)
-            }
-        }
-
-        let initialKeys = Set(desiredCategoryNames.map { "Author: \($0)" })
-        initialCategories = initialKeys
-        completedInitialCategories.formIntersection(initialKeys)
-        shelfSnapshotComplete = true
-
-        if initialKeys.isEmpty {
+    private func rebuildShelfCategories(from booksInShelf: [String: CalibreBook]) async {
+        let result = await categoryStore.rebuild(from: booksInShelf)
+        synchronizeCategorySearchTasks(with: result)
+        removeDiscoverSections(ids: result.sectionIdsToRemove)
+        if result.initialLoadComplete {
             markInitialLoadComplete()
-        } else {
-            checkInitialLoadCompletion()
         }
     }
 
-    private func addToShelf(inShelfId: String, categoryName: String) {
-        addToShelf(inShelfIds: [inShelfId], categoryName: categoryName)
+    private func synchronizeCategorySearchTasks(with result: ShelfCategoryStore.RebuildResult) {
+        for categoryKey in result.categoryKeysToCancel {
+            categorySearchTasks.removeValue(forKey: categoryKey)?.cancel()
+        }
+        for descriptor in result.categoriesToStart where categorySearchTasks[descriptor.categoryKey] == nil {
+            startCategorySearchTask(for: descriptor)
+        }
     }
 
-    private func addToShelf(inShelfIds: Set<String>, categoryName: String) {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+    private func startCategorySearchTask(for descriptor: ShelfCategoryStore.CategoryDescriptor) {
+        let searchService = unifiedSearchService
+        categorySearchTasks[descriptor.categoryKey] = Task { [weak self] in
+            let stream = await searchService.search(key: descriptor.searchKey)
+            for await update in stream {
+                guard !Task.isCancelled else { return }
+                await self?.handleCategorySearchUpdate(update, descriptor: descriptor)
+            }
+        }
+    }
 
-        let category = CategoryObject(type: .Author, category: categoryName)
-        if let index = categories.firstIndex(of: category) {
-            categories[index].inShelfBookIds.formUnion(inShelfIds)
+    private func handleCategorySearchUpdate(
+        _ update: SearchUpdate,
+        descriptor: ShelfCategoryStore.CategoryDescriptor
+    ) async {
+        let activeLibraryIds = Set(
+            container.libraryManager.calibreLibraries
+                .filter { !$0.value.hidden && !$0.value.server.removed }
+                .keys
+        )
+        guard let result = await categoryStore.apply(
+            update: update,
+            category: descriptor.category,
+            activeLibraryIds: activeLibraryIds
+        ) else {
             return
         }
 
-        category.inShelfBookIds.formUnion(inShelfIds)
-        categories.insert(category)
-
-        let key = SearchCriteriaMergedKey(
-            libraryIds: [],
-            criteria: SearchCriteria(
-                searchString: "",
-                sortCriteria: .init(),
-                filterCriteriaCategory: ["Authors" : Set([categoryName])]
-            )
-        )
-
-        let categoryKey = "Author: \(categoryName)"
-
-        unifiedSearchService.searchUpdatePublisher(for: key)
-            .receive(on: dispatchQueue)
-            .sink { [weak self, weak category] update in
-                guard let self = self, let category = category else { return }
-                dispatchPrecondition(condition: .onQueue(self.dispatchQueue))
-                category.unifiedSearchResult = update.result
-
-                let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
-
-                // Track category loading completion
-                let searchLibraryIds = self.container.libraryManager.calibreLibraries.filter {
-                    !$0.value.hidden && !$0.value.server.removed
-                }.keys
-
-                let isDone: Bool = {
-                    if searchLibraryIds.isEmpty {
-                        return true
-                    }
-                    if update.statuses.isEmpty {
-                        return false
-                    }
-                    return update.statuses.values.allSatisfy { !$0.loading }
-                }()
-
-                if isDone && self.initialCategories.contains(categoryKey) {
-                    self.completedInitialCategories.insert(categoryKey)
-                    self.checkInitialLoadCompletion()
-                }
-
-                DispatchQueue.main.async {
-                    if discoverShelfSectionItem.books.count > 1 {
-                        if self.discoverShelfItems[discoverShelfSectionItem.id] != discoverShelfSectionItem {
-                            self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
-                            self.notifyDiscoverShelfChanged()
-                        }
-                    } else {
-                        if self.discoverShelfItems.removeValue(forKey: discoverShelfSectionItem.id) != nil {
-                            self.notifyDiscoverShelfChanged()
-                        }
-                    }
-                }
-            }
-            .store(in: &category.cancellables)
+        applyDiscoverSectionUpdate(result.sectionItem)
+        if result.initialLoadComplete {
+            markInitialLoadComplete()
+        }
     }
 
-    private func checkInitialLoadCompletion() {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        guard shelfSnapshotComplete else { return }
-        guard !isInitialLoadCompleteFlag else { return }
+    private func applyDiscoverSectionUpdate(_ sectionItem: ShelfSectionItem) {
+        if sectionItem.books.count > 1 {
+            if discoverShelfItems[sectionItem.id] != sectionItem {
+                discoverShelfItems[sectionItem.id] = sectionItem
+                notifyDiscoverShelfChanged()
+            }
+        } else if discoverShelfItems.removeValue(forKey: sectionItem.id) != nil {
+            notifyDiscoverShelfChanged()
+        }
+    }
 
-        let remaining = initialCategories.subtracting(completedInitialCategories)
-        if remaining.isEmpty {
-            markInitialLoadComplete()
+    private func removeDiscoverSections(ids: Set<String>) {
+        var didRemove = false
+        for id in ids {
+            if discoverShelfItems.removeValue(forKey: id) != nil {
+                didRemove = true
+            }
+        }
+        if didRemove {
+            notifyDiscoverShelfChanged()
         }
     }
 
     private func markInitialLoadComplete() {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        guard !isInitialLoadCompleteFlag else { return }
-        isInitialLoadCompleteFlag = true
-        DispatchQueue.main.async {
-            self.isInitialLoadComplete = true
-        }
+        guard !isInitialLoadComplete else { return }
+        isInitialLoadComplete = true
     }
 
-    func removeFromShelf(book: CalibreBook) {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
-
-        for categoryName in authorCategories(for: book) {
-            guard let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName))
-            else {
-                continue
-            }
-
-            let category = categories[index]
-            category.inShelfBookIds.remove(book.inShelfId)
-
-            guard category.inShelfBookIds.isEmpty
-            else {
-                continue
-            }
-
-            removeCategory(category)
+    func seedCategoriesForTesting(_ categories: [CategoryObject]) async {
+        let seeds = categories.map {
+            ShelfCategoryStore.CategorySeed(
+                category: $0.category,
+                inShelfBookIds: $0.inShelfBookIds,
+                unifiedSearchResult: $0.unifiedSearchResult
+            )
         }
+        await categoryStore.seedCategoriesForTesting(seeds)
     }
 
-    private func removeCategory(_ category: CategoryObject) {
-        dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        category.cancellables.removeAll()
-        category.unifiedSearchResult = nil
-
-        let sectionName = "\(category.type.rawValue): \(category.category)"
-        DispatchQueue.main.async {
-            if self.discoverShelfItems.removeValue(forKey: sectionName) != nil {
-                self.notifyDiscoverShelfChanged()
-            }
-        }
-
-        categories.remove(category)
+    func categoryNamesForTesting() async -> Set<String> {
+        await categoryStore.categoryNamesForTesting()
     }
 
-    private func authorCategories(for book: CalibreBook) -> [String] {
-        let authors = book.authors.isEmpty ? ["Unknown"] : book.authors
-        return Array(authors.prefix(3))
-    }
-
-    func seedCategoriesForTesting(_ categories: [CategoryObject]) {
-        dispatchQueue.sync {
-            self.categories = Set(categories)
-        }
-    }
-
-    func categoryNamesForTesting() -> Set<String> {
-        dispatchQueue.sync {
-            Set(categories.map(\.category))
-        }
+    func categorySearchTaskKeysForTesting() -> Set<String> {
+        Set(categorySearchTasks.keys)
     }
 
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
@@ -312,37 +400,13 @@ class YabrShelfDataModel: ObservableObject {
         return ShelfSectionItem(id: sectionName, title: sectionName, books: books)
     }
 
-    @MainActor
     private func notifyDiscoverShelfChanged() {
         let displaySections = self.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
         self.container.discoverShelfItemsSubject.send(displaySections)
     }
 
     func refresh() async {
-        let keys = await withCheckedContinuation {
-            (continuation: CheckedContinuation<[SearchCriteriaMergedKey], Never>) in
-            dispatchQueue.async {
-                let keys = self.categories
-                    .sorted {
-                        if $0.type.rawValue == $1.type.rawValue {
-                            return $0.category < $1.category
-                        }
-                        return $0.type.rawValue < $1.type.rawValue
-                    }
-                    .map { category in
-                        SearchCriteriaMergedKey(
-                            libraryIds: [],
-                            criteria: SearchCriteria(
-                                searchString: "",
-                                sortCriteria: .init(),
-                                filterCriteriaCategory: ["Authors": Set([category.category])]
-                            )
-                        )
-                    }
-                continuation.resume(returning: keys)
-            }
-        }
-
+        let keys = await categoryStore.categoryKeysForRefresh()
         for key in keys {
             guard !Task.isCancelled else { return }
             await unifiedSearchService.resetSearchAndWait(for: key, force: true)

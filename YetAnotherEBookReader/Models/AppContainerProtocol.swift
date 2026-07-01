@@ -42,7 +42,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var downloadManager: BookDownloadManager { get }
     var fontsManager: FontsManager { get }
     var databaseBootstrapper: DatabaseBootstrapper { get }
-    var shelfDataModel: YabrShelfDataModel { get }
+    @MainActor var shelfDataModel: YabrShelfDataModel { get }
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding { get set }
 
     // MARK: - Services
