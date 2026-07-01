@@ -84,7 +84,7 @@ class SectionShelfViewModelTests: XCTestCase {
 
     func testCalibreUpdatedDeletionDismissal() async throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
-        mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
+        mockAppContainer.publishCalibreUpdate(.deleted("deleted-book-id"))
 
         await waitForViewModelUpdate { self.viewModel.presentingBookDetailId == nil }
         XCTAssertNil(viewModel.presentingBookDetailId)

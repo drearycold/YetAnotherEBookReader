@@ -105,7 +105,7 @@ final class MainViewModel: ObservableObject {
             if let localLibrary = self.container.libraryManager.localLibrary,
                let bookId = info.bookId,
                let book = self.container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-                self.container.calibreUpdatedSubject.send(.book(book))
+                self.container.publishCalibreUpdate(.book(book))
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {

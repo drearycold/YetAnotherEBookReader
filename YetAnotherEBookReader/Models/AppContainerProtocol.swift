@@ -95,6 +95,12 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var bookReaderActivitySubject: PassthroughSubject<ScenePhase, Never> { get }
     var probeLibraryLastModifiedSubject: PassthroughSubject<CalibreSyncLibraryRequest, Never> { get }
 
+    @MainActor
+    func publishCalibreUpdate(_ signal: calibreUpdatedSignal)
+
+    @MainActor
+    func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
+
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which
     // take a weak `AppContainerProtocol`) can be reused by both the legacy

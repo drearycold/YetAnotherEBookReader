@@ -446,7 +446,7 @@ class YabrShelfDataModel: ObservableObject {
     }
 
     private func startEventTask() {
-        let signals = container.calibreUpdatedSubject.values
+        let signals = container.calibreUpdates()
         eventTask = Task { [weak self] in
             for await signal in signals {
                 guard !Task.isCancelled else { return }
@@ -527,7 +527,7 @@ class YabrShelfDataModel: ObservableObject {
             guard let book = booksInShelf[request.inShelfId],
                   let format = Format(rawValue: request.formatRawValue)
             else { continue }
-            container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            container.downloadManager.requestDownload(book: book, format: format)
         }
 
         recentShelfItems = result.books

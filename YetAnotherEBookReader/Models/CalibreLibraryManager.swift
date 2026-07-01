@@ -325,7 +325,9 @@ class CalibreLibraryManager: ObservableObject {
                         try? self.libraryRepository.saveLibrary(library)
                     }
 
-                    self.container?.calibreUpdatedSubject.send(.library(library))
+                    Task { @MainActor in
+                        self.container?.publishCalibreUpdate(.library(library))
+                    }
                 case .failure(let error):
                     self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                 }
@@ -436,7 +438,7 @@ class CalibreLibraryManager: ObservableObject {
                 await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
 
                 if container.serverManager.isServerReachable(server: library.server) {
-                    container.calibreUpdatedSubject.send(.server(library.server))
+                    await container.publishCalibreUpdate(.server(library.server))
                     container.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
@@ -461,7 +463,7 @@ class CalibreLibraryManager: ObservableObject {
                 self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
 
                 if container.serverManager.isServerReachable(server: library.server) {
-                    container.calibreUpdatedSubject.send(.server(library.server))
+                    await container.publishCalibreUpdate(.server(library.server))
                 }
             } else {
                 self.librarySyncStatus[libraryId]?.msg = result.errmsg

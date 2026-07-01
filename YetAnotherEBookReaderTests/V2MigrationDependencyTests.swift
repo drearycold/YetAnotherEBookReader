@@ -230,6 +230,74 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(repository.invalidateCategoryCacheParams.first?.libraryId, activeLibrary.id)
         XCTAssertEqual(repository.invalidateCategoryCacheParams.first?.categoryName, "Authors")
     }
+
+    func testCalibreUpdatesStreamsReceivePublishedSignalsForMultipleSubscribers() async throws {
+        let container = makeAppContainer()
+        var firstSignals = [calibreUpdatedSignal]()
+        var secondSignals = [calibreUpdatedSignal]()
+
+        let firstTask = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                firstSignals.append(signal)
+                if firstSignals.count == 1 { break }
+            }
+        }
+        let secondTask = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                secondSignals.append(signal)
+                if secondSignals.count == 1 { break }
+            }
+        }
+
+        await Task.yield()
+        container.publishCalibreUpdate(.shelf)
+        await waitForSnapshotCount(1, in: { firstSignals.count })
+        await waitForSnapshotCount(1, in: { secondSignals.count })
+        firstTask.cancel()
+        secondTask.cancel()
+
+        XCTAssertEqual(firstSignals, [.shelf])
+        XCTAssertEqual(secondSignals, [.shelf])
+    }
+
+    func testCalibreUpdatesStreamTerminationStopsUpdates() async throws {
+        let container = makeAppContainer()
+        var signals = [calibreUpdatedSignal]()
+
+        let task = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                signals.append(signal)
+            }
+        }
+
+        await Task.yield()
+        container.publishCalibreUpdate(.shelf)
+        await waitForSnapshotCount(1, in: { signals.count })
+        task.cancel()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        container.publishCalibreUpdate(.deleted("after-cancel"))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(signals, [.shelf])
+    }
+
+    func testPublishCalibreUpdateStillBridgesToLegacySubject() async throws {
+        let container = makeAppContainer()
+        let expectation = XCTestExpectation(description: "Legacy calibre subject receives signal")
+
+        container.calibreUpdatedSubject
+            .sink { signal in
+                if signal == .shelf {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        container.publishCalibreUpdate(.shelf)
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
     
     func testShelfRefreshResetsActiveUnifiedSearchLimit() async throws {
         let container = makeAppContainer()
@@ -296,7 +364,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.bookManager.booksInShelf = [book.inShelfId: book]
         container.bookManager.isShelfLoaded = true
 
-        container.calibreUpdatedSubject.send(.book(book))
+        container.publishCalibreUpdate(.book(book))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let categoryNames = await shelfDataModel.categoryNamesForTesting()
@@ -317,7 +385,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.bookManager.booksInShelf = [:]
         container.bookManager.isShelfLoaded = true
 
-        container.calibreUpdatedSubject.send(.deleted("stale-book-id"))
+        container.publishCalibreUpdate(.deleted("stale-book-id"))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let categoryNames = await shelfDataModel.categoryNamesForTesting()
@@ -341,12 +409,12 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.bookManager.booksInShelf = [book.inShelfId: book]
         container.bookManager.isShelfLoaded = true
 
-        container.calibreUpdatedSubject.send(.book(book))
+        container.publishCalibreUpdate(.book(book))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
         XCTAssertEqual(shelfDataModel.categorySearchTaskKeysForTesting(), ["Author: Cancelable Author"])
 
         container.bookManager.booksInShelf = [:]
-        container.calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        container.publishCalibreUpdate(.deleted(book.inShelfId))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         XCTAssertTrue(shelfDataModel.categorySearchTaskKeysForTesting().isEmpty)
@@ -384,7 +452,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.bookManager.isShelfLoaded = true
 
         let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
@@ -435,7 +503,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         container.bookManager.booksInShelf = [:]
         container.bookManager.isShelfLoaded = true
-        container.calibreUpdatedSubject.send(.deleted("removed-pending-book-id"))
+        container.publishCalibreUpdate(.deleted("removed-pending-book-id"))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
@@ -451,7 +519,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.bookManager.isShelfLoaded = true
 
         let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
         try await waitForShelfSignalProcessing(in: shelfDataModel)
         XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
 
@@ -463,7 +531,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         container.libraryManager.calibreLibraries = [library.id: library]
         container.bookManager.booksInShelf = [book.inShelfId: book]
-        container.calibreUpdatedSubject.send(.book(book))
+        container.publishCalibreUpdate(.book(book))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let storeInitialLoadCompleteAfterAdd = await shelfDataModel.initialLoadCompleteForTesting()
@@ -471,7 +539,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
 
         container.bookManager.booksInShelf = [:]
-        container.calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        container.publishCalibreUpdate(.deleted(book.inShelfId))
         try await waitForShelfSignalProcessing(in: shelfDataModel)
 
         let storeInitialLoadCompleteAfterDelete = await shelfDataModel.initialLoadCompleteForTesting()
@@ -496,7 +564,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         try await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertNil(weakShelfDataModel)
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
     }
 
     func testShelfDataModelSnapshotsYieldCurrentSnapshotToNewSubscriber() async throws {
@@ -812,7 +880,7 @@ final class V2MigrationDependencyTests: XCTestCase {
             localBook.inShelfId: localBook
         ]
         container.bookManager.isShelfLoaded = true
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
 
         await waitForRecentBooksCount(5, in: shelfDataModel)
         let books = shelfDataModel.recentShelfItems

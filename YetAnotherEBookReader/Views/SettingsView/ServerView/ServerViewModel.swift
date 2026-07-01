@@ -304,7 +304,7 @@ class ServerViewModel: ObservableObject {
 
             guard let library = self.container.libraryManager.calibreLibraries[libraryId] else { return }
 
-            self.container.calibreUpdatedSubject.send(.library(library))
+            self.container.publishCalibreUpdate(.library(library))
 
             Task {
                 await self.container.libraryManager.removeLibrary(library: library)
@@ -317,7 +317,7 @@ class ServerViewModel: ObservableObject {
         libraryRestoreListSelection.forEach { libId in
             container.libraryManager.restoreLibrary(libraryId: libId)
             if let library = self.container.libraryManager.calibreLibraries[libId], library.discoverable {
-                self.container.calibreUpdatedSubject.send(.library(library))
+                self.container.publishCalibreUpdate(.library(library))
             }
         }
         updater.wrappedValue += 1

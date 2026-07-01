@@ -49,7 +49,7 @@ final class SectionShelfViewModel: ObservableObject {
     }
 
     /// Idempotent bootstrap of the lazy `shelfDataModel`. Safe to call from
-    /// `init`, from the `calibreUpdatedSubject` task, and from the view's
+    /// `init`, from the calibre update task, and from the view's
     /// `.onAppear` to cover the case where the user first lands directly
     /// on the Discover tab and the database-ready signal has not yet
     /// been routed through the event stream.
@@ -67,7 +67,7 @@ final class SectionShelfViewModel: ObservableObject {
     }
 
     private func setupSubscriptions() {
-        let signals = container.calibreUpdatedSubject.values
+        let signals = container.calibreUpdates()
         calibreEventTask = Task { [weak self] in
             for await signal in signals {
                 guard !Task.isCancelled else { return }
@@ -147,7 +147,7 @@ final class SectionShelfViewModel: ObservableObject {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            self.container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            self.container.downloadManager.requestDownload(book: book, format: format)
         }
     }
 

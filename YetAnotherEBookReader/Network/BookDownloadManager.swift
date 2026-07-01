@@ -62,9 +62,14 @@ class BookDownloadManager: ObservableObject {
         bookFormatDownloadSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] request in
-                _ = self?.startDownloadNew(request.book, format: request.format, overwrite: false)
+                _ = self?.requestDownload(book: request.book, format: request.format)
             }
             .store(in: &cancellables)
+    }
+
+    @discardableResult
+    func requestDownload(book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
+        startDownloadNew(book, format: format, overwrite: overwrite)
     }
 
     func cancelDownload(_ book: CalibreBook, format: Format) {

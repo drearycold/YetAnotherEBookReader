@@ -169,6 +169,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// inShelfId for single book
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
+    private var calibreUpdateContinuations = [UUID: AsyncStream<calibreUpdatedSignal>.Continuation]()
 
     @Published var fontsManager = FontsManager()
 
@@ -193,6 +194,31 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         if clearConfiguration {
             realmConf = nil
             databaseService.realmConf = nil
+        }
+    }
+
+    deinit {
+        calibreUpdateContinuations.values.forEach { $0.finish() }
+    }
+
+    @MainActor
+    func publishCalibreUpdate(_ signal: calibreUpdatedSignal) {
+        for continuation in calibreUpdateContinuations.values {
+            continuation.yield(signal)
+        }
+        calibreUpdatedSubject.send(signal)
+    }
+
+    @MainActor
+    func calibreUpdates() -> AsyncStream<calibreUpdatedSignal> {
+        let id = UUID()
+        return AsyncStream { [weak self] continuation in
+            self?.calibreUpdateContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.calibreUpdateContinuations.removeValue(forKey: id)
+                }
+            }
         }
     }
 
@@ -313,7 +339,9 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         libraryManager.registerProbeLibraryLastModifiedCancellable()
 
         downloadManager.bookDownloadedSubject.sink { [weak self] book in
-            self?.calibreUpdatedSubject.send(.book(book))
+            Task { @MainActor in
+                self?.publishCalibreUpdate(.book(book))
+            }
         }.store(in: &calibreCancellables)
     }
 

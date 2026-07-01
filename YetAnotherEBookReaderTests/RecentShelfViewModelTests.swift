@@ -101,7 +101,7 @@ import Combine
         await waitForViewModelUpdate {
             self.viewModel.loadedBooks != nil
         }
-        mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
+        mockAppContainer.publishCalibreUpdate(.deleted("deleted-book-id"))
 
         await waitForViewModelUpdate {
             self.viewModel.presentingBookDetailId == nil

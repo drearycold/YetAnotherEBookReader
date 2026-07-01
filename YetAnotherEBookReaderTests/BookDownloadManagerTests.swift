@@ -75,6 +75,52 @@ final class BookDownloadManagerTests: XCTestCase {
             XCTFail("Failed to start download: \(error.localizedDescription)")
         }
     }
+
+    func testRequestDownload_addsToActiveDownloads() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: 998, library: library)
+        book.title = "Request Download Test"
+        book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "request.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
+
+        if let savedUrl = getSavedUrl(book: book, format: .EPUB) {
+            try? FileManager.default.removeItem(at: savedUrl)
+        }
+
+        let result = manager.requestDownload(book: book, format: .EPUB, overwrite: true)
+
+        switch result {
+        case .success:
+            XCTAssertEqual(manager.activeDownloads.count, 1)
+            XCTAssertEqual(manager.activeDownloads.values.first?.book.id, 998)
+        case .failure(let error):
+            XCTFail("Failed to request download: \(error.localizedDescription)")
+        }
+    }
+
+    func testLegacyBookFormatDownloadSubjectRequestsDownload() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: 997, library: library)
+        book.title = "Legacy Download Subject Test"
+        book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "legacy.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
+
+        if let savedUrl = getSavedUrl(book: book, format: .EPUB) {
+            try? FileManager.default.removeItem(at: savedUrl)
+        }
+
+        let expectation = expectation(description: "Legacy download subject starts request")
+        manager.$activeDownloads
+            .dropFirst()
+            .sink { downloads in
+                if downloads.values.contains(where: { $0.book.id == 997 && $0.format == .EPUB }) {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        manager.bookFormatDownloadSubject.send((book: book, format: .EPUB))
+
+        waitForExpectations(timeout: 1.0)
+    }
     
     func testCancelDownload_removesFromActive() throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)

@@ -60,7 +60,7 @@ final class RecentShelfViewModel: ObservableObject {
             }
         }
 
-        let signals = container.calibreUpdatedSubject.values
+        let signals = container.calibreUpdates()
         calibreEventTask = Task { [weak self] in
             for await signal in signals {
                 guard !Task.isCancelled else { return }
@@ -87,7 +87,7 @@ final class RecentShelfViewModel: ObservableObject {
         if selectionState.selectedBookIds.isEmpty {
             selectionState.isEditing = false
         }
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
     }
 
     func deleteBook(bookId: String) {
@@ -149,7 +149,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
     
     func triggerDownload(book: CalibreBook, format: Format) {
-        container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+        container.downloadManager.requestDownload(book: book, format: format)
     }
     
     func refreshBookFormats(bookId: String) {
@@ -158,7 +158,7 @@ final class RecentShelfViewModel: ObservableObject {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            self.container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            self.container.downloadManager.requestDownload(book: book, format: format)
         }
     }
 
