@@ -237,25 +237,29 @@ private actor RecentShelfBuilder {
         booksInShelf: [String: CalibreBook],
         readingPositionRepository: ReadingPositionRepositoryProtocol,
         context: BuildContext
-    ) -> BuildResult {
+    ) throws -> BuildResult {
         var booksWithTS: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])] = []
         for (key, book) in booksInShelf {
+            try Task.checkCancellation()
             let positions = readingPositionRepository.getPositions(for: book)
             let maxEpoch = positions.map { Date(timeIntervalSince1970: $0.epoch) }.max()
             let ts = max(book.lastModified, maxEpoch ?? book.lastUpdated)
             booksWithTS.append((key, book, ts, positions))
         }
 
+        try Task.checkCancellation()
         var autoDownloadRequests = [AutoDownloadRequest]()
-        let books = booksWithTS
-            .sorted { $0.ts > $1.ts }
-            .map { entry in
+        var books = [ShelfBookItem]()
+        for entry in booksWithTS.sorted(by: { $0.ts > $1.ts }) {
+            try Task.checkCancellation()
+            books.append(
                 buildShelfBookItem(
                     entry: entry,
                     context: context,
                     autoDownloadRequests: &autoDownloadRequests
                 )
-            }
+            )
+        }
         return BuildResult(books: books, autoDownloadRequests: autoDownloadRequests)
     }
 
@@ -469,16 +473,22 @@ class YabrShelfDataModel: ObservableObject {
 
         recentRebuildTask?.cancel()
         recentRebuildTask = Task { [weak self, booksInShelf, context, readingPositionRepository, builder, state] in
-            let result = await builder.rebuild(
-                booksInShelf: booksInShelf,
-                readingPositionRepository: readingPositionRepository,
-                context: context
-            )
-            guard !Task.isCancelled else {
+            do {
+                let result = try await builder.rebuild(
+                    booksInShelf: booksInShelf,
+                    readingPositionRepository: readingPositionRepository,
+                    context: context
+                )
+                guard !Task.isCancelled else {
+                    AppPerformanceSignpost.end("RecentShelfRebuild", state)
+                    return
+                }
+                self?.applyRecentShelfBuildResult(result, booksInShelf: booksInShelf, state: state)
+            } catch is CancellationError {
                 AppPerformanceSignpost.end("RecentShelfRebuild", state)
-                return
+            } catch {
+                AppPerformanceSignpost.end("RecentShelfRebuild", state)
             }
-            self?.applyRecentShelfBuildResult(result, booksInShelf: booksInShelf, state: state)
         }
     }
 
