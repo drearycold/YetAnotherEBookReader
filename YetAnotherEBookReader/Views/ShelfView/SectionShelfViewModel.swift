@@ -22,10 +22,10 @@ enum SectionShelfAlert: Identifiable {
 @MainActor @available(macCatalyst 14.0, *)
 final class SectionShelfViewModel: ObservableObject {
     let container: AppContainer
-    private var cancellables = Set<AnyCancellable>()
+    private var snapshotTask: Task<Void, Never>?
+    private var calibreEventTask: Task<Void, Never>?
 
     private var allDisplaySections = [ShelfSectionItem]()
-    private var isSubscribedToInitialLoad = false
 
     @Published var pickedLibraries = Set<String>()
     @Published var displaySections = [ShelfSectionItem]()
@@ -43,48 +43,37 @@ final class SectionShelfViewModel: ObservableObject {
         bootstrapIfDatabaseReady()
     }
 
+    deinit {
+        snapshotTask?.cancel()
+        calibreEventTask?.cancel()
+    }
+
     /// Idempotent bootstrap of the lazy `shelfDataModel`. Safe to call from
-    /// `init`, from the `calibreUpdatedSubject` sink, and from the view's
+    /// `init`, from the `calibreUpdatedSubject` task, and from the view's
     /// `.onAppear` to cover the case where the user first lands directly
     /// on the Discover tab and the database-ready signal has not yet
-    /// been routed through the subject pipeline.
+    /// been routed through the event stream.
     func bootstrapIfDatabaseReady() {
         guard container.logger != nil else { return }
+        guard snapshotTask == nil else { return }
 
-        if !isSubscribedToInitialLoad {
-            isSubscribedToInitialLoad = true
-            container.shelfDataModel.$isInitialLoadComplete
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] isComplete in
-                    self?.isInitialLoadComplete = isComplete
-                }
-                .store(in: &cancellables)
-        }
-
-        guard allDisplaySections.isEmpty else { return }
-
-        let initialItems = container.shelfDataModel.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
-        if !initialItems.isEmpty {
-            self.allDisplaySections = initialItems
-            self.applyFiltering()
+        let snapshots = container.shelfDataModel.snapshots()
+        snapshotTask = Task { [weak self] in
+            for await snapshot in snapshots {
+                guard !Task.isCancelled else { return }
+                self?.applySnapshot(snapshot)
+            }
         }
     }
 
     private func setupSubscriptions() {
-        container.discoverShelfItemsSubject
-            .sink { [weak self] sections in
-                guard let self = self else { return }
-                self.allDisplaySections = sections
-                self.applyFiltering()
-            }
-            .store(in: &cancellables)
-
-        container.calibreUpdatedSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] signal in
+        let signals = container.calibreUpdatedSubject.values
+        calibreEventTask = Task { [weak self] in
+            for await signal in signals {
+                guard !Task.isCancelled else { return }
                 guard let self = self else { return }
 
-                // If database just finished initializing, bootstrap shelfDataModel
+                // If database just finished initializing, bootstrap shelfDataModel.
                 self.bootstrapIfDatabaseReady()
 
                 if case .deleted(let deletedId) = signal {
@@ -93,7 +82,13 @@ final class SectionShelfViewModel: ObservableObject {
                     }
                 }
             }
-            .store(in: &cancellables)
+        }
+    }
+
+    private func applySnapshot(_ snapshot: YabrShelfDataModel.DiscoverShelfSnapshot) {
+        isInitialLoadComplete = snapshot.isInitialLoadComplete
+        allDisplaySections = snapshot.sections
+        applyFiltering()
     }
 
     func refreshShelf() async {

@@ -43,8 +43,9 @@ import Combine
         cancellable.cancel()
     }
     
-    func testSectionShelfViewModelMappingAndFilters() {
+    func testSectionShelfViewModelMappingAndFilters() async {
         let mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ShelfDisplayModelsTests")
+        mockAppContainer.bookManager.isShelfLoaded = false
 
         // Setup library config in mockAppContainer
         let uuid = UUID()
@@ -73,15 +74,13 @@ import Combine
             books: [bookItem]
         )
 
-        // The viewModel sink is wired directly to
-        // discoverShelfItemsSubject (no .collect/.receive(on:)),
-        // so it fires synchronously on send() and the section is
-        // reflected in displaySections immediately. The shelf
-        // data model also sends "Author: Unknown" sections
-        // asynchronously, so we check displaySections right after
-        // send, before the bootstrapper's emission arrives and
-        // overwrites our test section.
-        mockAppContainer.discoverShelfItemsSubject.send([section])
+        mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [section], isInitialLoadComplete: false),
+            sendLegacySubject: false
+        )
+        await waitForViewModelUpdate {
+            viewModel.displaySections.count == 1
+        }
 
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.books.count, 1)
@@ -104,6 +103,18 @@ import Combine
         // resetLibraryFilters calls applyFiltering synchronously.
         XCTAssertFalse(viewModel.libraryFilters.getOrNil(0)?.isSelected ?? true)
         XCTAssertEqual(viewModel.displaySections.count, 1)
+    }
+
+    private func waitForViewModelUpdate(
+        _ predicate: @escaping () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if predicate() { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(predicate(), file: file, line: line)
     }
 
     // MARK: - ShelfBookItem libraryId

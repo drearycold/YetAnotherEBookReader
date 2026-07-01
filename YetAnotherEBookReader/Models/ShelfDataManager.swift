@@ -197,6 +197,11 @@ private actor ShelfCategoryStore {
 @MainActor
 class YabrShelfDataModel: ObservableObject {
 
+    struct DiscoverShelfSnapshot: Equatable, Sendable {
+        let sections: [ShelfSectionItem]
+        let isInitialLoadComplete: Bool
+    }
+
     enum CategoryType: String {
         case Last
         case Author
@@ -237,6 +242,8 @@ class YabrShelfDataModel: ObservableObject {
     private var eventTask: Task<Void, Never>?
     private var initialSnapshotTask: Task<Void, Never>?
     private var categorySearchTasks = [String: Task<Void, Never>]()
+    private var snapshotContinuations = [UUID: AsyncStream<DiscoverShelfSnapshot>.Continuation]()
+    private var lastPublishedSnapshot: DiscoverShelfSnapshot?
 
     @Published var isInitialLoadComplete = false
 
@@ -267,6 +274,23 @@ class YabrShelfDataModel: ObservableObject {
         eventTask?.cancel()
         initialSnapshotTask?.cancel()
         categorySearchTasks.values.forEach { $0.cancel() }
+        snapshotContinuations.values.forEach { $0.finish() }
+    }
+
+    func snapshots() -> AsyncStream<DiscoverShelfSnapshot> {
+        let id = UUID()
+        let initialSnapshot = currentSnapshot()
+
+        return AsyncStream { [weak self] continuation in
+            continuation.yield(initialSnapshot)
+            self?.snapshotContinuations[id] = continuation
+
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.snapshotContinuations.removeValue(forKey: id)
+                }
+            }
+        }
     }
 
     private func startEventTask() {
@@ -362,6 +386,7 @@ class YabrShelfDataModel: ObservableObject {
     private func markInitialLoadComplete() {
         guard !isInitialLoadComplete else { return }
         isInitialLoadComplete = true
+        publishDiscoverShelfSnapshot(sendLegacySubject: false)
     }
 
     func seedCategoriesForTesting(_ categories: [CategoryObject]) async {
@@ -383,6 +408,12 @@ class YabrShelfDataModel: ObservableObject {
         Set(categorySearchTasks.keys)
     }
 
+    func setDiscoverShelfSnapshotForTesting(_ snapshot: DiscoverShelfSnapshot, sendLegacySubject: Bool = true) {
+        discoverShelfItems = Dictionary(uniqueKeysWithValues: snapshot.sections.map { ($0.id, $0) })
+        isInitialLoadComplete = snapshot.isInitialLoadComplete
+        publishDiscoverShelfSnapshot(sendLegacySubject: sendLegacySubject)
+    }
+
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
         let sectionName = "\(category.type.rawValue): \(category.category)"
 
@@ -401,8 +432,27 @@ class YabrShelfDataModel: ObservableObject {
     }
 
     private func notifyDiscoverShelfChanged() {
-        let displaySections = self.discoverShelfItems.values.sorted(by: { $0.title < $1.title })
-        self.container.discoverShelfItemsSubject.send(displaySections)
+        publishDiscoverShelfSnapshot(sendLegacySubject: true)
+    }
+
+    private func currentSnapshot() -> DiscoverShelfSnapshot {
+        DiscoverShelfSnapshot(
+            sections: discoverShelfItems.values.sorted(by: { $0.title < $1.title }),
+            isInitialLoadComplete: isInitialLoadComplete
+        )
+    }
+
+    private func publishDiscoverShelfSnapshot(sendLegacySubject: Bool) {
+        let snapshot = currentSnapshot()
+        if lastPublishedSnapshot != snapshot {
+            lastPublishedSnapshot = snapshot
+            for continuation in snapshotContinuations.values {
+                continuation.yield(snapshot)
+            }
+        }
+        if sendLegacySubject {
+            container.discoverShelfItemsSubject.send(snapshot.sections)
+        }
     }
 
     func refresh() async {

@@ -4,7 +4,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -12,21 +11,19 @@ import RealmSwift
 class SectionShelfViewModelTests: XCTestCase {
     var viewModel: SectionShelfViewModel!
     var mockAppContainer: AppContainer!
-    var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
 
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests")
+        mockAppContainer.bookManager.isShelfLoaded = false
 
         viewModel = SectionShelfViewModel(container: mockAppContainer)
-        cancellables = []
     }
 
     override func tearDownWithError() throws {
         viewModel = nil
         mockAppContainer = nil
-        cancellables = nil
         try super.tearDownWithError()
     }
 
@@ -45,7 +42,7 @@ class SectionShelfViewModelTests: XCTestCase {
         viewModel.downloadSelectedBooks(bookIds: ["non-existent"])
     }
 
-    func testUpdateShelfModels() {
+    func testUpdateShelfModels() async {
         let uuid = UUID()
         let server = CalibreServer(uuid: uuid, name: "Mock Server", baseUrl: "http://localhost:8080", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "libId", name: "MockLibrary")
@@ -57,14 +54,8 @@ class SectionShelfViewModelTests: XCTestCase {
             books: []
         )
 
-        // The viewModel sink is wired directly to
-        // discoverShelfItemsSubject (no .collect/.receive(on:)),
-        // so it fires synchronously on send(). The shelf data
-        // model also sends "Author: Unknown" sections
-        // asynchronously, so we check displaySections
-        // immediately after send, before the bootstrapper's
-        // emission arrives and overwrites our test section.
-        mockAppContainer.discoverShelfItemsSubject.send([section])
+        publishDiscoverSections([section])
+        await waitForViewModelUpdate { self.viewModel.displaySections.count == 1 }
 
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.id, "Author: testSection")
@@ -91,16 +82,12 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.selectionState.isEditing)
     }
 
-    func testCalibreUpdatedDeletionDismissal() throws {
+    func testCalibreUpdatedDeletionDismissal() async throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
         mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
 
-        let expectation = XCTestExpectation(description: "Detail dismissed")
-        DispatchQueue.main.async {
-            XCTAssertNil(self.viewModel.presentingBookDetailId)
-            expectation.fulfill()
-        }
-        self.wait(for: [expectation], timeout: 1.0)
+        await waitForViewModelUpdate { self.viewModel.presentingBookDetailId == nil }
+        XCTAssertNil(viewModel.presentingBookDetailId)
     }
 
     func testSelectAllAndClear() throws {
@@ -125,7 +112,7 @@ class SectionShelfViewModelTests: XCTestCase {
         return (server, library)
     }
 
-    func testCrossLibraryAuthorSectionShownWithoutFilter() {
+    func testCrossLibraryAuthorSectionShownWithoutFilter() async {
         let (_, lib1) = makeLibrary(serverName: "S1", libraryKey: "k1", libraryName: "Library 1")
         let (_, lib2) = makeLibrary(serverName: "S2", libraryKey: "k2", libraryName: "Library 2")
         mockAppContainer.calibreLibraries[lib1.id] = lib1
@@ -135,7 +122,8 @@ class SectionShelfViewModelTests: XCTestCase {
         let book2 = ShelfBookItem(id: "b2", title: "Book 2", coverURL: "", progress: 0, status: .ready, libraryId: lib2.id)
         let section = ShelfSectionItem(id: "Author: Ursula K. Le Guin", title: "Author: Ursula K. Le Guin", books: [book1, book2])
 
-        mockAppContainer.discoverShelfItemsSubject.send([section])
+        publishDiscoverSections([section])
+        await waitForViewModelUpdate { self.viewModel.displaySections.count == 1 }
 
         XCTAssertEqual(viewModel.displaySections.count, 1)
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.books.count, 2)
@@ -143,7 +131,7 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.pickedLibraries.isEmpty)
     }
 
-    func testLibraryFilterFiltersBooksNotSections() {
+    func testLibraryFilterFiltersBooksNotSections() async {
         let (_, lib1) = makeLibrary(serverName: "S1", libraryKey: "k1", libraryName: "Library 1")
         let (_, lib2) = makeLibrary(serverName: "S2", libraryKey: "k2", libraryName: "Library 2")
         mockAppContainer.calibreLibraries[lib1.id] = lib1
@@ -153,7 +141,8 @@ class SectionShelfViewModelTests: XCTestCase {
         let book2 = ShelfBookItem(id: "b2", title: "Book 2", coverURL: "", progress: 0, status: .ready, libraryId: lib2.id)
         let section = ShelfSectionItem(id: "Author: Ursula K. Le Guin", title: "Author: Ursula K. Le Guin", books: [book1, book2])
 
-        mockAppContainer.discoverShelfItemsSubject.send([section])
+        publishDiscoverSections([section])
+        await waitForViewModelUpdate { self.viewModel.displaySections.count == 1 }
         viewModel.toggleLibraryFilter(libraryId: lib1.id)
 
         XCTAssertEqual(viewModel.displaySections.count, 1)
@@ -162,7 +151,7 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.displaySections.getOrNil(0)?.id, "Author: Ursula K. Le Guin")
     }
 
-    func testEmptySectionAfterFilterHidden() {
+    func testEmptySectionAfterFilterHidden() async {
         let (_, lib1) = makeLibrary(serverName: "S1", libraryKey: "k1", libraryName: "Library 1")
         let (_, lib2) = makeLibrary(serverName: "S2", libraryKey: "k2", libraryName: "Library 2")
         mockAppContainer.calibreLibraries[lib1.id] = lib1
@@ -171,13 +160,14 @@ class SectionShelfViewModelTests: XCTestCase {
         let book1 = ShelfBookItem(id: "b1", title: "Book 1", coverURL: "", progress: 0, status: .ready, libraryId: lib1.id)
         let section = ShelfSectionItem(id: "Author: One", title: "Author: One", books: [book1])
 
-        mockAppContainer.discoverShelfItemsSubject.send([section])
+        publishDiscoverSections([section])
+        await waitForViewModelUpdate { self.viewModel.displaySections.count == 1 }
         viewModel.toggleLibraryFilter(libraryId: lib2.id)
 
         XCTAssertEqual(viewModel.displaySections.count, 0)
     }
 
-    func testLibraryFiltersAggregatedFromBookLevelLibraryId() {
+    func testLibraryFiltersAggregatedFromBookLevelLibraryId() async {
         let (_, lib1) = makeLibrary(serverName: "S1", libraryKey: "k1", libraryName: "Library 1")
         let (_, lib2) = makeLibrary(serverName: "S2", libraryKey: "k2", libraryName: "Library 2")
         mockAppContainer.calibreLibraries[lib1.id] = lib1
@@ -188,7 +178,8 @@ class SectionShelfViewModelTests: XCTestCase {
         let s1 = ShelfSectionItem(id: "Author: A", title: "Author: A", books: [book1])
         let s2 = ShelfSectionItem(id: "Author: B", title: "Author: B", books: [book2])
 
-        mockAppContainer.discoverShelfItemsSubject.send([s1, s2])
+        publishDiscoverSections([s1, s2])
+        await waitForViewModelUpdate { self.viewModel.displaySections.count == 2 }
 
         let filterIds = Set(viewModel.libraryFilters.map { $0.id })
         XCTAssertEqual(viewModel.libraryFilters.count, 2)
@@ -199,6 +190,7 @@ class SectionShelfViewModelTests: XCTestCase {
     func testBootstrapIfDatabaseReadyIdempotent() {
         // Without a database-ready container, bootstrap is a no-op.
         let freshContainer = MockAppContainerFactory.makeContainer(testName: "SectionShelfViewModelTests-bootstrap")
+        freshContainer.bookManager.isShelfLoaded = false
         let freshVM = SectionShelfViewModel(container: freshContainer)
 
         // Calling twice should not crash and should not double-fill sections.
@@ -208,23 +200,34 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertEqual(freshVM.displaySections.count, 0)
     }
 
-    func testInitialLoadCompleteTracking() throws {
+    func testInitialLoadCompleteTracking() async throws {
         XCTAssertFalse(viewModel.isInitialLoadComplete)
 
-        let shelfDataModel = mockAppContainer.shelfDataModel
+        mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [], isInitialLoadComplete: true),
+            sendLegacySubject: false
+        )
 
-        let expectation = XCTestExpectation(description: "Wait for isInitialLoadComplete")
-        let cancellable = viewModel.$isInitialLoadComplete
-            .sink { isComplete in
-                if isComplete {
-                    expectation.fulfill()
-                }
-            }
-
-        shelfDataModel.isInitialLoadComplete = true
-
-        wait(for: [expectation], timeout: 1.0)
+        await waitForViewModelUpdate { self.viewModel.isInitialLoadComplete }
         XCTAssertTrue(viewModel.isInitialLoadComplete)
-        cancellable.cancel()
+    }
+
+    private func publishDiscoverSections(_ sections: [ShelfSectionItem], isInitialLoadComplete: Bool = false) {
+        mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: sections, isInitialLoadComplete: isInitialLoadComplete),
+            sendLegacySubject: false
+        )
+    }
+
+    private func waitForViewModelUpdate(
+        _ predicate: @escaping () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if predicate() { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(predicate(), file: file, line: line)
     }
 }

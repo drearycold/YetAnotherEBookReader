@@ -395,6 +395,122 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertNil(weakShelfDataModel)
         container.calibreUpdatedSubject.send(.shelf)
     }
+
+    func testShelfDataModelSnapshotsYieldCurrentSnapshotToNewSubscriber() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let section = makeShelfSection(id: "Author: Current")
+
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [section], isInitialLoadComplete: true),
+            sendLegacySubject: false
+        )
+
+        var iterator = shelfDataModel.snapshots().makeAsyncIterator()
+        let snapshot = await iterator.next()
+
+        XCTAssertEqual(snapshot?.sections, [section])
+        XCTAssertEqual(snapshot?.isInitialLoadComplete, true)
+    }
+
+    func testShelfDataModelSnapshotsYieldSectionUpdates() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let section = makeShelfSection(id: "Author: Updated")
+
+        var snapshots = [YabrShelfDataModel.DiscoverShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.snapshots() {
+                snapshots.append(snapshot)
+                if snapshots.count == 2 { break }
+            }
+        }
+
+        await Task.yield()
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [section], isInitialLoadComplete: false),
+            sendLegacySubject: false
+        )
+        await waitForSnapshotCount(2, in: { snapshots.count })
+        task.cancel()
+
+        XCTAssertEqual(snapshots.last?.sections, [section])
+    }
+
+    func testShelfDataModelSnapshotsYieldInitialLoadOnlyUpdates() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        var snapshots = [YabrShelfDataModel.DiscoverShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.snapshots() {
+                snapshots.append(snapshot)
+                if snapshots.count == 2 { break }
+            }
+        }
+
+        await Task.yield()
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [], isInitialLoadComplete: true),
+            sendLegacySubject: false
+        )
+        await waitForSnapshotCount(2, in: { snapshots.count })
+        task.cancel()
+
+        XCTAssertEqual(snapshots.last?.sections, [])
+        XCTAssertEqual(snapshots.last?.isInitialLoadComplete, true)
+    }
+
+    func testShelfDataModelSnapshotTerminationStopsUpdates() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        var snapshots = [YabrShelfDataModel.DiscoverShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.snapshots() {
+                snapshots.append(snapshot)
+            }
+        }
+
+        await waitForSnapshotCount(1, in: { snapshots.count })
+        task.cancel()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [makeShelfSection(id: "Author: Cancelled")], isInitialLoadComplete: false),
+            sendLegacySubject: false
+        )
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(snapshots.count, 1)
+    }
+
+    func testShelfDataModelLegacyDiscoverSubjectStillReceivesPublishedSections() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let section = makeShelfSection(id: "Author: Legacy")
+
+        let expectation = XCTestExpectation(description: "Legacy discover subject receives sections")
+        container.discoverShelfItemsSubject
+            .sink { sections in
+                if sections == [section] {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [section], isInitialLoadComplete: false),
+            sendLegacySubject: true
+        )
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+    }
     
     private func makeAppContainer() -> AppContainer {
         return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests")
@@ -403,6 +519,36 @@ final class V2MigrationDependencyTests: XCTestCase {
     private func waitForShelfSignalProcessing(in shelfDataModel: YabrShelfDataModel) async throws {
         try await Task.sleep(nanoseconds: 100_000_000)
         _ = await shelfDataModel.categoryNamesForTesting()
+    }
+
+    private func makeShelfSection(id: String) -> ShelfSectionItem {
+        ShelfSectionItem(
+            id: id,
+            title: id,
+            books: [
+                ShelfBookItem(
+                    id: "\(id)-book",
+                    title: "\(id) Book",
+                    coverURL: "",
+                    progress: 0,
+                    status: .ready,
+                    libraryId: "library-id"
+                )
+            ]
+        )
+    }
+
+    private func waitForSnapshotCount(
+        _ expectedCount: Int,
+        in count: @escaping () -> Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if count() >= expectedCount { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertGreaterThanOrEqual(count(), expectedCount, file: file, line: line)
     }
     
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {
