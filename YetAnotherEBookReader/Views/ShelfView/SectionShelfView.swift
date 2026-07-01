@@ -163,7 +163,7 @@ struct SectionShelfView: View {
                         }
                     }
                     .refreshable {
-                        viewModel.refreshShelf()
+                        await viewModel.refreshShelf()
                     }
                     .overlay(
                         Group {
@@ -276,9 +276,14 @@ struct SectionShelfView: View {
                 
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !viewModel.selectionState.isEditing {
-                        Button(action: { viewModel.refreshShelf() }) {
+                        Button {
+                            Task {
+                                await viewModel.refreshShelf()
+                            }
+                        } label: {
                             Image(systemName: "arrow.clockwise")
                         }
+                        .disabled(viewModel.isRefreshing)
                     }
                 }
                 

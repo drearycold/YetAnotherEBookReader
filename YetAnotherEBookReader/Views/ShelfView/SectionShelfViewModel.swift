@@ -35,6 +35,7 @@ final class SectionShelfViewModel: ObservableObject {
     @Published var activeAlert: SectionShelfAlert? = nil
     @Published var selectionState = ShelfSelectionState()
     @Published private(set) var isInitialLoadComplete = false
+    @Published private(set) var isRefreshing = false
 
     init(container: AppContainer) {
         self.container = container
@@ -95,8 +96,11 @@ final class SectionShelfViewModel: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func refreshShelf() {
-        container.shelfDataModel.refresh()
+    func refreshShelf() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        await container.shelfDataModel.refresh()
     }
 
     func downloadSelectedBooks(bookIds: Set<String>) {

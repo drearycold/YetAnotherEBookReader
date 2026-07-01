@@ -35,8 +35,9 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.pickedLibraries.count, 0)
     }
 
-    func testRefreshShelf() {
-        viewModel.refreshShelf()
+    func testRefreshShelf() async {
+        await viewModel.refreshShelf()
+        XCTAssertFalse(viewModel.isRefreshing)
     }
 
     func testDownloadSelectedBooks() {

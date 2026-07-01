@@ -291,21 +291,34 @@ class YabrShelfDataModel: ObservableObject {
         self.container.discoverShelfItemsSubject.send(displaySections)
     }
 
-    func refresh() {
-        dispatchQueue.async {
-            self.categories.forEach { category in
-                let key = SearchCriteriaMergedKey(
-                    libraryIds: [],
-                    criteria: SearchCriteria(
-                        searchString: "",
-                        sortCriteria: .init(),
-                        filterCriteriaCategory: ["Authors" : Set([category.category])]
-                    )
-                )
-                Task {
-                    await self.unifiedSearchService.resetSearch(for: key, force: true)
-                }
+    func refresh() async {
+        let keys = await withCheckedContinuation {
+            (continuation: CheckedContinuation<[SearchCriteriaMergedKey], Never>) in
+            dispatchQueue.async {
+                let keys = self.categories
+                    .sorted {
+                        if $0.type.rawValue == $1.type.rawValue {
+                            return $0.category < $1.category
+                        }
+                        return $0.type.rawValue < $1.type.rawValue
+                    }
+                    .map { category in
+                        SearchCriteriaMergedKey(
+                            libraryIds: [],
+                            criteria: SearchCriteria(
+                                searchString: "",
+                                sortCriteria: .init(),
+                                filterCriteriaCategory: ["Authors": Set([category.category])]
+                            )
+                        )
+                    }
+                continuation.resume(returning: keys)
             }
+        }
+
+        for key in keys {
+            guard !Task.isCancelled else { return }
+            await unifiedSearchService.resetSearchAndWait(for: key, force: true)
         }
     }
 }

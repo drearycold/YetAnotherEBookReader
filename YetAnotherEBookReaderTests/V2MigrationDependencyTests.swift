@@ -272,9 +272,8 @@ final class V2MigrationDependencyTests: XCTestCase {
         shelfDataModel.dispatchQueue.sync {
             shelfDataModel.categories = [YabrShelfDataModel.CategoryObject(type: .Author, category: "Author A")]
         }
-        shelfDataModel.refresh()
-        
-        try await Task.sleep(nanoseconds: 150_000_000)
+        await shelfDataModel.refresh()
+
         let limitAfterRefresh = await unifiedSearchService.getActiveSearch(for: key)?.limitNumber
         XCTAssertEqual(limitAfterRefresh, 100)
     }

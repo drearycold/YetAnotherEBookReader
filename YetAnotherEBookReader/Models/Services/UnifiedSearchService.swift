@@ -136,7 +136,22 @@ actor UnifiedSearchService {
     }
 
     func resetSearch(for key: SearchCriteriaMergedKey, force: Bool = false) {
-        guard var activeSearch = activeSearches[key] else { return }
+        guard prepareSearchReset(for: key) else { return }
+
+        Task {
+            _ = await triggerSearch(for: key, force: force)
+        }
+    }
+
+    func resetSearchAndWait(for key: SearchCriteriaMergedKey, force: Bool = false) async {
+        guard prepareSearchReset(for: key) else { return }
+
+        let task = await triggerSearch(for: key, force: force)
+        await task.value
+    }
+
+    private func prepareSearchReset(for key: SearchCriteriaMergedKey) -> Bool {
+        guard var activeSearch = activeSearches[key] else { return false }
         activeSearch.currentResult.books.removeAll()
         activeSearch.currentResult.limitNumber = 100
         for libraryId in activeSearch.currentResult.libraryIds {
@@ -147,10 +162,7 @@ actor UnifiedSearchService {
             )
         }
         activeSearches[key] = activeSearch
-
-        Task {
-            await triggerSearch(for: key, force: force)
-        }
+        return true
     }
 
     // MARK: - Private Coordination
@@ -187,7 +199,8 @@ actor UnifiedSearchService {
         }
     }
 
-    private func triggerSearch(for key: SearchCriteriaMergedKey, force: Bool) async {
+    @discardableResult
+    private func triggerSearch(for key: SearchCriteriaMergedKey, force: Bool) async -> Task<Void, Never> {
         searchTasks[key]?.cancel()
 
         let activeLibraryIds = await getTargetLibraryIds(for: key)
@@ -253,6 +266,7 @@ actor UnifiedSearchService {
         }
 
         searchTasks[key] = searchTask
+        return searchTask
     }
 
     private func handleLibrarySearchResult(
