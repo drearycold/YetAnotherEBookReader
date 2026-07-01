@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-import RealmSwift
 import OSLog
 
 class YabrShelfDataModel: ObservableObject {
@@ -52,8 +51,6 @@ class YabrShelfDataModel: ObservableObject {
 
     @Published var discoverShelfItems = [String: ShelfSectionItem]()
 
-    let addToShelfSubject = PassthroughSubject<CalibreBookRealm, Never>()
-
     var cancellables: Set<AnyCancellable> = []
 
     let dispatchQueue = DispatchQueue(label: "shelf-queue")
@@ -61,210 +58,240 @@ class YabrShelfDataModel: ObservableObject {
     @Published var isInitialLoadComplete = false
     private var initialCategories = Set<String>()
     private var completedInitialCategories = Set<String>()
-    private var realmScanComplete = false
+    private var shelfSnapshotComplete = false
     private var isInitialLoadCompleteFlag = false
-
-    var realmOnQueue: Realm!
 
     init(unifiedSearchService: UnifiedSearchService, container: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
         self.container = container
 
-        dispatchQueue.sync {
-            guard let realmConf = self.container.realmConf,
-                  let realmOnQueue = try? Realm(configuration: realmConf, queue: dispatchQueue) else {
-                return
+        container.calibreUpdatedSubject
+            .receive(on: RunLoop.main)
+            .compactMap { [weak self] signal -> [String: CalibreBook]? in
+                self?.booksInShelfSnapshotIfNeeded(for: signal)
             }
-            self.realmOnQueue = realmOnQueue
-
-            // Synchronously scan initial books and construct categories
-            let initialBooks = realmOnQueue.objects(CalibreBookRealm.self).filter("inShelf == true")
-            var initialKeys = Set<String>()
-            for book in initialBooks {
-                for author in [book.authorFirst, book.authorSecond, book.authorThird].compactMap({ $0 }) {
-                    initialKeys.insert("Author: \(author)")
-                }
+            .receive(on: dispatchQueue)
+            .sink { [weak self] booksInShelf in
+                self?.rebuildShelfCategories(from: booksInShelf)
             }
-            self.initialCategories = initialKeys
-            self.realmScanComplete = true
+            .store(in: &cancellables)
 
-            if initialKeys.isEmpty {
-                self.isInitialLoadCompleteFlag = true
-                DispatchQueue.main.async {
-                    self.isInitialLoadComplete = true
-                }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            guard self.container.bookManager.isShelfLoaded else { return }
+            let snapshot = self.container.bookManager.booksInShelf
+            self.dispatchQueue.async {
+                self.rebuildShelfCategories(from: snapshot)
             }
-
-            initialBooks.forEach {
-                self.addToShelf(book: $0)
-            }
-
-            // Observe subsequent updates only
-            realmOnQueue.objects(CalibreBookRealm.self)
-                .changesetPublisher(keyPaths: ["inShelf"])
-                .subscribe(on: dispatchQueue)
-                .sink { changes in
-                    switch changes {
-                    case .initial:
-                        // Ignored since we manually populated above
-                        break
-                    case .update(let results, deletions: _, insertions: _, modifications: let modifications):
-                        modifications
-                            .map { results[$0] }
-                            .forEach {
-                                if $0.inShelf {
-                                    self.addToShelfSubject.send($0)
-                                } else {
-                                    self.removeFromShelf(book: $0)
-                                }
-                            }
-                        break
-                    case .error(_):
-                        break
-                    }
-                }
-                .store(in: &cancellables)
-
-            addToShelfSubject.receive(on: dispatchQueue)
-                .sink { book in
-                    self.addToShelf(book: book)
-                }.store(in: &cancellables)
         }
+    }
+
+    private func booksInShelfSnapshotIfNeeded(for signal: calibreUpdatedSignal) -> [String: CalibreBook]? {
+        switch signal {
+        case .shelf, .book, .deleted:
+            guard container.bookManager.isShelfLoaded else { return nil }
+            return container.bookManager.booksInShelf
+        case .library, .server:
+            return nil
+        }
+    }
+
+    deinit {
+        cancellables.removeAll()
+        categories.forEach { $0.cancellables.removeAll() }
     }
 
     /**
      run on dispatchQueue
      */
-    func addToShelf(book: CalibreBookRealm) {
+    func addToShelf(book: CalibreBook) {
         dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        guard let inShelfId = book.primaryKey
-        else {
+
+        for categoryName in authorCategories(for: book) {
+            addToShelf(inShelfId: book.inShelfId, categoryName: categoryName)
+        }
+    }
+
+    private func rebuildShelfCategories(from booksInShelf: [String: CalibreBook]) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+
+        var categoryBookIds = [String: Set<String>]()
+        for (inShelfId, book) in booksInShelf {
+            for categoryName in authorCategories(for: book) {
+                categoryBookIds[categoryName, default: []].insert(inShelfId)
+            }
+        }
+
+        let desiredCategoryNames = Set(categoryBookIds.keys)
+        let existingCategories = categories
+
+        for category in existingCategories where !desiredCategoryNames.contains(category.category) {
+            removeCategory(category)
+        }
+
+        for categoryName in desiredCategoryNames.sorted() {
+            guard let inShelfBookIds = categoryBookIds[categoryName] else { continue }
+            if let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName)) {
+                categories[index].inShelfBookIds = inShelfBookIds
+            } else {
+                addToShelf(inShelfIds: inShelfBookIds, categoryName: categoryName)
+            }
+        }
+
+        let initialKeys = Set(desiredCategoryNames.map { "Author: \($0)" })
+        initialCategories = initialKeys
+        completedInitialCategories.formIntersection(initialKeys)
+        shelfSnapshotComplete = true
+
+        if initialKeys.isEmpty {
+            markInitialLoadComplete()
+        } else {
+            checkInitialLoadCompletion()
+        }
+    }
+
+    private func addToShelf(inShelfId: String, categoryName: String) {
+        addToShelf(inShelfIds: [inShelfId], categoryName: categoryName)
+    }
+
+    private func addToShelf(inShelfIds: Set<String>, categoryName: String) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+
+        let category = CategoryObject(type: .Author, category: categoryName)
+        if let index = categories.firstIndex(of: category) {
+            categories[index].inShelfBookIds.formUnion(inShelfIds)
             return
         }
 
-        for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
-            guard let categoryName = categoryName
-            else {
-                continue
-            }
+        category.inShelfBookIds.formUnion(inShelfIds)
+        categories.insert(category)
 
-            let category = CategoryObject(type: .Author, category: categoryName)
-            if let index = categories.firstIndex(of: category) {
-                categories[index].inShelfBookIds.insert(inShelfId)
-                continue
-            }
-
-            category.inShelfBookIds.insert(inShelfId)
-            categories.insert(category)
-
-            let key = SearchCriteriaMergedKey(
-                libraryIds: [],
-                criteria: SearchCriteria(
-                    searchString: "",
-                    sortCriteria: .init(),
-                    filterCriteriaCategory: ["Authors" : Set([categoryName])]
-                )
+        let key = SearchCriteriaMergedKey(
+            libraryIds: [],
+            criteria: SearchCriteria(
+                searchString: "",
+                sortCriteria: .init(),
+                filterCriteriaCategory: ["Authors" : Set([categoryName])]
             )
+        )
 
-            let categoryKey = "Author: \(categoryName)"
+        let categoryKey = "Author: \(categoryName)"
 
-            unifiedSearchService.searchUpdatePublisher(for: key)
-                .receive(on: dispatchQueue)
-                .sink { [weak self, weak category] update in
-                    guard let self = self, let category = category else { return }
-                    dispatchPrecondition(condition: .onQueue(self.dispatchQueue))
-                    category.unifiedSearchResult = update.result
+        unifiedSearchService.searchUpdatePublisher(for: key)
+            .receive(on: dispatchQueue)
+            .sink { [weak self, weak category] update in
+                guard let self = self, let category = category else { return }
+                dispatchPrecondition(condition: .onQueue(self.dispatchQueue))
+                category.unifiedSearchResult = update.result
 
-                    let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
+                let discoverShelfSectionItem = self.buildShelfSectionItem(category: category)
 
-                    // Track category loading completion
-                    let searchLibraryIds = self.container.libraryManager.calibreLibraries.filter {
-                        !$0.value.hidden && !$0.value.server.removed
-                    }.keys
+                // Track category loading completion
+                let searchLibraryIds = self.container.libraryManager.calibreLibraries.filter {
+                    !$0.value.hidden && !$0.value.server.removed
+                }.keys
 
-                    let isDone: Bool = {
-                        if searchLibraryIds.isEmpty {
-                            return true
-                        }
-                        if update.statuses.isEmpty {
-                            return false
-                        }
-                        return update.statuses.values.allSatisfy { !$0.loading }
-                    }()
-
-                    if isDone && self.initialCategories.contains(categoryKey) {
-                        self.completedInitialCategories.insert(categoryKey)
-                        self.checkInitialLoadCompletion()
+                let isDone: Bool = {
+                    if searchLibraryIds.isEmpty {
+                        return true
                     }
+                    if update.statuses.isEmpty {
+                        return false
+                    }
+                    return update.statuses.values.allSatisfy { !$0.loading }
+                }()
 
-                    DispatchQueue.main.async {
-                        if discoverShelfSectionItem.books.count > 1 {
-                            if self.discoverShelfItems[discoverShelfSectionItem.id] != discoverShelfSectionItem {
-                                self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
-                                self.notifyDiscoverShelfChanged()
-                            }
-                        } else {
-                            if self.discoverShelfItems.removeValue(forKey: discoverShelfSectionItem.id) != nil {
-                                self.notifyDiscoverShelfChanged()
-                            }
+                if isDone && self.initialCategories.contains(categoryKey) {
+                    self.completedInitialCategories.insert(categoryKey)
+                    self.checkInitialLoadCompletion()
+                }
+
+                DispatchQueue.main.async {
+                    if discoverShelfSectionItem.books.count > 1 {
+                        if self.discoverShelfItems[discoverShelfSectionItem.id] != discoverShelfSectionItem {
+                            self.discoverShelfItems[discoverShelfSectionItem.id] = discoverShelfSectionItem
+                            self.notifyDiscoverShelfChanged()
+                        }
+                    } else {
+                        if self.discoverShelfItems.removeValue(forKey: discoverShelfSectionItem.id) != nil {
+                            self.notifyDiscoverShelfChanged()
                         }
                     }
                 }
-                .store(in: &category.cancellables)
-        }
+            }
+            .store(in: &category.cancellables)
     }
 
     private func checkInitialLoadCompletion() {
         dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        guard realmScanComplete else { return }
+        guard shelfSnapshotComplete else { return }
         guard !isInitialLoadCompleteFlag else { return }
 
         let remaining = initialCategories.subtracting(completedInitialCategories)
         if remaining.isEmpty {
-            isInitialLoadCompleteFlag = true
-            DispatchQueue.main.async {
-                self.isInitialLoadComplete = true
-            }
+            markInitialLoadComplete()
         }
     }
 
-    func removeFromShelf(book: CalibreBookRealm) {
+    private func markInitialLoadComplete() {
         dispatchPrecondition(condition: .onQueue(dispatchQueue))
-        guard let inShelfId = book.primaryKey
-        else {
-            return
+        guard !isInitialLoadCompleteFlag else { return }
+        isInitialLoadCompleteFlag = true
+        DispatchQueue.main.async {
+            self.isInitialLoadComplete = true
         }
+    }
 
-        for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
-            guard let categoryName = categoryName
-            else {
-                continue
-            }
+    func removeFromShelf(book: CalibreBook) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
 
+        for categoryName in authorCategories(for: book) {
             guard let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName))
             else {
                 continue
             }
 
             let category = categories[index]
-            category.inShelfBookIds.remove(inShelfId)
+            category.inShelfBookIds.remove(book.inShelfId)
 
             guard category.inShelfBookIds.isEmpty
             else {
                 continue
             }
 
-            category.cancellables.removeAll()
-            category.unifiedSearchResult = nil
+            removeCategory(category)
+        }
+    }
 
-            let sectionName = "\(category.type.rawValue): \(category.category)"
-            DispatchQueue.main.async {
-                if self.discoverShelfItems.removeValue(forKey: sectionName) != nil {
-                    self.notifyDiscoverShelfChanged()
-                }
+    private func removeCategory(_ category: CategoryObject) {
+        dispatchPrecondition(condition: .onQueue(dispatchQueue))
+        category.cancellables.removeAll()
+        category.unifiedSearchResult = nil
+
+        let sectionName = "\(category.type.rawValue): \(category.category)"
+        DispatchQueue.main.async {
+            if self.discoverShelfItems.removeValue(forKey: sectionName) != nil {
+                self.notifyDiscoverShelfChanged()
             }
+        }
 
-            categories.remove(at: index)
+        categories.remove(category)
+    }
+
+    private func authorCategories(for book: CalibreBook) -> [String] {
+        let authors = book.authors.isEmpty ? ["Unknown"] : book.authors
+        return Array(authors.prefix(3))
+    }
+
+    func seedCategoriesForTesting(_ categories: [CategoryObject]) {
+        dispatchQueue.sync {
+            self.categories = Set(categories)
+        }
+    }
+
+    func categoryNamesForTesting() -> Set<String> {
+        dispatchQueue.sync {
+            Set(categories.map(\.category))
         }
     }
 

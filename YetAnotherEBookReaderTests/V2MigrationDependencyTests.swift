@@ -268,18 +268,71 @@ final class V2MigrationDependencyTests: XCTestCase {
         let limitBeforeRefresh = await unifiedSearchService.getActiveSearch(for: key)?.limitNumber
         XCTAssertEqual(limitBeforeRefresh, 250)
         
+        container.bookManager.isShelfLoaded = false
         let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
-        shelfDataModel.dispatchQueue.sync {
-            shelfDataModel.categories = [YabrShelfDataModel.CategoryObject(type: .Author, category: "Author A")]
-        }
+        shelfDataModel.seedCategoriesForTesting([
+            YabrShelfDataModel.CategoryObject(type: .Author, category: "Author A")
+        ])
         await shelfDataModel.refresh()
 
         let limitAfterRefresh = await unifiedSearchService.getActiveSearch(for: key)?.limitNumber
         XCTAssertEqual(limitAfterRefresh, 100)
     }
+
+    func testShelfDataModelRebuildsAuthorCategoriesForBookSignal() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.isShelfLoaded = false
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "book-signal", name: "Book Signal")
+        var book = TestFixtures.makeBook(id: 101, library: library)
+        book.title = "Book Signal Title"
+        book.authors = ["Signal Author"]
+        book.inShelf = true
+
+        container.libraryManager.calibreLibraries = [library.id: library]
+        container.bookManager.booksInShelf = [book.inShelfId: book]
+        container.bookManager.isShelfLoaded = true
+
+        container.calibreUpdatedSubject.send(.book(book))
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        XCTAssertEqual(shelfDataModel.categoryNamesForTesting(), ["Signal Author"])
+    }
+
+    func testShelfDataModelRemovesStaleAuthorCategoriesForDeletedSignal() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.unifiedSearchService = unifiedSearchService
+        container.bookManager.isShelfLoaded = false
+
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+        shelfDataModel.seedCategoriesForTesting([
+            YabrShelfDataModel.CategoryObject(type: .Author, category: "Stale Author")
+        ])
+
+        container.bookManager.booksInShelf = [:]
+        container.bookManager.isShelfLoaded = true
+
+        container.calibreUpdatedSubject.send(.deleted("stale-book-id"))
+        try await waitForShelfSignalProcessing(in: shelfDataModel)
+
+        XCTAssertTrue(shelfDataModel.categoryNamesForTesting().isEmpty)
+    }
     
     private func makeAppContainer() -> AppContainer {
         return MockAppContainerFactory.makeContainer(testName: "V2MigrationDependencyTests")
+    }
+
+    private func waitForShelfSignalProcessing(in shelfDataModel: YabrShelfDataModel) async throws {
+        try await Task.sleep(nanoseconds: 100_000_000)
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            shelfDataModel.dispatchQueue.async {
+                continuation.resume()
+            }
+        }
     }
     
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {
