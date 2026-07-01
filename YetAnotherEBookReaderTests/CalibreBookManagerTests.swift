@@ -52,14 +52,60 @@ final class CalibreBookManagerTests: XCTestCase {
             }
 
         // Populate
-        bookManager.populateBookShelf()
+        var completionCount = 0
+        var completionWasOnMainThread = false
+        bookManager.populateBookShelf {
+            completionCount += 1
+            completionWasOnMainThread = Thread.isMainThread
+        }
 
         wait(for: [expectation], timeout: 5.0)
 
         // Verify loaded
         XCTAssertNotNil(bookManager.booksInShelf[book.inShelfId])
         XCTAssertEqual(bookManager.booksInShelf[book.inShelfId]?.title, "Shelf Book")
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertTrue(completionWasOnMainThread)
         cancellable.cancel()
+    }
+
+    func testPopulateBookShelfSendsShelfUpdateByDefault() {
+        let expectation = XCTestExpectation(description: "Shelf update is sent")
+        container.calibreUpdatedSubject
+            .sink { signal in
+                if case .shelf = signal {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        bookManager.populateBookShelf()
+
+        wait(for: [expectation], timeout: 1.0)
+    }
+
+    func testPopulateBookShelfCanSuppressShelfUpdate() {
+        let invertedExpectation = XCTestExpectation(description: "Shelf update is not sent")
+        invertedExpectation.isInverted = true
+        container.calibreUpdatedSubject
+            .sink { signal in
+                if case .shelf = signal {
+                    invertedExpectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        var completionCount = 0
+        var completionWasOnMainThread = false
+        bookManager.populateBookShelf(sendShelfUpdate: false) {
+            completionCount += 1
+            completionWasOnMainThread = Thread.isMainThread
+        }
+
+        wait(for: [invertedExpectation], timeout: 0.2)
+        XCTAssertEqual(completionCount, 1)
+        XCTAssertTrue(completionWasOnMainThread)
+        XCTAssertTrue(bookManager.isShelfLoaded)
     }
 
     func testAddBookToShelfAndRemove() {

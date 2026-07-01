@@ -50,9 +50,15 @@ extension EpubFolioReaderContainer {
             return provider
         } else {
             guard let book = container?.bookManager.readingBook,
-                  let readerInfo = container?.sessionManager.readerInfo
+                  let readerInfo = container?.sessionManager.readerInfo,
+                  let readingPositionRepository = container?.readingPositionRepository
                   else { return FolioReaderNaiveReadPositionProvider() }
-            let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo, readerEngineDelegate: self.readerEngineDelegate)
+            let provider = FolioReaderYabrReadPositionProvider(
+                book: book,
+                readerInfo: readerInfo,
+                readingPositionRepository: readingPositionRepository,
+                readerEngineDelegate: self.readerEngineDelegate
+            )
             self.folioReaderReadPositionProvider = provider
 
             return provider
@@ -481,25 +487,32 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     let book: CalibreBook
     let readerInfo: ReaderInfo
     let bookIdentity: FolioReaderBookIdentity
+    private let readingPositionRepository: ReadingPositionRepositoryProtocol
     weak var readerEngineDelegate: ReaderEngineDelegate?
 
-    init(book: CalibreBook, readerInfo: ReaderInfo, readerEngineDelegate: ReaderEngineDelegate? = nil) {
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        readingPositionRepository: ReadingPositionRepositoryProtocol,
+        readerEngineDelegate: ReaderEngineDelegate? = nil
+    ) {
         self.book = book
         self.readerInfo = readerInfo
         self.bookIdentity = FolioReaderBookIdentity(book: book, readerInfo: readerInfo)
+        self.readingPositionRepository = readingPositionRepository
         self.readerEngineDelegate = readerEngineDelegate
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String) -> FolioReaderReadPosition? {
         guard bookIdentity.accepts(bookId) else { return nil }
 
-        return AppContainer.shared?.readingPositionRepository.getPosition(forBookId: bookIdentity.canonicalBookId, policy: .latest)?.toFolioReaderReadPosition()
+        return readingPositionRepository.getPosition(for: book, policy: .latest)?.toFolioReaderReadPosition()
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, by rootPageNumber: Int) -> FolioReaderReadPosition? {
         guard bookIdentity.accepts(bookId) else { return nil }
 
-        return (AppContainer.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? [])
+        return readingPositionRepository.getPositions(for: book)
             .filter({
                 $0.readerName == ReaderType.YabrEPUB.rawValue
                 &&
@@ -534,14 +547,17 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
         if let delegate = readerEngineDelegate {
             delegate.readerEngine(self, didUpdatePosition: enginePos)
         } else {
-            AppContainer.shared?.readingPositionRepository.savePosition(bookDevPos, forBookId: bookIdentity.canonicalBookId)
+            readingPositionRepository.savePosition(bookDevPos, for: book)
         }
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, remove readPosition: FolioReaderReadPosition) {
         guard bookIdentity.accepts(bookId) else { return }
 
-        AppContainer.shared?.readingPositionRepository.removePosition(position: readPosition.toBookDeviceReadingPosition(), forBookId: bookIdentity.canonicalBookId)
+        readingPositionRepository.removePosition(
+            position: readPosition.toBookDeviceReadingPosition(),
+            for: book
+        )
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader, bookId: String, getById deviceId: String) -> [FolioReaderReadPosition] {
@@ -552,17 +568,17 @@ public class FolioReaderYabrReadPositionProvider: FolioReaderReadPositionProvide
     public func folioReaderReadPosition(_ folioReader: FolioReader, allByBookId bookId: String) -> [FolioReaderReadPosition] {
         guard bookIdentity.accepts(bookId) else { return [] }
 
-        return (AppContainer.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? []).map { $0.toFolioReaderReadPosition() }
+        return readingPositionRepository.getPositions(for: book).map { $0.toFolioReaderReadPosition() }
     }
 
     public func folioReaderReadPosition(_ folioReader: FolioReader) -> [FolioReaderReadPosition] {
-        return (AppContainer.shared?.readingPositionRepository.getPositions(forBookId: bookIdentity.canonicalBookId) ?? []).map { $0.toFolioReaderReadPosition() }
+        return readingPositionRepository.getPositions(for: book).map { $0.toFolioReaderReadPosition() }
     }
 
     public func folioReaderPositionHistory(_ folioReader: FolioReader, bookId: String) -> [FolioReaderReadPositionHistory] {
         guard bookIdentity.accepts(bookId) else { return [] }
 
-        return (AppContainer.shared?.readingPositionRepository.sessions(forBookId: bookIdentity.canonicalBookId, list: nil) ?? []).map { $0.toFolioReaderReadPositionHistory() }
+        return readingPositionRepository.sessions(for: book, list: nil).map { $0.toFolioReaderReadPositionHistory() }
     }
 
 }

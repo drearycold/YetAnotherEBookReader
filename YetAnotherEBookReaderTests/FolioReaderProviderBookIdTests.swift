@@ -20,7 +20,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(
-            testName: "FolioReaderProviderBookIdTests"
+            testName: "FolioReaderProviderBookIdTests-\(UUID().uuidString)"
         )
 
         guard let library = container.libraryManager.calibreLibraries.first?.value else {
@@ -67,9 +67,9 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     func testReadPositionProviderRestoresCanonicalPositionWithFolioReaderRuntimeId() {
         let savedPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
-        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, for: book)
 
-        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+        let provider = makeReadPositionProvider()
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: folioReaderBookId)
 
         XCTAssertEqual(restored?.pageNumber, 14)
@@ -81,10 +81,10 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let oldPosition = makePosition(page: 4, offsetX: 1, offsetY: 2, cfi: "epubcfi(/6/8)", epoch: 1_000)
         let newPosition = makePosition(page: 17, offsetX: 33, offsetY: 44, cfi: "epubcfi(/6/34)", epoch: 2_000)
 
-        container.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
-        container.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(oldPosition, for: book)
+        container.readingPositionRepository.savePosition(newPosition, for: book)
 
-        let restored = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(container.deviceName))
+        let restored = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container.deviceName))
         XCTAssertEqual(restored?.lastReadPage, 17)
         XCTAssertEqual(restored?.lastPosition, [17, 33, 44])
         XCTAssertEqual(restored?.cfi, "epubcfi(/6/34)")
@@ -97,10 +97,10 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     func testReadPositionProviderReturnsPositionAfterReplacementSave() {
         let oldPosition = makePosition(page: 6, cfi: "epubcfi(/6/12)", epoch: 1_000)
         let newPosition = makePosition(page: 18, offsetX: 9, offsetY: 10, cfi: "epubcfi(/6/36)", epoch: 2_000)
-        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+        let provider = makeReadPositionProvider()
 
-        container.readingPositionRepository.savePosition(oldPosition, forBookId: book.bookPrefId)
-        container.readingPositionRepository.savePosition(newPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(oldPosition, for: book)
+        container.readingPositionRepository.savePosition(newPosition, for: book)
 
         let restored = provider.folioReaderReadPosition(FolioReader(), bookId: book.bookPrefId)
         XCTAssertNotNil(restored)
@@ -131,7 +131,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
         DispatchQueue.global(qos: .default).async {
             writerStarted.signal()
-            repository.savePosition(newPosition, forBookId: self.book.bookPrefId)
+            repository.savePosition(newPosition, for: self.book)
             stateLock.lock()
             writerFinished = true
             stateLock.unlock()
@@ -141,7 +141,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         DispatchQueue.global(qos: .userInitiated).async {
             writerStarted.wait()
             while true {
-                if repository.getPosition(forBookId: self.book.bookPrefId, policy: .latestForDevice(self.container.deviceName)) == nil {
+                if repository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)) == nil {
                     stateLock.lock()
                     sawEmptyPosition = true
                     stateLock.unlock()
@@ -167,16 +167,16 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
     func testReadPositionProviderRejectsUnrelatedId() {
         let savedPosition = makePosition(page: 8)
-        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, for: book)
 
-        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+        let provider = makeReadPositionProvider()
 
         XCTAssertNil(provider.folioReaderReadPosition(FolioReader(), bookId: "unrelated-id"))
         XCTAssertTrue(provider.folioReaderReadPosition(FolioReader(), allByBookId: "unrelated-id").isEmpty)
     }
 
     func testReadPositionProviderSetCallsCompletionForAcceptedAndRejectedIds() {
-        let provider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+        let provider = makeReadPositionProvider()
         let position = makePosition(page: 9).toFolioReaderReadPosition()
         var acceptedCompletionCalled = false
         var rejectedCompletionCalled = false
@@ -312,7 +312,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     func testCombinedPositionAndHighlightRestoreViaFolioReaderRuntimeId() throws {
         // 1. Save a canonical reading position
         let savedPosition = makePosition(page: 21, offsetX: 5, offsetY: 7, cfi: "epubcfi(/6/42[chap03ref])")
-        container.readingPositionRepository.savePosition(savedPosition, forBookId: book.bookPrefId)
+        container.readingPositionRepository.savePosition(savedPosition, for: book)
 
         // 2. Save a canonical highlight via the annotation repository
         let highlight = BookHighlight(
@@ -342,7 +342,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         let container = try makeTestContainer()
 
         // Position restore
-        let positionProvider = FolioReaderYabrReadPositionProvider(book: book, readerInfo: readerInfo)
+        let positionProvider = makeReadPositionProvider()
         let restoredPosition = positionProvider.folioReaderReadPosition(
             FolioReader(), bookId: folioReaderBookId
         )
@@ -456,11 +456,8 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     private func clearReadingPositions() {
-        guard let book = book else { return }
-        let components = book.bookPrefId.components(separatedBy: " - ")
-        guard components.count > 1,
-              let library = container?.calibreLibraries.values.first(where: { $0.key == components[0] }),
-              let config = container?.serverScopedRealmProvider.configuration(for: library.server),
+        guard let book,
+              let config = container?.serverScopedRealmProvider.configuration(for: book.library.server),
               let realm = try? Realm(configuration: config) else {
             return
         }
@@ -469,10 +466,16 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         }
     }
 
+    private func makeReadPositionProvider() -> FolioReaderYabrReadPositionProvider {
+        FolioReaderYabrReadPositionProvider(
+            book: book,
+            readerInfo: readerInfo,
+            readingPositionRepository: container.readingPositionRepository
+        )
+    }
+
     private func readingPositionRealm() throws -> Realm {
-        let components = book.bookPrefId.components(separatedBy: " - ")
-        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.values.first(where: { $0.key == components[0] }))
-        let config = container.serverScopedRealmProvider.configuration(for: library.server)
+        let config = container.serverScopedRealmProvider.configuration(for: book.library.server)
         return try Realm(configuration: config)
     }
 

@@ -145,13 +145,13 @@ class YabrShelfDataModel: ObservableObject {
         for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
             guard let categoryName = categoryName
             else {
-                return
+                continue
             }
 
             let category = CategoryObject(type: .Author, category: categoryName)
             if let index = categories.firstIndex(of: category) {
                 categories[index].inShelfBookIds.insert(inShelfId)
-                return
+                continue
             }
 
             category.inShelfBookIds.insert(inShelfId)
@@ -238,12 +238,12 @@ class YabrShelfDataModel: ObservableObject {
         for categoryName in [book.authorFirst, book.authorSecond, book.authorThird] {
             guard let categoryName = categoryName
             else {
-                return
+                continue
             }
 
             guard let index = categories.firstIndex(of: CategoryObject(type: .Author, category: categoryName))
             else {
-                return
+                continue
             }
 
             let category = categories[index]
@@ -251,7 +251,7 @@ class YabrShelfDataModel: ObservableObject {
 
             guard category.inShelfBookIds.isEmpty
             else {
-                return
+                continue
             }
 
             category.cancellables.removeAll()
@@ -344,7 +344,7 @@ extension AppContainerProtocol where Self: ObservableObject {
                 let readingPositionRepository = self.readingPositionRepository
                 var booksWithTS: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])] = []
                 for (key, book) in booksInShelf {
-                    let positions: [BookDeviceReadingPosition] = readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+                    let positions = readingPositionRepository.getPositions(for: book)
                     let maxEpoch: Date? = positions.map { p in Date(timeIntervalSince1970: p.epoch) }.max()
                     let ts: Date = max(book.lastModified, maxEpoch ?? book.lastUpdated)
                     booksWithTS.append((key, book, ts, positions))

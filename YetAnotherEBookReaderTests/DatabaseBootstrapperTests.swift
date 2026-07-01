@@ -140,4 +140,40 @@ final class DatabaseBootstrapperTests: XCTestCase {
     // configuration that opens on the main thread but fails on the
     // queue is not reliable. The error mapping and queue-bound
     // rethrow are verified by code review of `DatabaseBootstrapper.swift`.
+
+    func testMigrationFrom140To141AppliesSearchIndexes() throws {
+        let previousDefaultConfiguration = Realm.Configuration.defaultConfiguration
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("DatabaseMigration-\(UUID().uuidString)", isDirectory: true)
+        let realmURL = directory.appendingPathComponent("migration.realm")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer {
+            Realm.Configuration.defaultConfiguration = previousDefaultConfiguration
+            try? FileManager.default.removeItem(at: directory)
+        }
+
+        var oldConfiguration = Realm.Configuration()
+        oldConfiguration.fileURL = realmURL
+        oldConfiguration.schemaVersion = 140
+        try autoreleasepool {
+            _ = try Realm(configuration: oldConfiguration)
+        }
+        XCTAssertEqual(try schemaVersionAtURL(realmURL), 140)
+
+        let migrator = DatabaseMigrator()
+        let config = try migrator.makeConfiguration(schemaVersion: 141, fileURL: realmURL) { _ in }
+        let migratedRealm = try Realm(configuration: config)
+        let searchSchema = try XCTUnwrap(
+            migratedRealm.schema.objectSchema.first {
+                $0.className == CalibreLibrarySearchObject.className()
+            }
+        )
+
+        XCTAssertEqual(config.schemaVersion, 141)
+        XCTAssertEqual(try schemaVersionAtURL(realmURL), 141)
+        XCTAssertNil(config.migrationBlock)
+        XCTAssertTrue(try XCTUnwrap(searchSchema["libraryId"]).isIndexed)
+        XCTAssertTrue(try XCTUnwrap(searchSchema["search"]).isIndexed)
+        XCTAssertTrue(try XCTUnwrap(searchSchema["sortAsc"]).isIndexed)
+    }
 }

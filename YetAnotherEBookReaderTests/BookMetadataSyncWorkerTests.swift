@@ -262,7 +262,12 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
         let databaseService = DatabaseService()
         databaseService.setup(conf: config)
 
-        let positionRepository = RealmReadingPositionRepository(databaseService: databaseService)
+        let positionRepository = RealmReadingPositionRepository(
+            databaseService: databaseService,
+            realmConfigurationProvider: InMemoryServerScopedRealmConfigurationProvider(
+                identifierPrefix: "BookMetadataSyncWorkerTests-\(UUID().uuidString)"
+            )
+        )
         let annotationRepository = RealmAnnotationRepository(databaseService: databaseService)
         let realWorker = BookMetadataSyncWorker(
             readingPositionRepository: positionRepository,
@@ -320,7 +325,7 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 
         XCTAssertTrue(outcome.positionsToUpload.isEmpty)
         XCTAssertTrue(outcome.annotationsToUpload.isEmpty)
-        XCTAssertEqual(positionRepository.getPositions(forBookId: book.bookPrefId).count, 1)
+        XCTAssertEqual(positionRepository.getPositions(for: book).count, 1)
         XCTAssertEqual(annotationRepository.getBookmarks(forBookId: book.bookPrefId, excludeRemoved: true).count, 1)
         XCTAssertEqual(annotationRepository.getHighlights(forBookId: book.bookPrefId, excludeRemoved: true).count, 1)
     }
@@ -331,9 +336,13 @@ final class BookMetadataSyncWorkerTests: XCTestCase {
 final class ThreadCheckReadingPositionRepository: MockReadingPositionRepository, @unchecked Sendable {
     var wasSyncCalledOnBackgroundThread = false
 
-    override func syncPositions(entries lastReadPositions: [CalibreBookLastReadPositionEntry], forBookId bookId: String) -> [CalibreBookLastReadPositionEntry] {
+    override func syncPositions(
+        entries lastReadPositions: [CalibreBookLastReadPositionEntry],
+        forBookId bookId: String,
+        server: CalibreServer?
+    ) -> [CalibreBookLastReadPositionEntry] {
         wasSyncCalledOnBackgroundThread = !Thread.isMainThread
-        return super.syncPositions(entries: lastReadPositions, forBookId: bookId)
+        return super.syncPositions(entries: lastReadPositions, forBookId: bookId, server: server)
     }
 }
 

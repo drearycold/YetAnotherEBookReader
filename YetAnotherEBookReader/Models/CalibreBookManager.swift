@@ -85,7 +85,11 @@ class CalibreBookManager: ObservableObject {
         if let repo = readingPositionRepository {
             self.readingPositionRepository = repo
         } else {
-            self.readingPositionRepository = RealmReadingPositionRepository(databaseService: databaseService, container: container)
+            self.readingPositionRepository = RealmReadingPositionRepository(
+                databaseService: databaseService,
+                realmConfigurationProvider: container?.serverScopedRealmProvider
+                    ?? DefaultServerScopedRealmConfigurationProvider()
+            )
         }
 
         if let repo = annotationRepository {
@@ -111,17 +115,30 @@ class CalibreBookManager: ObservableObject {
 
     // MARK: - Initialization & Realm Sync
 
-    func populateBookShelf() {
+    func populateBookShelf(sendShelfUpdate: Bool = true, completion: (() -> Void)? = nil) {
+        let finish = {
+            if Thread.isMainThread {
+                completion?()
+            } else {
+                DispatchQueue.main.async {
+                    completion?()
+                }
+            }
+        }
+
         let work = { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                finish()
+                return
+            }
             let books = self.bookRepository.getAllBooksInShelf()
             var tempBooks = [String: CalibreBook]()
             var changedBooks = [CalibreBook]()
-            
+
             for book in books {
                 var updatedBook = book
                 var needsSave = false
-                
+
                 for (formatRaw, formatInfo) in updatedBook.formats {
                     guard let format = Format(rawValue: formatRaw) else {
                         continue
@@ -143,15 +160,15 @@ class CalibreBookManager: ObservableObject {
                         needsSave = true
                     }
                 }
-                
+
                 if needsSave {
                     self.bookRepository.saveBook(updatedBook)
                     changedBooks.append(updatedBook)
                 }
-                
+
                 tempBooks[updatedBook.inShelfId] = updatedBook
             }
-            
+
             let publish = {
                 self.booksInShelf = tempBooks
                 for updatedBook in changedBooks {
@@ -160,16 +177,19 @@ class CalibreBookManager: ObservableObject {
                     }
                 }
                 self.isShelfLoaded = true
-                self.container?.calibreUpdatedSubject.send(.shelf)
+                if sendShelfUpdate {
+                    self.container?.calibreUpdatedSubject.send(.shelf)
+                }
+                finish()
             }
-            
+
             if Thread.isMainThread {
                 publish()
             } else {
                 DispatchQueue.main.async(execute: publish)
             }
         }
-        
+
         if NSClassFromString("XCTestCase") != nil {
             work()
         } else {
@@ -205,11 +225,20 @@ class CalibreBookManager: ObservableObject {
     func updateBook(book: CalibreBook) {
         bookRepository.saveBook(book)
 
-        if readingBook?.inShelfId == book.inShelfId {
-            readingBook = book
+        let publish = { [weak self] in
+            guard let self = self else { return }
+            if self.readingBook?.inShelfId == book.inShelfId {
+                self.readingBook = book
+            }
+            if book.inShelf {
+                self.booksInShelf[book.inShelfId] = book
+            }
         }
-        if book.inShelf {
-            booksInShelf[book.inShelfId] = book
+
+        if Thread.isMainThread {
+            publish()
+        } else {
+            DispatchQueue.main.async(execute: publish)
         }
     }
 
@@ -291,7 +320,7 @@ class CalibreBookManager: ObservableObject {
 
         booksInShelf.removeValue(forKey: inShelfId)
 
-        if readingPositionRepository.getPositions(forBookId: book.bookPrefId).first?.id == container?.deviceName,
+        if readingPositionRepository.getPositions(for: book).first?.id == container?.deviceName,
            let calibreServerService = container?.calibreServerService,
            let library = container?.calibreLibraries[book.library.id],
            let goodreadsId = book.identifiers["goodreads"],
@@ -305,7 +334,7 @@ class CalibreBookManager: ObservableObject {
                     logger.error("Failed to remove book \(book.title) from Goodreads currently-reading shelf: \(error.localizedDescription)")
                 }
 
-                if let position = readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(container?.deviceName ?? "")), position.lastProgress > 99 {
+                if let position = readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container?.deviceName ?? "")), position.lastProgress > 99 {
                     do {
                         try await connector.addToShelf(goodreads_id: goodreadsId, shelfName: "read")
                     } catch {
@@ -669,7 +698,7 @@ class CalibreBookManager: ObservableObject {
 
         if task.request.getAnnotations, let annotationsResult = task.booksAnnotationsEntry {
             var jobs = [BookMetadataSyncWorker.SyncJob]()
-            
+
             for book in task.booksInShelf {
                 for (formatKey, _) in book.formats {
                     guard let format = Format(rawValue: formatKey),
@@ -685,7 +714,7 @@ class CalibreBookManager: ObservableObject {
                     )
                 }
             }
-            
+
             for book in task.booksAnnotation {
                 for (formatKey, _) in book.formats {
                     guard let format = Format(rawValue: formatKey),
@@ -701,9 +730,9 @@ class CalibreBookManager: ObservableObject {
                     )
                 }
             }
-            
+
             let outcome = await metadataSyncWorker.executeSync(jobs: jobs)
-            
+
             // Trigger uploads for positions
             for posUpload in outcome.positionsToUpload {
                 for pos in posUpload.entries {
@@ -722,7 +751,7 @@ class CalibreBookManager: ObservableObject {
                     }
                 }
             }
-            
+
             // Trigger uploads for annotations
             for annUpload in outcome.annotationsToUpload {
                 do {

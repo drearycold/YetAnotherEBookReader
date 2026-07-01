@@ -233,7 +233,6 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
     }
     
     func testReadingPositionThreading() throws {
-        // Use a bookId that does not contain '@' or '^' to avoid accessing actor-isolated AppContainer.shared from background thread
         let bookId = "thread_test_book"
         let repo = repository!
         
@@ -259,5 +258,41 @@ final class RealmReadingPositionRepositoryTests: XCTestCase {
         XCTAssertEqual(positions.count, 5)
         let ids = Set(positions.map { $0.id })
         XCTAssertEqual(ids, Set(["device-1", "device-2", "device-3", "device-4", "device-5"]))
+    }
+
+    func testExplicitBookContextKeepsServerRealmsIsolated() throws {
+        let provider = InMemoryServerScopedRealmConfigurationProvider(
+            identifierPrefix: "RealmReadingPositionRepositoryTests-\(UUID().uuidString)"
+        )
+        let scopedRepository = RealmReadingPositionRepository(
+            databaseService: databaseService,
+            realmConfigurationProvider: provider
+        )
+        let firstBook = TestFixtures.makeBook(
+            id: 42,
+            library: TestFixtures.makeLibrary(
+                server: TestFixtures.makeServer(name: "First"),
+                key: "shared"
+            )
+        )
+        let secondBook = TestFixtures.makeBook(
+            id: 42,
+            library: TestFixtures.makeLibrary(
+                server: TestFixtures.makeServer(name: "Second"),
+                key: "shared"
+            )
+        )
+
+        scopedRepository.savePosition(
+            TestFixtures.makeReadingPosition(id: "first-device", epoch: 1),
+            for: firstBook
+        )
+        scopedRepository.savePosition(
+            TestFixtures.makeReadingPosition(id: "second-device", epoch: 2),
+            for: secondBook
+        )
+
+        XCTAssertEqual(scopedRepository.getPositions(for: firstBook).map(\.id), ["first-device"])
+        XCTAssertEqual(scopedRepository.getPositions(for: secondBook).map(\.id), ["second-device"])
     }
 }

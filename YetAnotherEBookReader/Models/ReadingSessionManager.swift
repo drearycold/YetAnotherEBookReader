@@ -76,7 +76,7 @@ class ReadingSessionManager: ObservableObject {
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
-        let positions = container?.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        let positions = container?.readingPositionRepository.getPositions(for: book)
         return prepareBookReading(book: book, withLoadedPositions: positions)
     }
     
@@ -85,7 +85,7 @@ class ReadingSessionManager: ObservableObject {
             return ReaderInfo(deviceName: "", url: URL(fileURLWithPath: "/invalid"), missing: true, format: .UNKNOWN, readerType: .UNSUPPORTED, position: .init(readerName: ReaderType.UNSUPPORTED.id))
         }
         
-        let loadedPositions = positions ?? container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        let loadedPositions = positions ?? container.readingPositionRepository.getPositions(for: book)
         
         var candidatePositions = [BookDeviceReadingPosition]()
 
@@ -165,11 +165,11 @@ class ReadingSessionManager: ObservableObject {
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId
             if let book = container.bookManager.booksInShelf[bookInShelfId] {
-                historyList.append(contentsOf: container.readingPositionRepository.sessions(forBookId: book.bookPrefId, list: startDateAfter))
+                historyList.append(contentsOf: container.readingPositionRepository.sessions(for: book, list: startDateAfter))
             }
         } else {
             container.bookManager.booksInShelf.forEach {
-                historyList.append(contentsOf: container.readingPositionRepository.sessions(forBookId: $0.value.bookPrefId, list: startDateAfter))
+                historyList.append(contentsOf: container.readingPositionRepository.sessions(for: $0.value, list: startDateAfter))
             }
         }
         
@@ -193,7 +193,7 @@ class ReadingSessionManager: ObservableObject {
         
         container.bookManager.refreshShelfMetadataV2(with: [book.library.server.id], for: [book.inShelfId], serverReachableChanged: true)
 
-        guard let updatedReadingPosition = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId).first else { return }
+        guard let updatedReadingPosition = container.readingPositionRepository.getPositions(for: book).first else { return }
 
         if floor(updatedReadingPosition.lastProgress) > lastPosition.lastProgress || updatedReadingPosition.lastProgress < floor(lastPosition.lastProgress),
            let library = container.libraryManager.calibreLibraries[book.library.id],
@@ -223,7 +223,7 @@ class ReadingSessionManager: ObservableObject {
     
     func updateCurrentPosition(alertDelegate: AlertDelegate?) {
         guard let readingBook = self.readingBook,
-              let updatedReadingPosition = container?.readingPositionRepository.getPositions(forBookId: readingBook.bookPrefId).first,
+              let updatedReadingPosition = container?.readingPositionRepository.getPositions(for: readingBook).first,
               let readerInfo = self.readerInfo
         else {
             return

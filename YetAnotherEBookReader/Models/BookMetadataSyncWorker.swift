@@ -67,7 +67,7 @@ final class BookMetadataSyncWorker {
 
                     pendingPositions = readingPositionRepository.syncPositions(
                         entries: entry.last_read_positions,
-                        forBookId: book.bookPrefId
+                        for: book
                     )
                     if shouldMergeAnnotations {
                         highlightPending = annotationRepository.syncHighlights(

@@ -3,7 +3,7 @@
 //  YetAnotherEBookReader
 //
 //  Extracted from AppContainer.tryInitializeDatabase() on 2026-06-24.
-//  Owns the Realm schema v42→v140 migration history.
+//  Owns the Realm schema v42→v141 migration history.
 //
 
 import Foundation
@@ -11,13 +11,17 @@ import RealmSwift
 import OSLog
 
 final class DatabaseMigrator {
-    /// Build a fully-configured Realm.Configuration with all v42→v140 migration
+    /// Build a fully-configured Realm.Configuration with all v42→v141 migration
     /// blocks and the application-support file path. The supplied `statusHandler`
     /// receives human-readable progress updates (currently only emitted from the
     /// v90 server-id migration). The `schemaVersion` is supplied by the caller so
     /// there is a single source of truth (typically derived from
     /// `YabrAppInfo.shared.build`).
-    func makeConfiguration(schemaVersion: UInt64, statusHandler: @escaping (String) -> Void) throws -> Realm.Configuration {
+    func makeConfiguration(
+        schemaVersion: UInt64,
+        fileURL: URL? = nil,
+        statusHandler: @escaping (String) -> Void
+    ) throws -> Realm.Configuration {
         var conf = Realm.Configuration(
             schemaVersion: schemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
@@ -33,6 +37,10 @@ final class DatabaseMigrator {
                     // Removed deprecated properties from CalibreLibrarySearchObject:
                     // generation, totalNumber, bookIds, books. Realm automatically
                     // drops removed columns during migration.
+                }
+                if oldSchemaVersion < 141 {
+                    // Added indexes on libraryId, search, and sortAsc in CalibreLibrarySearchObject.
+                    // Realm automatically applies index changes during schema migration.
                 }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
@@ -239,8 +247,10 @@ final class DatabaseMigrator {
             }
         )
 
-        // Move legacy document-directory realm to application-support if needed.
-        if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+        if let fileURL {
+            conf.fileURL = fileURL
+        } else if let applicationSupportURL = try? FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
+            // Move legacy document-directory realm to application-support if needed.
             conf.fileURL = applicationSupportURL.appendingPathComponent("default.realm")
             if let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) {
                 let existingRealmURL = documentDirectoryURL.appendingPathComponent("default.realm")

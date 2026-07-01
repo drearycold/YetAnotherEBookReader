@@ -103,18 +103,13 @@ class BookDetailViewModelTests: XCTestCase {
     }
     
     private func clearReadingPositions() {
-        guard let calibreBook = mockCalibreBook else { return }
-        let bookId = calibreBook.bookPrefId
-        let components = bookId.components(separatedBy: " - ")
-        if components.count > 1 {
-            let libraryKey = components[0]
-            if let library = mockAppContainer?.calibreLibraries.values.first(where: { $0.key == libraryKey }),
-               let config = mockAppContainer?.serverScopedRealmProvider.configuration(for: library.server),
-               let realm = try? Realm(configuration: config) {
-                try? realm.write {
-                    realm.delete(realm.objects(BookDeviceReadingPositionRealm.self))
-                }
-            }
+        guard let calibreBook = mockCalibreBook,
+              let config = mockAppContainer?.serverScopedRealmProvider.configuration(for: calibreBook.library.server),
+              let realm = try? Realm(configuration: config) else {
+            return
+        }
+        try? realm.write {
+            realm.delete(realm.objects(BookDeviceReadingPositionRealm.self))
         }
     }
 
@@ -348,7 +343,7 @@ class BookDetailViewModelTests: XCTestCase {
             lastProgress: 75.0,
             epoch: Date().timeIntervalSince1970
         )
-        mockAppContainer.readingPositionRepository.savePosition(devicePosition, forBookId: mockCalibreBook.bookPrefId)
+        mockAppContainer.readingPositionRepository.savePosition(devicePosition, for: mockCalibreBook)
         
         let otherPosition = BookDeviceReadingPosition(
             id: "other-device",
@@ -357,7 +352,7 @@ class BookDetailViewModelTests: XCTestCase {
             lastProgress: 30.0,
             epoch: Date().timeIntervalSince1970
         )
-        mockAppContainer.readingPositionRepository.savePosition(otherPosition, forBookId: mockCalibreBook.bookPrefId)
+        mockAppContainer.readingPositionRepository.savePosition(otherPosition, for: mockCalibreBook)
         
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .localProgress(percent: 75.0, device: viewModel.deviceName))
@@ -388,7 +383,7 @@ class BookDetailViewModelTests: XCTestCase {
             lastProgress: 30.0,
             epoch: Date().timeIntervalSince1970
         )
-        mockAppContainer.readingPositionRepository.savePosition(otherPosition, forBookId: mockCalibreBook.bookPrefId)
+        mockAppContainer.readingPositionRepository.savePosition(otherPosition, for: mockCalibreBook)
         
         let summary = viewModel.getReadingProgressSummary(for: mockCalibreBook)
         XCTAssertEqual(summary, .localProgress(percent: 30.0, device: "other-device"))
@@ -426,7 +421,7 @@ class BookDetailViewModelTests: XCTestCase {
             lastProgress: 30.0,
             epoch: Date().timeIntervalSince1970
         )
-        mockAppContainer.readingPositionRepository.savePosition(position, forBookId: mockCalibreBook.bookPrefId)
+        mockAppContainer.readingPositionRepository.savePosition(position, for: mockCalibreBook)
         
         XCTAssertTrue(viewModel.hasReadingHistory(for: mockCalibreBook))
     }
@@ -839,13 +834,13 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
             lastProgress: 42.0,
             epoch: Date().timeIntervalSince1970
         )
-        mockAppContainer.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+        mockAppContainer.readingPositionRepository.savePosition(position, for: book)
         
         let expectation = expectation(description: "Background queue can read reading positions")
         let queue = DispatchQueue(label: "reading-position-thread-test")
         
         queue.async {
-            let positions = self.mockAppContainer.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+            let positions = self.mockAppContainer.readingPositionRepository.getPositions(for: book)
             XCTAssertTrue(positions.contains(where: { $0.id == "thread-test-device" }))
             expectation.fulfill()
         }

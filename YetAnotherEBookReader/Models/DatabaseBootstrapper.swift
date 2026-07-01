@@ -66,10 +66,11 @@ final class DatabaseBootstrapper {
 
         container.serverManager.populateServers()
         container.libraryManager.populateLibraries()
-        container.bookManager.populateBookShelf()
-        container.libraryManager.populateLocalLibraryBooks()
-
-        container.calibreUpdatedSubject.send(.shelf)
+        container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
+            container?.libraryManager.populateLocalLibraryBooks {
+                container?.calibreUpdatedSubject.send(.shelf)
+            }
+        }
         container.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))
 
         migrateLegacyReadPosData()

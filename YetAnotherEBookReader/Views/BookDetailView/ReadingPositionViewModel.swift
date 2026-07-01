@@ -26,7 +26,7 @@ class ReadingPositionListViewModel: ObservableObject {
     init(container: AppContainer, book: CalibreBook, positions: [BookDeviceReadingPosition]) {
         self.container = container
         self.book = book
-        self.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
+        self.positions = container.readingPositionRepository.getPositions(for: book)
         
         percentFormatter.numberStyle = .percent
         percentFormatter.minimumFractionDigits = 1
@@ -58,7 +58,7 @@ class ReadingPositionListViewModel: ObservableObject {
     }
     
     func removePosition(_ deviceName: String) {
-        container.readingPositionRepository.removePosition(deviceName: deviceName, forBookId: book.bookPrefId)
+        container.readingPositionRepository.removePosition(deviceName: deviceName, for: book)
         modified = true
     }
 }
@@ -165,8 +165,8 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
 
         if let book = container.bookManager.readingBook {
             listModel.book = book
-            listModel.positions = container.readingPositionRepository.getPositions(forBookId: book.bookPrefId)
-            if let position = container.readingPositionRepository.getPosition(forBookId: book.bookPrefId, policy: .latestForDevice(self.position.id)) {
+            listModel.positions = container.readingPositionRepository.getPositions(for: book)
+            if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(self.position.id)) {
                 self.position = position
             }
         }
@@ -239,13 +239,16 @@ class ReadingPositionHistoryViewModel: ObservableObject {
             localActivities = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
 
             if let book = container.readingPositionRepository.historyBook(for: library, bookId: bookId) {
-                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
+                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
             } else if let book = container.bookManager.readingBook {
-                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(forBookId: book.bookPrefId))
+                listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
             }
 
             let prefix = BookAnnotation.PrefId(library: library, id: bookId)
-            self.debugReadingPositions = container.readingPositionRepository.debugPositions(forBookId: prefix)
+            self.debugReadingPositions = container.readingPositionRepository.debugPositions(
+                forBookId: prefix,
+                server: library.server
+            )
         } else {
             let computedHistory = readingHistoryList.reduce(into: [String: Double](), { partialResult, entry in
                 let inShelfId = entry.key

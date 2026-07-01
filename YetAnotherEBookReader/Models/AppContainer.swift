@@ -114,7 +114,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     private var defaultLog = Logger()
 
-    static var RealmSchemaVersion: UInt64 = 140
+    static var RealmSchemaVersion: UInt64 = 141
     var realm: Realm?
     var realmSaveBooksMetadata: Realm?
     var realmConf: Realm.Configuration?
@@ -129,7 +129,10 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
     lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
     lazy var bookRepository: BookRepositoryProtocol = RealmBookRepository(databaseService: databaseService, libraryResolver: self)
-    lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(databaseService: databaseService, container: self)
+    lazy var readingPositionRepository: ReadingPositionRepositoryProtocol = RealmReadingPositionRepository(
+        databaseService: databaseService,
+        realmConfigurationProvider: serverScopedRealmProvider
+    )
     lazy var annotationRepository: AnnotationRepositoryProtocol = RealmAnnotationRepository(databaseService: databaseService)
     lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, container: self)
     lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository { [weak self] server in
@@ -200,9 +203,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         AppContainer.shared = self
 
         setupRealmDefaults()
-        setupImageCache()
-        wireCrossManagerSubscriptions()
-        wireObjectWillChangeForwarding()
 
         if let env = testRealmEnvironment {
             // Test path: install the in-memory main Realm + in-memory
@@ -217,6 +217,10 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             DatabaseService.shared.setup(conf: env.mainRealmConfiguration)
             self.serverScopedRealmProvider = env.serverScopedRealmProvider
         }
+
+        setupImageCache()
+        wireCrossManagerSubscriptions()
+        wireObjectWillChangeForwarding()
 
         if mock {
             // In the test path the in-memory main Realm is already
@@ -265,7 +269,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             )
             position.epoch = 1645495322
 
-            self.readingPositionRepository.savePosition(position, forBookId: book.bookPrefId)
+            self.readingPositionRepository.savePosition(position, for: book)
 
             self.bookManager.readingBook = book
 
@@ -282,7 +286,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// migration block so SwiftUI views using `ObservedResults` don't crash
     /// before `tryInitializeDatabase` has produced the real configuration.
     private func setupRealmDefaults() {
-        AppContainer.RealmSchemaVersion = 140
+        AppContainer.RealmSchemaVersion = 141
         let initialConf = Realm.Configuration(
             schemaVersion: AppContainer.RealmSchemaVersion,
             migrationBlock: { _, _ in }
