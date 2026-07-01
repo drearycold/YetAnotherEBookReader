@@ -167,7 +167,16 @@ struct SectionShelfView: View {
                     }
                     .overlay(
                         Group {
-                            if sections.isEmpty {
+                            if !viewModel.container.bookManager.isShelfLoaded {
+                                ProgressView("Loading Libraries...")
+                                    .padding()
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color(UIColor.systemBackground).opacity(0.8))
+                                            .shadow(radius: 10)
+                                    )
+                                    .padding(32)
+                            } else if sections.isEmpty {
                                 VStack(spacing: 12) {
                                     Image(systemName: "books.vertical")
                                         .font(.system(size: 60))

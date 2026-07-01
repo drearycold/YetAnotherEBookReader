@@ -41,12 +41,25 @@ final class CalibreBookManagerTests: XCTestCase {
         // Clear in-memory dictionary
         bookManager.booksInShelf.removeAll()
 
+        let expectation = XCTestExpectation(description: "Wait for booksInShelf to be populated")
+        
+        let cancellable = bookManager.$booksInShelf
+            .dropFirst()
+            .sink { books in
+                if books[book.inShelfId] != nil {
+                    expectation.fulfill()
+                }
+            }
+
         // Populate
         bookManager.populateBookShelf()
+
+        wait(for: [expectation], timeout: 5.0)
 
         // Verify loaded
         XCTAssertNotNil(bookManager.booksInShelf[book.inShelfId])
         XCTAssertEqual(bookManager.booksInShelf[book.inShelfId]?.title, "Shelf Book")
+        cancellable.cancel()
     }
 
     func testAddBookToShelfAndRemove() {

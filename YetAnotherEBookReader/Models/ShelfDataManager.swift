@@ -313,17 +313,10 @@ extension AppContainerProtocol where Self: ObservableObject {
                 }
                 return (sorted, state)
             }
-            .receive(on: DispatchQueue.main)
-            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([(key: String, value: CalibreBook, info: ReaderInfo)], OSSignpostIntervalState) in
-                let sessionManager = self.sessionManager
-                let mapped = books.map { inShelfId, book, ts, positions -> (key: String, value: CalibreBook, info: ReaderInfo) in
-                    return (inShelfId, book, sessionManager.prepareBookReading(book: book, withLoadedPositions: positions))
+            .map { (books: [(key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
+                let items = books.map { entry in
+                    self.buildShelfBookItem(entry: entry)
                 }
-                return (mapped, state)
-            }
-            .receive(on: queue)
-            .map { (books: [(key: String, value: CalibreBook, info: ReaderInfo)], state: OSSignpostIntervalState) -> ([ShelfBookItem], OSSignpostIntervalState) in
-                let items = books.map(self.buildShelfBookItem)
                 return (items, state)
             }
             .receive(on: RunLoop.main)
@@ -340,11 +333,11 @@ extension AppContainerProtocol where Self: ObservableObject {
 }
 
 extension AppContainerProtocol where Self: ObservableObject {
-    private func buildShelfBookItem(entry: (key: String, value: CalibreBook, info: ReaderInfo)) -> ShelfBookItem {
+    private func buildShelfBookItem(entry: (key: String, value: CalibreBook, ts: Date, positions: [BookDeviceReadingPosition])) -> ShelfBookItem {
         let inShelfId = entry.key
         let book = entry.value
-        let readerInfo = entry.info
-
+        let positions = entry.positions
+        
         let formats: [String: FormatInfo] = book.formats
         let formatArray: [(String, FormatInfo)] = Array(formats)
 
@@ -383,11 +376,18 @@ extension AppContainerProtocol where Self: ObservableObject {
             status = .local
         }
 
+        var lastProgress = 0.0
+        if let position = ReadingPositionSelectionPolicy.latestForDevice(self.deviceName).select(from: positions) {
+            lastProgress = position.lastProgress
+        } else if let position = ReadingPositionSelectionPolicy.latest.select(from: positions) {
+            lastProgress = position.lastProgress
+        }
+
         return ShelfBookItem(
             id: inShelfId,
             title: book.title,
             coverURL: book.coverURL?.absoluteString ?? "",
-            progress: Int(floor(readerInfo.position.lastProgress)),
+            progress: Int(floor(lastProgress)),
             status: status
         )
     }

@@ -89,54 +89,77 @@ class CalibreLibraryManager: ObservableObject {
             }
         }
 
-        guard let dirEnum = FileManager.default.enumerator(atPath: localLibraryURL.path) else {
-            return
-        }
-
-        dirEnum.forEach {
-            guard let fileName = $0 as? String else {
+        // Offload file scanning and metadata loading to the background thread
+        let work = { [weak self] in
+            guard let self = self, let localLibrary = self.localLibrary, let documentServer = container.serverManager.documentServer else { return }
+            
+            guard let dirEnum = FileManager.default.enumerator(atPath: localLibraryURL.path) else {
                 return
             }
-            if fileName.hasSuffix(".db") { return }
-            if fileName.hasSuffix(".db.lock") { return }
-            if fileName.hasSuffix(".db.note") { return }
-            if fileName.hasSuffix(".db.management") { return }
-            if fileName.hasSuffix(".cv") { return }
-            if fileName.hasSuffix(".mx") { return }
 
-            print("populateLocalLibraryBooks \(fileName)")
-            let fileURL = container.serverManager.documentServer!.localBaseUrl!.appendingPathComponent(localLibrary!.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
-
-            container.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary!, on: container.serverManager.documentServer!)
-        }
-
-        let removedBooks: [CalibreBook] = container.bookManager.booksInShelf.values.compactMap { (book: CalibreBook) -> CalibreBook? in
-            guard book.library.server.isLocal else { return nil }
-            let existingFormats: [String] = book.formats.compactMap {
-                guard let format = Format(rawValue: $0.key),
-                      let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
-
-                var isDirectory : ObjCBool = false
-                guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
-                    return nil
+            dirEnum.forEach {
+                guard let fileName = $0 as? String else {
+                    return
                 }
-                guard isDirectory.boolValue == false else {
-                    return nil
-                }
+                if fileName.hasSuffix(".db") { return }
+                if fileName.hasSuffix(".db.lock") { return }
+                if fileName.hasSuffix(".db.note") { return }
+                if fileName.hasSuffix(".db.management") { return }
+                if fileName.hasSuffix(".cv") { return }
+                if fileName.hasSuffix(".mx") { return }
 
-                return $0.key
+                print("populateLocalLibraryBooks \(fileName)")
+                if let localBaseUrl = documentServer.localBaseUrl {
+                    let fileURL = localBaseUrl.appendingPathComponent(localLibrary.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
+                    container.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary, on: documentServer)
+                }
             }
 
-            guard existingFormats.isEmpty else {
-                return nil
+            let booksInShelfValues = Array(container.bookManager.booksInShelf.values)
+            let removedBooks: [CalibreBook] = booksInShelfValues.compactMap { (book: CalibreBook) -> CalibreBook? in
+                guard book.library.server.isLocal else { return nil }
+                let existingFormats: [String] = book.formats.compactMap {
+                    guard let format = Format(rawValue: $0.key),
+                          let bookFileUrl = getSavedUrl(book: book, format: format) else { return nil }
+
+                    var isDirectory : ObjCBool = false
+                    guard FileManager.default.fileExists(atPath: bookFileUrl.path, isDirectory: &isDirectory) else {
+                        return nil
+                    }
+                    guard isDirectory.boolValue == false else {
+                        return nil
+                    }
+
+                    return $0.key
+                }
+
+                guard existingFormats.isEmpty else {
+                    return nil
+                }
+
+                return book
             }
 
-            return book
+            if !removedBooks.isEmpty {
+                let publish = {
+                    removedBooks.forEach {
+                        container.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
+                        print("populateLocalLibraryBooks removeFromShelf \($0)")
+                    }
+                }
+                
+                if Thread.isMainThread {
+                    publish()
+                } else {
+                    DispatchQueue.main.async(execute: publish)
+                }
+            }
         }
-
-        removedBooks.forEach {
-            container.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
-            print("populateLocalLibraryBooks removeFromShelf \($0)")
+        
+        if NSClassFromString("XCTestCase") != nil {
+            work()
+        } else {
+            DispatchQueue.global(qos: .userInitiated).async(execute: work)
         }
     }
     
