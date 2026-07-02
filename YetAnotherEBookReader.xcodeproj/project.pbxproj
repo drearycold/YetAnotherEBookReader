@@ -224,6 +224,8 @@
 		E71F34EB2FDD1DD2007AB0B1 /* CalibreLibraryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */; };
 		E71F34ED2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
 		E71F34EE2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */; };
+		E7B100072FF1000600000007 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
+		E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */; };
 		E71F34F02FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
 		E71F34F12FDE284F007AB0B1 /* BookRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */; };
 		E71F34F32FDE305D007AB0B1 /* ServerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */; };
@@ -636,6 +638,7 @@
 		E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerManager.swift; sourceTree = "<group>"; };
 		E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryManager.swift; sourceTree = "<group>"; };
 		E71F34EC2FDD272C007AB0B1 /* CalibreBookManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBookManager.swift; sourceTree = "<group>"; };
+		E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagerAsyncBroadcaster.swift; sourceTree = "<group>"; };
 		E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookRepository.swift; sourceTree = "<group>"; };
 		E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerRepository.swift; sourceTree = "<group>"; };
 		E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryRepository.swift; sourceTree = "<group>"; };
@@ -1234,6 +1237,7 @@
 				E71F34E92FDD1DD2007AB0B1 /* CalibreLibraryManager.swift */,
 				E71F34E62FDD0933007AB0B1 /* CalibreServerManager.swift */,
 				E792C7ED2F849A2B0015E020 /* FontsManager.swift */,
+				E7B100062FF1000600000006 /* ManagerAsyncBroadcaster.swift */,
 				E792C7EA2F84990E0015E020 /* ReadingSessionManager.swift */,
 				E7AD2142293720AC00736FEF /* ShelfDataManager.swift */,
 			);
@@ -1704,6 +1708,7 @@
 				E71F34D12FDBD78E007AB0B1 /* UnifiedCategoryService.swift in Sources */,
 				2ABB9156261F1A47004AA7C0 /* YabrEBookReader.swift in Sources */,
 				E71F34EE2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */,
+				E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,
 				E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
 				E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
@@ -1984,6 +1989,7 @@
 				E7226E2A2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
 				6E7B810028FBA7AD008B075C /* CalibreDateParser.swift in Sources */,
 				E71F34ED2FDD272C007AB0B1 /* CalibreBookManager.swift in Sources */,
+				E7B100072FF1000600000007 /* ManagerAsyncBroadcaster.swift in Sources */,
 				E70A25CE2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,
 				E71F34BD2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
 				E71F35662FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,

@@ -8,54 +8,6 @@
 import Foundation
 import OSLog
 
-final class ManagerAsyncBroadcaster<Element> {
-    private let lock = NSLock()
-    private var continuations = [UUID: AsyncStream<Element>.Continuation]()
-
-    func stream() -> AsyncStream<Element> {
-        makeStream(initialValue: nil)
-    }
-
-    func stream(initialValue: Element) -> AsyncStream<Element> {
-        makeStream(initialValue: initialValue)
-    }
-
-    private func makeStream(initialValue: Element?) -> AsyncStream<Element> {
-        AsyncStream { [weak self] continuation in
-            let id = UUID()
-            if let initialValue {
-                continuation.yield(initialValue)
-            }
-            self?.lock.lock()
-            self?.continuations[id] = continuation
-            self?.lock.unlock()
-
-            continuation.onTermination = { [weak self] _ in
-                self?.lock.lock()
-                self?.continuations.removeValue(forKey: id)
-                self?.lock.unlock()
-            }
-        }
-    }
-
-    func send(_ value: Element) {
-        lock.lock()
-        let currentContinuations = continuations.map { $0.value }
-        lock.unlock()
-        for continuation in currentContinuations {
-            continuation.yield(value)
-        }
-    }
-
-    func finish() {
-        lock.lock()
-        let currentContinuations = continuations.map { $0.value }
-        continuations.removeAll()
-        lock.unlock()
-        currentContinuations.forEach { $0.finish() }
-    }
-}
-
 private actor ShelfCategoryStore {
     struct CategoryDescriptor: Hashable {
         let category: String
@@ -591,7 +543,7 @@ final class YabrShelfDataModel {
         }
 
         recentShelfItems = result.books
-        publishRecentShelfSnapshot(sendLegacySubject: true)
+        publishRecentShelfSnapshot()
     }
 
     private func rebuildShelfCategories(from booksInShelf: [String: CalibreBook]) async {
@@ -672,7 +624,7 @@ final class YabrShelfDataModel {
     private func markInitialLoadComplete() {
         guard !isInitialLoadComplete else { return }
         isInitialLoadComplete = true
-        publishDiscoverShelfSnapshot(sendLegacySubject: false)
+        publishDiscoverShelfSnapshot()
     }
 
     func seedCategoriesForTesting(_ categories: [CategoryObject]) async {
@@ -686,7 +638,7 @@ final class YabrShelfDataModel {
         }
         await categoryStore.seedCategoriesForTesting(seeds)
         isInitialLoadComplete = categories.isEmpty
-        publishDiscoverShelfSnapshot(sendLegacySubject: false)
+        publishDiscoverShelfSnapshot()
     }
 
     func categoryNamesForTesting() async -> Set<String> {
@@ -705,15 +657,15 @@ final class YabrShelfDataModel {
         Set(categorySearchTasks.keys)
     }
 
-    func setDiscoverShelfSnapshotForTesting(_ snapshot: DiscoverShelfSnapshot, sendLegacySubject: Bool = true) {
+    func setDiscoverShelfSnapshotForTesting(_ snapshot: DiscoverShelfSnapshot) {
         discoverShelfItemsById = Dictionary(uniqueKeysWithValues: snapshot.sections.map { ($0.id, $0) })
         isInitialLoadComplete = snapshot.isInitialLoadComplete
-        publishDiscoverShelfSnapshot(sendLegacySubject: sendLegacySubject)
+        publishDiscoverShelfSnapshot()
     }
 
-    func setRecentShelfSnapshotForTesting(_ snapshot: RecentShelfSnapshot, sendLegacySubject: Bool = true) {
+    func setRecentShelfSnapshotForTesting(_ snapshot: RecentShelfSnapshot) {
         recentShelfItems = snapshot.books
-        publishRecentShelfSnapshot(sendLegacySubject: sendLegacySubject)
+        publishRecentShelfSnapshot()
     }
 
     func currentRecentSnapshotForTesting() -> RecentShelfSnapshot {
@@ -742,7 +694,7 @@ final class YabrShelfDataModel {
     }
 
     private func notifyDiscoverShelfChanged() {
-        publishDiscoverShelfSnapshot(sendLegacySubject: true)
+        publishDiscoverShelfSnapshot()
     }
 
     private func currentRecentSnapshot() -> RecentShelfSnapshot {
@@ -756,20 +708,14 @@ final class YabrShelfDataModel {
         )
     }
 
-    private func publishRecentShelfSnapshot(sendLegacySubject: Bool) {
+    private func publishRecentShelfSnapshot() {
         let snapshot = currentRecentSnapshot()
         recentSnapshotBroadcaster.publish(snapshot)
-        if sendLegacySubject {
-            container.publishLegacyRecentShelfItems(snapshot.books)
-        }
     }
 
-    private func publishDiscoverShelfSnapshot(sendLegacySubject: Bool) {
+    private func publishDiscoverShelfSnapshot() {
         let snapshot = currentSnapshot()
         discoverSnapshotBroadcaster.publish(snapshot)
-        if sendLegacySubject {
-            container.publishLegacyDiscoverShelfItems(snapshot.sections)
-        }
     }
 
     func refresh() async {

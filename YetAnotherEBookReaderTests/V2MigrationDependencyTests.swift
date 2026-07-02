@@ -6,16 +6,12 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
 @MainActor
 final class V2MigrationDependencyTests: XCTestCase {
-    private var cancellables = Set<AnyCancellable>()
-    
     override func tearDown() {
-        cancellables.removeAll()
         AppContainer.shared = nil
         super.tearDown()
     }
@@ -288,23 +284,6 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(signals, [.shelf])
     }
 
-    func testPublishCalibreUpdateStillBridgesToLegacySubject() async throws {
-        let container = makeAppContainer()
-        let expectation = XCTestExpectation(description: "Legacy calibre subject receives signal")
-
-        container.calibreUpdatedSubject
-            .sink { signal in
-                if signal == .shelf {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        container.publishCalibreUpdate(.shelf)
-
-        await fulfillment(of: [expectation], timeout: 1.0)
-    }
-    
     func testShelfRefreshResetsActiveUnifiedSearchLimit() async throws {
         let container = makeAppContainer()
         let unifiedSearchService = try await makeUnifiedSearchService(container: container)
@@ -584,8 +563,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let section = makeShelfSection(id: "Author: Current")
 
         shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [section], isInitialLoadComplete: true),
-            sendLegacySubject: false
+            .init(sections: [section], isInitialLoadComplete: true)
         )
 
         var iterator = shelfDataModel.snapshots().makeAsyncIterator()
@@ -611,8 +589,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await Task.yield()
         shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [section], isInitialLoadComplete: false),
-            sendLegacySubject: false
+            .init(sections: [section], isInitialLoadComplete: false)
         )
         await waitForSnapshotCount(2, in: { snapshots.count })
         task.cancel()
@@ -635,8 +612,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await Task.yield()
         shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [], isInitialLoadComplete: true),
-            sendLegacySubject: false
+            .init(sections: [], isInitialLoadComplete: true)
         )
         await waitForSnapshotCount(2, in: { snapshots.count })
         task.cancel()
@@ -659,8 +635,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await waitForSnapshotCount(1, in: { snapshots.count })
         shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [], isInitialLoadComplete: false),
-            sendLegacySubject: false
+            .init(sections: [], isInitialLoadComplete: false)
         )
         try await Task.sleep(nanoseconds: 100_000_000)
         task.cancel()
@@ -685,35 +660,11 @@ final class V2MigrationDependencyTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [makeShelfSection(id: "Author: Cancelled")], isInitialLoadComplete: false),
-            sendLegacySubject: false
+            .init(sections: [makeShelfSection(id: "Author: Cancelled")], isInitialLoadComplete: false)
         )
         try await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(snapshots.count, 1)
-    }
-
-    func testShelfDataModelLegacyDiscoverSubjectStillReceivesPublishedSections() async throws {
-        let container = makeAppContainer()
-        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
-        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
-        let section = makeShelfSection(id: "Author: Legacy")
-
-        let expectation = XCTestExpectation(description: "Legacy discover subject receives sections")
-        container.discoverShelfItemsSubject
-            .sink { sections in
-                if sections == [section] {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [section], isInitialLoadComplete: false),
-            sendLegacySubject: true
-        )
-
-        await fulfillment(of: [expectation], timeout: 1.0)
     }
 
     func testShelfDataModelRecentSnapshotsYieldCurrentSnapshotToNewSubscriber() async throws {
@@ -724,8 +675,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let item = makeRecentBookItem(id: "recent-current")
 
         shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [item]),
-            sendLegacySubject: false
+            .init(books: [item])
         )
 
         var iterator = shelfDataModel.recentSnapshots().makeAsyncIterator()
@@ -751,8 +701,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await Task.yield()
         shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [item]),
-            sendLegacySubject: false
+            .init(books: [item])
         )
         await waitForSnapshotCount(2, in: { snapshots.count })
         task.cancel()
@@ -775,8 +724,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         await waitForSnapshotCount(1, in: { snapshots.count })
         shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: []),
-            sendLegacySubject: false
+            .init(books: [])
         )
         try await Task.sleep(nanoseconds: 100_000_000)
         task.cancel()
@@ -802,36 +750,11 @@ final class V2MigrationDependencyTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [makeRecentBookItem(id: "recent-cancelled")]),
-            sendLegacySubject: false
+            .init(books: [makeRecentBookItem(id: "recent-cancelled")])
         )
         try await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(snapshots.count, 1)
-    }
-
-    func testShelfDataModelLegacyRecentSubjectStillReceivesPublishedBooks() async throws {
-        let container = makeAppContainer()
-        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
-        container.bookManager.isShelfLoaded = false
-        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
-        let item = makeRecentBookItem(id: "recent-legacy")
-
-        let expectation = XCTestExpectation(description: "Legacy recent subject receives books")
-        container.recentShelfItemsSubject
-            .sink { books in
-                if books == [item] {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [item]),
-            sendLegacySubject: true
-        )
-
-        await fulfillment(of: [expectation], timeout: 1.0)
     }
 
     func testShelfDataModelRecentRebuildSortsAndMapsStatuses() async throws {

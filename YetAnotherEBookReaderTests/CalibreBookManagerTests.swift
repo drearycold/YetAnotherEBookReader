@@ -7,20 +7,17 @@
 
 import XCTest
 import RealmSwift
-import Combine
 @testable import YetAnotherEBookReader
 
 final class CalibreBookManagerTests: XCTestCase {
     private var container: AppContainer!
     private var bookManager: CalibreBookManager!
     private var library: CalibreLibrary!
-    private var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(testName: "CalibreBookManagerTests")
         bookManager = container.bookManager
         library = container.libraryManager.calibreLibraries.first?.value
-        cancellables = []
         XCTAssertNotNil(library, "Mock library should be populated")
     }
 
@@ -28,7 +25,6 @@ final class CalibreBookManagerTests: XCTestCase {
         container = nil
         bookManager = nil
         library = nil
-        cancellables = nil
     }
 
     func testPopulateBookShelf() {
@@ -73,32 +69,36 @@ final class CalibreBookManagerTests: XCTestCase {
         XCTAssertTrue(completionWasOnMainThread)
     }
 
-    func testPopulateBookShelfSendsShelfUpdateByDefault() {
+    func testPopulateBookShelfSendsShelfUpdateByDefault() async {
         let expectation = XCTestExpectation(description: "Shelf update is sent")
-        container.calibreUpdatedSubject
-            .sink { signal in
+        let task = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
                 if case .shelf = signal {
                     expectation.fulfill()
+                    return
                 }
             }
-            .store(in: &cancellables)
+        }
 
+        await Task.yield()
         bookManager.populateBookShelf()
 
-        wait(for: [expectation], timeout: 1.0)
+        await fulfillment(of: [expectation], timeout: 1.0)
+        task.cancel()
     }
 
-    func testPopulateBookShelfCanSuppressShelfUpdate() {
+    func testPopulateBookShelfCanSuppressShelfUpdate() async {
         let invertedExpectation = XCTestExpectation(description: "Shelf update is not sent")
         invertedExpectation.isInverted = true
-        container.calibreUpdatedSubject
-            .sink { signal in
+        let task = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
                 if case .shelf = signal {
                     invertedExpectation.fulfill()
                 }
             }
-            .store(in: &cancellables)
+        }
 
+        await Task.yield()
         var completionCount = 0
         var completionWasOnMainThread = false
         bookManager.populateBookShelf(sendShelfUpdate: false) {
@@ -106,7 +106,8 @@ final class CalibreBookManagerTests: XCTestCase {
             completionWasOnMainThread = Thread.isMainThread
         }
 
-        wait(for: [invertedExpectation], timeout: 0.2)
+        await fulfillment(of: [invertedExpectation], timeout: 0.2)
+        task.cancel()
         XCTAssertEqual(completionCount, 1)
         XCTAssertTrue(completionWasOnMainThread)
         XCTAssertTrue(bookManager.isShelfLoaded)

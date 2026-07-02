@@ -80,17 +80,11 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
 
-    let bookImportedSubject = PassthroughSubject<BookImportInfo, Never>()
     private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
-    let dismissAllSubject = PassthroughSubject<String, Never>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
-
-    let recentShelfItemsSubject = PassthroughSubject<[ShelfBookItem], Never>()
-    let discoverShelfItemsSubject = PassthroughSubject<[ShelfSectionItem], Never>()
 
     var presentingStack = [Binding<Bool>]()
 
-    let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
     private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
 
     var calibreCancellables = Set<AnyCancellable>()
@@ -166,15 +160,13 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
-    let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
     private let probeLibraryLastModifiedBroadcaster = ManagerAsyncBroadcaster<CalibreSyncLibraryRequest>()
 
     var probeTimer: AnyCancellable?
 
     /// inShelfId for single book
     /// empty string for full update
-    let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
-    private var calibreUpdateContinuations = [UUID: AsyncStream<calibreUpdatedSignal>.Continuation]()
+    private let calibreUpdateBroadcaster = ManagerAsyncBroadcaster<calibreUpdatedSignal>()
 
     @Published var fontsManager = FontsManager()
 
@@ -204,7 +196,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     deinit {
         managerStateForwardingTasks.forEach { $0.cancel() }
-        calibreUpdateContinuations.values.forEach { $0.finish() }
+        calibreUpdateBroadcaster.finish()
         bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
         bookReaderActivityBroadcaster.finish()
@@ -214,7 +206,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @MainActor
     func publishBookImport(_ info: BookImportInfo) {
         bookImportBroadcaster.send(info)
-        bookImportedSubject.send(info)
     }
 
     func bookImportEvents() -> AsyncStream<BookImportInfo> {
@@ -224,7 +215,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @MainActor
     func publishDismissAll(_ reason: String) {
         dismissAllBroadcaster.send(reason)
-        dismissAllSubject.send(reason)
     }
 
     func dismissAllEvents() -> AsyncStream<String> {
@@ -234,7 +224,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @MainActor
     func publishBookReaderActivity(_ phase: ScenePhase) {
         bookReaderActivityBroadcaster.send(phase)
-        bookReaderActivitySubject.send(phase)
     }
 
     func bookReaderActivities() -> AsyncStream<ScenePhase> {
@@ -243,42 +232,20 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     @MainActor
     func publishCalibreUpdate(_ signal: calibreUpdatedSignal) {
-        for continuation in calibreUpdateContinuations.values {
-            continuation.yield(signal)
-        }
-        calibreUpdatedSubject.send(signal)
+        calibreUpdateBroadcaster.send(signal)
     }
 
     @MainActor
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal> {
-        let id = UUID()
-        return AsyncStream { [weak self] continuation in
-            self?.calibreUpdateContinuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in
-                    self?.calibreUpdateContinuations.removeValue(forKey: id)
-                }
-            }
-        }
+        calibreUpdateBroadcaster.stream()
     }
 
     func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest) {
         probeLibraryLastModifiedBroadcaster.send(request)
-        probeLibraryLastModifiedSubject.send(request)
     }
 
     func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest> {
         probeLibraryLastModifiedBroadcaster.stream()
-    }
-
-    @MainActor
-    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem]) {
-        recentShelfItemsSubject.send(books)
-    }
-
-    @MainActor
-    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem]) {
-        discoverShelfItemsSubject.send(sections)
     }
 
     init(

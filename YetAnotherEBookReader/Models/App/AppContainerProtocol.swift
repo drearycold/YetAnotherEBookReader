@@ -87,14 +87,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
 
     // MARK: - App-wide events
 
-    var calibreUpdatedSubject: PassthroughSubject<calibreUpdatedSignal, Never> { get }
-    var bookImportedSubject: PassthroughSubject<BookImportInfo, Never> { get }
-    var dismissAllSubject: PassthroughSubject<String, Never> { get }
-    var recentShelfItemsSubject: PassthroughSubject<[ShelfBookItem], Never> { get }
-    var discoverShelfItemsSubject: PassthroughSubject<[ShelfSectionItem], Never> { get }
-    var bookReaderActivitySubject: PassthroughSubject<ScenePhase, Never> { get }
-    var probeLibraryLastModifiedSubject: PassthroughSubject<CalibreSyncLibraryRequest, Never> { get }
-
     @MainActor
     func publishCalibreUpdate(_ signal: calibreUpdatedSignal)
 
@@ -119,12 +111,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest)
 
     func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest>
-
-    @MainActor
-    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem])
-
-    @MainActor
-    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem])
 
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which

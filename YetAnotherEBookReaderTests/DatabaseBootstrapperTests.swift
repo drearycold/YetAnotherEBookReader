@@ -64,7 +64,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
     /// `AppContainer.initializeDatabase` previously logged and swallowed
     /// any bootstrap error. It must now rethrow so `YetAnotherEBookReaderApp`
     /// can keep the upgrade overlay up and skip `enableProbeTimer()` /
-    /// `bookReaderActivitySubject.send(.active)`.
+    /// `publishBookReaderActivity(.active)`.
     func testInitializeDatabaseRethrowsBootstrapErrors() throws {
         let nonExistentDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("DatabaseBootstrapperTests-\(UUID().uuidString)/nested")

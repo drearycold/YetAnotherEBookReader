@@ -7,7 +7,6 @@
 
 import XCTest
 import RealmSwift
-import Combine
 @testable import YetAnotherEBookReader
 
 final class CalibreLibraryManagerTests: XCTestCase {
@@ -15,7 +14,6 @@ final class CalibreLibraryManagerTests: XCTestCase {
     private var libraryManager: CalibreLibraryManager!
     private var library: CalibreLibrary!
     private var server: CalibreServer!
-    private var cancellables: Set<AnyCancellable>!
     private var databaseService: DatabaseService!
     private var libraryRepository: LibraryRepositoryProtocol!
 
@@ -44,8 +42,6 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager.calibreLibraries[library.id] = library
         try? libraryRepository.saveLibrary(library)
         
-        cancellables = []
-        
         XCTAssertNotNil(server, "Mock server should be populated")
         XCTAssertNotNil(library, "Mock library should be populated")
     }
@@ -55,7 +51,6 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager = nil
         library = nil
         server = nil
-        cancellables = nil
         databaseService = nil
         libraryRepository = nil
         AppContainer.shared = nil
@@ -255,7 +250,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertFalse(libraryManager.librarySyncStatus[library.id]?.isSync ?? true)
     }
 
-    func testRegisterProbeLibraryLastModifiedCancellable() throws {
+    func testRegisterProbeLibraryLastModifiedCancellable() async throws {
         let expectation = XCTestExpectation(description: "Probe last modified succeeds")
         
         let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
@@ -295,21 +290,23 @@ final class CalibreLibraryManagerTests: XCTestCase {
         libraryManager.calibreLibraries[localLib.id] = localLib
         try libraryRepository.saveLibrary(localLib)
         
-        container.calibreUpdatedSubject
-            .receive(on: DispatchQueue.main)
-            .sink { update in
+        let task = Task { @MainActor in
+            for await update in container.calibreUpdates() {
                 if case .library(let updatedLib) = update {
                     if updatedLib.id == localLib.id {
                         XCTAssertTrue(updatedLib.lastModified > Date(timeIntervalSince1970: 0))
                         expectation.fulfill()
+                        return
                     }
                 }
             }
-            .store(in: &cancellables)
+        }
             
+        await Task.yield()
         container.publishProbeLibraryLastModifiedRequest(.init(library: localLib, autoUpdateOnly: false, incremental: false))
         
-        wait(for: [expectation], timeout: 5.0)
+        await fulfillment(of: [expectation], timeout: 5.0)
+        task.cancel()
     }
 
     func testSyncLibraryAndSaveBookMetadata() async throws {
