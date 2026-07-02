@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LibraryInfoBatchDownloadSheet: View {
-    @EnvironmentObject var downloadManager: BookDownloadManager
+    @EnvironmentObject var container: AppContainer
     
     @Binding var presenting: Bool
     @Binding var downloadBookList: [CalibreBook]
@@ -73,7 +73,7 @@ struct LibraryInfoBatchDownloadSheet: View {
                     Button(action: {
                         presenting = false
                         
-                        downloadManager.startBatchDownload(books: selectedFormatBooks, formats: Array(selectedFormats.keys))
+                        container.downloadManager.startBatchDownload(books: selectedFormatBooks, formats: Array(selectedFormats.keys))
                         
                         downloadBookList.removeAll()
                     }) {
@@ -105,6 +105,6 @@ struct LibraryInfoBatchDownloadSheet_Previews: PreviewProvider {
     
     static var previews: some View {
         LibraryInfoBatchDownloadSheet(presenting: $presenting, downloadBookList: $downloadBookList)
-            .environmentObject(container.downloadManager)
+            .environmentObject(container)
     }
 }

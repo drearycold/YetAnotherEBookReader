@@ -8,7 +8,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -25,7 +24,6 @@ final class DSReaderHelperConnectorTests: XCTestCase {
 
         container = MockAppContainerFactory.makeContainer(testName: "DSReaderHelperConnectorTests")
         service = container.calibreServerService
-
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "user", password: "pass")
         library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
 
@@ -49,6 +47,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
 
     override func tearDown() async throws {
         dsreaderHelperServer = nil
+        MockURLProtocol.requestHandler = nil
         library = nil
         server = nil
         service = nil
@@ -281,6 +280,60 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             }
         } catch {
             XCTFail("Expected CalibreAPIError, but got \(error)")
+        }
+    }
+
+    func testRefreshConfigurationAsyncSuccess() async throws {
+        let connector = DSReaderHelperConnector(
+            calibreServerService: service,
+            server: server,
+            dsreaderHelperServer: dsreaderHelperServer,
+            goodreadsSync: nil
+        )
+
+        let payload = Data(#"{"dsreader_helper_prefs":{"plugin_prefs":{"Options":{"servicePort":8080}}}}"#.utf8)
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/dshelper/configuration")
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, payload)
+        }
+
+        let received = try await connector.refreshConfiguration()
+        XCTAssertEqual(received.id, server.uuid.uuidString)
+        XCTAssertEqual(received.port, 8080)
+        XCTAssertEqual(received.data, payload)
+    }
+
+    func testRefreshConfigurationAsyncThrowsForInvalidEndpoint() async throws {
+        let unreachableServer = CalibreServer(
+            uuid: UUID(),
+            name: "Unreachable",
+            baseUrl: "http://unreachable",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let connector = DSReaderHelperConnector(
+            calibreServerService: service,
+            server: unreachableServer,
+            dsreaderHelperServer: dsreaderHelperServer,
+            goodreadsSync: nil
+        )
+
+        do {
+            _ = try await connector.refreshConfiguration()
+            XCTFail("Expected bad URL")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .badURL)
+        } catch {
+            XCTFail("Expected URLError, got \(error)")
         }
     }
 }

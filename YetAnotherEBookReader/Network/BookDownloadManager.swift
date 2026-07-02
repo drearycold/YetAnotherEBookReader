@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import OSLog
 import RealmSwift
 
@@ -33,14 +32,12 @@ public enum DownloadStartError: Error, LocalizedError, Equatable {
     }
 }
 
-class BookDownloadManager: ObservableObject {
-    @Published var activeDownloads: [URL: BookFormatDownload] = [:]
-    
-    let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
-    let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
-    
-    private var cancellables = Set<AnyCancellable>()
+class BookDownloadManager {
+    var activeDownloads: [URL: BookFormatDownload] = [:]
+
     private let defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookDownloadManager")
+    private let downloadSnapshotLock = NSRecursiveLock()
+    private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
     var container: AppContainerProtocol?
     private var realmConf: Realm.Configuration?
@@ -49,8 +46,6 @@ class BookDownloadManager: ObservableObject {
     init(container: AppContainerProtocol? = nil, realmConf: Realm.Configuration? = nil) {
         self.container = container
         self.realmConf = realmConf
-        
-        registerBookFormatDownloadHandler()
     }
     
     func setup(container: AppContainerProtocol, realmConf: Realm.Configuration?) {
@@ -58,27 +53,41 @@ class BookDownloadManager: ObservableObject {
         self.realmConf = realmConf
     }
 
-    private func registerBookFormatDownloadHandler() {
-        bookFormatDownloadSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] request in
-                Task { @MainActor in
-                    _ = self?.requestDownload(book: request.book, format: request.format)
-                }
+    func downloadSnapshots() -> AsyncStream<[URL: BookFormatDownload]> {
+        AsyncStream { continuation in
+            let id = UUID()
+            downloadSnapshotLock.lock()
+            downloadSnapshotContinuations[id] = continuation
+            downloadSnapshotLock.unlock()
+            continuation.yield(activeDownloads)
+            continuation.onTermination = { [weak self] _ in
+                guard let self else { return }
+                self.downloadSnapshotLock.lock()
+                defer { self.downloadSnapshotLock.unlock() }
+                self.downloadSnapshotContinuations.removeValue(forKey: id)
             }
-            .store(in: &cancellables)
+        }
+    }
+
+    fileprivate func publishDownloadSnapshot() {
+        downloadSnapshotLock.lock()
+        let continuations = Array(downloadSnapshotContinuations.values)
+        downloadSnapshotLock.unlock()
+        continuations.forEach {
+            $0.yield(activeDownloads)
+        }
     }
 
     @discardableResult
     @MainActor
     func requestDownload(book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
-        startDownloadNew(book, format: format, overwrite: overwrite)
+        startDownload(book, format: format, overwrite: overwrite)
     }
 
     func cancelDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
                     $1.book.id == book.id && $1.format == format
-            && ($1.isDownloading || $1.resumeData != nil)
+            && $1.isActive
         }).first else {
             return
         }
@@ -90,8 +99,11 @@ class BookDownloadManager: ObservableObject {
         }
 
         activeDownloads[download.key]?.isDownloading = false
+        activeDownloads[download.key]?.isPausing = false
+        activeDownloads[download.key]?.isPaused = false
         activeDownloads[download.key]?.progress = 0.0
         activeDownloads[download.key]?.resumeData = nil
+        publishDownloadSnapshot()
     }
     
     func pauseDownload(_ book: CalibreBook, format: Format) {
@@ -100,11 +112,25 @@ class BookDownloadManager: ObservableObject {
         }).first else {
             return
         }
+
+        activeDownloads[download.key]?.isDownloading = false
+        activeDownloads[download.key]?.isPausing = true
+        activeDownloads[download.key]?.isPaused = true
+        publishDownloadSnapshot()
         
         download.value.downloadTask?.cancel(byProducingResumeData: { [weak self] resumeData in
-            DispatchQueue.main.async {
-                self?.activeDownloads[download.key]?.isDownloading = false
-                self?.activeDownloads[download.key]?.resumeData = resumeData
+            Task { @MainActor in
+                guard let self else { return }
+                if let currentTask = self.activeDownloads[download.key]?.downloadTask,
+                   let pausedTask = download.value.downloadTask,
+                   currentTask !== pausedTask {
+                    return
+                }
+                self.activeDownloads[download.key]?.isDownloading = false
+                self.activeDownloads[download.key]?.isPausing = false
+                self.activeDownloads[download.key]?.isPaused = true
+                self.activeDownloads[download.key]?.resumeData = resumeData
+                self.publishDownloadSnapshot()
             }
         })
         
@@ -115,31 +141,34 @@ class BookDownloadManager: ObservableObject {
     
     func resumeDownload(_ book: CalibreBook, format: Format) -> Bool {
         guard let bookFormatDownloadIndex = activeDownloads.firstIndex (where: {
-                $1.book.id == book.id && $1.format == format && $1.resumeData != nil
+                $1.book.id == book.id && $1.format == format && ($1.resumeData != nil || $1.isPaused)
         }) else {
             cancelDownload(book, format: format)
             return false
         }
         let bookFormatDownload = activeDownloads[bookFormatDownloadIndex].value
 
-        guard let resumeData = bookFormatDownload.resumeData else {
-            cancelDownload(book, format: format)
-            return false
-        }
-
         let downloadDelegate = BookFormatDownloadDelegate(download: bookFormatDownload, manager: self)
 
         let downloadConfiguration = self.sessionConfiguration
         let downloadSession = URLSession(configuration: downloadConfiguration, delegate: downloadDelegate, delegateQueue: nil)
-        let downloadTask = downloadSession.downloadTask(withResumeData: resumeData)
+        let downloadTask: URLSessionDownloadTask
+        if let resumeData = bookFormatDownload.resumeData {
+            downloadTask = downloadSession.downloadTask(withResumeData: resumeData)
+        } else {
+            downloadTask = downloadSession.downloadTask(with: bookFormatDownload.sourceURL)
+        }
 
         if let credential = bookFormatDownload.credential, let protectionSpace = bookFormatDownload.protectionSpace {
             URLCredentialStorage.shared.setDefaultCredential(credential, for: protectionSpace, task: downloadTask)
         }
 
         activeDownloads[bookFormatDownload.sourceURL]?.isDownloading = true
+        activeDownloads[bookFormatDownload.sourceURL]?.isPausing = false
+        activeDownloads[bookFormatDownload.sourceURL]?.isPaused = false
         activeDownloads[bookFormatDownload.sourceURL]?.resumeData = nil
         activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
+        publishDownloadSnapshot()
 
         if let request = downloadTask.originalRequest {
             container?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, finishDatetime: Date(), errMsg: "Resumed")
@@ -150,7 +179,7 @@ class BookDownloadManager: ObservableObject {
         return true
     }
     
-    func startDownloadNew(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
+    func startDownload(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
         guard let formatInfo = book.formats[format.rawValue] else {
             return .failure(.missingFormatInfo)
         }
@@ -176,7 +205,7 @@ class BookDownloadManager: ObservableObject {
             return .failure(.fileAlreadyExists)
         }
         
-        if activeDownloads[url]?.isDownloading == true && !overwrite {
+        if activeDownloads[url]?.isActive == true && !overwrite {
             return .failure(.downloadAlreadyActive)
         }
         
@@ -220,6 +249,7 @@ class BookDownloadManager: ObservableObject {
         bookFormatDownload.downloadTask = downloadTask
         
         activeDownloads[url] = bookFormatDownload
+        publishDownloadSnapshot()
         
         downloadTask.resume()
         
@@ -228,16 +258,6 @@ class BookDownloadManager: ObservableObject {
         return .success(())
     }
 
-    @available(*, deprecated, message: "Use startDownloadNew instead")
-    func startDownload(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Bool {
-        switch startDownloadNew(book, format: format, overwrite: overwrite) {
-        case .success:
-            return true
-        case .failure:
-            return false
-        }
-    }
-    
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
         books.forEach { book in
             let downloadFormats = formats.compactMap { format -> Format? in
@@ -253,6 +273,8 @@ class BookDownloadManager: ObservableObject {
 
 struct BookFormatDownload {
     var isDownloading = false
+    var isPaused = false
+    var isPausing = false
     var progress: Float = 0
     var resumeData: Data?
     var book: CalibreBook
@@ -266,6 +288,10 @@ struct BookFormatDownload {
     var downloadTask: URLSessionDownloadTask?
     var credential: URLCredential?
     var protectionSpace: URLProtectionSpace?
+
+    var isActive: Bool {
+        isDownloading || isPausing || isPaused || resumeData != nil
+    }
 }
 
 struct DownloadError: Error {
@@ -319,18 +345,22 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
            isFileExist {
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self, let manager = self.manager, let container = manager.container
                        else { return }
+                if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
+                   currentTask !== task {
+                    return
+                }
 
                 container.bookManager.addedCache(book: self.download.book, format: self.download.format)
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
+                manager.activeDownloads[self.download.sourceURL]?.isPausing = false
+                manager.activeDownloads[self.download.sourceURL]?.isPaused = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                manager.publishDownloadSnapshot()
 
-                MainActor.assumeIsolated {
-                    container.publishCalibreUpdate(.book(self.download.book))
-                }
-                manager.bookDownloadedSubject.send(self.download.book)
+                container.publishCalibreUpdate(.book(self.download.book))
 
                 guard let request = task.originalRequest else { return }
                 let logger = container.logger
@@ -342,13 +372,27 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 }
             }
         } else {
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self, let manager = self.manager, let container = manager.container,
                       let request = task.originalRequest
                        else { return }
+                if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
+                   currentTask !== task {
+                    return
+                }
+
+                let nsError = error as NSError?
+                if manager.activeDownloads[self.download.sourceURL]?.isPaused == true,
+                   nsError?.domain == NSURLErrorDomain,
+                   nsError?.code == NSURLErrorCancelled {
+                    return
+                }
 
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
+                manager.activeDownloads[self.download.sourceURL]?.isPausing = false
+                manager.activeDownloads[self.download.sourceURL]?.isPaused = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                manager.publishDownloadSnapshot()
 
                 let logger = container.logger
                 let startDatetime = self.download.startDatetime
@@ -365,11 +409,15 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
         
         guard let manager = manager else { return }
-        
-        guard progress > (manager.activeDownloads[self.download.sourceURL]?.progress ?? 0.0) + 0.01 else { return }
-        
-        DispatchQueue.main.async {
+
+        Task { @MainActor in
+            if let currentTask = manager.activeDownloads[self.download.sourceURL]?.downloadTask,
+               currentTask !== downloadTask {
+                return
+            }
+            guard progress > (manager.activeDownloads[self.download.sourceURL]?.progress ?? 0.0) + 0.01 else { return }
             manager.activeDownloads[self.download.sourceURL]?.progress = progress
+            manager.publishDownloadSnapshot()
         }
     }
 }

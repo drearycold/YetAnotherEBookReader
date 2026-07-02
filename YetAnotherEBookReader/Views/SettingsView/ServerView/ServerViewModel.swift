@@ -396,31 +396,23 @@ class ServerViewModel: ObservableObject {
                 self.helperStatus = "Connected"
                 self.configAlertItem = AlertItem(id: "updateConfigAlert")
             } catch {
-                // Fallback to Combine
-                refreshCancellable = connector.refreshConfiguration()?
-                    .receive(on: DispatchQueue.main)
-                    .sink(receiveCompletion: { [weak self] complete in
-                        guard let self = self else { return }
-                        switch complete {
-                        case .finished:
-                            break
-                        default:
-                            self.helperStatus = "Failed to Connect"
-                            self.configAlertItem = AlertItem(id: "failedConnectConfigAlert")
-                        }
-                    }, receiveValue: { [weak self] data in
-                        guard let self = self else { return }
-                        let decoder = JSONDecoder()
-                        if let config = try? decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data.data), config.dsreader_helper_prefs != nil {
-                            self.configuration = config
-                            self.configurationData = data.data
-                            self.helperStatus = "Connected"
-                            self.configAlertItem = AlertItem(id: "updateConfigAlert")
-                        } else {
-                            self.helperStatus = "Failed"
-                            self.configAlertItem = AlertItem(id: "failedParseConfigAlert")
-                        }
-                    })
+                do {
+                    let data = try await connector.refreshConfiguration()
+                    let decoder = JSONDecoder()
+                    if let config = try? decoder.decode(CalibreDSReaderHelperConfiguration.self, from: data.data),
+                       config.dsreader_helper_prefs != nil {
+                        self.configuration = config
+                        self.configurationData = data.data
+                        self.helperStatus = "Connected"
+                        self.configAlertItem = AlertItem(id: "updateConfigAlert")
+                    } else {
+                        self.helperStatus = "Failed"
+                        self.configAlertItem = AlertItem(id: "failedParseConfigAlert")
+                    }
+                } catch {
+                    self.helperStatus = "Failed to Connect"
+                    self.configAlertItem = AlertItem(id: "failedConnectConfigAlert")
+                }
             }
         }
     }

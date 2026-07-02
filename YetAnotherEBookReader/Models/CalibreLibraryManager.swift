@@ -291,45 +291,39 @@ class CalibreLibraryManager: ObservableObject {
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
 
-        let queue = DispatchQueue(label: "probe-library", qos: .userInitiated)
         guard let container = self.container else { return }
-        container.probeLibraryLastModifiedSubject.receive(on: queue)
-            .flatMap { [weak self] request -> AnyPublisher<Result<CalibreSyncLibraryResult, CalibreAPIError>, Never> in
-                guard let self = self, let calibreServerService = self.container?.calibreServerService else {
-                    return Empty().eraseToAnyPublisher()
-                }
-                return calibreServerService.syncLibraryPublisher(
-                    resultPrev: .init(request: request, result: [:]),
-                    order: "",
-                    filter: "",
-                    limit: 1
-                )
-                .map { Result.success($0) }
-                .catch { Just(Result.failure($0)) }
-                .eraseToAnyPublisher()
-            }
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] result in
-                guard let self = self else { return }
-                switch result {
-                case .success(let syncResult):
-                    guard var library = self.calibreLibraries[syncResult.request.library.id],
-                          let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
-                          let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
-                    else {
-                        return
-                    }
-                    if lastModified > library.lastModified {
-                        library.lastModified = lastModified
-                        self.calibreLibraries[syncResult.request.library.id] = library
-                        try? self.libraryRepository.saveLibrary(library)
-                    }
+        container.probeLibraryLastModifiedSubject
+            .sink { [weak self] request in
+                Task { [weak self] in
+                    guard let self = self,
+                          let calibreServerService = self.container?.calibreServerService else { return }
 
-                    Task { @MainActor in
-                        self.container?.publishCalibreUpdate(.library(library))
+                    do {
+                        let syncResult = try await calibreServerService.syncLegacyLibraryResult(
+                            resultPrev: .init(request: request, result: [:]),
+                            order: "",
+                            filter: "",
+                            limit: 1
+                        )
+
+                        await MainActor.run {
+                            guard var library = self.calibreLibraries[syncResult.request.library.id],
+                                  let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
+                                  let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
+                            else {
+                                return
+                            }
+                            if lastModified > library.lastModified {
+                                library.lastModified = lastModified
+                                self.calibreLibraries[syncResult.request.library.id] = library
+                                try? self.libraryRepository.saveLibrary(library)
+                            }
+
+                            self.container?.publishCalibreUpdate(.library(library))
+                        }
+                    } catch {
+                        self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                     }
-                case .failure(let error):
-                    self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                 }
             }
             .store(in: &calibreCancellables)

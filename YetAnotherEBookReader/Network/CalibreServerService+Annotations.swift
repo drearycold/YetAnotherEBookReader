@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 extension CalibreServerService {
     func getAnnotations(task: CalibreBooksTask) async -> CalibreBooksTask {
@@ -23,40 +22,14 @@ extension CalibreServerService {
                 resultTask.booksAnnotationsEntry = try JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
             } catch {
                 resultTask.booksError.formUnion(task.books)
+                resultTask.error = CalibreAPIError(error: error)
             }
             return resultTask
         } catch {
-            return task
+            var resultTask = task
+            resultTask.error = CalibreAPIError(error: error)
+            return resultTask
         }
-    }
-
-    func getAnnotations(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
-        guard let annotationsUrl = task.annotationsUrl,
-              annotationsUrl.isHTTP else {
-            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
-        }
-
-        return validatedDataPublisher(from: annotationsUrl, server: task.library.server)
-            .tryMap { data, _ -> CalibreBooksTask in
-                var resultTask = task
-                resultTask.annotationsData = data
-                do {
-                    resultTask.booksAnnotationsEntry = try JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
-                } catch {
-                    resultTask.booksError.formUnion(task.books)
-                    throw error
-                }
-                return resultTask
-            }
-            .mapError(CalibreAPIError.init(error:))
-            .eraseToAnyPublisher()
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func getAnnotations(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        getAnnotations(task: task)
-            .mapError(\.asURLError)
-            .eraseToAnyPublisher()
     }
 
     func buildUpdateAnnotationsTask(library: CalibreLibrary, bookId: Int32, format: Format, highlights: [CalibreBookAnnotationHighlightEntry], bookmarks: [CalibreBookAnnotationBookmarkEntry]) throws -> CalibreBookUpdateAnnotationsTask {
@@ -115,22 +88,4 @@ extension CalibreServerService {
         return resultTask
     }
 
-    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, CalibreAPIError> {
-        validatedDataPublisher(for: task.urlRequest, server: task.library.server)
-            .map { data, response -> CalibreBookUpdateAnnotationsTask in
-                var resultTask = task
-                resultTask.urlResponse = response
-                resultTask.data = data
-                return resultTask
-            }
-            .eraseToAnyPublisher()
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, Never> {
-        let publisher: AnyPublisher<CalibreBookUpdateAnnotationsTask, CalibreAPIError> = updateAnnotationByTask(task: task)
-        return publisher
-            .replaceError(with: task)
-            .eraseToAnyPublisher()
-    }
 }

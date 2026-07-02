@@ -6,29 +6,18 @@
 //
 
 import Foundation
-import Combine
 
 extension CalibreServerService {
-    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
+    func getLastReadPosition(task: CalibreBooksTask) async throws -> CalibreBooksTask {
         guard let lastReadPositionUrl = task.lastReadPositionUrl,
               lastReadPositionUrl.isHTTP else {
-            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
+            return task
         }
 
-        return validatedDataPublisher(from: lastReadPositionUrl, server: task.library.server)
-            .map { data, _ -> CalibreBooksTask in
-                var task = task
-                task.lastReadPositionsData = data
-                return task
-            }
-            .eraseToAnyPublisher()
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, URLError> {
-        getLastReadPosition(task: task)
-            .mapError(\.asURLError)
-            .eraseToAnyPublisher()
+        let (data, _) = try await validatedData(from: lastReadPositionUrl, server: task.library.server)
+        var task = task
+        task.lastReadPositionsData = data
+        return task
     }
 
     func buildSetLastReadPositionTask(library: CalibreLibrary, bookId: Int32, format: Format, entry: CalibreBookLastReadPositionEntry) throws -> CalibreBookSetLastReadPositionTask {
@@ -76,22 +65,4 @@ extension CalibreServerService {
         return resultTask
     }
 
-    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, CalibreAPIError> {
-        validatedDataPublisher(for: task.urlRequest, server: task.library.server)
-            .map { data, response -> CalibreBookSetLastReadPositionTask in
-                var resultTask = task
-                resultTask.urlResponse = response
-                resultTask.data = data
-                return resultTask
-            }
-            .eraseToAnyPublisher()
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, Never> {
-        let publisher: AnyPublisher<CalibreBookSetLastReadPositionTask, CalibreAPIError> = setLastReadPositionByTask(task: task)
-        return publisher
-            .replaceError(with: task)
-            .eraseToAnyPublisher()
-    }
 }

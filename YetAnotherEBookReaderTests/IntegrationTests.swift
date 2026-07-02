@@ -138,7 +138,7 @@ final class IntegrationTests: XCTestCase {
             try? FileManager.default.removeItem(at: savedURL)
         }
         
-        let result = container.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: true)
+        let result = container.downloadManager.startDownload(book, format: .EPUB, overwrite: true)
         switch result {
         case .success:
             break

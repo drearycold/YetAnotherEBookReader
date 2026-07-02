@@ -10,7 +10,6 @@
 		17C3957C8FAD6C8F240E2079 /* (null) in Frameworks */ = {isa = PBXBuildFile; };
 		2A0A0487271BF65A00589B87 /* SupportInfoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A0486271BF65A00589B87 /* SupportInfoView.swift */; };
 		2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */; };
-		2A0EBA86267893740080BF5B /* Downloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA85267893740080BF5B /* Downloader.swift */; };
 		2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A107D412661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift */; platformFilter = ios; };
 		2A1A4BF62616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */; platformFilter = ios; };
 		2A1A4BFE2619EBE300E95ED5 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
@@ -60,7 +59,6 @@
 		2ADCD7D426F4B96200FBAE11 /* SwiftUI_Ad_Banner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */; };
 		2ADCD7DA26F4B96200FBAE11 /* LibraryInfoBatchDownloadSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE40A0267874B80058A501 /* LibraryInfoBatchDownloadSheet.swift */; };
 		2ADCD7E026F4B96200FBAE11 /* PDFPageWithBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */; };
-		2ADCD7E126F4B96200FBAE11 /* Downloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0EBA85267893740080BF5B /* Downloader.swift */; };
 		2ADCD7E426F4B96200FBAE11 /* WebViewUIVC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26B425C54BC800FC7FC0 /* WebViewUIVC.swift */; };
 		2ADCD7E626F4B96200FBAE11 /* Utils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A1A4BFD2619EBE300E95ED5 /* Utils.swift */; };
 		2ADCD7E726F4B96200FBAE11 /* YabrPDFViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */; };
@@ -529,7 +527,6 @@
 		2A0A782D26E8F65500F3C753 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2A0A782E26E8F65500F3C753 /* YetAnotherEBookReader_for_macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = YetAnotherEBookReader_for_macOS.entitlements; sourceTree = "<group>"; };
 		2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPageWithBackground.swift; sourceTree = "<group>"; };
-		2A0EBA85267893740080BF5B /* Downloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Downloader.swift; sourceTree = "<group>"; };
 		2A107D412661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReadiumEPUBViewController.swift; sourceTree = "<group>"; };
 		2A1A4BF52616CCED00E95ED5 /* SwiftUI_Ad_Banner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUI_Ad_Banner.swift; sourceTree = "<group>"; };
 		2A1A4BFD2619EBE300E95ED5 /* Utils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utils.swift; sourceTree = "<group>"; };
@@ -920,7 +917,6 @@
 				A04D100130C0000100000003 /* CalibreServerService+Metadata.swift */,
 				A04D100130C0000100000005 /* CalibreServerService+ReadingPosition.swift */,
 				A04D100130C0000100000008 /* CalibreServerService+Search.swift */,
-				2A0EBA85267893740080BF5B /* Downloader.swift */,
 				2AC340D22647A23600A477ED /* DSReaderHelperConnector.swift */,
 				2ACE265C26A97BE70037FCB4 /* ImageRequest.swift */,
 				E71F352C2FE3B39D007AB0B1 /* CalibreActivityModels.swift */,
@@ -1606,7 +1602,6 @@
 				E71F34AA2FD906F9007AB0B1 /* MergeHead.swift in Sources */,
 				E71F34D52FDBD7AB007AB0B1 /* UnifiedCategoryViewModel.swift in Sources */,
 				2A0A78A126EB2AC300F3C753 /* PDFPageWithBackground.swift in Sources */,
-				2A0EBA86267893740080BF5B /* Downloader.swift in Sources */,
 				E71F35122FDFAD10007AB0B1 /* YabrPDFSearchListCell.swift in Sources */,
 				E730405828E865550013BA01 /* YabrEBookReaderMetaSource.swift in Sources */,
 				E71F356E2FE77F0C007AB0B1 /* BookCountPagesCorner.swift in Sources */,
@@ -1974,7 +1969,6 @@
 				E71F35782FE8C6BD007AB0B1 /* BookFormatRow.swift in Sources */,
 				2ADCD7E026F4B96200FBAE11 /* PDFPageWithBackground.swift in Sources */,
 				E71F35342FE3B3A9007AB0B1 /* Array+Chunks.swift in Sources */,
-				2ADCD7E126F4B96200FBAE11 /* Downloader.swift in Sources */,
 				2ADCD7E426F4B96200FBAE11 /* WebViewUIVC.swift in Sources */,
 				E71F34F72FDE3060007AB0B1 /* LibraryRepository.swift in Sources */,
 				E71F357A2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,

@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -16,15 +15,12 @@ final class CalibreServerServiceTests: XCTestCase {
     var service: CalibreServerService!
     var server: CalibreServer!
     var library: CalibreLibrary!
-    var cancellables: Set<AnyCancellable>!
 
     override func setUp() async throws {
         try await super.setUp()
 
         container = MockAppContainerFactory.makeContainer(testName: "CalibreServerServiceTests")
         service = container.calibreServerService
-        cancellables = []
-
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
 
@@ -45,7 +41,6 @@ final class CalibreServerServiceTests: XCTestCase {
     }
 
     override func tearDown() async throws {
-        cancellables = nil
         library = nil
         server = nil
         service = nil
@@ -77,7 +72,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testGetCustomColumnsPublisherReturnsServerBodyAsErrmsg() async throws {
+    func testGetLegacyCustomColumnsReturnsServerBodyAsErrmsg() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -88,19 +83,46 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("bad custom columns request".utf8))
         }
 
-        let expectation = expectation(description: "publisher emits result")
-        var received: CalibreSyncLibraryResult?
         let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
 
-        service.getCustomColumnsPublisher(request: request)
-            .sink { result in
-                received = result
-                expectation.fulfill()
-            }
-            .store(in: &cancellables)
+        let received = await service.getLegacyCustomColumns(request: request)
+        XCTAssertEqual(received.errmsg, "bad custom columns request")
+    }
 
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertEqual(received?.errmsg, "bad custom columns request")
+    func testGetCustomColumnsAsyncSuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "result": {
+                    "#pages": {
+                        "name": "Pages",
+                        "datatype": "int",
+                        "label": "pages",
+                        "editable": true,
+                        "display": {
+                            "description": "",
+                            "number_format": "{0}"
+                        },
+                        "normalized": false,
+                        "num": 1,
+                        "is_multiple": false,
+                        "multiple_seps": {}
+                    }
+                }
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
+        let result = try await service.getCustomColumnsResult(request: request)
+        XCTAssertEqual(result.result["result"]?["#pages"]?.name, "Pages")
     }
 
     func testGetMetadataSuccess() async throws {
@@ -146,28 +168,57 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data(json.utf8))
         }
 
-        let expectation = expectation(description: "getMetadata emits success")
-        var receivedEntry: CalibreBookEntry?
-        var receivedError: CalibreAPIError?
+        let (_, receivedEntry) = try await service.getMetadata(task: task)
+        XCTAssertEqual(receivedEntry.title, "Mock Book")
+        XCTAssertEqual(receivedEntry.uuid, "mock-uuid-1234")
+    }
 
-        service.getMetadata(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task, entry in
-                    receivedEntry = entry
-                }
-            )
-            .store(in: &cancellables)
+    func testGetMetadataAsyncTaskSuccess() async throws {
+        let task = CalibreBookTask(
+            server: server,
+            bookId: 123,
+            inShelfId: "shelf123",
+            url: URL(string: "http://localhost/get/json/123/lib1")!
+        )
 
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError, "Expected no error, got \(String(describing: receivedError))")
-        XCTAssertEqual(receivedEntry?.title, "Mock Book")
-        XCTAssertEqual(receivedEntry?.uuid, "mock-uuid-1234")
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "title": "Async Mock Book",
+                "uuid": "async-mock-uuid",
+                "authors": ["Author One"],
+                "formats": ["epub"],
+                "user_metadata": {},
+                "tags": [],
+                "author_sort": "",
+                "title_sort": "",
+                "thumbnail": "",
+                "timestamp": "",
+                "user_categories": {},
+                "cover": "",
+                "last_modified": "",
+                "application_id": 0,
+                "author_sort_map": {},
+                "identifiers": {},
+                "languages": [],
+                "pubdate": "",
+                "rating": 0.0,
+                "format_metadata": {},
+                "category_urls": {}
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let (_, entry) = try await service.getMetadata(task: task)
+        XCTAssertEqual(entry.title, "Async Mock Book")
+        XCTAssertEqual(entry.uuid, "async-mock-uuid")
     }
 
     func testGetMetadataFailureHttpStatus() async throws {
@@ -188,29 +239,14 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data())
         }
 
-        let expectation = expectation(description: "getMetadata emits failure status")
-        var receivedError: CalibreAPIError?
-
-        service.getMetadata(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _, _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .httpStatus(let statusCode, _) = receivedError {
+        do {
+            _ = try await service.getMetadata(task: task)
+            XCTFail("Expected failure, but received value")
+        } catch let receivedError as CalibreAPIError {
+            guard case .httpStatus(let statusCode, _) = receivedError else {
+                return XCTFail("Expected httpStatus error, but got \(receivedError)")
+            }
             XCTAssertEqual(statusCode, 404)
-        } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: receivedError))")
         }
     }
 
@@ -232,33 +268,18 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("invalid json".utf8))
         }
 
-        let expectation = expectation(description: "getMetadata emits failure decode")
-        var receivedError: CalibreAPIError?
-
-        service.getMetadata(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _, _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .decoding = receivedError {
+        do {
+            _ = try await service.getMetadata(task: task)
+            XCTFail("Expected failure, but received value")
+        } catch let receivedError as CalibreAPIError {
+            guard case .decoding = receivedError else {
+                return XCTFail("Expected decoding error, but got \(receivedError)")
+            }
             // expected
-        } else {
-            XCTFail("Expected decoding error, but got \(String(describing: receivedError))")
         }
     }
 
-    func testGetAnnotationsPublisherSuccess() async throws {
+    func testGetAnnotationsAsyncSuccess() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
         let task = CalibreBooksTask(
             request: request,
@@ -289,31 +310,12 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data(mockJSON.utf8))
         }
 
-        let expectation = expectation(description: "getAnnotations publisher success")
-        var receivedTask: CalibreBooksTask?
-        var receivedError: CalibreAPIError?
-
-        service.getAnnotations(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task in
-                    receivedTask = task
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
-        XCTAssertNotNil(receivedTask)
-        XCTAssertNotNil(receivedTask?.booksAnnotationsEntry?["123:epub"])
+        let receivedTask = await service.getAnnotations(task: task)
+        XCTAssertNil(receivedTask.error)
+        XCTAssertNotNil(receivedTask.booksAnnotationsEntry?["123:epub"])
     }
 
-    func testGetAnnotationsPublisherFailure() async throws {
+    func testGetAnnotationsAsyncFailure() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
         let task = CalibreBooksTask(
             request: request,
@@ -332,33 +334,15 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("internal error".utf8))
         }
 
-        let expectation = expectation(description: "getAnnotations publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.getAnnotations(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .httpStatus(let statusCode, _) = receivedError {
+        let result = await service.getAnnotations(task: task)
+        if case .httpStatus(let statusCode, _) = result.error {
             XCTAssertEqual(statusCode, 500)
         } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: receivedError))")
+            XCTFail("Expected httpStatus error, but got \(String(describing: result.error))")
         }
     }
 
-    func testGetBooksMetadataPublisherSuccess() async throws {
+    func testGetBooksMetadataAsyncSuccess() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: false)
         let task = CalibreBooksTask(
             request: request,
@@ -405,32 +389,13 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data(mockJSON.utf8))
         }
 
-        let expectation = expectation(description: "getBooksMetadata publisher success")
-        var receivedTask: CalibreBooksTask?
-        var receivedError: CalibreAPIError?
-
-        service.getBooksMetadata(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task in
-                    receivedTask = task
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
-        XCTAssertNotNil(receivedTask)
-        let entry = receivedTask?.booksMetadataEntry?["123"] as? CalibreBookEntry
+        let receivedTask = await service.getBooksMetadata(task: task)
+        XCTAssertNil(receivedTask.error)
+        let entry = receivedTask.booksMetadataEntry?["123"] as? CalibreBookEntry
         XCTAssertEqual(entry?.title, "Mock Book")
     }
 
-    func testGetBooksMetadataPublisherFailure() async throws {
+    func testGetBooksMetadataAsyncFailure() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: false)
         let task = CalibreBooksTask(
             request: request,
@@ -449,33 +414,15 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("Forbidden".utf8))
         }
 
-        let expectation = expectation(description: "getBooksMetadata publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.getBooksMetadata(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .authFailed = receivedError {
+        let result = await service.getBooksMetadata(task: task)
+        if case .authFailed = result.error {
             // expected
         } else {
-            XCTFail("Expected authFailed error, but got \(String(describing: receivedError))")
+            XCTFail("Expected authFailed error, but got \(String(describing: result.error))")
         }
     }
 
-    func testGetLastReadPositionPublisherSuccess() async throws {
+    func testGetLastReadPositionAsyncSuccessFromHTTP() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
         let task = CalibreBooksTask(
             request: request,
@@ -496,31 +443,35 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, mockData)
         }
 
-        let expectation = expectation(description: "getLastReadPosition publisher success")
-        var receivedTask: CalibreBooksTask?
-        var receivedError: CalibreAPIError?
-
-        service.getLastReadPosition(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task in
-                    receivedTask = task
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
-        XCTAssertNotNil(receivedTask)
-        XCTAssertEqual(receivedTask?.lastReadPositionsData, mockData)
+        let receivedTask = try await service.getLastReadPosition(task: task)
+        XCTAssertEqual(receivedTask.lastReadPositionsData, mockData)
     }
 
-    func testGetLastReadPositionPublisherFailure() async throws {
+    func testGetLastReadPositionAsyncSuccess() async throws {
+        let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
+        let task = CalibreBooksTask(
+            request: request,
+            metadataUrl: URL(string: "http://localhost/metadata")!,
+            lastReadPositionUrl: URL(string: "http://localhost/last_read")!,
+            annotationsUrl: URL(string: "http://localhost/annotations")!
+        )
+        let mockData = Data("async-last-read-data".utf8)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, mockData)
+        }
+
+        let result = try await service.getLastReadPosition(task: task)
+        XCTAssertEqual(result.lastReadPositionsData, mockData)
+    }
+
+    func testGetLastReadPositionAsyncFailure() async throws {
         let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
         let task = CalibreBooksTask(
             request: request,
@@ -539,33 +490,18 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("bad request".utf8))
         }
 
-        let expectation = expectation(description: "getLastReadPosition publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.getLastReadPosition(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .httpStatus(let statusCode, _) = receivedError {
+        do {
+            _ = try await service.getLastReadPosition(task: task)
+            XCTFail("Expected failure, but received value")
+        } catch let receivedError as CalibreAPIError {
+            guard case .httpStatus(let statusCode, _) = receivedError else {
+                return XCTFail("Expected httpStatus error, but got \(receivedError)")
+            }
             XCTAssertEqual(statusCode, 400)
-        } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: receivedError))")
         }
     }
 
-    func testGetMetadataNewPublisherSuccess() async throws {
+    func testGetMetadataDataAsyncSuccess() async throws {
         let task = CalibreBookTask(
             server: server,
             bookId: 123,
@@ -585,30 +521,11 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, mockData)
         }
 
-        let expectation = expectation(description: "getMetadataNew publisher success")
-        var receivedData: Data?
-        var receivedError: CalibreAPIError?
-
-        service.getMetadataNew(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task, data, response in
-                    receivedData = data
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
+        let (_, receivedData, _) = try await service.getMetadataData(task: task)
         XCTAssertEqual(receivedData, mockData)
     }
 
-    func testGetMetadataNewPublisherFailure() async throws {
+    func testGetMetadataDataAsyncFailure() async throws {
         let task = CalibreBookTask(
             server: server,
             bookId: 123,
@@ -626,29 +543,14 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("Bad Gateway".utf8))
         }
 
-        let expectation = expectation(description: "getMetadataNew publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.getMetadataNew(task: task)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _, _, _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .httpStatus(let statusCode, _) = receivedError {
+        do {
+            _ = try await service.getMetadataData(task: task)
+            XCTFail("Expected failure, but received value")
+        } catch let receivedError as CalibreAPIError {
+            guard case .httpStatus(let statusCode, _) = receivedError else {
+                return XCTFail("Expected httpStatus error, but got \(receivedError)")
+            }
             XCTAssertEqual(statusCode, 502)
-        } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: receivedError))")
         }
     }
 
@@ -712,7 +614,7 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(updateTask.urlRequest.httpMethod, "POST")
     }
 
-    func testUpdateAnnotationByTaskPublisherSuccess() async throws {
+    func testUpdateAnnotationByTaskAsyncSuccess() async throws {
         let highlight = CalibreBookAnnotationHighlightEntry(
             type: "highlight",
             timestamp: "2026-06-20T00:00:00Z",
@@ -746,31 +648,12 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("success".utf8))
         }
 
-        let expectation = expectation(description: "updateAnnotationByTask publisher success")
-        var receivedTask: CalibreBookUpdateAnnotationsTask?
-        var receivedError: CalibreAPIError?
-
-        service.updateAnnotationByTask(task: updateTask)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task in
-                    receivedTask = task
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
-        XCTAssertNotNil(receivedTask)
-        XCTAssertEqual(receivedTask?.data, Data("success".utf8))
+        let receivedTask = await service.updateAnnotationByTask(task: updateTask)
+        XCTAssertNil(receivedTask.error)
+        XCTAssertEqual(receivedTask.data, Data("success".utf8))
     }
 
-    func testUpdateAnnotationByTaskPublisherFailure() async throws {
+    func testUpdateAnnotationByTaskAsyncFailure() async throws {
         let highlight = CalibreBookAnnotationHighlightEntry(
             type: "highlight",
             timestamp: "2026-06-20T00:00:00Z",
@@ -804,33 +687,15 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("internal error".utf8))
         }
 
-        let expectation = expectation(description: "updateAnnotationByTask publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.updateAnnotationByTask(task: updateTask)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .httpStatus(let statusCode, _) = receivedError {
+        let result = await service.updateAnnotationByTask(task: updateTask)
+        if case .httpStatus(let statusCode, _) = result.error {
             XCTAssertEqual(statusCode, 500)
         } else {
-            XCTFail("Expected httpStatus error, but got \(String(describing: receivedError))")
+            XCTFail("Expected httpStatus error, but got \(String(describing: result.error))")
         }
     }
 
-    func testSetLastReadPositionByTaskPublisherSuccess() async throws {
+    func testSetLastReadPositionByTaskAsyncSuccess() async throws {
         let entry = CalibreBookLastReadPositionEntry(
             device: "device1",
             cfi: "cfi-1",
@@ -854,31 +719,12 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("success".utf8))
         }
 
-        let expectation = expectation(description: "setLastReadPositionByTask publisher success")
-        var receivedTask: CalibreBookSetLastReadPositionTask?
-        var receivedError: CalibreAPIError?
-
-        service.setLastReadPositionByTask(task: setTask)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { task in
-                    receivedTask = task
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNil(receivedError)
-        XCTAssertNotNil(receivedTask)
-        XCTAssertEqual(receivedTask?.data, Data("success".utf8))
+        let receivedTask = await service.setLastReadPositionByTask(task: setTask)
+        XCTAssertNil(receivedTask.error)
+        XCTAssertEqual(receivedTask.data, Data("success".utf8))
     }
 
-    func testSetLastReadPositionByTaskPublisherFailure() async throws {
+    func testSetLastReadPositionByTaskAsyncFailure() async throws {
         let entry = CalibreBookLastReadPositionEntry(
             device: "device1",
             cfi: "cfi-1",
@@ -902,29 +748,11 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data("unauthorized".utf8))
         }
 
-        let expectation = expectation(description: "setLastReadPositionByTask publisher failure")
-        var receivedError: CalibreAPIError?
-
-        service.setLastReadPositionByTask(task: setTask)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
-        if case .authFailed = receivedError {
+        let result = await service.setLastReadPositionByTask(task: setTask)
+        if case .authFailed = result.error {
             // expected
         } else {
-            XCTFail("Expected authFailed error, but got \(String(describing: receivedError))")
+            XCTFail("Expected authFailed error, but got \(String(describing: result.error))")
         }
     }
 
@@ -1067,7 +895,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testSyncLibraryPublisherFailure() async throws {
+    func testSyncLegacyLibraryFailure() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -1078,31 +906,18 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data())
         }
 
-        let expectation = expectation(description: "syncLibraryPublisher failure")
-        var receivedError: CalibreAPIError?
-
         let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
         let resultPrev = CalibreSyncLibraryResult(request: request, result: [:])
 
-        service.syncLibraryPublisher(resultPrev: resultPrev)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
+        do {
+            _ = try await service.syncLegacyLibraryResult(resultPrev: resultPrev)
+            XCTFail("Expected failure, but received value")
+        } catch {
+            // expected
+        }
     }
 
-    func testGetLibraryCategoriesPublisherFailure() async throws {
+    func testGetLibraryCategoriesAsyncFailure() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
                 url: try XCTUnwrap(request.url),
@@ -1113,37 +928,24 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, Data())
         }
 
-        let expectation = expectation(description: "getLibraryCategoriesPublisher failure")
-        var receivedError: CalibreAPIError?
-
         let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
         let resultPrev = CalibreSyncLibraryResult(request: request, result: [:])
 
-        service.getLibraryCategoriesPublisher(resultPrev: resultPrev)
-            .sink(
-                receiveCompletion: { completion in
-                    if case .failure(let error) = completion {
-                        receivedError = error
-                    }
-                    expectation.fulfill()
-                },
-                receiveValue: { _ in
-                    XCTFail("Expected failure, but received value")
-                }
-            )
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertNotNil(receivedError)
+        do {
+            _ = try await service.getLibraryCategoriesResult(resultPrev: resultPrev)
+            XCTFail("Expected failure, but received value")
+        } catch {
+            // expected
+        }
     }
 
-    func testStartDownloadNewFailureMissingFormatInfo() async throws {
+    func testStartDownloadFailureMissingFormatInfo() async throws {
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]
         book.formats = [:] // no EPUB format
 
-        let result = container.downloadManager.startDownloadNew(book, format: .EPUB)
+        let result = container.downloadManager.startDownload(book, format: .EPUB)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.missingFormatInfo)
         } else {
@@ -1151,7 +953,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testStartDownloadNewFailureFileAlreadyExists() async throws {
+    func testStartDownloadFailureFileAlreadyExists() async throws {
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]
@@ -1169,7 +971,7 @@ final class CalibreServerServiceTests: XCTestCase {
             try? fileManager.removeItem(at: savedURL)
         }
 
-        let result = container.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: false)
+        let result = container.downloadManager.startDownload(book, format: .EPUB, overwrite: false)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.fileAlreadyExists)
         } else {
@@ -1288,5 +1090,150 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(result.categories.count, 1)
         XCTAssertEqual(result.categories.first?.name, "Authors")
         XCTAssertEqual(result.errmsg, "")
+    }
+
+    func testValidatedDataAsyncSuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(#"{"ok":true}"#.utf8))
+        }
+
+        let (receivedData, response) = try await service.validatedData(for: URLRequest(url: URL(string: "http://localhost/ok")!), server: server)
+        XCTAssertEqual(receivedData, Data(#"{"ok":true}"#.utf8))
+        XCTAssertEqual(response.statusCode, 200)
+    }
+
+    func testValidatedDataAsyncMapsNon2xxStatus() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 503,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/plain"]
+            )!
+            return (response, Data("unavailable".utf8))
+        }
+
+        do {
+            _ = try await service.validatedData(for: URLRequest(url: URL(string: "http://localhost/failure")!), server: server)
+            XCTFail("Expected failure")
+        } catch let receivedError as CalibreAPIError {
+            guard case .httpStatus(let statusCode, let body) = receivedError else {
+                return XCTFail("Expected httpStatus, got \(receivedError)")
+            }
+            XCTAssertEqual(statusCode, 503)
+            XCTAssertEqual(body.flatMap { String(data: $0, encoding: .utf8) }, "unavailable")
+        }
+    }
+
+    func testValidatedDataAsyncMapsUnauthorizedToAuthFailed() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 403,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        do {
+            _ = try await service.validatedData(for: URLRequest(url: URL(string: "http://localhost/auth")!), server: server)
+            XCTFail("Expected failure")
+        } catch let receivedError as CalibreAPIError {
+            guard case .authFailed = receivedError else {
+                return XCTFail("Expected authFailed, got \(receivedError)")
+            }
+        }
+    }
+
+    func testValidatedDataAsyncMapsTransportError() async throws {
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.badServerResponse)
+        }
+
+        do {
+            _ = try await service.validatedData(for: URLRequest(url: URL(string: "http://localhost/bad-response")!), server: server)
+            XCTFail("Expected failure")
+        } catch let receivedError as CalibreAPIError {
+            guard case .transport(let error) = receivedError else {
+                return XCTFail("Expected transport error, got \(receivedError)")
+            }
+            XCTAssertEqual(error.code, .badServerResponse)
+        }
+    }
+
+    func testProbeServerReachabilityAsyncSuccessPreservesErrorField() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "default_library": "lib1",
+                "library_map": {"lib1": "Library 1"}
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let result = await service.probeServerReachability(serverInfo: info)
+        XCTAssertTrue(result.reachable)
+        XCTAssertEqual(result.defaultLibrary, "lib1")
+        XCTAssertEqual(result.libraryMap["lib1"], "Library 1")
+        XCTAssertNil(result.error)
+    }
+
+    func testProbeServerReachabilityAsyncReportsNoLibraryAsUnsupportedPayload() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(#"{"default_library":null,"library_map":{}}"#.utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let result = await service.probeServerReachability(serverInfo: info)
+        XCTAssertFalse(result.reachable)
+        XCTAssertEqual(result.errorMsg, "Server has no library")
+        guard case .unsupportedPayload = result.error else {
+            return XCTFail("Expected unsupportedPayload, got \(String(describing: result.error))")
+        }
+    }
+
+    func testProbeServerReachabilityAsyncReportsHttpFailure() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("server down".utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let result = await service.probeServerReachability(serverInfo: info)
+        XCTAssertFalse(result.reachable)
+        XCTAssertEqual(result.errorMsg, "server down")
+        guard case .httpStatus(let statusCode, _) = result.error else {
+            return XCTFail("Expected httpStatus, got \(String(describing: result.error))")
+        }
+        XCTAssertEqual(statusCode, 500)
     }
 }

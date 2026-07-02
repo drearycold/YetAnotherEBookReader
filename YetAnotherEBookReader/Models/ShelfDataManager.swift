@@ -626,6 +626,7 @@ final class YabrShelfDataModel {
     }
 
     func seedCategoriesForTesting(_ categories: [CategoryObject]) async {
+        initialSnapshotTask?.cancel()
         let seeds = categories.map {
             ShelfCategoryStore.CategorySeed(
                 category: $0.category,
@@ -634,6 +635,8 @@ final class YabrShelfDataModel {
             )
         }
         await categoryStore.seedCategoriesForTesting(seeds)
+        isInitialLoadComplete = categories.isEmpty
+        publishDiscoverShelfSnapshot(sendLegacySubject: false)
     }
 
     func categoryNamesForTesting() async -> Set<String> {

@@ -198,4 +198,51 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         // Non-empty series, filter matches -> should not show
         XCTAssertFalse(listViewModel.shouldShowSeriesFilter(for: book, filterCriteriaCategory: ["Series": Set(["Foundation"])]))
     }
+
+    func testBindDownloadSnapshotsPublishesActiveDownload() async throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: 42, library: library)
+        book.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "library-info-download.epub",
+            serverSize: 100,
+            serverMTime: Date(),
+            cached: false,
+            cacheSize: 0,
+            cacheMTime: Date.distantPast
+        )
+        let sourceURL = URL(string: "http://localhost/get/EPUB/42/library")!
+        let download = BookFormatDownload(
+            isDownloading: false,
+            isPaused: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: book,
+            format: .EPUB,
+            startDatetime: Date(),
+            sourceURL: sourceURL,
+            savedURL: URL(fileURLWithPath: "/tmp/library-info-download.epub"),
+            modificationDate: Date()
+        )
+        container.downloadManager.activeDownloads[sourceURL] = download
+
+        listViewModel.bindDownloadSnapshots(container: container)
+
+        await waitForViewModelUpdate {
+            self.listViewModel.activeDownload(for: book)?.isPaused == true
+        }
+        XCTAssertEqual(listViewModel.activeDownload(for: book)?.progress, 0.5)
+    }
+
+    private func waitForViewModelUpdate(
+        _ predicate: @escaping () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if predicate() { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(predicate(), file: file, line: line)
+    }
 }

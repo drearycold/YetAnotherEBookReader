@@ -27,7 +27,7 @@ struct BookDetailToolbar: ToolbarContent {
             Button(action: {
                 viewModel.downloadOrClearCache(book: book)
             }) {
-                if let download = viewModel.activeDownloads.filter( {$1.isDownloading && $1.book.id == book.id} ).first {
+                if viewModel.activeDownloads.filter( {$1.isActive && $1.book.id == book.id} ).first != nil {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else if book.inShelf {

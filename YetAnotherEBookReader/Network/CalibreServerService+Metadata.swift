@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 extension CalibreServerService {
     func getMetadata(oldbook: CalibreBook) async throws -> CalibreBook {
@@ -54,33 +53,6 @@ extension CalibreServerService {
                 self.updatingMetadata = false
             }
             throw err
-        }
-    }
-
-    @available(*, deprecated, message: "Use async throwing getMetadata(oldbook:) instead")
-    func getMetadata(oldbook: CalibreBook, completion: ((_ newbook: CalibreBook) -> Void)? = nil) {
-        guard oldbook.library.server.isLocal == false else {
-            updatingMetadataStatus = "Local File"
-            updatingMetadataSucceed = true
-            completion?(oldbook)
-            return
-        }
-
-        Task {
-            do {
-                let newbook = try await getMetadata(oldbook: oldbook)
-                await MainActor.run {
-                    self.updatingMetadataStatus = "Success"
-                    self.updatingMetadataSucceed = true
-                    completion?(newbook)
-                }
-            } catch {
-                await MainActor.run {
-                    self.updatingMetadataStatus = error.localizedDescription
-                    self.updatingMetadataSucceed = false
-                    completion?(oldbook)
-                }
-            }
         }
     }
 
@@ -238,18 +210,6 @@ extension CalibreServerService {
         }
     }
 
-    @available(*, deprecated, message: "Use async throwing getBookManifest(book:format:) instead")
-    func getBookManifest(book: CalibreBook, format: Format, completion: ((_ manifest: Data?) -> Void)? = nil) {
-        Task {
-            do {
-                let data = try await getBookManifest(book: book, format: format)
-                completion?(data)
-            } catch {
-                completion?(nil)
-            }
-        }
-    }
-
     func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) async throws {
         let endpointURL = try makeEndpointURL(
             server: library.server,
@@ -273,18 +233,6 @@ extension CalibreServerService {
             await self.logger.logFinishCalibreActivity(type: "Set Book Metadata", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: err.localizedDescription)
             throw err
         }
-    }
-
-    @available(*, deprecated, message: "Use async throwing updateMetadata instead")
-    func updateMetadata(library: CalibreLibrary, bookId: Int32, metadata: [Any]) -> Int {
-        Task {
-            do {
-                try await updateMetadata(library: library, bookId: bookId, metadata: metadata)
-            } catch {
-                // No-op
-            }
-        }
-        return 0
     }
 
     func buildMetadataTask(library: CalibreLibrary, bookId: Int32) -> CalibreBookTask? {
@@ -319,26 +267,13 @@ extension CalibreServerService {
         )
     }
 
-    func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), CalibreAPIError> {
-        validatedDataPublisher(from: task.url, server: task.server)
-            .tryMap { data, _ in
-                try self.decodePayload(CalibreBookEntry.self, from: data)
-            }
-            .mapError(CalibreAPIError.init(error:))
-            .map { (task, $0) }
-            .eraseToAnyPublisher()
+    func getMetadata(task: CalibreBookTask) async throws -> (CalibreBookTask, CalibreBookEntry) {
+        let (data, _) = try await validatedData(from: task.url, server: task.server)
+        return (task, try decodePayload(CalibreBookEntry.self, from: data))
     }
 
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), CalibreAPIError> {
-        validatedDataPublisher(from: task.url, server: task.server)
-            .map { (task, $0.0, $0.1 as URLResponse) }
-            .eraseToAnyPublisher()
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
-        getMetadataNew(task: task)
-            .mapError(\.asURLError)
-            .eraseToAnyPublisher()
+    func getMetadataData(task: CalibreBookTask) async throws -> (CalibreBookTask, Data, URLResponse) {
+        let (data, response) = try await validatedData(from: task.url, server: task.server)
+        return (task, data, response as URLResponse)
     }
 }

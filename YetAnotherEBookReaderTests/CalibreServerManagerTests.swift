@@ -290,4 +290,160 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertNotNil(serverManager.calibreServerInfoStaging[req2.id])
         XCTAssertNotNil(serverManager.calibreServerInfoStaging[req2Pub.id])
     }
+
+    func testSyncServerHelperConfigSubjectUpdatesConfiguration() async throws {
+        let server = CalibreServer(uuid: UUID(), name: "Helper Server", baseUrl: "http://helper-one", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        try installServerForHelperSync(server)
+
+        let payload = try makeDSReaderHelperConfigurationData(servicePort: 7777)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, payload)
+        }
+
+        await Task.yield()
+        serverManager.syncServerHelperConfigSubject.send(server.id)
+
+        let helper = try await waitForHelperConfiguration(serverId: server.id)
+        XCTAssertEqual(helper?.port, 8080)
+        XCTAssertEqual(helper?.configurationData, payload)
+        XCTAssertEqual(helper?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7777)
+    }
+
+    func testSyncServerHelperConfigSubjectIgnoresRequestFailure() async throws {
+        let server = CalibreServer(uuid: UUID(), name: "Failing Helper Server", baseUrl: "http://helper-fail", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        try installServerForHelperSync(server)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("failure".utf8))
+        }
+
+        await Task.yield()
+        serverManager.syncServerHelperConfigSubject.send(server.id)
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        let helper = serverManager.queryServerDSReaderHelper(server: server)
+        XCTAssertNotNil(helper)
+        XCTAssertNil(helper?.configurationData)
+    }
+
+    func testSyncServerHelperConfigSubjectIgnoresConfigurationWithoutDSReaderPrefs() async throws {
+        let server = CalibreServer(uuid: UUID(), name: "Invalid Helper Server", baseUrl: "http://helper-invalid", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        try installServerForHelperSync(server)
+
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: nil,
+            count_pages_prefs: CalibreCountPagesPrefs(library_config: [:]),
+            goodreads_sync_prefs: nil
+        )
+        let payload = try JSONEncoder().encode(config)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, payload)
+        }
+
+        await Task.yield()
+        serverManager.syncServerHelperConfigSubject.send(server.id)
+        try await Task.sleep(nanoseconds: 150_000_000)
+
+        let helper = serverManager.queryServerDSReaderHelper(server: server)
+        XCTAssertNotNil(helper)
+        XCTAssertNil(helper?.configurationData)
+    }
+
+    func testSyncServerHelperConfigSubjectTracksMultipleServersIndependently() async throws {
+        let serverOne = CalibreServer(uuid: UUID(), name: "Helper One", baseUrl: "http://helper-one", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        let serverTwo = CalibreServer(uuid: UUID(), name: "Helper Two", baseUrl: "http://helper-two", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        try installServerForHelperSync(serverOne)
+        try installServerForHelperSync(serverTwo)
+
+        let payloadOne = try makeDSReaderHelperConfigurationData(servicePort: 7101)
+        let payloadTwo = try makeDSReaderHelperConfigurationData(servicePort: 7202)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let data = request.url?.host == "helper-two" ? payloadTwo : payloadOne
+            return (response, data)
+        }
+
+        await Task.yield()
+        serverManager.syncServerHelperConfigSubject.send(serverOne.id)
+        serverManager.syncServerHelperConfigSubject.send(serverTwo.id)
+
+        let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id)
+        let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id)
+        XCTAssertEqual(helperOne?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7101)
+        XCTAssertEqual(helperTwo?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort, 7202)
+    }
+
+    private func installServerForHelperSync(_ server: CalibreServer) throws {
+        container.serverManager.calibreServers[server.id] = server
+        try serverRepository.saveServer(server)
+        serverManager.updateServerDSReaderHelper(serverId: server.id, dsreaderHelper: CalibreServerDSReaderHelper(port: 8080))
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: server.baseUrl)!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: "lib",
+            libraryMap: ["lib": "Library"],
+            request: request
+        )
+        serverManager.calibreServerInfoStaging[request.id] = info
+
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
+                container.calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+    }
+
+    private func makeDSReaderHelperConfigurationData(servicePort: Int) throws -> Data {
+        let options = CalibreDSReaderHelperPrefs.Options(servicePort: servicePort)
+        let config = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: CalibreDSReaderHelperPrefs(plugin_prefs: .init(Options: options)),
+            count_pages_prefs: nil,
+            goodreads_sync_prefs: nil
+        )
+        return try JSONEncoder().encode(config)
+    }
+
+    private func waitForHelperConfiguration(serverId: String) async throws -> CalibreServerDSReaderHelper? {
+        for _ in 0..<20 {
+            if let helper = serverRepository.getDSReaderHelper(for: serverId),
+               helper.configurationData != nil {
+                return helper
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return serverRepository.getDSReaderHelper(for: serverId)
+    }
 }

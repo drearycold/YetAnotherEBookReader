@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 struct DSReaderHelperConnector {
     let calibreServerService: CalibreServerService
@@ -79,14 +78,18 @@ struct DSReaderHelperConnector {
         return urlComponents
     }
 
-    func refreshConfiguration() -> AnyPublisher<(id: String, port: Int, data: Data), URLError>? {
-        guard let url = endpointConfiguration()?.url else { return nil }
-        let serverId = self.server.uuid.uuidString
-        let publisher = urlSession.dataTaskPublisher(for: url)
-            .map { (id: serverId, port: self.dsreaderHelperServer.port, data: $0.data) }
-            .eraseToAnyPublisher()
+    func refreshConfiguration() async throws -> (id: String, port: Int, data: Data) {
+        guard let url = endpointConfiguration()?.url else {
+            throw URLError(.badURL)
+        }
 
-        return publisher
+        return try await refreshConfiguration(from: url)
+    }
+
+    private func refreshConfiguration(from url: URL) async throws -> (id: String, port: Int, data: Data) {
+        let request = URLRequest(url: url)
+        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
+        return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: data)
     }
 
     func refreshConfiguration(_ libraryKey: String) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
@@ -94,7 +97,8 @@ struct DSReaderHelperConnector {
             throw URLError(.badURL)
         }
 
-        let (data, _) = try await urlSession.data(from: url)
+        let request = URLRequest(url: url)
+        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
         let config = try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
 
         return (config, data)
@@ -142,42 +146,4 @@ struct DSReaderHelperConnector {
         _ = try await calibreServerService.validatedData(for: request, server: server)
     }
 
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func addToShelf(goodreads_id: String, shelfName: String) -> Bool {
-        Task {
-            do {
-                try await addToShelf(goodreads_id: goodreads_id, shelfName: shelfName)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
-
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func removeFromShelf(goodreads_id: String, shelfName: String) -> Bool {
-        Task {
-            do {
-                try await removeFromShelf(goodreads_id: goodreads_id, shelfName: shelfName)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
-
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func updateReadingProgress(goodreads_id: String, progress: Double) -> Bool {
-        Task {
-            do {
-                try await updateReadingProgress(goodreads_id: goodreads_id, progress: progress)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
 }

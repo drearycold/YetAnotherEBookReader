@@ -7,7 +7,6 @@
 
 import Foundation
 import OSLog
-import Combine
 
 final class CalibreServerService {
     var logger: CalibreActivityLogger
@@ -182,22 +181,6 @@ final class CalibreServerService {
         } catch {
             throw CalibreAPIError(error: error)
         }
-    }
-
-    func validatedDataPublisher(from url: URL, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<(Data, HTTPURLResponse), CalibreAPIError> {
-        validatedDataPublisher(for: URLRequest(url: url), server: server, timeout: timeout, qos: qos)
-    }
-
-    func validatedDataPublisher(for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<(Data, HTTPURLResponse), CalibreAPIError> {
-        urlSession(server: server, timeout: timeout, qos: qos)
-            .dataTaskPublisher(for: request)
-            .mapError(CalibreAPIError.transport)
-            .tryMap { data, response in
-                let httpResponse = try self.validateHTTPResponse(data: data, response: response)
-                return (data, httpResponse)
-            }
-            .mapError(CalibreAPIError.init(error:))
-            .eraseToAnyPublisher()
     }
 
     func validateHTTPResponse(data: Data, response: URLResponse) throws -> HTTPURLResponse {

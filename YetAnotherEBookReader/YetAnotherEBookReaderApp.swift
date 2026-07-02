@@ -97,7 +97,6 @@ struct YetAnotherEBookReaderApp: App {
                 case .ready:
                     MainView(container: container, viewModel: mainViewModel)
                         .environmentObject(container)
-                        .environmentObject(container.downloadManager)
                         .environmentObject(container.sessionManager)
                         .environmentObject(container.fontsManager)
                 }
