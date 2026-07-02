@@ -72,7 +72,7 @@ test target or class first, then state exactly what was and was not verified.
   - `SectionShelfView`
   - `LibraryInfoView`
   - `SettingsView`
-- `YetAnotherEBookReader/Models/AppContainer.swift` is the composition root
+- `YetAnotherEBookReader/Models/App/AppContainer.swift` is the composition root
   (366 lines, replaces the deleted `ModelData.swift`). It owns every repository,
   manager, service, and runtime state, and conforms to `AppContainerProtocol`,
   `LibraryProvider`, and (transitively) `LibraryResolver` / `ServerResolver`.
@@ -113,34 +113,35 @@ code.
 ### Models
 
 - `CalibreData.swift` has been split (Milestone P2/A11) into focused files in
-  `Models/` and `Network/`. The decomposition is a zero-behavior move:
-  - `CalibreCoreModels.swift`: `CalibreServer`, `CalibreLibrary`,
+  `Models/Calibre/`, `Models/Domain/`, `Models/Utils/`, and `Network/`. The
+  decomposition is a zero-behavior move:
+  - `Calibre/CalibreCoreModels.swift`: `CalibreServer`, `CalibreLibrary`,
     `CalibreBook`, `CalibreSyncStatus`.
-  - `ReadingPositionModels.swift`: `BookDeviceReadingPosition`,
+  - `Domain/ReadingPositionModels.swift`: `BookDeviceReadingPosition`,
     `BookDeviceReadingPositionHistory`, reading statistics.
-  - `CalibreHighlightStyle.swift`: `BookHighlightStyle` (only model file in the
-    split that imports UIKit).
-  - `CalibreTasks.swift`: network/metadata task structs
+  - `Calibre/CalibreHighlightStyle.swift`: `BookHighlightStyle` (only model
+    file in the split that imports UIKit).
+  - `Calibre/CalibreTasks.swift`: network/metadata task structs
     (`CalibreBookTask`, `CalibreBooksMetadataRequest`, `CalibreBooksTask`,
     `CalibreLibraryProbeTask`, `CalibreLibrarySearchTask`,
     `CalibreBookSetLastReadPositionTask`, `CalibreBookUpdateAnnotationsTask`).
-  - `CalibrePayloadModels.swift`: Codable API entry/result payloads
+  - `Calibre/CalibrePayloadModels.swift`: Codable API entry/result payloads
     (`CalibreBookEntry`, `CalibreBookLastReadPositionEntry`,
     `CalibreBookAnnotationsResult`, `CalibreBookAnnotationsMap`,
     `CalibreLibraryBooksResult`, etc.).
-  - `CalibreSyncModels.swift`: custom columns, category keys, probe/sync
+  - `Calibre/CalibreSyncModels.swift`: custom columns, category keys, probe/sync
     requests, `CalibreCdbCmdListResult`.
-  - `CalibrePluginModels.swift`: DSReader Helper / Count Pages / Goodreads Sync
-    preferences and `CalibreDSReaderHelperConfiguration`.
+  - `Calibre/CalibrePluginModels.swift`: DSReader Helper / Count Pages /
+    Goodreads Sync preferences and `CalibreDSReaderHelperConfiguration`.
   - `Network/CalibreActivityModels.swift`: `CalibreActivity`/`Start`/`Finish`.
-  - `CalibreServerConfigProvider.swift`: the `CalibreServerConfigProvider`
-    protocol used to bridge managers/services with the `ModelData` facade.
-  - `Array+Chunks.swift`: generic `Array.chunks(size:)` helper.
-- `RealmModel.swift`: Realm object schema. Treat edits here as migration work.
-- `YabrData.swift`: format, reader, reader-info, and app-specific value types.
-- `BookFiles.swift`: import and local-file helpers.
-- `BookPreference.swift`, `BookBookmark.swift`, `BookHighlight.swift`: reader
-  preferences and annotation value types.
+  - `Utils/Array+Chunks.swift`: generic `Array.chunks(size:)` helper.
+- `Models/Realm/*`: Realm object schema and Realm/domain mappers. Treat edits
+  here as migration work. `CalibreSearchCache.swift` now lives here.
+- `Domain/YabrData.swift`: format, reader, reader-info, and app-specific value
+  types.
+- `Domain/BookFiles.swift`: import and local-file helpers.
+- `Domain/BookPreference.swift`, `Domain/BookBookmark.swift`,
+  `Domain/BookHighlight.swift`: reader preferences and annotation value types.
 
 ### Search And Category
 
@@ -160,9 +161,9 @@ The modern path is value-type/actor based. Do not revive direct
   cache results.
 - `UnifiedSearchViewModel` and `UnifiedCategoryViewModel` are the UI-facing
   adapters for LibraryInfo views.
-- `Models/CalibreBrowser/CalibreBrowser.swift` and
-  `CalibreLibrarySearchManager` are historical only; treat older analysis that
-  references them as pre-P1e context rather than live architecture.
+- `CalibreBrowser.swift` / `CalibreLibrarySearchManager` are historical only;
+  treat older analysis that references them as pre-P1e context rather than live
+  architecture.
 
 ### Reader Stack
 
@@ -182,7 +183,7 @@ The modern path is value-type/actor based. Do not revive direct
 - `Views/BookDetailView/*`: book detail, preview, activity, reading position UI.
 - `Views/SettingsView/*`: settings, server/library configuration, reader
   options, import pickers.
-- `Views/ShelfView/*`: native SwiftUI Recent/Discover shelves (`RecentShelfView`, `SectionShelfView`, view models, and components). The shelf data model (`YabrShelfDataModel`) lives in `Models/ShelfDataManager.swift` (moved out of `Views/ShelfView/` in Milestone P2/A10).
+- `Views/ShelfView/*`: native SwiftUI Recent/Discover shelves (`RecentShelfView`, `SectionShelfView`, view models, and components). The shelf data model (`YabrShelfDataModel`) lives in `Models/Managers/ShelfDataManager.swift` (moved out of `Views/ShelfView/` in Milestone P2/A10).
 - `Views/DictView/*`: dictionary and external lookup UI.
 
 ## Coding Rules
@@ -278,7 +279,7 @@ decomposition. The ModelData god-object elimination plan (Phases 0-4) is now
 **complete**; `ModelData.swift` and the `CalibreServerConfigProvider` protocol
 have been deleted and replaced by `AppContainer` + `AppContainerProtocol`.
 
-- **Phase 4: ModelData Elimination (2026-06-25, complete):** `ModelData.swift` (was 1,073 lines) and `CalibreServerConfigProvider.swift` (24 lines) are fully deleted. The replacement is a 366-line `Models/AppContainer.swift` (composition root) + 130-line `Models/AppContainerProtocol.swift` (facade aggregating all repos / managers / services / subjects / runtime state). The four sub-phases:
+- **Phase 4: ModelData Elimination (2026-06-25, complete):** `ModelData.swift` (was 1,073 lines) and `CalibreServerConfigProvider.swift` (24 lines) are fully deleted. The replacement is a 366-line `Models/App/AppContainer.swift` (composition root) + 130-line `Models/App/AppContainerProtocol.swift` (facade aggregating all repos / managers / services / subjects / runtime state). The four sub-phases:
   - **4a+4b (commit 5f28bc9):** Created `AppContainer` as a verbatim mirror of `ModelData`; widened 11 manager / repository / init-helper `init` and `weak var` types from `ModelData` to `AppContainerProtocol`; extended `AppContainerProtocol` with the missing runtime state (`calibreLibraries`, `calibreServers`, `librarySyncStatus`, `deviceName`, etc.), sync progress (`updatingMetadata*`), database lifecycle, activity log, and `LibraryResolver` / `ServerResolver` conformances. Converted the three `ModelData` extensions in `ShelfDataManager.swift` to extensions on `AppContainerProtocol where Self: ObservableObject`. Both classes compiled and 329 tests passed.
   - **4c (commit 23708d1):** Bulk-renamed `ModelData` → `AppContainer` and `modelData` → `container` across 36 app source files and 6 test files. The 11 init/setup parameter labels were updated to `container:` to match. `YetAnotherEBookReaderApp` now creates `AppContainer()` as the sole `@StateObject`. All 16 View files declare `@EnvironmentObject var container: AppContainer`. All 9 ViewModels + the `YabrEBookReaderNavigationController`, `EpubFolioReaderContainer`, and `FolioReaderViewController` adapters take `container: AppContainer`. 6 `ModelData.shared` access sites switched to `AppContainer.shared`. 329 tests pass.
   - **4d (commit 0e2fa0e):** Deleted `Models/ModelData.swift` (382 lines) and `Models/CalibreServerConfigProvider.swift` (24 lines). `CalibreServerService` now takes `AppContainerProtocol` instead of `CalibreServerConfigProvider`. `AppContainerProtocol` absorbed `updateBook` / `getPreferredFormat` from the deleted protocol. Xcode project updated. 329 tests pass. The full Phase 4 is complete: ModelData 1,073 → 0 lines, replaced by 366-line AppContainer + 130-line AppContainerProtocol.
