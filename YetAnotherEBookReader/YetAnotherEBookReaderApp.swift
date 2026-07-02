@@ -107,7 +107,7 @@ struct YetAnotherEBookReaderApp: App {
 
                 if case .ready = launchState, container.isDatabaseReady {
                     enableProbeTimer()
-                    container.bookReaderActivitySubject.send(newScenePhase)
+                    container.publishBookReaderActivity(newScenePhase)
                 } else {
                     bootstrapInFlight = true
                     launchState = .initializing(status: "Initializing...")
@@ -130,7 +130,7 @@ struct YetAnotherEBookReaderApp: App {
                                     return
                                 }
                                 enableProbeTimer()
-                                container.bookReaderActivitySubject.send(newScenePhase)
+                                container.publishBookReaderActivity(newScenePhase)
                             }
                         } catch {
                             DispatchQueue.main.async {
@@ -144,7 +144,7 @@ struct YetAnotherEBookReaderApp: App {
                 break
             case .background:
                 disableProbeTimer()
-                container.bookReaderActivitySubject.send(newScenePhase)
+                container.publishBookReaderActivity(newScenePhase)
                 break
             @unknown default:
                 break

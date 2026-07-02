@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 
 @MainActor
@@ -40,15 +39,17 @@ class ServerViewModel: ObservableObject {
     
     // DSReader Helper properties (ServerOptionsDSReaderHelper)
     @Published var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
-    @Published var portStr: String = ""
+    @Published var portStr: String = "" {
+        didSet {
+            updateDSReaderHelperPort(from: portStr)
+        }
+    }
     @Published var configurationData: Data? = nil
     @Published var configuration: CalibreDSReaderHelperConfiguration? = nil
     @Published var helperStatus: String? = nil
     @Published var configAlertItem: AlertItem? = nil
     @Published var dsreaderHelperInstructionPresenting: Bool = false
     
-    private var cancellables = Set<AnyCancellable>()
-    private var refreshCancellable: AnyCancellable?
     private var libraryObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, server: CalibreServer?) {
@@ -80,31 +81,25 @@ class ServerViewModel: ObservableObject {
     
     func setupBindings() {
         libraryObservationTask?.cancel()
-        libraryObservationTask = Task { [weak self, container] in
+        libraryObservationTask = Task { @MainActor [weak self, container] in
             for await _ in container.libraryManager.librarySnapshots() {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.updateLibraryList()
-                }
+                self?.updateLibraryList()
             }
         }
-            
-        // Map portStr changes back to dsreaderHelperServer.port
-        $portStr
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                let filtered = newValue.filter { "0123456789".contains($0) }
-                if let num = Int(filtered), num != self.dsreaderHelperServer.port {
-                    if num > 65535 {
-                        self.dsreaderHelperServer.port = 65535
-                    } else if num < 1024 {
-                        self.dsreaderHelperServer.port = 1024
-                    } else {
-                        self.dsreaderHelperServer.port = num
-                    }
-                }
+    }
+
+    private func updateDSReaderHelperPort(from newValue: String) {
+        let filtered = newValue.filter { "0123456789".contains($0) }
+        if let num = Int(filtered), num != dsreaderHelperServer.port {
+            if num > 65535 {
+                dsreaderHelperServer.port = 65535
+            } else if num < 1024 {
+                dsreaderHelperServer.port = 1024
+            } else {
+                dsreaderHelperServer.port = num
             }
-            .store(in: &cancellables)
+        }
     }
     
     // MARK: - Add / Modify Server Actions (AddModServerView)
@@ -342,7 +337,7 @@ class ServerViewModel: ObservableObject {
 
     func setDSReaderStates(server: CalibreServer) {
         let dsHelper = container.serverManager.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
+            let dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
             if let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }
@@ -356,7 +351,6 @@ class ServerViewModel: ObservableObject {
     }
 
     func connectDSReader(server: CalibreServer) {
-        refreshCancellable?.cancel()
         configurationData = nil
         configuration = nil
         helperStatus = "Connecting..."

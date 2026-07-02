@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Combine
+import SwiftUI
 
 extension LibraryInfoView {
     enum GroupKey: String, CaseIterable, Identifiable, CustomStringConvertible {
@@ -111,18 +111,14 @@ extension LibraryInfoView {
         func setupCategoryObserver() {
             guard let container = AppContainer.shared, categoryObserverTask == nil else { return }
 
-            categoryObserverTask = Task { [weak self, repository = container.categoryCacheRepository] in
+            categoryObserverTask = Task { @MainActor [weak self, repository = container.categoryCacheRepository] in
                 for await summaries in repository.observeCategorySummaries() {
                     guard !Task.isCancelled else { break }
-                    await MainActor.run {
-                        self?.availableCategories = summaries
-                    }
+                    self?.availableCategories = summaries
                 }
             }
         }
         
-        private var cancellables = Set<AnyCancellable>()
-
         deinit {
             categoryObserverTask?.cancel()
         }

@@ -6,13 +6,13 @@
 //
 
 import SwiftUI
-import Combine
 
 @MainActor @available(macCatalyst 14.0, *)
 final class MainViewModel: ObservableObject {
     private let container: AppContainer
     private let sessionManager: ReadingSessionManager
-    private var cancellables = Set<AnyCancellable>()
+    private var dismissAllTask: Task<Void, Never>?
+    private var bookImportTask: Task<Void, Never>?
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
@@ -39,24 +39,31 @@ final class MainViewModel: ObservableObject {
         
         setupSubscriptions()
     }
+
+    deinit {
+        dismissAllTask?.cancel()
+        bookImportTask?.cancel()
+    }
     
     private func setupSubscriptions() {
-        container.dismissAllSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.sessionManager.presentingEBookReaderFromShelf = false
+        dismissAllTask?.cancel()
+        let dismissEvents = container.dismissAllEvents()
+        dismissAllTask = Task { @MainActor [weak self] in
+            for await _ in dismissEvents {
+                guard !Task.isCancelled else { return }
+                self?.sessionManager.presentingEBookReaderFromShelf = false
             }
-            .store(in: &cancellables)
-            
-        container.bookImportedSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] bookImportInfo in
-                guard let self = self else { return }
+        }
+
+        bookImportTask?.cancel()
+        let bookImportEvents = container.bookImportEvents()
+        bookImportTask = Task { @MainActor [weak self] in
+            for await bookImportInfo in bookImportEvents {
+                guard !Task.isCancelled, let self else { return }
                 self.bookImportInfo = bookImportInfo
                 self.handleImportedBook(bookImportInfo)
             }
-            .store(in: &cancellables)
+        }
     }
     
     var showWelcome: Bool {
@@ -98,7 +105,7 @@ final class MainViewModel: ObservableObject {
     func handleImportedBook(_ info: BookImportInfo) {
         dismissAll { [weak self] in
             guard let self = self else { return }
-            self.container.dismissAllSubject.send("")
+            self.container.publishDismissAll("")
             self.activeTab = 0
             self.bookImportActionSheetPresenting = false
 
@@ -116,12 +123,12 @@ final class MainViewModel: ObservableObject {
 
     func importBookAsNew(url: URL, bookId: Int32?) {
         let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: true, knownBookId: bookId)
-        container.bookImportedSubject.send(result)
+        container.publishBookImport(result)
     }
 
     func importBookOverwrite(url: URL, bookId: Int32?) {
         let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: true, asNew: false, knownBookId: bookId)
-        container.bookImportedSubject.send(result)
+        container.publishBookImport(result)
     }
 
     func openImportedBook() {

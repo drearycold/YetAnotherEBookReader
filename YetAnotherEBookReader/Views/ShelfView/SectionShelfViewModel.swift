@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Combine
+import SwiftUI
 
 enum SectionShelfAlert: Identifiable {
     case downloadConfirm(bookIds: Set<String>)

@@ -43,22 +43,20 @@ class ReaderOptionsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.fontsDetailPresenting)
     }
     
-    func testDismissAllBindings() throws {
+    func testDismissAllBindings() async throws {
         viewModel.optionsHelpFormat = true
         viewModel.fontsDetailPresenting = true
-        
-        let expectation = XCTestExpectation(description: "Wait for dismiss publisher")
-        
-        // Trigger dismiss
-        mockAppContainer.dismissAllSubject.send("")
-        
-        DispatchQueue.main.async {
-            XCTAssertFalse(self.viewModel.optionsHelpFormat)
-            XCTAssertFalse(self.viewModel.fontsDetailPresenting)
-            expectation.fulfill()
+
+        await MainActor.run {
+            mockAppContainer.publishDismissAll("")
         }
-        
-        wait(for: [expectation], timeout: 1.0)
+
+        for _ in 0..<50 where viewModel.optionsHelpFormat || viewModel.fontsDetailPresenting {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+
+        XCTAssertFalse(viewModel.optionsHelpFormat)
+        XCTAssertFalse(viewModel.fontsDetailPresenting)
     }
     
     func testPreferredFormatBinding() throws {

@@ -101,6 +101,21 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     @MainActor
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
 
+    @MainActor
+    func publishBookImport(_ info: BookImportInfo)
+
+    func bookImportEvents() -> AsyncStream<BookImportInfo>
+
+    @MainActor
+    func publishDismissAll(_ reason: String)
+
+    func dismissAllEvents() -> AsyncStream<String>
+
+    @MainActor
+    func publishBookReaderActivity(_ phase: ScenePhase)
+
+    func bookReaderActivities() -> AsyncStream<ScenePhase>
+
     func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest)
 
     func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest>

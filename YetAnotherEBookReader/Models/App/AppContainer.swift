@@ -81,7 +81,9 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
 
     let bookImportedSubject = PassthroughSubject<BookImportInfo, Never>()
+    private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     let dismissAllSubject = PassthroughSubject<String, Never>()
+    private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
     let recentShelfItemsSubject = PassthroughSubject<[ShelfBookItem], Never>()
     let discoverShelfItemsSubject = PassthroughSubject<[ShelfSectionItem], Never>()
@@ -89,6 +91,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     var presentingStack = [Binding<Bool>]()
 
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
+    private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
 
     var calibreCancellables = Set<AnyCancellable>()
     private var managerStateForwardingTasks = [Task<Void, Never>]()
@@ -202,7 +205,40 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     deinit {
         managerStateForwardingTasks.forEach { $0.cancel() }
         calibreUpdateContinuations.values.forEach { $0.finish() }
+        bookImportBroadcaster.finish()
+        dismissAllBroadcaster.finish()
+        bookReaderActivityBroadcaster.finish()
         probeLibraryLastModifiedBroadcaster.finish()
+    }
+
+    @MainActor
+    func publishBookImport(_ info: BookImportInfo) {
+        bookImportBroadcaster.send(info)
+        bookImportedSubject.send(info)
+    }
+
+    func bookImportEvents() -> AsyncStream<BookImportInfo> {
+        bookImportBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishDismissAll(_ reason: String) {
+        dismissAllBroadcaster.send(reason)
+        dismissAllSubject.send(reason)
+    }
+
+    func dismissAllEvents() -> AsyncStream<String> {
+        dismissAllBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishBookReaderActivity(_ phase: ScenePhase) {
+        bookReaderActivityBroadcaster.send(phase)
+        bookReaderActivitySubject.send(phase)
+    }
+
+    func bookReaderActivities() -> AsyncStream<ScenePhase> {
+        bookReaderActivityBroadcaster.stream()
     }
 
     @MainActor
@@ -373,12 +409,10 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     }
 
     private func forwardStateChanges(from stream: AsyncStream<Void>) {
-        let task = Task { [weak self] in
+        let task = Task { @MainActor [weak self] in
             for await _ in stream {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.objectWillChange.send()
-                }
+                self?.objectWillChange.send()
             }
         }
         managerStateForwardingTasks.append(task)

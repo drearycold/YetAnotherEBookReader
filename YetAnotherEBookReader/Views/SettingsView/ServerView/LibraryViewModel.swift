@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Combine
+import SwiftUI
 
 class LibraryViewModel: ObservableObject {
     let container: AppContainer
@@ -32,7 +32,6 @@ class LibraryViewModel: ObservableObject {
     @Published var failedBookIds: [Int32] = []
     @Published var deletedBookIds: [Int32] = []
     
-    private var cancellables = Set<AnyCancellable>()
     private var libraryObservationTask: Task<Void, Never>?
     private var syncStatusObservationTask: Task<Void, Never>?
     
@@ -56,22 +55,18 @@ class LibraryViewModel: ObservableObject {
         }
 
         libraryObservationTask?.cancel()
-        libraryObservationTask = Task { [weak self, libraryRepository, libraryId = library.id] in
+        libraryObservationTask = Task { @MainActor [weak self, libraryRepository, libraryId = library.id] in
             for await observedLibrary in libraryRepository.observeLibrary(id: libraryId) {
                 guard !Task.isCancelled, let observedLibrary else { continue }
-                await MainActor.run { [weak self] in
-                    self?.applyObservedFlags(from: observedLibrary)
-                }
+                self?.applyObservedFlags(from: observedLibrary)
             }
         }
             
         syncStatusObservationTask?.cancel()
-        syncStatusObservationTask = Task { [weak self, container] in
+        syncStatusObservationTask = Task { @MainActor [weak self, container] in
             for await statusMap in container.libraryManager.librarySyncStatusSnapshots() {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.applySyncStatus(statusMap)
-                }
+                self?.applySyncStatus(statusMap)
             }
         }
     }

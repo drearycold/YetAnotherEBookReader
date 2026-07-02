@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 import AppTrackingTransparency
 import RealmSwift
 
@@ -261,7 +260,7 @@ struct MainView: View {
         .onOpenURL { url in
             print("onOpenURL \(url)")
             let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
-            container.bookImportedSubject.send(result)
+            container.publishBookImport(result)
         }.onAppear {
             viewModel.onAppear()
         }

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 
 class ReaderOptionsViewModel: ObservableObject {
@@ -19,12 +18,16 @@ class ReaderOptionsViewModel: ObservableObject {
     @Published var optionsHelpFont = false
     
     @Published var fontsFolderPresenting = false
-    @Published var fontsFolderPicked = [URL]()
+    @Published var fontsFolderPicked = [URL]() {
+        didSet {
+            importFonts(from: fontsFolderPicked)
+        }
+    }
     @Published var fontsDetailPresenting = false
     @Published var fontsCount = 0
     @Published var fontsImportNotice = ""
     
-    private var cancellables = Set<AnyCancellable>()
+    private var dismissAllTask: Task<Void, Never>?
     
     init(container: AppContainer, fontsManager: FontsManager) {
         self.container = container
@@ -32,29 +35,24 @@ class ReaderOptionsViewModel: ObservableObject {
         
         setupBindings()
     }
+
+    deinit {
+        dismissAllTask?.cancel()
+    }
     
     private func setupBindings() {
-        // Observe dismissAllSubject to dismiss sheets/popovers
-        container.dismissAllSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
+        dismissAllTask?.cancel()
+        let dismissEvents = container.dismissAllEvents()
+        dismissAllTask = Task { @MainActor [weak self] in
+            for await _ in dismissEvents {
+                guard !Task.isCancelled, let self else { return }
                 self.fontsFolderPresenting = false
                 self.fontsDetailPresenting = false
                 self.optionsHelpFormat = false
                 self.optionsHelpReader = false
                 self.optionsHelpFont = false
             }
-            .store(in: &cancellables)
-            
-        // Observe changes to fontsFolderPicked to import fonts
-        $fontsFolderPicked
-            .dropFirst()
-            .sink { [weak self] tmpURLs in
-                guard let self = self else { return }
-                self.importFonts(from: tmpURLs)
-            }
-            .store(in: &cancellables)
+        }
     }
     
     // MARK: - Format / Reader Preference Bindings

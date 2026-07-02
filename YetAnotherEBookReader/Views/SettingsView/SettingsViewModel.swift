@@ -6,19 +6,21 @@
 //
 
 import SwiftUI
-import Combine
 
 @MainActor @available(macCatalyst 14.0, *)
 final class SettingsViewModel: ObservableObject {
     let container: AppContainer
-    private var cancellables = Set<AnyCancellable>()
     private var serverObservationTask: Task<Void, Never>?
     private let refreshDatabaseAction: () -> Void
     private let populateBookShelfAction: () -> Void
     private let probeServersReachabilityAction: (Set<String>) -> Void
     
     @Published var serverList = [CalibreServer]()
-    @Published var serverListDelete: CalibreServer? = nil
+    @Published var serverListDelete: CalibreServer? = nil {
+        didSet {
+            updateServerList()
+        }
+    }
     @Published var selectedServer: String? = nil
     @Published var addServerActive = false
     @Published var alertItem: AlertItem?
@@ -44,21 +46,12 @@ final class SettingsViewModel: ObservableObject {
     
     private func setupSubscriptions() {
         serverObservationTask?.cancel()
-        serverObservationTask = Task { [weak self, container] in
+        serverObservationTask = Task { @MainActor [weak self, container] in
             for await _ in container.serverManager.serverSnapshots() {
                 guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self?.updateServerList()
-                }
-            }
-        }
-
-        // Also observe deletions
-        $serverListDelete
-            .sink { [weak self] _ in
                 self?.updateServerList()
             }
-            .store(in: &cancellables)
+        }
     }
 
     var isRefreshing: Bool {

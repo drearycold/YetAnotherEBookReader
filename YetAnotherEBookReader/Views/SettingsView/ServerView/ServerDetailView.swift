@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 
 struct ServerDetailView: View {
     @EnvironmentObject var container: AppContainer

@@ -7,7 +7,6 @@
 
 import SwiftUI
 import OSLog
-import Combine
 //import struct Kingfisher.KFImage
 import KingfisherSwiftUI
 
@@ -43,8 +42,6 @@ struct LibraryInfoView: View {
     
     @State private var batchDownloadSheetPresenting = false
     
-    @State private var dismissAllCancellable: AnyCancellable?
-    
     @State private var savedFilterCriteriaCategory: [String: Set<String>]? = nil
     
     private var defaultLog = Logger()
@@ -74,9 +71,10 @@ struct LibraryInfoView: View {
             libraryList = container.libraryManager.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
-
-            dismissAllCancellable?.cancel()
-            dismissAllCancellable = container.dismissAllSubject.sink { _ in
+        }
+        .task {
+            for await _ in container.dismissAllEvents() {
+                guard !Task.isCancelled else { return }
                 batchDownloadSheetPresenting = false
             }
         }

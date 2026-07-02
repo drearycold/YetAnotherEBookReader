@@ -6,7 +6,7 @@
 //
 
 import UIKit
-import Combine
+import SwiftUI
 
 enum RecentShelfAlert: Identifiable {
     case missingFormat(book: CalibreBook, format: Format)
