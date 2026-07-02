@@ -10,10 +10,12 @@ import Combine
 
 extension URLSession {
 
+    @available(*, deprecated, message: "Unused legacy Combine adapter; use URLSession.download(from:) or BookDownloadManager instead")
     public func downloadTaskPublisher(for url: URL) -> URLSession.DownloadTaskPublisher {
         self.downloadTaskPublisher(for: .init(url: url))
     }
 
+    @available(*, deprecated, message: "Unused legacy Combine adapter; use URLSession.download(for:) or BookDownloadManager instead")
     public func downloadTaskPublisher(for request: URLRequest) -> URLSession.DownloadTaskPublisher {
         .init(request: request, session: self)
     }

@@ -1397,4 +1397,226 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(result.categories.first?.name, "Authors")
         XCTAssertEqual(result.errmsg, "")
     }
+
+    func testValidatedDataPublisherSuccessUsesAsyncValidationPath() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(#"{"ok":true}"#.utf8))
+        }
+
+        let expectation = expectation(description: "validated publisher succeeds")
+        var receivedData: Data?
+        var receivedStatusCode: Int?
+
+        service.validatedDataPublisher(for: URLRequest(url: URL(string: "http://localhost/ok")!), server: server)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    XCTFail("Expected success, got \(error)")
+                }
+            } receiveValue: { data, response in
+                receivedData = data
+                receivedStatusCode = response.statusCode
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        XCTAssertEqual(receivedData, Data(#"{"ok":true}"#.utf8))
+        XCTAssertEqual(receivedStatusCode, 200)
+    }
+
+    func testValidatedDataPublisherMapsNon2xxStatus() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 503,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "text/plain"]
+            )!
+            return (response, Data("unavailable".utf8))
+        }
+
+        let expectation = expectation(description: "validated publisher fails")
+        var receivedError: CalibreAPIError?
+
+        service.validatedDataPublisher(for: URLRequest(url: URL(string: "http://localhost/failure")!), server: server)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    receivedError = error
+                    expectation.fulfill()
+                }
+            } receiveValue: { _ in
+                XCTFail("Expected failure")
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        guard case .httpStatus(let statusCode, let body) = receivedError else {
+            return XCTFail("Expected httpStatus, got \(String(describing: receivedError))")
+        }
+        XCTAssertEqual(statusCode, 503)
+        XCTAssertEqual(body.flatMap { String(data: $0, encoding: .utf8) }, "unavailable")
+    }
+
+    func testValidatedDataPublisherMapsUnauthorizedToAuthFailed() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 403,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data())
+        }
+
+        let expectation = expectation(description: "validated publisher auth fails")
+        var receivedError: CalibreAPIError?
+
+        service.validatedDataPublisher(for: URLRequest(url: URL(string: "http://localhost/auth")!), server: server)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    receivedError = error
+                    expectation.fulfill()
+                }
+            } receiveValue: { _ in
+                XCTFail("Expected failure")
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        guard case .authFailed = receivedError else {
+            return XCTFail("Expected authFailed, got \(String(describing: receivedError))")
+        }
+    }
+
+    func testValidatedDataPublisherMapsUnsupportedResponse() async throws {
+        MockURLProtocol.requestHandler = { _ in
+            throw URLError(.badServerResponse)
+        }
+
+        let expectation = expectation(description: "validated publisher unsupported response fails")
+        var receivedError: CalibreAPIError?
+
+        service.validatedDataPublisher(for: URLRequest(url: URL(string: "http://localhost/bad-response")!), server: server)
+            .sink { completion in
+                if case .failure(let error) = completion {
+                    receivedError = error
+                    expectation.fulfill()
+                }
+            } receiveValue: { _ in
+                XCTFail("Expected failure")
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        guard case .transport(let error) = receivedError else {
+            return XCTFail("Expected transport error, got \(String(describing: receivedError))")
+        }
+        XCTAssertEqual(error.code, .badServerResponse)
+    }
+
+    func testProbeServerReachabilityNewMatchesAsyncSuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "default_library": "lib1",
+                "library_map": {"lib1": "Library 1"}
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let expectation = expectation(description: "probe publisher emits")
+        var publisherResult: CalibreServerInfo?
+
+        service.probeServerReachabilityNew(serverInfo: info)
+            .sink { result in
+                publisherResult = result
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        let asyncResult = await service.probeServerReachability(serverInfo: info)
+        XCTAssertTrue(publisherResult?.reachable ?? false)
+        XCTAssertEqual(publisherResult?.defaultLibrary, asyncResult.defaultLibrary)
+        XCTAssertEqual(publisherResult?.libraryMap, asyncResult.libraryMap)
+        XCTAssertNil(publisherResult?.error)
+    }
+
+    func testProbeServerReachabilityNewReportsNoLibraryAsUnsupportedPayload() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (response, Data(#"{"default_library":null,"library_map":{}}"#.utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let expectation = expectation(description: "probe publisher emits no-library failure")
+        var publisherResult: CalibreServerInfo?
+
+        service.probeServerReachabilityNew(serverInfo: info)
+            .sink { result in
+                publisherResult = result
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        XCTAssertFalse(publisherResult?.reachable ?? true)
+        XCTAssertEqual(publisherResult?.errorMsg, "Server has no library")
+        guard case .unsupportedPayload = publisherResult?.error else {
+            return XCTFail("Expected unsupportedPayload, got \(String(describing: publisherResult?.error))")
+        }
+    }
+
+    func testProbeServerReachabilityNewReportsHttpFailure() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 500,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, Data("server down".utf8))
+        }
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(server: server, isPublic: false, url: URL(string: "http://localhost")!, reachable: false, probing: false, errorMsg: "", defaultLibrary: "", libraryMap: [:], request: request)
+        let expectation = expectation(description: "probe publisher emits http failure")
+        var publisherResult: CalibreServerInfo?
+
+        service.probeServerReachabilityNew(serverInfo: info)
+            .sink { result in
+                publisherResult = result
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        await fulfillment(of: [expectation], timeout: 2.0)
+        XCTAssertFalse(publisherResult?.reachable ?? true)
+        XCTAssertEqual(publisherResult?.errorMsg, "server down")
+        guard case .httpStatus(let statusCode, _) = publisherResult?.error else {
+            return XCTFail("Expected httpStatus, got \(String(describing: publisherResult?.error))")
+        }
+        XCTAssertEqual(statusCode, 500)
+    }
 }

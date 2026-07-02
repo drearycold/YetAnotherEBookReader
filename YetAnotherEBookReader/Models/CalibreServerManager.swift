@@ -18,11 +18,11 @@ class CalibreServerManager: ObservableObject {
     private let serverRepository: ServerRepositoryProtocol
 
     /// Internal subject emitted whenever a new full server probe completes.
-    /// Consumed by `registerSyncServerHelperConfigCancellable()` to refresh
+    /// Consumed by `registerSyncServerHelperConfigTask()` to refresh
     /// each server's DSReader Helper configuration.
     let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
 
-    private var syncServerHelperConfigCancellable: AnyCancellable?
+    private var syncServerHelperConfigTask: Task<Void, Never>?
 
     @Published var calibreServers = [String: CalibreServer]()
     @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
@@ -36,7 +36,11 @@ class CalibreServerManager: ObservableObject {
         self.container = container
         self.databaseService = databaseService
         self.serverRepository = serverRepository
-        registerSyncServerHelperConfigCancellable()
+        registerSyncServerHelperConfigTask()
+    }
+
+    deinit {
+        syncServerHelperConfigTask?.cancel()
     }
     
     // MARK: - Migrated Methods
@@ -271,54 +275,49 @@ class CalibreServerManager: ObservableObject {
     /// Subscribe to `syncServerHelperConfigSubject` and, for every server id
     /// emitted, fetch the latest DSReader Helper configuration from the helper
     /// endpoint and persist it back into the server Realm.
-    private func registerSyncServerHelperConfigCancellable() {
-        let queue = DispatchQueue(label: "sync-server-helper", qos: .userInitiated)
-        syncServerHelperConfigCancellable = syncServerHelperConfigSubject
-            .receive(on: queue)
-            .flatMap { [weak self] serverId -> AnyPublisher<Result<(id: String, port: Int, data: Data), URLError>, Never> in
-                guard let self = self,
-                      let container = self.container,
-                      let server = self.calibreServers[serverId],
-                      let dsreaderHelperServer = self.queryServerDSReaderHelper(server: server),
-                      let publisher = DSReaderHelperConnector(
-                        calibreServerService: container.calibreServerService,
-                        server: server,
-                        dsreaderHelperServer: dsreaderHelperServer,
-                        goodreadsSync: nil
-                      ).refreshConfiguration()
-                else {
-                    return Just(Result.failure(URLError(.unknown))).eraseToAnyPublisher()
-                }
-                return publisher
-                    .map { Result.success($0) }
-                    .catch { Just(Result.failure($0)) }
-                    .eraseToAnyPublisher()
-            }
-            .map { result -> (id: String, port: Int, data: Data, config: CalibreDSReaderHelperConfiguration?, error: URLError?) in
-                switch result {
-                case .success(let task):
-                    return (
-                        id: task.id,
-                        port: task.port,
-                        data: task.data,
-                        config: try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data),
-                        error: nil
-                    )
-                case .failure(let error):
-                    return (id: "", port: 0, data: Data(), config: nil, error: error)
+    private func registerSyncServerHelperConfigTask() {
+        syncServerHelperConfigTask = Task { [weak self] in
+            guard let self else { return }
+            await withTaskGroup(of: Void.self) { group in
+                let serverIds = syncServerHelperConfigSubject
+                    .buffer(size: 64, prefetch: .byRequest, whenFull: .dropOldest)
+                    .values
+                for await serverId in serverIds {
+                    group.addTask { [weak self] in
+                        await self?.syncServerHelperConfiguration(serverId: serverId)
+                    }
                 }
             }
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] task in
-                if let error = task.error {
-                    self?.logger.error("Failed to sync server helper configuration: \(error.localizedDescription)")
-                    return
-                }
-                if let config = task.config, config.dsreader_helper_prefs != nil {
-                    let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
-                    dsreaderHelper.configurationData = task.data
-                    self?.updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
-                }
+        }
+    }
+
+    @MainActor
+    private func syncServerHelperConfiguration(serverId: String) async {
+        guard let container,
+              let server = calibreServers[serverId],
+              let dsreaderHelperServer = queryServerDSReaderHelper(server: server) else {
+            logger.error("Failed to sync server helper configuration: missing server or helper configuration")
+            return
+        }
+
+        let connector = DSReaderHelperConnector(
+            calibreServerService: container.calibreServerService,
+            server: server,
+            dsreaderHelperServer: dsreaderHelperServer,
+            goodreadsSync: nil
+        )
+
+        do {
+            let task = try await connector.refreshConfiguration()
+            guard let config = try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: task.data),
+                  config.dsreader_helper_prefs != nil else {
+                return
             }
+            let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
+            dsreaderHelper.configurationData = task.data
+            updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
+        } catch {
+            logger.error("Failed to sync server helper configuration: \(error.localizedDescription)")
+        }
     }
 }

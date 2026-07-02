@@ -81,12 +81,18 @@ struct DSReaderHelperConnector {
 
     func refreshConfiguration() -> AnyPublisher<(id: String, port: Int, data: Data), URLError>? {
         guard let url = endpointConfiguration()?.url else { return nil }
-        let serverId = self.server.uuid.uuidString
-        let publisher = urlSession.dataTaskPublisher(for: url)
-            .map { (id: serverId, port: self.dsreaderHelperServer.port, data: $0.data) }
-            .eraseToAnyPublisher()
-
-        return publisher
+        return Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.refreshConfiguration(from: url)))
+                    } catch {
+                        promise(.failure(error as? URLError ?? URLError(.unknown)))
+                    }
+                }
+            }
+        }
+        .eraseToAnyPublisher()
     }
 
     func refreshConfiguration() async throws -> (id: String, port: Int, data: Data) {
@@ -94,6 +100,10 @@ struct DSReaderHelperConnector {
             throw URLError(.badURL)
         }
 
+        return try await refreshConfiguration(from: url)
+    }
+
+    private func refreshConfiguration(from url: URL) async throws -> (id: String, port: Int, data: Data) {
         let (data, _) = try await urlSession.data(from: url)
         return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: data)
     }

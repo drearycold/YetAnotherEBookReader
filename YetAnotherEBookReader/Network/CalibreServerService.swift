@@ -189,15 +189,18 @@ final class CalibreServerService {
     }
 
     func validatedDataPublisher(for request: URLRequest, server: CalibreServer, timeout: Double = 600, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<(Data, HTTPURLResponse), CalibreAPIError> {
-        urlSession(server: server, timeout: timeout, qos: qos)
-            .dataTaskPublisher(for: request)
-            .mapError(CalibreAPIError.transport)
-            .tryMap { data, response in
-                let httpResponse = try self.validateHTTPResponse(data: data, response: response)
-                return (data, httpResponse)
+        Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.validatedData(for: request, server: server, timeout: timeout, qos: qos)))
+                    } catch {
+                        promise(.failure(CalibreAPIError(error: error)))
+                    }
+                }
             }
-            .mapError(CalibreAPIError.init(error:))
-            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     func validateHTTPResponse(data: Data, response: URLResponse) throws -> HTTPURLResponse {
