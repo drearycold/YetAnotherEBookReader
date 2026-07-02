@@ -11,6 +11,16 @@ import Combine
 extension CalibreServerService {
     func syncLibrary(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) async -> CalibreSyncLibraryResult {
         do {
+            return try await syncLibraryResult(resultPrev: resultPrev, order: order, filter: filter, limit: limit)
+        } catch {
+            var result = resultPrev
+            result.errmsg = CalibreAPIError(error: error).localizedDescription
+            return result
+        }
+    }
+
+    func syncLibraryResult(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) async throws -> CalibreSyncLibraryResult {
+        do {
             let endpointURL = try makeEndpointURL(
                 server: resultPrev.request.library.server,
                 path: "/cdb/cmd/list/\(resultPrev.request.library.key)"
@@ -43,9 +53,7 @@ extension CalibreServerService {
             result.errmsg = ""
             return result
         } catch {
-            var result = resultPrev
-            result.errmsg = CalibreAPIError(error: error).localizedDescription
-            return result
+            throw CalibreAPIError(error: error)
         }
     }
 
@@ -73,29 +81,27 @@ extension CalibreServerService {
         let errorResult: [String: [String: CalibreCustomColumnInfo]] = ["error": [:]]
 
         do {
-            let url = try makeEndpointURL(
-                server: request.library.server,
-                path: "/cdb/cmd/custom_columns/\(request.library.key)"
-            )
-            let (data, _) = try await validatedData(from: url, server: request.library.server)
-            let result = try decodePayload([String: [String: CalibreCustomColumnInfo]].self, from: data)
-            return CalibreSyncLibraryResult(request: request, result: result)
+            return try await getCustomColumnsResult(request: request)
         } catch {
-            return CalibreSyncLibraryResult(request: request, result: errorResult)
+            var result = CalibreSyncLibraryResult(request: request, result: errorResult)
+            result.errmsg = CalibreAPIError(error: error).localizedDescription
+            return result
         }
+    }
+
+    func getCustomColumnsResult(request: CalibreSyncLibraryRequest) async throws -> CalibreSyncLibraryResult {
+        let url = try makeEndpointURL(
+            server: request.library.server,
+            path: "/cdb/cmd/custom_columns/\(request.library.key)"
+        )
+        let (data, _) = try await validatedData(from: url, server: request.library.server)
+        let result = try decodePayload([String: [String: CalibreCustomColumnInfo]].self, from: data)
+        return CalibreSyncLibraryResult(request: request, result: result)
     }
 
     func getLibraryCategories(resultPrev: CalibreSyncLibraryResult) async -> CalibreSyncLibraryResult {
         do {
-            let endpointURL = try makeEndpointURL(
-                server: resultPrev.request.library.server,
-                path: "ajax/categories/\(resultPrev.request.library.key)"
-            )
-            let (data, _) = try await validatedData(from: endpointURL, server: resultPrev.request.library.server)
-            var result = resultPrev
-            result.categories = try decodePayload([CalibreLibraryCategory].self, from: data)
-            result.errmsg = ""
-            return result
+            return try await getLibraryCategoriesResult(resultPrev: resultPrev)
         } catch {
             var result = resultPrev
             result.errmsg = CalibreAPIError(error: error).localizedDescription
@@ -103,55 +109,67 @@ extension CalibreServerService {
         }
     }
 
+    func getLibraryCategoriesResult(resultPrev: CalibreSyncLibraryResult) async throws -> CalibreSyncLibraryResult {
+        let endpointURL = try makeEndpointURL(
+            server: resultPrev.request.library.server,
+            path: "ajax/categories/\(resultPrev.request.library.key)"
+        )
+        let (data, _) = try await validatedData(from: endpointURL, server: resultPrev.request.library.server)
+        var result = resultPrev
+        result.categories = try decodePayload([CalibreLibraryCategory].self, from: data)
+        result.errmsg = ""
+        return result
+    }
+
     func syncLibraryPublisher(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) -> AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> {
-        do {
-            let endpointURL = try makeEndpointURL(
-                server: resultPrev.request.library.server,
-                path: "/cdb/cmd/list/0",
-                queryItems: [URLQueryItem(name: "library_id", value: resultPrev.request.library.key)]
-            )
-
-            let payload: [Any] = [["last_modified"], "last_modified", order, filter, limit]
-            let body = try JSONSerialization.data(withJSONObject: payload, options: [])
-            let request = makeJSONRequest(
-                url: endpointURL,
-                method: "POST",
-                body: body,
-                acceptEncoding: "gzip"
-            )
-
-            let startDatetime = Date()
-            Task { [weak self] in
-                await self?.logger.logStartCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+        Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.syncLibraryPublisherResult(resultPrev: resultPrev, order: order, filter: filter, limit: limit)))
+                    } catch {
+                        promise(.failure(CalibreAPIError(error: error)))
+                    }
+                }
             }
+        }
+        .eraseToAnyPublisher()
+    }
 
-            return validatedDataPublisher(for: request, server: resultPrev.request.library.server)
-                .tryMap { data, _ in
-                    try self.decodePayload([String: CalibreCdbCmdListResult].self, from: data)
-                }
-                .mapError(CalibreAPIError.init(error:))
-                .handleEvents(receiveOutput: { [weak self] listResult in
-                    let errMsg = (listResult["result"]?.book_ids.first == -1) ? "Failure" : "Success"
-                    Task { [weak self] in
-                        await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: errMsg)
-                    }
-                }, receiveCompletion: { [weak self] completion in
-                    if case .failure(let error) = completion {
-                        Task { [weak self] in
-                            await self?.logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: error.localizedDescription)
-                        }
-                    }
-                })
-                .map { listResult -> CalibreSyncLibraryResult in
-                    var result = resultPrev
-                    if let list = listResult["result"] {
-                        result.list = list
-                    }
-                    return result
-                }
-                .eraseToAnyPublisher()
+    func syncLibraryPublisherResult(resultPrev: CalibreSyncLibraryResult, order: String = "ascending", filter: String = "", limit: Int = -1) async throws -> CalibreSyncLibraryResult {
+        let endpointURL = try makeEndpointURL(
+            server: resultPrev.request.library.server,
+            path: "/cdb/cmd/list/0",
+            queryItems: [URLQueryItem(name: "library_id", value: resultPrev.request.library.key)]
+        )
+
+        let payload: [Any] = [["last_modified"], "last_modified", order, filter, limit]
+        let body = try JSONSerialization.data(withJSONObject: payload, options: [])
+        let request = makeJSONRequest(
+            url: endpointURL,
+            method: "POST",
+            body: body,
+            acceptEncoding: "gzip"
+        )
+
+        let startDatetime = Date()
+        await logger.logStartCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, bookId: nil, libraryId: resultPrev.request.library.id)
+
+        do {
+            let (data, _) = try await validatedData(for: request, server: resultPrev.request.library.server)
+            let listResult = try decodePayload([String: CalibreCdbCmdListResult].self, from: data)
+            let errMsg = (listResult["result"]?.book_ids.first == -1) ? "Failure" : "Success"
+            await logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: errMsg)
+
+            var result = resultPrev
+            if let list = listResult["result"] {
+                result.list = list
+            }
+            return result
         } catch {
-            return Fail(error: CalibreAPIError(error: error)).eraseToAnyPublisher()
+            let apiError = CalibreAPIError(error: error)
+            await logger.logFinishCalibreActivity(type: "Sync Library Books", request: request, startDatetime: startDatetime, finishDatetime: Date(), errMsg: apiError.localizedDescription)
+            throw apiError
         }
     }
 
@@ -214,20 +232,19 @@ extension CalibreServerService {
     }
 
     func getBooksMetadata(task: CalibreBooksTask, qos: DispatchQoS.QoSClass = .default) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
-        guard let metadataUrl = task.metadataUrl,
-              metadataUrl.isHTTP,
-              task.books.isEmpty == false else {
-            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
-        }
-
-        return validatedDataPublisher(from: metadataUrl, server: task.library.server, qos: qos)
-            .map { data, response -> CalibreBooksTask in
-                var resultTask = task
-                resultTask.data = data
-                resultTask.response = response
-                return self.applyBooksMetadataPayload(data, to: resultTask)
+        Deferred {
+            Future { promise in
+                Task {
+                    let result = await self.getBooksMetadata(task: task, qos: qos)
+                    if let error = result.error {
+                        promise(.failure(error))
+                    } else {
+                        promise(.success(result))
+                    }
+                }
             }
-            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
@@ -240,60 +257,52 @@ extension CalibreServerService {
     func getCustomColumnsPublisher(request: CalibreSyncLibraryRequest) -> AnyPublisher<CalibreSyncLibraryResult, Never> {
         let errorResult: [String: [String: CalibreCustomColumnInfo]] = ["error": [:]]
 
-        do {
-            let endpointURL = try makeEndpointURL(
-                server: request.library.server,
-                path: "/cdb/cmd/custom_columns/0",
-                queryItems: [URLQueryItem(name: "library_id", value: request.library.key)]
-            )
-            let urlRequest = makeJSONRequest(
-                url: endpointURL,
-                method: "POST",
-                body: Data("[]".utf8)
-            )
-
-            return validatedDataPublisher(for: urlRequest, server: request.library.server)
-                .tryMap { data, _ in
-                    try self.decodePayload([String: [String: CalibreCustomColumnInfo]].self, from: data)
-                }
-                .mapError(CalibreAPIError.init(error:))
-                .map {
-                    CalibreSyncLibraryResult(request: request, result: $0)
-                }
-                .catch { error in
+        return Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.getCustomColumnsPublisherResult(request: request)))
+                    } catch {
                     var result = CalibreSyncLibraryResult(request: request, result: errorResult)
-                    result.errmsg = error.localizedDescription
-                    return Just(result)
+                        result.errmsg = CalibreAPIError(error: error).localizedDescription
+                        promise(.success(result))
+                    }
                 }
-                .eraseToAnyPublisher()
-        } catch {
-            var result = CalibreSyncLibraryResult(request: request, result: errorResult)
-            result.errmsg = CalibreAPIError(error: error).localizedDescription
-            return Just(result).eraseToAnyPublisher()
+            }
         }
+        .eraseToAnyPublisher()
+    }
+
+    private func getCustomColumnsPublisherResult(request: CalibreSyncLibraryRequest) async throws -> CalibreSyncLibraryResult {
+        let endpointURL = try makeEndpointURL(
+            server: request.library.server,
+            path: "/cdb/cmd/custom_columns/0",
+            queryItems: [URLQueryItem(name: "library_id", value: request.library.key)]
+        )
+        let urlRequest = makeJSONRequest(
+            url: endpointURL,
+            method: "POST",
+            body: Data("[]".utf8)
+        )
+
+        let (data, _) = try await validatedData(for: urlRequest, server: request.library.server)
+        let result = try decodePayload([String: [String: CalibreCustomColumnInfo]].self, from: data)
+        return CalibreSyncLibraryResult(request: request, result: result)
     }
 
     func getLibraryCategoriesPublisher(resultPrev: CalibreSyncLibraryResult) -> AnyPublisher<CalibreSyncLibraryResult, CalibreAPIError> {
-        do {
-            let endpointURL = try makeEndpointURL(
-                server: resultPrev.request.library.server,
-                path: "ajax/categories/\(resultPrev.request.library.key)"
-            )
-
-            return validatedDataPublisher(from: endpointURL, server: resultPrev.request.library.server)
-                .tryMap { data, _ in
-                    try self.decodePayload([CalibreLibraryCategory].self, from: data)
+        Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.getLibraryCategoriesResult(resultPrev: resultPrev)))
+                    } catch {
+                        promise(.failure(CalibreAPIError(error: error)))
+                    }
                 }
-                .mapError(CalibreAPIError.init(error:))
-                .map { categories -> CalibreSyncLibraryResult in
-                    var result = resultPrev
-                    result.categories = categories
-                    return result
-                }
-                .eraseToAnyPublisher()
-        } catch {
-            return Fail(error: CalibreAPIError(error: error)).eraseToAnyPublisher()
+            }
         }
+        .eraseToAnyPublisher()
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError version instead")

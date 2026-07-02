@@ -89,6 +89,15 @@ struct DSReaderHelperConnector {
         return publisher
     }
 
+    func refreshConfiguration() async throws -> (id: String, port: Int, data: Data) {
+        guard let url = endpointConfiguration()?.url else {
+            throw URLError(.badURL)
+        }
+
+        let (data, _) = try await urlSession.data(from: url)
+        return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: data)
+    }
+
     func refreshConfiguration(_ libraryKey: String) async throws -> (CalibreDSReaderHelperConfiguration, Data) {
         guard let url = endpointConfigurationV1(libraryKey: libraryKey)?.url else {
             throw URLError(.badURL)

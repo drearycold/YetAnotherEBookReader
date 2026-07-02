@@ -103,6 +103,42 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(received?.errmsg, "bad custom columns request")
     }
 
+    func testGetCustomColumnsAsyncSuccess() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "result": {
+                    "#pages": {
+                        "name": "Pages",
+                        "datatype": "int",
+                        "label": "pages",
+                        "editable": true,
+                        "display": {
+                            "description": "",
+                            "number_format": "{0}"
+                        },
+                        "normalized": false,
+                        "num": 1,
+                        "is_multiple": false,
+                        "multiple_seps": {}
+                    }
+                }
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let request = CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
+        let result = try await service.getCustomColumnsResult(request: request)
+        XCTAssertEqual(result.result["result"]?["#pages"]?.name, "Pages")
+    }
+
     func testGetMetadataSuccess() async throws {
         let task = CalibreBookTask(
             server: server,
@@ -168,6 +204,54 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertNil(receivedError, "Expected no error, got \(String(describing: receivedError))")
         XCTAssertEqual(receivedEntry?.title, "Mock Book")
         XCTAssertEqual(receivedEntry?.uuid, "mock-uuid-1234")
+    }
+
+    func testGetMetadataAsyncTaskSuccess() async throws {
+        let task = CalibreBookTask(
+            server: server,
+            bookId: 123,
+            inShelfId: "shelf123",
+            url: URL(string: "http://localhost/get/json/123/lib1")!
+        )
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let json = """
+            {
+                "title": "Async Mock Book",
+                "uuid": "async-mock-uuid",
+                "authors": ["Author One"],
+                "formats": ["epub"],
+                "user_metadata": {},
+                "tags": [],
+                "author_sort": "",
+                "title_sort": "",
+                "thumbnail": "",
+                "timestamp": "",
+                "user_categories": {},
+                "cover": "",
+                "last_modified": "",
+                "application_id": 0,
+                "author_sort_map": {},
+                "identifiers": {},
+                "languages": [],
+                "pubdate": "",
+                "rating": 0.0,
+                "format_metadata": {},
+                "category_urls": {}
+            }
+            """
+            return (response, Data(json.utf8))
+        }
+
+        let (_, entry) = try await service.getMetadata(task: task)
+        XCTAssertEqual(entry.title, "Async Mock Book")
+        XCTAssertEqual(entry.uuid, "async-mock-uuid")
     }
 
     func testGetMetadataFailureHttpStatus() async throws {
@@ -518,6 +602,30 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertNil(receivedError)
         XCTAssertNotNil(receivedTask)
         XCTAssertEqual(receivedTask?.lastReadPositionsData, mockData)
+    }
+
+    func testGetLastReadPositionAsyncSuccess() async throws {
+        let request = CalibreBooksMetadataRequest(library: library, books: [123], getAnnotations: true)
+        let task = CalibreBooksTask(
+            request: request,
+            metadataUrl: URL(string: "http://localhost/metadata")!,
+            lastReadPositionUrl: URL(string: "http://localhost/last_read")!,
+            annotationsUrl: URL(string: "http://localhost/annotations")!
+        )
+        let mockData = Data("async-last-read-data".utf8)
+
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (response, mockData)
+        }
+
+        let result = try await service.getLastReadPosition(task: task)
+        XCTAssertEqual(result.lastReadPositionsData, mockData)
     }
 
     func testGetLastReadPositionPublisherFailure() async throws {

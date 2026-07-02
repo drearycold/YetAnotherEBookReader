@@ -23,33 +23,30 @@ extension CalibreServerService {
                 resultTask.booksAnnotationsEntry = try JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
             } catch {
                 resultTask.booksError.formUnion(task.books)
+                resultTask.error = CalibreAPIError(error: error)
             }
             return resultTask
         } catch {
-            return task
+            var resultTask = task
+            resultTask.error = CalibreAPIError(error: error)
+            return resultTask
         }
     }
 
     func getAnnotations(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
-        guard let annotationsUrl = task.annotationsUrl,
-              annotationsUrl.isHTTP else {
-            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
-        }
-
-        return validatedDataPublisher(from: annotationsUrl, server: task.library.server)
-            .tryMap { data, _ -> CalibreBooksTask in
-                var resultTask = task
-                resultTask.annotationsData = data
-                do {
-                    resultTask.booksAnnotationsEntry = try JSONDecoder().decode([String: CalibreBookAnnotationsResult].self, from: data)
-                } catch {
-                    resultTask.booksError.formUnion(task.books)
-                    throw error
+        Deferred {
+            Future { promise in
+                Task {
+                    let resultTask = await self.getAnnotations(task: task)
+                    if let error = resultTask.error {
+                        promise(.failure(error))
+                    } else {
+                        promise(.success(resultTask))
+                    }
                 }
-                return resultTask
             }
-            .mapError(CalibreAPIError.init(error:))
-            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
@@ -116,14 +113,19 @@ extension CalibreServerService {
     }
 
     func updateAnnotationByTask(task: CalibreBookUpdateAnnotationsTask) -> AnyPublisher<CalibreBookUpdateAnnotationsTask, CalibreAPIError> {
-        validatedDataPublisher(for: task.urlRequest, server: task.library.server)
-            .map { data, response -> CalibreBookUpdateAnnotationsTask in
-                var resultTask = task
-                resultTask.urlResponse = response
-                resultTask.data = data
-                return resultTask
+        Deferred {
+            Future { promise in
+                Task {
+                    let resultTask = await self.updateAnnotationByTask(task: task)
+                    if let error = resultTask.error {
+                        promise(.failure(error))
+                    } else {
+                        promise(.success(resultTask))
+                    }
+                }
             }
-            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")

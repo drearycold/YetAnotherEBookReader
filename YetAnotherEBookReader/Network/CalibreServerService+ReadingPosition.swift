@@ -10,18 +10,30 @@ import Combine
 
 extension CalibreServerService {
     func getLastReadPosition(task: CalibreBooksTask) -> AnyPublisher<CalibreBooksTask, CalibreAPIError> {
+        Deferred {
+            Future { promise in
+                Task {
+                    do {
+                        promise(.success(try await self.getLastReadPosition(task: task)))
+                    } catch {
+                        promise(.failure(CalibreAPIError(error: error)))
+                    }
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+
+    func getLastReadPosition(task: CalibreBooksTask) async throws -> CalibreBooksTask {
         guard let lastReadPositionUrl = task.lastReadPositionUrl,
               lastReadPositionUrl.isHTTP else {
-            return Just(task).setFailureType(to: CalibreAPIError.self).eraseToAnyPublisher()
+            return task
         }
 
-        return validatedDataPublisher(from: lastReadPositionUrl, server: task.library.server)
-            .map { data, _ -> CalibreBooksTask in
-                var task = task
-                task.lastReadPositionsData = data
-                return task
-            }
-            .eraseToAnyPublisher()
+        let (data, _) = try await validatedData(from: lastReadPositionUrl, server: task.library.server)
+        var task = task
+        task.lastReadPositionsData = data
+        return task
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
@@ -77,14 +89,19 @@ extension CalibreServerService {
     }
 
     func setLastReadPositionByTask(task: CalibreBookSetLastReadPositionTask) -> AnyPublisher<CalibreBookSetLastReadPositionTask, CalibreAPIError> {
-        validatedDataPublisher(for: task.urlRequest, server: task.library.server)
-            .map { data, response -> CalibreBookSetLastReadPositionTask in
-                var resultTask = task
-                resultTask.urlResponse = response
-                resultTask.data = data
-                return resultTask
+        Deferred {
+            Future { promise in
+                Task {
+                    let resultTask = await self.setLastReadPositionByTask(task: task)
+                    if let error = resultTask.error {
+                        promise(.failure(error))
+                    } else {
+                        promise(.success(resultTask))
+                    }
+                }
             }
-            .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
     }
 
     @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")

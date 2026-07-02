@@ -41,6 +41,7 @@ class BookDownloadManager: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     private let defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookDownloadManager")
+    private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
     var container: AppContainerProtocol?
     private var realmConf: Realm.Configuration?
@@ -56,6 +57,23 @@ class BookDownloadManager: ObservableObject {
     func setup(container: AppContainerProtocol, realmConf: Realm.Configuration?) {
         self.container = container
         self.realmConf = realmConf
+    }
+
+    func downloadSnapshots() -> AsyncStream<[URL: BookFormatDownload]> {
+        AsyncStream { continuation in
+            let id = UUID()
+            downloadSnapshotContinuations[id] = continuation
+            continuation.yield(activeDownloads)
+            continuation.onTermination = { [weak self] _ in
+                self?.downloadSnapshotContinuations.removeValue(forKey: id)
+            }
+        }
+    }
+
+    fileprivate func publishDownloadSnapshot() {
+        downloadSnapshotContinuations.values.forEach {
+            $0.yield(activeDownloads)
+        }
     }
 
     private func registerBookFormatDownloadHandler() {
@@ -92,6 +110,7 @@ class BookDownloadManager: ObservableObject {
         activeDownloads[download.key]?.isDownloading = false
         activeDownloads[download.key]?.progress = 0.0
         activeDownloads[download.key]?.resumeData = nil
+        publishDownloadSnapshot()
     }
     
     func pauseDownload(_ book: CalibreBook, format: Format) {
@@ -102,9 +121,10 @@ class BookDownloadManager: ObservableObject {
         }
         
         download.value.downloadTask?.cancel(byProducingResumeData: { [weak self] resumeData in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self?.activeDownloads[download.key]?.isDownloading = false
                 self?.activeDownloads[download.key]?.resumeData = resumeData
+                self?.publishDownloadSnapshot()
             }
         })
         
@@ -140,6 +160,7 @@ class BookDownloadManager: ObservableObject {
         activeDownloads[bookFormatDownload.sourceURL]?.isDownloading = true
         activeDownloads[bookFormatDownload.sourceURL]?.resumeData = nil
         activeDownloads[bookFormatDownload.sourceURL]?.downloadTask = downloadTask
+        publishDownloadSnapshot()
 
         if let request = downloadTask.originalRequest {
             container?.logFinishCalibreActivity(type: "Download Format \(format.rawValue)", request: request, startDatetime: bookFormatDownload.startDatetime, finishDatetime: Date(), errMsg: "Resumed")
@@ -220,6 +241,7 @@ class BookDownloadManager: ObservableObject {
         bookFormatDownload.downloadTask = downloadTask
         
         activeDownloads[url] = bookFormatDownload
+        publishDownloadSnapshot()
         
         downloadTask.resume()
         
@@ -319,17 +341,16 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
            let httpResponse = response as? HTTPURLResponse,
            (200...299).contains(httpResponse.statusCode),
            isFileExist {
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self, let manager = self.manager, let container = manager.container
                        else { return }
 
                 container.bookManager.addedCache(book: self.download.book, format: self.download.format)
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                manager.publishDownloadSnapshot()
 
-                MainActor.assumeIsolated {
-                    container.publishCalibreUpdate(.book(self.download.book))
-                }
+                container.publishCalibreUpdate(.book(self.download.book))
                 manager.bookDownloadedSubject.send(self.download.book)
 
                 guard let request = task.originalRequest else { return }
@@ -342,13 +363,14 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 }
             }
         } else {
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 guard let self = self, let manager = self.manager, let container = manager.container,
                       let request = task.originalRequest
                        else { return }
 
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
+                manager.publishDownloadSnapshot()
 
                 let logger = container.logger
                 let startDatetime = self.download.startDatetime
@@ -368,8 +390,9 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
         
         guard progress > (manager.activeDownloads[self.download.sourceURL]?.progress ?? 0.0) + 0.01 else { return }
         
-        DispatchQueue.main.async {
+        Task { @MainActor in
             manager.activeDownloads[self.download.sourceURL]?.progress = progress
+            manager.publishDownloadSnapshot()
         }
     }
 }
