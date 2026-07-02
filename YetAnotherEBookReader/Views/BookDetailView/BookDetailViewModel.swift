@@ -170,7 +170,7 @@ class BookDetailViewModel: ObservableObject {
             // TODO cancel logic if needed
         } else {
             if let coverUrl = book.coverURL {
-                container.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
+                container.coverCache.removeCover(for: coverUrl)
             }
             fetchMetadata(book: book)
         }

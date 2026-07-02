@@ -8,17 +8,36 @@
 import Foundation
 import Kingfisher
 
-class AuthPlugin: ImageDownloadRequestModifier {
-    let container: AppContainerProtocol
+final class DefaultBookCoverCache: BookCoverCaching {
+    private let imageCache = ImageCache.default
+    private let authResponder = AuthResponsor()
 
-    init(container: AppContainerProtocol) {
-        self.container = container
+    func configureAuthentication(serverProvider: CalibreServerSnapshotProviding) {
+        imageCache.diskStorage.config.expiration = .days(28)
+        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(serverProvider: serverProvider))]
+        ImageDownloader.default.authenticationChallengeResponder = authResponder
+    }
+
+    func storeCoverData(_ data: Data, for url: URL) {
+        imageCache.storeToDisk(data, forKey: url.absoluteString)
+    }
+
+    func removeCover(for url: URL) {
+        imageCache.removeImage(forKey: url.absoluteString)
+    }
+}
+
+private final class AuthPlugin: ImageDownloadRequestModifier {
+    private weak var serverProvider: CalibreServerSnapshotProviding?
+
+    init(serverProvider: CalibreServerSnapshotProviding) {
+        self.serverProvider = serverProvider
     }
     
     func modified(for request: URLRequest) -> URLRequest? {
         var request = request
         guard let url = request.url, let query = url.query else { return request }
-        container.serverManager.calibreServers.values.forEach { server in
+        serverProvider?.calibreServers.values.forEach { server in
             if url.absoluteString.starts(with: server.serverUrl) && server.serverUrl.hasPrefix("https://") && server.username.isEmpty == false && query.hasSuffix("&username=\(server.username)"){
                 let toEncode = "\(server.username):\(server.password)";
                 guard let encoded = toEncode.data(using: .utf8)?.base64EncodedString() else { return }
@@ -29,25 +48,7 @@ class AuthPlugin: ImageDownloadRequestModifier {
     }
 }
 
-class AuthResponsor: AuthenticationChallengeResponsable {
-//    let container: AppContainer
-//
-//    init(container: AppContainer) {
-//        self.container = container
-//    }
-//    
-//    func downloader(
-//        _ downloader: ImageDownloader,
-//        didReceive challenge: URLAuthenticationChallenge,
-//        completionHandler: (URLSession.AuthChallengeDisposition, URLCredential?) -> Void)
-//    {
-//        // Provide your `AuthChallengeDisposition` and `URLCredential`
-//        var disposition: URLSession.AuthChallengeDisposition = .performDefaultHandling
-//        var credential: URLCredential? = nil
-//
-//        completionHandler(disposition, credential)
-//    }
-    
+private final class AuthResponsor: AuthenticationChallengeResponsable {
     func downloader(
         _ downloader: ImageDownloader,
         task: URLSessionTask,

@@ -16,9 +16,18 @@
 import Foundation
 import RealmSwift
 import SwiftUI
-import Kingfisher
 
-protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
+protocol CalibreServerSnapshotProviding: AnyObject {
+    var calibreServers: [String: CalibreServer] { get }
+}
+
+protocol BookCoverCaching: AnyObject {
+    func configureAuthentication(serverProvider: CalibreServerSnapshotProviding)
+    func storeCoverData(_ data: Data, for url: URL)
+    func removeCover(for url: URL)
+}
+
+protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, CalibreServerSnapshotProviding {
     // MARK: - Repositories
 
     var serverRepository: ServerRepositoryProtocol { get }
@@ -63,8 +72,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var realmSaveBooksMetadata: Realm? { get set }
     var realmConf: Realm.Configuration? { get set }
     var logger: CalibreActivityLogger? { get set }
-    var authResponsor: AuthResponsor { get }
-    var kfImageCache: ImageCache { get }
+    var coverCache: BookCoverCaching { get }
     var presentingStack: [Binding<Bool>] { get set }
 
     // MARK: - Calibre cache (used directly by services/repositories)

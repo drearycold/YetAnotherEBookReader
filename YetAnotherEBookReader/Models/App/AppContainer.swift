@@ -18,8 +18,6 @@ import Foundation
 import RealmSwift
 import SwiftUI
 import OSLog
-import Kingfisher
-import CryptoSwift
 
 final class AppContainer: AppContainerProtocol, LibraryProvider {
     static var shared: AppContainer?
@@ -115,8 +113,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     var logger: CalibreActivityLogger?
 
-    let kfImageCache = ImageCache.default
-    var authResponsor = AuthResponsor()
+    let coverCache: BookCoverCaching = DefaultBookCoverCache()
 
     var databaseService = DatabaseService.shared
 
@@ -263,7 +260,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             self.serverScopedRealmProvider = env.serverScopedRealmProvider
         }
 
-        setupImageCache()
+        setupCoverCache()
         wireCrossManagerSubscriptions()
 
         if mock {
@@ -339,13 +336,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         self.realmConf = initialConf
     }
 
-    /// Configure the Kingfisher image cache and register the auth challenge
-    /// responder so the rest of the app can issue authenticated HTTP image
-    /// requests via `KFImage`.
-    private func setupImageCache() {
-        kfImageCache.diskStorage.config.expiration = .days(28)
-        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(container: self))]
-        ImageDownloader.default.authenticationChallengeResponder = authResponsor
+    /// Configure cover cache and authenticated HTTP image requests.
+    private func setupCoverCache() {
+        coverCache.configureAuthentication(serverProvider: self)
 
         downloadManager.container = self
         fontsManager.reloadCustomFonts()

@@ -9,7 +9,6 @@ import Foundation
 import RealmSwift
 import SwiftUI
 import OSLog
-import Kingfisher
 import CryptoSwift
 
 #if canImport(R2Shared)
@@ -628,8 +627,8 @@ class CalibreBookManager {
             }
 
             book.title = publication.metadata.title
-            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL, let kfImageCache = container?.kfImageCache {
-                kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
+            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
+                container?.coverCache.storeCoverData(coverData, for: coverUrl)
             }
 
             self.updateBook(book: book)
