@@ -6,14 +6,12 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class ReadingSessionManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: ReadingSessionManager!
-    private var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(
@@ -21,14 +19,12 @@ final class ReadingSessionManagerTests: XCTestCase {
         )
 
         manager = ReadingSessionManager(container: container)
-        cancellables = []
     }
 
     override func tearDownWithError() throws {
         AppContainer.shared = nil
         manager = nil
         container = nil
-        cancellables = nil
     }
     
     func testDefaultFormat_returnsPreferredFormat() throws {
@@ -61,11 +57,17 @@ final class ReadingSessionManagerTests: XCTestCase {
         
         let expectation = self.expectation(description: "Reading book change published")
         
-        manager.$readingBookInShelfId.sink { shelfId in
-            if shelfId == book.inShelfId {
+        let manager = manager!
+        let observationTask = Task {
+            for await shelfId in manager.readingBookInShelfIdSnapshots() {
+                guard shelfId == book.inShelfId else { continue }
                 expectation.fulfill()
+                return
             }
-        }.store(in: &cancellables)
+        }
+        defer {
+            observationTask.cancel()
+        }
         
         manager.readingBookInShelfId = book.inShelfId
         waitForExpectations(timeout: 1.0)

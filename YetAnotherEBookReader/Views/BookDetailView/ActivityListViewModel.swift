@@ -38,12 +38,11 @@ class ActivityListViewModel: ObservableObject {
         let cutoff = Date(timeIntervalSinceNow: -86400 * 7)  // Show last 7 days
         activities = activityLogRepository.fetchEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
         activitiesTask?.cancel()
-        activitiesTask = Task { [weak self, activityLogRepository, libraryId, bookId] in
-            for await entries in activityLogRepository.observeEntries(libraryId: libraryId, bookId: bookId, since: cutoff) {
+        let activityUpdates = activityLogRepository.observeEntries(libraryId: libraryId, bookId: bookId, since: cutoff)
+        activitiesTask = Task { @MainActor [weak self] in
+            for await entries in activityUpdates {
                 guard !Task.isCancelled else { break }
-                await MainActor.run {
-                    self?.activities = entries
-                }
+                self?.activities = entries
             }
         }
     }

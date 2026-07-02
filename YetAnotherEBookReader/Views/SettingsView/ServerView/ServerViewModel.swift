@@ -49,6 +49,7 @@ class ServerViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     private var refreshCancellable: AnyCancellable?
+    private var libraryObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, server: CalibreServer?) {
         self.container = container
@@ -72,16 +73,21 @@ class ServerViewModel: ObservableObject {
         
         setupBindings()
     }
+
+    deinit {
+        libraryObservationTask?.cancel()
+    }
     
     func setupBindings() {
-        // Observe calibreLibraries to keep libraryList updated
-        container.libraryManager.$calibreLibraries
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.updateLibraryList()
+        libraryObservationTask?.cancel()
+        libraryObservationTask = Task { [weak self, container] in
+            for await _ in container.libraryManager.librarySnapshots() {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.updateLibraryList()
+                }
             }
-            .store(in: &cancellables)
+        }
             
         // Map portStr changes back to dsreaderHelperServer.port
         $portStr

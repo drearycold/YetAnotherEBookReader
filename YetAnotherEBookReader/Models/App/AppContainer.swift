@@ -91,6 +91,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
 
     var calibreCancellables = Set<AnyCancellable>()
+    private var managerStateForwardingTasks = [Task<Void, Never>]()
 
     @Published var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
@@ -163,6 +164,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
+    private let probeLibraryLastModifiedBroadcaster = ManagerAsyncBroadcaster<CalibreSyncLibraryRequest>()
 
     var probeTimer: AnyCancellable?
 
@@ -198,7 +200,9 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     }
 
     deinit {
+        managerStateForwardingTasks.forEach { $0.cancel() }
         calibreUpdateContinuations.values.forEach { $0.finish() }
+        probeLibraryLastModifiedBroadcaster.finish()
     }
 
     @MainActor
@@ -220,6 +224,15 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
                 }
             }
         }
+    }
+
+    func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest) {
+        probeLibraryLastModifiedBroadcaster.send(request)
+        probeLibraryLastModifiedSubject.send(request)
+    }
+
+    func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest> {
+        probeLibraryLastModifiedBroadcaster.stream()
     }
 
     @MainActor
@@ -346,23 +359,29 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// Wire subscriptions that cross manager boundaries (so the originating
     /// `init` body stays focused on `objectWillChange` plumbing).
     private func wireCrossManagerSubscriptions() {
-        libraryManager.registerProbeLibraryLastModifiedCancellable()
+        libraryManager.startProbeLibraryLastModifiedTask()
     }
 
-    /// Forward each manager's `objectWillChange` to our own so SwiftUI views
+    /// Forward each manager's explicit state stream to our own so SwiftUI views
     /// observing the container redraw on manager-level mutations.
     private func wireObjectWillChangeForwarding() {
-        forwardObjectWillChange(of: serverManager)
-        forwardObjectWillChange(of: libraryManager)
-        forwardObjectWillChange(of: bookManager)
-        forwardObjectWillChange(of: sessionManager)
+        forwardStateChanges(from: serverManager.stateChanges())
+        forwardStateChanges(from: libraryManager.stateChanges())
+        forwardStateChanges(from: bookManager.stateChanges())
+        forwardStateChanges(from: sessionManager.stateChanges())
+        forwardStateChanges(from: fontsManager.stateChanges())
     }
 
-    private func forwardObjectWillChange<Manager: ObservableObject>(of manager: Manager) {
-        manager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
+    private func forwardStateChanges(from stream: AsyncStream<Void>) {
+        let task = Task { [weak self] in
+            for await _ in stream {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.objectWillChange.send()
+                }
+            }
+        }
+        managerStateForwardingTasks.append(task)
     }
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {

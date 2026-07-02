@@ -18,7 +18,6 @@ import UserMessagingPlatform
 @available(macCatalyst 14.0, *)
 struct MainView: View {
     @EnvironmentObject var container: AppContainer
-    @EnvironmentObject var sessionManager: ReadingSessionManager
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
@@ -339,6 +338,5 @@ struct MainView_Previews: PreviewProvider {
     static var previews: some View {
         MainView(container: container, viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
             .environmentObject(container)
-            .environmentObject(container.sessionManager)
     }
 }

@@ -9,13 +9,29 @@ import Foundation
 import CoreText
 import SwiftUI
 
-class FontsManager: ObservableObject {
-    @Published var userFontInfos = [String: FontInfo]()
+class FontsManager {
+    private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
+    private let fontInfoBroadcaster = ManagerAsyncBroadcaster<[String: FontInfo]>()
+
+    var userFontInfos = [String: FontInfo]() {
+        didSet {
+            fontInfoBroadcaster.send(userFontInfos)
+            stateChangeBroadcaster.send(())
+        }
+    }
     
     private static var registeredURLs = Set<URL>()
     
     init() {
         reloadCustomFonts()
+    }
+
+    func stateChanges() -> AsyncStream<Void> {
+        stateChangeBroadcaster.stream()
+    }
+
+    func fontInfoSnapshots() -> AsyncStream<[String: FontInfo]> {
+        fontInfoBroadcaster.stream(initialValue: userFontInfos)
     }
     
     func importCustomFonts(urls: [URL]) -> [CFArray]? {

@@ -583,6 +583,9 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var observeEntriesBookIdParam: Int32?
     var observeEntriesSinceParam: Date?
     private let observeEntriesBroadcaster = TestAsyncStreamBroadcaster<[ActivityLogUIEntry]>()
+    var observeEntriesSubscriberCount: Int {
+        observeEntriesBroadcaster.subscriberCount
+    }
 
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
         fetchEntriesCalled = true

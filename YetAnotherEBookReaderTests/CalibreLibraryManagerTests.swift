@@ -307,7 +307,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
             }
             .store(in: &cancellables)
             
-        container.probeLibraryLastModifiedSubject.send(.init(library: localLib, autoUpdateOnly: false, incremental: false))
+        container.publishProbeLibraryLastModifiedRequest(.init(library: localLib, autoUpdateOnly: false, incremental: false))
         
         wait(for: [expectation], timeout: 5.0)
     }

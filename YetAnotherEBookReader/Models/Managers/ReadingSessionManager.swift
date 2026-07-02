@@ -6,21 +6,38 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 import RealmSwift
 import OSLog
 
-class ReadingSessionManager: ObservableObject {
-    @Published var defaultFormat = Format.PDF
+class ReadingSessionManager {
+    private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
+    private let readingBookInShelfIdBroadcaster = ManagerAsyncBroadcaster<String?>()
+    private let readingBookBroadcaster = ManagerAsyncBroadcaster<CalibreBook?>()
+    private let readerInfoBroadcaster = ManagerAsyncBroadcaster<ReaderInfo?>()
+    private let presentingReaderBroadcaster = ManagerAsyncBroadcaster<Bool>()
+    private let selectedPositionBroadcaster = ManagerAsyncBroadcaster<String>()
+
+    var defaultFormat = Format.PDF {
+        didSet {
+            publishStateChange()
+        }
+    }
     var formatReaderMap = [Format: [ReaderType]]()
     var formatList = [Format]()
     
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
-    @Published var presentingEBookReaderFromShelf = false
-    
-    @Published var readingBookInShelfId: String? = nil {
+    var presentingEBookReaderFromShelf = false {
         didSet {
+            presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
+            publishStateChange()
+        }
+    }
+    
+    var readingBookInShelfId: String? = nil {
+        didSet {
+            readingBookInShelfIdBroadcaster.send(readingBookInShelfId)
+            publishStateChange()
             guard let readingBookInShelfId = readingBookInShelfId else {
                 readingBook = nil
                 return
@@ -32,8 +49,10 @@ class ReadingSessionManager: ObservableObject {
     }
     
     @available(*, deprecated)
-    @Published var readingBook: CalibreBook? = nil {
+    var readingBook: CalibreBook? = nil {
         didSet {
+            readingBookBroadcaster.send(readingBook)
+            publishStateChange()
             guard let readingBook = readingBook else {
                 self.selectedPosition = ""
                 return
@@ -44,11 +63,20 @@ class ReadingSessionManager: ObservableObject {
         }
     }
     
-    @Published var readerInfo: ReaderInfo? = nil
-    @Published var selectedPosition = ""
+    var readerInfo: ReaderInfo? = nil {
+        didSet {
+            readerInfoBroadcaster.send(readerInfo)
+            publishStateChange()
+        }
+    }
+    var selectedPosition = "" {
+        didSet {
+            selectedPositionBroadcaster.send(selectedPosition)
+            publishStateChange()
+        }
+    }
     
     weak var container: AppContainerProtocol?
-    private var cancellables = Set<AnyCancellable>()
 
     init(container: AppContainerProtocol? = nil) {
         self.container = container
@@ -69,6 +97,34 @@ class ReadingSessionManager: ObservableObject {
     
     func setup(container: AppContainerProtocol) {
         self.container = container
+    }
+
+    func stateChanges() -> AsyncStream<Void> {
+        stateChangeBroadcaster.stream()
+    }
+
+    func readingBookInShelfIdSnapshots() -> AsyncStream<String?> {
+        readingBookInShelfIdBroadcaster.stream(initialValue: readingBookInShelfId)
+    }
+
+    func readingBookSnapshots() -> AsyncStream<CalibreBook?> {
+        readingBookBroadcaster.stream(initialValue: readingBook)
+    }
+
+    func readerInfoSnapshots() -> AsyncStream<ReaderInfo?> {
+        readerInfoBroadcaster.stream(initialValue: readerInfo)
+    }
+
+    func presentingReaderSnapshots() -> AsyncStream<Bool> {
+        presentingReaderBroadcaster.stream(initialValue: presentingEBookReaderFromShelf)
+    }
+
+    func selectedPositionSnapshots() -> AsyncStream<String> {
+        selectedPositionBroadcaster.stream(initialValue: selectedPosition)
+    }
+
+    private func publishStateChange() {
+        stateChangeBroadcaster.send(())
     }
     
     func onBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {

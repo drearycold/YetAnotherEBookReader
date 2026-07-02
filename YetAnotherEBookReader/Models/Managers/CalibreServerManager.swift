@@ -6,28 +6,33 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 import OSLog
 
-class CalibreServerManager: ObservableObject {
+class CalibreServerManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreServerManager")
 
     weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
     private let serverRepository: ServerRepositoryProtocol
 
-    /// Internal subject emitted whenever a new full server probe completes.
-    /// Consumed by `registerSyncServerHelperConfigTask()` to refresh
-    /// each server's DSReader Helper configuration.
-    let syncServerHelperConfigSubject = PassthroughSubject<String, Never>()
-
+    private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
+    private let serverBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServer]>()
+    private let serverInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreServerInfo]>()
+    private let helperConfigRequestBroadcaster = ManagerAsyncBroadcaster<String>()
     private var syncServerHelperConfigTask: Task<Void, Never>?
 
-    @Published var calibreServers = [String: CalibreServer]()
-    @Published var calibreServerInfoStaging = [String: CalibreServerInfo]() {
+    var calibreServers = [String: CalibreServer]() {
+        didSet {
+            serverBroadcaster.send(calibreServers)
+            publishStateChange()
+        }
+    }
+    var calibreServerInfoStaging = [String: CalibreServerInfo]() {
         didSet {
             container?.calibreServerService.updateServerInfoStaging(calibreServerInfoStaging)
+            serverInfoStagingBroadcaster.send(calibreServerInfoStaging)
+            publishStateChange()
         }
     }
     var documentServer: CalibreServer?
@@ -41,6 +46,26 @@ class CalibreServerManager: ObservableObject {
 
     deinit {
         syncServerHelperConfigTask?.cancel()
+    }
+
+    func stateChanges() -> AsyncStream<Void> {
+        stateChangeBroadcaster.stream()
+    }
+
+    func serverSnapshots() -> AsyncStream<[String: CalibreServer]> {
+        serverBroadcaster.stream(initialValue: calibreServers)
+    }
+
+    func serverInfoStagingSnapshots() -> AsyncStream<[String: CalibreServerInfo]> {
+        serverInfoStagingBroadcaster.stream(initialValue: calibreServerInfoStaging)
+    }
+
+    func requestServerHelperConfigSync(serverId: String) {
+        helperConfigRequestBroadcaster.send(serverId)
+    }
+
+    private func publishStateChange() {
+        stateChangeBroadcaster.send(())
     }
     
     // MARK: - Migrated Methods
@@ -203,7 +228,7 @@ class CalibreServerManager: ObservableObject {
             }
             
             if serverInfo.request.autoUpdateOnly == false {
-                syncServerHelperConfigSubject.send(serverInfo.server.id)
+                requestServerHelperConfigSync(serverId: serverInfo.server.id)
             }
             
             // TODO: replace sync library with library search
@@ -229,7 +254,7 @@ class CalibreServerManager: ObservableObject {
                 container?.calibreLibraries.filter {
                     $0.value.server.id == serverInfo.server.id
                 }.forEach { id, library in
-                    container?.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+                    container?.publishProbeLibraryLastModifiedRequest(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
         }
@@ -272,17 +297,14 @@ class CalibreServerManager: ObservableObject {
 
     // MARK: - DSReader Helper Config Sync
 
-    /// Subscribe to `syncServerHelperConfigSubject` and, for every server id
-    /// emitted, fetch the latest DSReader Helper configuration from the helper
-    /// endpoint and persist it back into the server Realm.
+    /// For every requested server id, fetch the latest DSReader Helper
+    /// configuration from the helper endpoint and persist it back into Realm.
     private func registerSyncServerHelperConfigTask() {
+        let serverIds = helperConfigRequestBroadcaster.stream()
         syncServerHelperConfigTask = Task { [weak self] in
-            guard let self else { return }
             await withTaskGroup(of: Void.self) { group in
-                let serverIds = syncServerHelperConfigSubject
-                    .buffer(size: 64, prefetch: .byRequest, whenFull: .dropOldest)
-                    .values
                 for await serverId in serverIds {
+                    guard !Task.isCancelled else { return }
                     group.addTask { [weak self] in
                         await self?.syncServerHelperConfiguration(serverId: serverId)
                     }

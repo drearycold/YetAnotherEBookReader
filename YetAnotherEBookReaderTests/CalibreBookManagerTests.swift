@@ -43,13 +43,18 @@ final class CalibreBookManagerTests: XCTestCase {
 
         let expectation = XCTestExpectation(description: "Wait for booksInShelf to be populated")
         
-        let cancellable = bookManager.$booksInShelf
-            .dropFirst()
-            .sink { books in
+        let manager = bookManager!
+        let observationTask = Task {
+            for await books in manager.booksInShelfSnapshots() {
                 if books[book.inShelfId] != nil {
                     expectation.fulfill()
+                    return
                 }
             }
+        }
+        defer {
+            observationTask.cancel()
+        }
 
         // Populate
         var completionCount = 0
@@ -66,7 +71,6 @@ final class CalibreBookManagerTests: XCTestCase {
         XCTAssertEqual(bookManager.booksInShelf[book.inShelfId]?.title, "Shelf Book")
         XCTAssertEqual(completionCount, 1)
         XCTAssertTrue(completionWasOnMainThread)
-        cancellable.cancel()
     }
 
     func testPopulateBookShelfSendsShelfUpdateByDefault() {
@@ -164,13 +168,18 @@ final class CalibreBookManagerTests: XCTestCase {
         let expectation = self.expectation(description: "selectedBookId publisher fires")
         var receivedId: String? = nil
 
-        bookManager.$selectedBookId
-            .dropFirst()
-            .sink { id in
+        let manager = bookManager!
+        let observationTask = Task {
+            for await id in manager.selectedBookIdSnapshots() {
+                guard id == "test-selected-id" else { continue }
                 receivedId = id
                 expectation.fulfill()
+                return
             }
-            .store(in: &cancellables)
+        }
+        defer {
+            observationTask.cancel()
+        }
 
         bookManager.selectedBookId = "test-selected-id"
 

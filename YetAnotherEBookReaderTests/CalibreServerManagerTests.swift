@@ -307,7 +307,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
 
         let helper = try await waitForHelperConfiguration(serverId: server.id)
         XCTAssertEqual(helper?.port, 8080)
@@ -330,7 +330,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
         try await Task.sleep(nanoseconds: 150_000_000)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
@@ -359,7 +359,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
         try await Task.sleep(nanoseconds: 150_000_000)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
@@ -387,8 +387,8 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(serverOne.id)
-        serverManager.syncServerHelperConfigSubject.send(serverTwo.id)
+        serverManager.requestServerHelperConfigSync(serverId: serverOne.id)
+        serverManager.requestServerHelperConfigSync(serverId: serverTwo.id)
 
         let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id)
         let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id)

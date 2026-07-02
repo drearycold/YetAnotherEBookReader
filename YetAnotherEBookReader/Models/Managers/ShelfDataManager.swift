@@ -8,6 +8,54 @@
 import Foundation
 import OSLog
 
+final class ManagerAsyncBroadcaster<Element> {
+    private let lock = NSLock()
+    private var continuations = [UUID: AsyncStream<Element>.Continuation]()
+
+    func stream() -> AsyncStream<Element> {
+        makeStream(initialValue: nil)
+    }
+
+    func stream(initialValue: Element) -> AsyncStream<Element> {
+        makeStream(initialValue: initialValue)
+    }
+
+    private func makeStream(initialValue: Element?) -> AsyncStream<Element> {
+        AsyncStream { [weak self] continuation in
+            let id = UUID()
+            if let initialValue {
+                continuation.yield(initialValue)
+            }
+            self?.lock.lock()
+            self?.continuations[id] = continuation
+            self?.lock.unlock()
+
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.lock()
+                self?.continuations.removeValue(forKey: id)
+                self?.lock.unlock()
+            }
+        }
+    }
+
+    func send(_ value: Element) {
+        lock.lock()
+        let currentContinuations = continuations.map { $0.value }
+        lock.unlock()
+        for continuation in currentContinuations {
+            continuation.yield(value)
+        }
+    }
+
+    func finish() {
+        lock.lock()
+        let currentContinuations = continuations.map { $0.value }
+        continuations.removeAll()
+        lock.unlock()
+        currentContinuations.forEach { $0.finish() }
+    }
+}
+
 private actor ShelfCategoryStore {
     struct CategoryDescriptor: Hashable {
         let category: String
@@ -143,7 +191,7 @@ private actor ShelfCategoryStore {
             if update.statuses.isEmpty {
                 return false
             }
-            return update.statuses.values.allSatisfy { !$0.loading }
+            return update.statuses.allSatisfy { !$0.value.loading }
         }()
 
         if isDone {
@@ -157,7 +205,7 @@ private actor ShelfCategoryStore {
     }
 
     func categoryKeysForRefresh() -> [SearchCriteriaMergedKey] {
-        categories.values
+        categories.map { $0.value }
             .sorted {
                 $0.category < $1.category
             }
@@ -177,7 +225,7 @@ private actor ShelfCategoryStore {
                 )
             }
         )
-        let categoryKeys = Set(categories.values.map(\.sectionId))
+        let categoryKeys = Set(categories.map { $0.value.sectionId })
         initialLoadState = categoryKeys.isEmpty ? .complete : .loading(pendingCategoryKeys: categoryKeys)
     }
 
@@ -339,13 +387,13 @@ private final class ShelfSnapshotBroadcaster<Snapshot: Equatable> {
     func publish(_ snapshot: Snapshot) {
         guard lastPublishedSnapshot != snapshot else { return }
         lastPublishedSnapshot = snapshot
-        for continuation in continuations.values {
+        for continuation in continuations.map({ $0.value }) {
             continuation.yield(snapshot)
         }
     }
 
     func finish() {
-        continuations.values.forEach { $0.finish() }
+        continuations.map { $0.value }.forEach { $0.finish() }
         continuations.removeAll()
     }
 }
@@ -442,7 +490,7 @@ final class YabrShelfDataModel {
         eventTask?.cancel()
         initialSnapshotTask?.cancel()
         recentRebuildTask?.cancel()
-        categorySearchTasks.values.forEach { $0.cancel() }
+        categorySearchTasks.map { $0.value }.forEach { $0.cancel() }
         MainActor.assumeIsolated {
             recentSnapshotBroadcaster.finish()
             discoverSnapshotBroadcaster.finish()
@@ -506,14 +554,14 @@ final class YabrShelfDataModel {
 
     private func makeRecentShelfBuildContext(booksInShelf: [String: CalibreBook]) -> RecentShelfBuilder.BuildContext {
         let reachableServerIds = Set(
-            booksInShelf.values.compactMap { book in
+            booksInShelf.compactMap { _, book in
                 container.calibreServerService.getServerUrlByReachability(server: book.library.server) == nil
                     ? nil
                     : book.library.server.id
             }
         )
         let downloadingBookIds = Set(
-            container.downloadManager.activeDownloads.values.compactMap { download in
+            container.downloadManager.activeDownloads.compactMap { _, download in
                 download.isDownloading ? download.book.inShelfId : nil
             }
         )
@@ -703,7 +751,7 @@ final class YabrShelfDataModel {
 
     private func currentSnapshot() -> DiscoverShelfSnapshot {
         DiscoverShelfSnapshot(
-            sections: discoverShelfItemsById.values.sorted(by: { $0.title < $1.title }),
+            sections: discoverShelfItemsById.map { $0.value }.sorted(by: { $0.title < $1.title }),
             isInitialLoadComplete: isInitialLoadComplete
         )
     }

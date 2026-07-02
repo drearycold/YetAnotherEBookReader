@@ -743,7 +743,7 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.activities.count, 0)
     }
 
-    func testInitializationUsesRepositoryAndReceivesUpdates() throws {
+    func testInitializationUsesRepositoryAndReceivesUpdates() async throws {
         let repository = MockActivityLogRepository()
         let initialEntry = ActivityLogUIEntry(
             id: "1",
@@ -772,6 +772,13 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
         XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
         XCTAssertEqual(viewModel.activities, [initialEntry])
+        for _ in 0..<50 where repository.observeEntriesSubscriberCount == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(repository.observeEntriesCalled)
+        XCTAssertEqual(repository.observeEntriesLibraryIdParam, "library-id")
+        XCTAssertEqual(repository.observeEntriesBookIdParam, 7)
+        XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
 
         let updatedEntry = ActivityLogUIEntry(
             id: "2",
@@ -788,7 +795,9 @@ class ActivityListViewModelTests: XCTestCase {
             httpBodyString: "{}"
         )
         repository.sendObservedEntries([updatedEntry])
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        for _ in 0..<50 where viewModel.activities != [updatedEntry] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertEqual(viewModel.activities, [updatedEntry])
     }

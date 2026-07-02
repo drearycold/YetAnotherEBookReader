@@ -101,6 +101,10 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     @MainActor
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
 
+    func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest)
+
+    func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest>
+
     @MainActor
     func publishLegacyRecentShelfItems(_ books: [ShelfBookItem])
 
