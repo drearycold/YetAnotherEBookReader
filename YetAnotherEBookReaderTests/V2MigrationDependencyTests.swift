@@ -327,9 +327,13 @@ final class V2MigrationDependencyTests: XCTestCase {
             )
         )
         
-        unifiedSearchService.publisher(for: key)
-            .sink { _ in }
-            .store(in: &cancellables)
+        let searchTask = Task {
+            let stream = await unifiedSearchService.search(key: key)
+            for await _ in stream {
+                guard !Task.isCancelled else { break }
+            }
+        }
+        defer { searchTask.cancel() }
         
         try await Task.sleep(nanoseconds: 150_000_000)
         await unifiedSearchService.setLimit(for: key, limit: 250)

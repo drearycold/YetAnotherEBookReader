@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -20,11 +19,9 @@ class UnifiedSearchIntegrationTests: XCTestCase {
     var unifiedSearchService: UnifiedSearchService!
     var mockServer: CalibreServer!
     var mockLibrary: CalibreLibrary!
-    var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
-        cancellables = Set<AnyCancellable>()
 
         // Setup logger
 
@@ -118,7 +115,6 @@ class UnifiedSearchIntegrationTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
-        cancellables = nil
         unifiedSearchService = nil
         container = nil
         mockServer = nil
@@ -126,7 +122,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         try super.tearDownWithError()
     }
 
-    func testUnifiedSearchEndToEndWithMockServer() throws {
+    func testUnifiedSearchEndToEndWithMockServer() async throws {
         debugLog("testUnifiedSearchEndToEndWithMockServer started")
 
         // Mock search response JSON
@@ -278,27 +274,20 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         let expectation = expectation(description: "UnifiedSearchManager returns search results from network")
         var finalResult: UnifiedSearchResult?
 
-        debugLog("subscribing to publisher")
-        // Observe search manager publisher
-        unifiedSearchService.publisher(for: key)
-            .sink { result in
-                debugLog("publisher emitted result with \(result.books.count) books")
-                // Guard against multiple fulfillments: the publisher
-                // can emit the same result more than once (e.g. when
-                // a cached result is re-emitted after a network
-                // response arrives), and XCTestExpectation.fulfill()
-                // is an API violation if called twice on the same
-                // expectation.
-                if result.books.count > 0 && finalResult == nil {
-                    finalResult = result
+        debugLog("subscribing to async search stream")
+        let stream = await unifiedSearchService.search(key: key)
+        let task = Task {
+            for await update in stream {
+                debugLog("stream emitted result with \(update.result.books.count) books")
+                if update.result.books.count > 0 {
+                    finalResult = update.result
                     expectation.fulfill()
+                    break
                 }
             }
-            .store(in: &cancellables)
-
-        debugLog("waiting for expectations")
-        // Verify wait
-        waitForExpectations(timeout: 5.0)
+        }
+        await fulfillment(of: [expectation], timeout: 5.0)
+        task.cancel()
 
         debugLog("test finished. result: \(String(describing: finalResult))")
 

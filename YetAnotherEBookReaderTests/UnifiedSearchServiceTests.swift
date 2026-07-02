@@ -140,8 +140,35 @@ class UnifiedSearchServiceTests: XCTestCase {
         book.lastModified = Date()
         return book
     }
+
+    private func collectResults(
+        for key: SearchCriteriaMergedKey,
+        timeout: TimeInterval = 5.0,
+        until predicate: @escaping (UnifiedSearchResult) -> Bool
+    ) async -> [UnifiedSearchResult] {
+        let expectation = expectation(description: "Unified search stream emitted expected result")
+        var results: [UnifiedSearchResult] = []
+        var fulfilled = false
+        let stream = await manager.search(key: key)
+        let task = Task { @MainActor in
+            for await update in stream {
+                guard !Task.isCancelled else { break }
+                let result = update.result
+                results.append(result)
+                if predicate(result), !fulfilled {
+                    fulfilled = true
+                    expectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        await fulfillment(of: [expectation], timeout: timeout)
+        task.cancel()
+        return results
+    }
     
-    func testPublisherAndIncrementalMerging() async throws {
+    func testAsyncStreamAndIncrementalMerging() async throws {
         // Setup ephemeral URLSession with MockURLProtocol
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]
@@ -291,22 +318,9 @@ class UnifiedSearchServiceTests: XCTestCase {
         )
         let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id, mockLibrary2.id], criteria: criteria)
         
-        var receivedResults: [UnifiedSearchResult] = []
-        let expectation = expectation(description: "Unified results received")
-        var fulfilled = false
-        
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                receivedResults.append(result)
-                if result.books.count == 2 && !fulfilled {
-                    fulfilled = true
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        await fulfillment(of: [expectation], timeout: 5.0)
+        let receivedResults = await collectResults(for: key) { result in
+            result.books.count == 2
+        }
         
         XCTAssertGreaterThanOrEqual(receivedResults.count, 2)
         let finalResult = receivedResults.last!
@@ -403,61 +417,28 @@ class UnifiedSearchServiceTests: XCTestCase {
             result: lib1Result
         )
         
-        let expectation1 = expectation(description: "Initial merge completed")
-        var lastResult: UnifiedSearchResult?
-        var fulfilled = false
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                lastResult = result
-                if result.books.count == 2 && !fulfilled {
-                    fulfilled = true
-                    expectation1.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-        
-        await fulfillment(of: [expectation1], timeout: 5.0)
+        let initialResults = await collectResults(for: key) { result in
+            result.books.count == 2
+        }
+        let lastResult = initialResults.last
         
         XCTAssertEqual(lastResult?.books.count, 2)
         XCTAssertEqual(lastResult?.limitNumber, 100)
         
         // Expand limit
-        let expectation2 = expectation(description: "Limit expanded")
-        var limitExpanded = false
-        var lastExpandedResult: UnifiedSearchResult?
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                if result.limitNumber == 150 && !limitExpanded {
-                    limitExpanded = true
-                    lastExpandedResult = result
-                    expectation2.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
         await manager.expandLimit(for: key, by: 50)
-        await fulfillment(of: [expectation2], timeout: 5.0)
+        let expandedResults = await collectResults(for: key) { result in
+            result.limitNumber == 150
+        }
+        let lastExpandedResult = expandedResults.last
         XCTAssertEqual(lastExpandedResult?.limitNumber, 150)
         
         // Reset search
-        let expectation3 = expectation(description: "Search reset")
-        var searchReset = false
-        var lastResetResult: UnifiedSearchResult?
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                if result.limitNumber == 100 && !searchReset {
-                    searchReset = true
-                    lastResetResult = result
-                    expectation3.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
         await manager.resetSearch(for: key)
-        await fulfillment(of: [expectation3], timeout: 5.0)
+        let resetResults = await collectResults(for: key) { result in
+            result.limitNumber == 100
+        }
+        let lastResetResult = resetResults.last
         XCTAssertEqual(lastResetResult?.limitNumber, 100)
     }
     
@@ -506,44 +487,21 @@ class UnifiedSearchServiceTests: XCTestCase {
             result: lib2Result
         )
         
-        let expectation1 = expectation(description: "Merge completed for empty libraryIds")
-        var lastResult: UnifiedSearchResult?
-        var fulfilled = false
-        
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                lastResult = result
-                if result.books.count == 2 && !fulfilled {
-                    fulfilled = true
-                    expectation1.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        await fulfillment(of: [expectation1], timeout: 5.0)
+        let initialResults = await collectResults(for: key) { result in
+            result.books.count == 2
+        }
+        let lastResult = initialResults.last
         
         XCTAssertEqual(lastResult?.books.count, 2)
         XCTAssertEqual(lastResult?.totalNumber, 2)
         XCTAssertEqual(lastResult?.limitNumber, 100)
         
         // Expand limit
-        let expectation2 = expectation(description: "Limit expanded for empty libraryIds")
-        var limitExpanded = false
-        var lastExpandedResult: UnifiedSearchResult?
-        manager.publisher(for: key)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                if result.limitNumber == 150 && !limitExpanded {
-                    limitExpanded = true
-                    lastExpandedResult = result
-                    expectation2.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
         await manager.expandLimit(for: key, by: 50)
-        await fulfillment(of: [expectation2], timeout: 5.0)
+        let expandedResults = await collectResults(for: key) { result in
+            result.limitNumber == 150
+        }
+        let lastExpandedResult = expandedResults.last
         XCTAssertEqual(lastExpandedResult?.limitNumber, 150)
     }
     
@@ -588,40 +546,17 @@ class UnifiedSearchServiceTests: XCTestCase {
             result: resB
         )
         
-        var resultsA: [UnifiedSearchResult] = []
-        var resultsB: [UnifiedSearchResult] = []
+        async let resultsA = collectResults(for: keyA) { result in
+            result.books.count == 1
+        }
+        async let resultsB = collectResults(for: keyB) { result in
+            result.books.count == 1
+        }
+        let finalResultsA = await resultsA
+        let finalResultsB = await resultsB
         
-        let expA = expectation(description: "Results A received")
-        let expB = expectation(description: "Results B received")
-        
-        var fulfilledA = false
-        manager.publisher(for: keyA)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                resultsA.append(result)
-                if result.books.count == 1 && !fulfilledA {
-                    fulfilledA = true
-                    expA.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        var fulfilledB = false
-        manager.publisher(for: keyB)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                resultsB.append(result)
-                if result.books.count == 1 && !fulfilledB {
-                    fulfilledB = true
-                    expB.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        await fulfillment(of: [expA, expB], timeout: 5.0)
-        
-        XCTAssertEqual(resultsA.last?.books.first?.title, "Apple")
-        XCTAssertEqual(resultsB.last?.books.first?.title, "Banana")
+        XCTAssertEqual(finalResultsA.last?.books.first?.title, "Apple")
+        XCTAssertEqual(finalResultsB.last?.books.first?.title, "Banana")
     }
     
     func testLimitExpansionIsolatesCriteria() async throws {
@@ -639,73 +574,23 @@ class UnifiedSearchServiceTests: XCTestCase {
         let keyA = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteriaA)
         let keyB = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteriaB)
         
-        var resultsA: [UnifiedSearchResult] = []
-        var resultsB: [UnifiedSearchResult] = []
+        async let resultsA = collectResults(for: keyA) { _ in true }
+        async let resultsB = collectResults(for: keyB) { _ in true }
+        let initialResultsA = await resultsA
+        let initialResultsB = await resultsB
         
-        let expA = expectation(description: "Results A received")
-        let expB = expectation(description: "Results B received")
-        
-        var fulfilledA = false
-        manager.publisher(for: keyA)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                resultsA.append(result)
-                if resultsA.count == 1 && !fulfilledA {
-                    fulfilledA = true
-                    expA.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        var fulfilledB = false
-        manager.publisher(for: keyB)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                resultsB.append(result)
-                if resultsB.count == 1 && !fulfilledB {
-                    fulfilledB = true
-                    expB.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
-        await fulfillment(of: [expA, expB], timeout: 5.0)
-        
-        XCTAssertEqual(resultsA.last?.limitNumber, 100)
-        XCTAssertEqual(resultsB.last?.limitNumber, 100)
+        XCTAssertEqual(initialResultsA.last?.limitNumber, 100)
+        XCTAssertEqual(initialResultsB.last?.limitNumber, 100)
         
         // Expand limit for A only
-        let expA2 = expectation(description: "Results A expanded")
-        var fulfilledA2 = false
-        manager.publisher(for: keyA)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                if result.limitNumber == 150 && !fulfilledA2 {
-                    fulfilledA2 = true
-                    expA2.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-            
         await manager.expandLimit(for: keyA, by: 50)
-        await fulfillment(of: [expA2], timeout: 5.0)
+        let expandedA = await collectResults(for: keyA) { result in
+            result.limitNumber == 150
+        }
+        XCTAssertEqual(expandedA.last?.limitNumber, 150)
         
         // Verify B's limit is still 100
-        var currentB: UnifiedSearchResult?
-        let expB2 = expectation(description: "Verify B's limit")
-        var fulfilledB2 = false
-        manager.publisher(for: keyB)
-            .receive(on: DispatchQueue.main)
-            .sink { result in
-                currentB = result
-                if !fulfilledB2 {
-                    fulfilledB2 = true
-                    expB2.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-        await fulfillment(of: [expB2], timeout: 5.0)
-        
+        let currentB = await manager.getActiveSearch(for: keyB)
         XCTAssertEqual(currentB?.limitNumber, 100)
     }
 

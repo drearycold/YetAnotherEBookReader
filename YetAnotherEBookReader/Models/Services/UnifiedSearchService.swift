@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 actor UnifiedSearchService {
     private let mergeService: UnifiedSearchMergeService
@@ -51,45 +50,6 @@ actor UnifiedSearchService {
     ) {
         self.isServerReachableProvider = reachable
         self.isServerReachableNoPublicProvider = reachableNoPublic
-    }
-
-    nonisolated func searchUpdatePublisher(for key: SearchCriteriaMergedKey) -> AnyPublisher<SearchUpdate, Never> {
-        Deferred {
-            let subject = PassthroughSubject<SearchUpdate, Never>()
-            let task = Task {
-                let stream = await self.search(key: key)
-                for await update in stream {
-                    guard !Task.isCancelled else { break }
-                    subject.send(update)
-                }
-            }
-
-            let initialResult = UnifiedSearchResult(
-                search: key.criteria.searchString,
-                sortBy: key.criteria.sortCriteria.by,
-                sortAsc: key.criteria.sortCriteria.ascending,
-                filters: key.criteria.filterCriteriaCategory,
-                libraryIds: key.libraryIds,
-                unifiedOffsets: [:],
-                totalNumber: 0,
-                limitNumber: 100,
-                books: []
-            )
-            let initialUpdate = SearchUpdate(result: initialResult, statuses: [:])
-
-            return subject
-                .prepend(initialUpdate)
-                .handleEvents(receiveCancel: {
-                    task.cancel()
-                })
-        }
-        .eraseToAnyPublisher()
-    }
-
-    nonisolated func publisher(for key: SearchCriteriaMergedKey) -> AnyPublisher<UnifiedSearchResult, Never> {
-        searchUpdatePublisher(for: key)
-            .map { $0.result }
-            .eraseToAnyPublisher()
     }
 
     func search(key: SearchCriteriaMergedKey, force: Bool = false) -> AsyncStream<SearchUpdate> {
