@@ -128,21 +128,20 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
             }
         }
 
+        _ = realm.refresh()
+
         let results = realm.objects(CalibreActivityLogEntry.self)
             .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
             .sorted(byKeyPath: "startDatetime", ascending: false)
 
         return AsyncStream { [weak self] continuation in
-            continuation.yield(results.compactMap { self?.mapToUI($0) })
             let token = results.observe(on: DispatchQueue.main) { [weak self] change in
                 guard let self else {
                     continuation.yield([])
                     return
                 }
                 switch change {
-                case .initial:
-                    break
-                case .update(let collection, _, _, _):
+                case .initial(let collection), .update(let collection, _, _, _):
                     continuation.yield(collection.map(self.mapToUI))
                 case .error:
                     continuation.yield([])

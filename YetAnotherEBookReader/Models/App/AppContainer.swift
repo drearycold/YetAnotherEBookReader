@@ -379,7 +379,9 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             throw DatabaseBootstrapError.realmConfigurationMissing
         }
         do {
-            try databaseBootstrapper.bootstrap(realmConf: realmConf)
+            try MainActor.assumeIsolated {
+                try databaseBootstrapper.bootstrap(realmConf: realmConf)
+            }
         } catch {
             defaultLog.error("initializeDatabase failed: \(error.localizedDescription)")
             throw error

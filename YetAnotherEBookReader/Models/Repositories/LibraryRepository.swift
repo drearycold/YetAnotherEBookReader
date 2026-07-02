@@ -71,20 +71,19 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
             }
         }
 
+        _ = realm.refresh()
+
         let results = realm.objects(CalibreLibraryRealm.self)
             .filter("primaryKey == %@", id)
 
         return AsyncStream { [weak self] continuation in
-            continuation.yield(results.first.flatMap { self?.mapLibraryRealm($0) })
             let token = results.observe(on: DispatchQueue.main) { [weak self] change in
                 guard let self else {
                     continuation.yield(nil)
                     return
                 }
                 switch change {
-                case .initial:
-                    break
-                case .update(let collection, _, _, _):
+                case .initial(let collection), .update(let collection, _, _, _):
                     continuation.yield(collection.first.flatMap { self.mapLibraryRealm($0) })
                 case .error:
                     continuation.yield(nil)

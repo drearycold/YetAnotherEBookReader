@@ -36,6 +36,7 @@ final class DatabaseBootstrapper {
     /// Throws `DatabaseBootstrapError.realmOpenFailed` if the main Realm
     /// cannot be opened. On throw, the caller should leave `AppContainer.realm`
     /// nil so the upgrade UI stays visible.
+    @MainActor
     func bootstrap(realmConf: Realm.Configuration) throws {
         let bootstrapSignpost = AppPerformanceSignpost.begin("DatabaseBootstrap")
         defer {

@@ -9,6 +9,7 @@ import XCTest
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+@MainActor
 final class BookDownloadManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: BookDownloadManager!

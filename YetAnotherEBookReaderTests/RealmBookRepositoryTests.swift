@@ -227,15 +227,17 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertEqual(fetched?.lastSynced.timeIntervalSince1970, 0)
     }
     
-    func testObserveBook() async throws {
+    func testObserveBookPublishesInitialRealmNotificationAndUpdates() async throws {
         let server = TestFixtures.makeServer()
         let library = TestFixtures.makeLibrary(server: server, name: "Observe Library")
         resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
         
-        let book = TestFixtures.makeBook(id: 100, library: library)
+        var book = TestFixtures.makeBook(id: 100, library: library)
+        book.title = "Initial Title"
+        repository.saveBook(book)
         
-        let initialExpectation = expectation(description: "Initial missing book observed")
-        let updateExpectation = expectation(description: "Book saved and observed")
+        let initialExpectation = expectation(description: "Initial existing book observed")
+        let updateExpectation = expectation(description: "Book update observed")
         var observedBooks: [CalibreBook?] = []
         
         let task = Task { @MainActor [repository] in
@@ -252,13 +254,15 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         }
 
         await fulfillment(of: [initialExpectation], timeout: 2.0)
+        book.title = "Updated Title"
         repository.saveBook(book)
         
         await fulfillment(of: [updateExpectation], timeout: 2.0)
         task.cancel()
         
         XCTAssertEqual(observedBooks.count, 2)
-        XCTAssertNil(observedBooks[0])
+        XCTAssertEqual(observedBooks[0]?.title, "Initial Title")
         XCTAssertEqual(observedBooks[1]?.id, book.id)
+        XCTAssertEqual(observedBooks[1]?.title, "Updated Title")
     }
 }

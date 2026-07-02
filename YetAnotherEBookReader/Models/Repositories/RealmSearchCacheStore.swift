@@ -305,22 +305,17 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             }
         }
 
+        _ = realm.refresh()
+
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
         return AsyncStream { [weak self] continuation in
-            if let self {
-                continuation.yield(self.mapCategorySummaries(objects: objects))
-            } else {
-                continuation.yield([])
-            }
             let token = objects.observe(keyPaths: ["items", "totalNumber"], on: DispatchQueue.main) { [weak self] changes in
                 guard let self else {
                     continuation.yield([])
                     return
                 }
                 switch changes {
-                case .initial:
-                    break
-                case .update(let objects, _, _, _):
+                case .initial(let objects), .update(let objects, _, _, _):
                     continuation.yield(self.mapCategorySummaries(objects: objects))
                 case .error:
                     continuation.yield([])
@@ -338,6 +333,8 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 continuation.finish()
             }
         }
+
+        _ = realm.refresh()
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("categoryName == %@", categoryName)
