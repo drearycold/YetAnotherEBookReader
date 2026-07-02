@@ -457,7 +457,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
         XCTAssertTrue(storeInitialLoadComplete)
-        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
     }
 
     func testShelfDataModelPendingInitialCategoryKeepsInitialLoadIncomplete() async throws {
@@ -471,7 +471,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
         XCTAssertFalse(storeInitialLoadComplete)
-        XCTAssertFalse(shelfDataModel.isInitialLoadComplete)
+        XCTAssertFalse(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
     }
 
     func testShelfDataModelInitialLoadCompletesWhenPendingCategorySearchCompletes() async throws {
@@ -508,7 +508,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         let storeInitialLoadComplete = await shelfDataModel.initialLoadCompleteForTesting()
         XCTAssertTrue(storeInitialLoadComplete)
-        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
     }
 
     func testShelfDataModelCompletedInitialLoadDoesNotRegressWhenCategoriesChange() async throws {
@@ -521,7 +521,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
         container.publishCalibreUpdate(.shelf)
         try await waitForShelfSignalProcessing(in: shelfDataModel)
-        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
 
         let library = TestFixtures.makeLibrary(server: TestFixtures.makeServer(), key: "terminal-state", name: "Terminal State")
         var book = TestFixtures.makeBook(id: 401, library: library)
@@ -536,7 +536,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         let storeInitialLoadCompleteAfterAdd = await shelfDataModel.initialLoadCompleteForTesting()
         XCTAssertTrue(storeInitialLoadCompleteAfterAdd)
-        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
 
         container.bookManager.booksInShelf = [:]
         container.publishCalibreUpdate(.deleted(book.inShelfId))
@@ -544,7 +544,7 @@ final class V2MigrationDependencyTests: XCTestCase {
 
         let storeInitialLoadCompleteAfterDelete = await shelfDataModel.initialLoadCompleteForTesting()
         XCTAssertTrue(storeInitialLoadCompleteAfterDelete)
-        XCTAssertTrue(shelfDataModel.isInitialLoadComplete)
+        XCTAssertTrue(shelfDataModel.currentDiscoverSnapshotForTesting().isInitialLoadComplete)
     }
 
     func testShelfDataModelDeinitStopsShelfSignalConsumption() async throws {
@@ -930,7 +930,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         container.publishCalibreUpdate(.shelf)
 
         await waitForRecentBooksCount(5, in: shelfDataModel)
-        let books = shelfDataModel.recentShelfItems
+        let books = shelfDataModel.currentRecentSnapshotForTesting().books
 
         XCTAssertEqual(books.map(\.id), [
             progressBook.inShelfId,
@@ -989,10 +989,15 @@ final class V2MigrationDependencyTests: XCTestCase {
         line: UInt = #line
     ) async {
         for _ in 0..<50 {
-            if shelfDataModel.recentShelfItems.count >= expectedCount { return }
+            if shelfDataModel.currentRecentSnapshotForTesting().books.count >= expectedCount { return }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
-        XCTAssertGreaterThanOrEqual(shelfDataModel.recentShelfItems.count, expectedCount, file: file, line: line)
+        XCTAssertGreaterThanOrEqual(
+            shelfDataModel.currentRecentSnapshotForTesting().books.count,
+            expectedCount,
+            file: file,
+            line: line
+        )
     }
 
     private func waitForSnapshotCount(

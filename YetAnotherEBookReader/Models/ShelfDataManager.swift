@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import OSLog
 
 private actor ShelfCategoryStore {
@@ -352,7 +351,7 @@ private final class ShelfSnapshotBroadcaster<Snapshot: Equatable> {
 }
 
 @MainActor
-class YabrShelfDataModel: ObservableObject {
+final class YabrShelfDataModel {
 
     struct RecentShelfSnapshot: Equatable, Sendable {
         let books: [ShelfBookItem]
@@ -370,7 +369,7 @@ class YabrShelfDataModel: ObservableObject {
         case Tag
     }
 
-    class CategoryObject: ObservableObject, Hashable {
+    final class CategoryObject: Hashable {
 
         let type: CategoryType
         let category: String
@@ -399,8 +398,8 @@ class YabrShelfDataModel: ObservableObject {
     private let categoryStore = ShelfCategoryStore()
     private let recentShelfBuilder = RecentShelfBuilder()
 
-    @Published var recentShelfItems = [ShelfBookItem]()
-    @Published var discoverShelfItems = [String: ShelfSectionItem]()
+    private var recentShelfItems = [ShelfBookItem]()
+    private var discoverShelfItemsById = [String: ShelfSectionItem]()
 
     private var eventTask: Task<Void, Never>?
     private var initialSnapshotTask: Task<Void, Never>?
@@ -410,7 +409,7 @@ class YabrShelfDataModel: ObservableObject {
     private let discoverSnapshotBroadcaster = ShelfSnapshotBroadcaster<DiscoverShelfSnapshot>()
     private var isFirstRecentShelfPublish = true
 
-    @Published var isInitialLoadComplete = false
+    private var isInitialLoadComplete = false
 
     init(unifiedSearchService: UnifiedSearchService, container: AppContainerProtocol) {
         self.unifiedSearchService = unifiedSearchService
@@ -599,11 +598,11 @@ class YabrShelfDataModel: ObservableObject {
 
     private func applyDiscoverSectionUpdate(_ sectionItem: ShelfSectionItem) {
         if sectionItem.books.count > 1 {
-            if discoverShelfItems[sectionItem.id] != sectionItem {
-                discoverShelfItems[sectionItem.id] = sectionItem
+            if discoverShelfItemsById[sectionItem.id] != sectionItem {
+                discoverShelfItemsById[sectionItem.id] = sectionItem
                 notifyDiscoverShelfChanged()
             }
-        } else if discoverShelfItems.removeValue(forKey: sectionItem.id) != nil {
+        } else if discoverShelfItemsById.removeValue(forKey: sectionItem.id) != nil {
             notifyDiscoverShelfChanged()
         }
     }
@@ -611,7 +610,7 @@ class YabrShelfDataModel: ObservableObject {
     private func removeDiscoverSections(ids: Set<String>) {
         var didRemove = false
         for id in ids {
-            if discoverShelfItems.removeValue(forKey: id) != nil {
+            if discoverShelfItemsById.removeValue(forKey: id) != nil {
                 didRemove = true
             }
         }
@@ -654,7 +653,7 @@ class YabrShelfDataModel: ObservableObject {
     }
 
     func setDiscoverShelfSnapshotForTesting(_ snapshot: DiscoverShelfSnapshot, sendLegacySubject: Bool = true) {
-        discoverShelfItems = Dictionary(uniqueKeysWithValues: snapshot.sections.map { ($0.id, $0) })
+        discoverShelfItemsById = Dictionary(uniqueKeysWithValues: snapshot.sections.map { ($0.id, $0) })
         isInitialLoadComplete = snapshot.isInitialLoadComplete
         publishDiscoverShelfSnapshot(sendLegacySubject: sendLegacySubject)
     }
@@ -662,6 +661,14 @@ class YabrShelfDataModel: ObservableObject {
     func setRecentShelfSnapshotForTesting(_ snapshot: RecentShelfSnapshot, sendLegacySubject: Bool = true) {
         recentShelfItems = snapshot.books
         publishRecentShelfSnapshot(sendLegacySubject: sendLegacySubject)
+    }
+
+    func currentRecentSnapshotForTesting() -> RecentShelfSnapshot {
+        currentRecentSnapshot()
+    }
+
+    func currentDiscoverSnapshotForTesting() -> DiscoverShelfSnapshot {
+        currentSnapshot()
     }
 
     func buildShelfSectionItem(category: CategoryObject) -> ShelfSectionItem {
@@ -691,7 +698,7 @@ class YabrShelfDataModel: ObservableObject {
 
     private func currentSnapshot() -> DiscoverShelfSnapshot {
         DiscoverShelfSnapshot(
-            sections: discoverShelfItems.values.sorted(by: { $0.title < $1.title }),
+            sections: discoverShelfItemsById.values.sorted(by: { $0.title < $1.title }),
             isInitialLoadComplete: isInitialLoadComplete
         )
     }
