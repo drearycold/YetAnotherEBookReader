@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LibraryInfoBatchDownloadSheet: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     
     @Binding var presenting: Bool
     @Binding var downloadBookList: [CalibreBook]
@@ -105,6 +105,6 @@ struct LibraryInfoBatchDownloadSheet_Previews: PreviewProvider {
     
     static var previews: some View {
         LibraryInfoBatchDownloadSheet(presenting: $presenting, downloadBookList: $downloadBookList)
-            .environmentObject(container)
+            .environment(\.appContainer, container)
     }
 }

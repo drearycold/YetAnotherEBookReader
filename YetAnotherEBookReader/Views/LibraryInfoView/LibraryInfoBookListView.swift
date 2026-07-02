@@ -10,7 +10,7 @@ import KingfisherSwiftUI
 import OSLog
 
 struct LibraryInfoBookListView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
 

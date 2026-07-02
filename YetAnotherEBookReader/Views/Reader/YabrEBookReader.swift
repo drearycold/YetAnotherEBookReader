@@ -34,7 +34,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
     
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     
     init(book: CalibreBook, readerInfo: ReaderInfo) {
         self.book = book

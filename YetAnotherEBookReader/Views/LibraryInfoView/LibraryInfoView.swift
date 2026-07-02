@@ -12,7 +12,7 @@ import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     
     @StateObject var viewModel = ViewModel()
     @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
@@ -179,6 +179,6 @@ struct LibraryInfoView_Previews: PreviewProvider {
     static private var container = AppContainer()
     static var previews: some View {
         LibraryInfoView()
-            .environmentObject(AppContainer())
+            .environment(\.appContainer, container)
     }
 }

@@ -52,7 +52,7 @@ struct BookPreviewView: View {
 }
 
 struct BookPreviewView_Previews: PreviewProvider {
-    @StateObject static var container = AppContainer(mock: true)
+    static let container = AppContainer(mock: true)
 
     static var previews: some View {
         if let book = container.bookManager.booksInShelf.first?.value,

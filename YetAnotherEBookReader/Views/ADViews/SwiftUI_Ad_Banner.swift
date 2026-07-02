@@ -41,7 +41,7 @@ private struct BannerVC: UIViewControllerRepresentable  {
 }
 
 struct Banner: View{
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     
     var body: some View{
         HStack {
@@ -59,6 +59,6 @@ struct Banner_Previews: PreviewProvider {
 
     static var previews: some View {
         Banner()
-            .environmentObject(container)
+            .environment(\.appContainer, container)
     }
 }

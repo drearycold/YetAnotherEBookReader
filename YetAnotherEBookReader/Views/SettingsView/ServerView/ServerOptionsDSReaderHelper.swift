@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct ServerOptionsDSReaderHelper: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @Environment(\.openURL) var openURL
 
     @ObservedObject var viewModel: ServerViewModel
@@ -275,7 +275,7 @@ struct ServerOptionsDSReaderHelper_Previews: PreviewProvider {
         let viewModel = ServerViewModel(container: container, server: server)
         NavigationView {
             ServerOptionsDSReaderHelper(viewModel: viewModel, server: $server, updater: $updater)
-                .environmentObject(container)
+                .environment(\.appContainer, container)
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }

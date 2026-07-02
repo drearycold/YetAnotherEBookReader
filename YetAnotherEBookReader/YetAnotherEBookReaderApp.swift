@@ -15,7 +15,7 @@ struct YetAnotherEBookReaderApp: App {
         case failed(message: String)
     }
 
-    @StateObject private var container: AppContainer
+    private let container: AppContainer
     @StateObject private var mainViewModel: MainViewModel
     @Environment(\.scenePhase) private var scenePhase
     
@@ -24,7 +24,7 @@ struct YetAnotherEBookReaderApp: App {
     
     init() {
         let containerInstance = AppContainer()
-        _container = StateObject(wrappedValue: containerInstance)
+        self.container = containerInstance
         _mainViewModel = StateObject(wrappedValue: MainViewModel(container: containerInstance, sessionManager: containerInstance.sessionManager))
         
         setupAppearance()
@@ -96,7 +96,7 @@ struct YetAnotherEBookReaderApp: App {
                     
                 case .ready:
                     MainView(container: container, viewModel: mainViewModel)
-                        .environmentObject(container)
+                        .environment(\.appContainer, container)
                 }
             }
         }

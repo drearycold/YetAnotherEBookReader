@@ -32,6 +32,8 @@ class ServerViewModel: ObservableObject {
     
     // Server Detail properties (ServerDetailView)
     @Published var libraryList: [String] = []
+    @Published var hiddenLibraryList: [CalibreLibrary] = []
+    @Published var librarySyncStatus: [String: CalibreSyncStatus] = [:]
     @Published var selectedLibrary: String? = nil
     @Published var syncingLibrary: Bool = false
     @Published var libraryRestoreListActive: Bool = false
@@ -51,6 +53,7 @@ class ServerViewModel: ObservableObject {
     @Published var dsreaderHelperInstructionPresenting: Bool = false
     
     private var libraryObservationTask: Task<Void, Never>?
+    private var librarySyncStatusObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, server: CalibreServer?) {
         self.container = container
@@ -77,6 +80,7 @@ class ServerViewModel: ObservableObject {
 
     deinit {
         libraryObservationTask?.cancel()
+        librarySyncStatusObservationTask?.cancel()
     }
     
     func setupBindings() {
@@ -85,6 +89,13 @@ class ServerViewModel: ObservableObject {
             for await _ in container.libraryManager.librarySnapshots() {
                 guard !Task.isCancelled else { return }
                 self?.updateLibraryList()
+            }
+        }
+        librarySyncStatusObservationTask?.cancel()
+        librarySyncStatusObservationTask = Task { @MainActor [weak self, container] in
+            for await statusMap in container.libraryManager.librarySyncStatusSnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.librarySyncStatus = statusMap
             }
         }
     }
@@ -289,11 +300,15 @@ class ServerViewModel: ObservableObject {
 
     func updateLibraryList() {
         guard let serverId = serverId else { return }
-        libraryList = container.libraryManager.calibreLibraries.values.filter { library in
+        let serverLibraries = container.libraryManager.calibreLibraries.values.filter { library in
             library.server.id == serverId && library.hidden == false
         }
-        .sorted { $0.name < $1.name }
-        .map { $0.id }
+        libraryList = serverLibraries
+            .sorted { $0.name < $1.name }
+            .map { $0.id }
+        hiddenLibraryList = container.libraryManager.calibreLibraries.values
+            .filter { $0.server.id == serverId && $0.hidden }
+            .sorted { $0.id < $1.id }
     }
 
     func deleteLibrary(at offsets: IndexSet) {

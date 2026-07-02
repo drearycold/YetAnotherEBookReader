@@ -10,7 +10,7 @@ struct LibraryInfoBookContextMenu: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var container: AppContainer
+    let container: AppContainer
     
     var body: some View {
         let authors = listViewModel.filterableAuthors(for: book, filterCriteriaCategory: libraryInfoViewModel.filterCriteriaCategory)

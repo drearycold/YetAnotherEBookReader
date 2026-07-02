@@ -22,7 +22,7 @@ import OSLog
 import Kingfisher
 import CryptoSwift
 
-final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvider {
+final class AppContainer: AppContainerProtocol, LibraryProvider {
     static var shared: AppContainer?
 
     func getLibraries() -> [String: CalibreLibrary] {
@@ -72,7 +72,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         set { bookManager.booksInShelf = newValue }
     }
 
-    @Published var deviceName = UIDevice.current.name {
+    var deviceName = UIDevice.current.name {
         didSet {
             calibreServerService.updateDeviceName(deviceName)
         }
@@ -88,12 +88,11 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
 
     var calibreCancellables = Set<AnyCancellable>()
-    private var managerStateForwardingTasks = [Task<Void, Never>]()
 
-    @Published var downloadManager = BookDownloadManager()
+    var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
 
-    @Published var updatingMetadata = false {
+    var updatingMetadata = false {
         didSet {
             if updatingMetadata {
                 updatingMetadataSucceed = false
@@ -101,14 +100,14 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             }
         }
     }
-    @Published var updatingMetadataStatus = "" {
+    var updatingMetadataStatus = "" {
         didSet {
             if updatingMetadataStatus == "Success" || updatingMetadataStatus == "Deleted" {
                 updatingMetadataSucceed = true
             }
         }
     }
-    @Published var updatingMetadataSucceed = false
+    var updatingMetadataSucceed = false
 
     private var defaultLog = Logger()
 
@@ -168,7 +167,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// empty string for full update
     private let calibreUpdateBroadcaster = ManagerAsyncBroadcaster<calibreUpdatedSignal>()
 
-    @Published var fontsManager = FontsManager()
+    var fontsManager = FontsManager()
 
     var isDatabaseReady: Bool {
         realm != nil && realmSaveBooksMetadata != nil && databaseService.realm != nil
@@ -195,7 +194,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     }
 
     deinit {
-        managerStateForwardingTasks.forEach { $0.cancel() }
         calibreUpdateBroadcaster.finish()
         bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
@@ -272,7 +270,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
         setupImageCache()
         wireCrossManagerSubscriptions()
-        wireObjectWillChangeForwarding()
 
         if mock {
             // In the test path the in-memory main Realm is already
@@ -359,30 +356,9 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         fontsManager.reloadCustomFonts()
     }
 
-    /// Wire subscriptions that cross manager boundaries (so the originating
-    /// `init` body stays focused on `objectWillChange` plumbing).
+    /// Wire subscriptions that cross manager boundaries.
     private func wireCrossManagerSubscriptions() {
         libraryManager.startProbeLibraryLastModifiedTask()
-    }
-
-    /// Forward each manager's explicit state stream to our own so SwiftUI views
-    /// observing the container redraw on manager-level mutations.
-    private func wireObjectWillChangeForwarding() {
-        forwardStateChanges(from: serverManager.stateChanges())
-        forwardStateChanges(from: libraryManager.stateChanges())
-        forwardStateChanges(from: bookManager.stateChanges())
-        forwardStateChanges(from: sessionManager.stateChanges())
-        forwardStateChanges(from: fontsManager.stateChanges())
-    }
-
-    private func forwardStateChanges(from stream: AsyncStream<Void>) {
-        let task = Task { @MainActor [weak self] in
-            for await _ in stream {
-                guard !Task.isCancelled else { return }
-                self?.objectWillChange.send()
-            }
-        }
-        managerStateForwardingTasks.append(task)
     }
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
@@ -471,5 +447,22 @@ extension AppContainer: LibraryResolver {
 extension AppContainer: ServerResolver {
     func server(forUUID uuid: String) -> CalibreServer? {
         return serverManager.calibreServers[uuid]
+    }
+}
+
+private struct AppContainerEnvironmentKey: EnvironmentKey {
+    static var defaultValue: AppContainer {
+        guard let shared = AppContainer.shared else {
+            assertionFailure("Missing AppContainer environment")
+            return AppContainer(mock: true)
+        }
+        return shared
+    }
+}
+
+extension EnvironmentValues {
+    var appContainer: AppContainer {
+        get { self[AppContainerEnvironmentKey.self] }
+        set { self[AppContainerEnvironmentKey.self] = newValue }
     }
 }
