@@ -21,6 +21,9 @@ struct YetAnotherEBookReaderApp: App {
     
     @State private var launchState: LaunchState = .initializing(status: "Initializing...")
     @State private var bootstrapInFlight = false
+    @State private var probeTimerTask: Task<Void, Never>?
+
+    private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
     
     init() {
         let containerInstance = AppContainer()
@@ -152,17 +155,26 @@ struct YetAnotherEBookReaderApp: App {
         }
     }
     
+    @MainActor
     func enableProbeTimer() {
+        probeTimerTask?.cancel()
         container.serverManager.probeServersReachability(with: [], updateLibrary: true)
-        container.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
-            .autoconnect()
-            .receive(on: DispatchQueue.main)
-            .sink { timer in
-//                container.probeServersReachability(with: [], updateLibrary: true)
+        probeTimerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: Self.probeIntervalNanoseconds)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled else { break }
+                container.serverManager.probeServersReachability(with: [], updateLibrary: true)
             }
+        }
     }
     
+    @MainActor
     func disableProbeTimer() {
-        container.probeTimer?.cancel()
+        probeTimerTask?.cancel()
+        probeTimerTask = nil
     }
 }

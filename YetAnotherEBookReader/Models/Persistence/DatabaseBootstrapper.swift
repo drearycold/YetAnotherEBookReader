@@ -8,7 +8,6 @@
 
 import Foundation
 import RealmSwift
-import Combine
 import OSLog
 
 /// Errors thrown by `DatabaseBootstrapper.bootstrap` when the database cannot

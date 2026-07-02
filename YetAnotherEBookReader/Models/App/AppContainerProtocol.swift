@@ -14,7 +14,6 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 import SwiftUI
 import Kingfisher
@@ -64,8 +63,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var realmSaveBooksMetadata: Realm? { get set }
     var realmConf: Realm.Configuration? { get set }
     var logger: CalibreActivityLogger? { get set }
-    var probeTimer: AnyCancellable? { get set }
-    var calibreCancellables: Set<AnyCancellable> { get set }
     var authResponsor: AuthResponsor { get }
     var kfImageCache: ImageCache { get }
     var presentingStack: [Binding<Bool>] { get set }

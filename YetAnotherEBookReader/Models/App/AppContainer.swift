@@ -15,7 +15,6 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 import SwiftUI
 import OSLog
@@ -86,8 +85,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     var presentingStack = [Binding<Bool>]()
 
     private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
-
-    var calibreCancellables = Set<AnyCancellable>()
 
     var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
@@ -160,8 +157,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
     private let probeLibraryLastModifiedBroadcaster = ManagerAsyncBroadcaster<CalibreSyncLibraryRequest>()
-
-    var probeTimer: AnyCancellable?
 
     /// inShelfId for single book
     /// empty string for full update
