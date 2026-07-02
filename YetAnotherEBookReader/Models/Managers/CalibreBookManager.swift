@@ -699,7 +699,7 @@ class CalibreBookManager {
             AppContainer.SaveBooksMetadataRealmQueue.async {
                 guard let entries = task.booksMetadataEntry,
                       let json = task.booksMetadataJSON,
-                      let realmSaveBooksMetadata = self.container?.realmSaveBooksMetadata else {
+                      let realmSaveBooksMetadata = self.databaseService.metadataRealm else {
                     continuation.resume()
                     return
                 }

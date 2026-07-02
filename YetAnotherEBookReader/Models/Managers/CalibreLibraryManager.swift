@@ -369,6 +369,7 @@ class CalibreLibraryManager {
         }
     }
 
+    @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
         guard let container = self.container else { return }
         let calibreServerService = container.calibreServerService

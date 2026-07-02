@@ -7,7 +7,6 @@
 
 import Foundation
 import OSLog
-import RealmSwift
 
 public enum DownloadStartError: Error, LocalizedError, Equatable {
     case missingFormatInfo
@@ -41,19 +40,16 @@ class BookDownloadManager {
     private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
     var container: AppContainerProtocol?
-    private var realmConf: Realm.Configuration?
     @MainActor
     var sessionConfiguration: URLSessionConfiguration = .default
 
-    init(container: AppContainerProtocol? = nil, realmConf: Realm.Configuration? = nil) {
+    init(container: AppContainerProtocol? = nil) {
         self.container = container
-        self.realmConf = realmConf
     }
     
     @MainActor
-    func setup(container: AppContainerProtocol, realmConf: Realm.Configuration?) {
+    func setup(container: AppContainerProtocol) {
         self.container = container
-        self.realmConf = realmConf
     }
 
     @MainActor

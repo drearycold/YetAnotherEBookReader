@@ -107,15 +107,12 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private var defaultLog = Logger()
 
     static var RealmSchemaVersion: UInt64 = 141
-    var realm: Realm?
-    var realmSaveBooksMetadata: Realm?
-    var realmConf: Realm.Configuration?
 
     var logger: CalibreActivityLogger?
 
     let coverCache: BookCoverCaching = DefaultBookCoverCache()
 
-    var databaseService = DatabaseService.shared
+    let databaseService = DatabaseService()
 
     lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
     lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
@@ -130,7 +127,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         self?.serverScopedRealmProvider.configuration(for: server)
             ?? BookAnnotation.getBookPreferenceServerConfig(server)
     }
-    lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.realmConf)
+    lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.databaseService.realmConf)
 
     lazy var serverManager = CalibreServerManager(container: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(container: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
@@ -140,7 +137,10 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
-    lazy var searchCacheRepository = RealmSearchCacheStore(container: self)
+    lazy var searchCacheRepository = RealmSearchCacheStore(
+        databaseService: self.databaseService,
+        librarySnapshotProvider: self
+    )
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
@@ -162,7 +162,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     var fontsManager = FontsManager()
 
     var isDatabaseReady: Bool {
-        realm != nil && realmSaveBooksMetadata != nil && databaseService.realm != nil
+        databaseService.realm != nil && databaseService.metadataRealm != nil
     }
 
     func getBook(for primaryKey: String) -> CalibreBook? {
@@ -171,18 +171,12 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     @MainActor
     func refreshDatabase() {
-        databaseService.realm?.refresh()
+        databaseService.refreshMainRealm()
     }
 
     func resetDatabaseBootstrapState(clearConfiguration: Bool = false) {
-        realm = nil
-        realmSaveBooksMetadata = nil
         logger = nil
-        databaseService.realm = nil
-        if clearConfiguration {
-            realmConf = nil
-            databaseService.realmConf = nil
-        }
+        databaseService.reset(clearConfiguration: clearConfiguration)
     }
 
     deinit {
@@ -255,8 +249,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             // and initializeDatabase(), both of which need this to
             // already be wired.
             Realm.Configuration.defaultConfiguration = env.mainRealmConfiguration
-            self.realmConf = env.mainRealmConfiguration
-            DatabaseService.shared.setup(conf: env.mainRealmConfiguration)
+            databaseService.setup(conf: env.mainRealmConfiguration)
             self.serverScopedRealmProvider = env.serverScopedRealmProvider
         }
 
@@ -333,7 +326,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             migrationBlock: { _, _ in }
         )
         Realm.Configuration.defaultConfiguration = initialConf
-        self.realmConf = initialConf
+        databaseService.configure(conf: initialConf)
     }
 
     /// Configure cover cache and authenticated HTTP image requests.
@@ -354,11 +347,11 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         AppContainer.RealmSchemaVersion = schemaVersion
         let conf = try DatabaseMigrator().makeConfiguration(schemaVersion: schemaVersion, statusHandler: statusHandler)
         Realm.Configuration.defaultConfiguration = conf
-        realmConf = conf
+        databaseService.configure(conf: conf)
     }
 
     func initializeDatabase() throws {
-        guard let realmConf = realmConf else {
+        guard let realmConf = databaseService.realmConf else {
             defaultLog.error("initializeDatabase called without a Realm configuration")
             throw DatabaseBootstrapError.realmConfigurationMissing
         }

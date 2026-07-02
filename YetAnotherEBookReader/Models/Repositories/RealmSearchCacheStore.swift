@@ -11,17 +11,31 @@ import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
     private let customConfig: Realm.Configuration?
-    private let container: AppContainerProtocol
+    private let databaseService: DatabaseService
+    private weak var librarySnapshotProvider: CalibreLibrarySnapshotProviding?
 
     var defaultLog = Logger()
 
-    init(config: Realm.Configuration? = nil, container: AppContainerProtocol) {
+    init(
+        config: Realm.Configuration? = nil,
+        databaseService: DatabaseService,
+        librarySnapshotProvider: CalibreLibrarySnapshotProviding
+    ) {
         self.customConfig = config
-        self.container = container
+        self.databaseService = databaseService
+        self.librarySnapshotProvider = librarySnapshotProvider
+    }
+
+    convenience init(config: Realm.Configuration? = nil, container: AppContainerProtocol) {
+        self.init(
+            config: config,
+            databaseService: container.databaseService,
+            librarySnapshotProvider: container
+        )
     }
     
     private func getRealm() throws -> Realm {
-        var conf = customConfig ?? container.realmConf ?? Realm.Configuration()
+        var conf = customConfig ?? databaseService.realmConf ?? Realm.Configuration()
         // Strip closures to prevent EXC_BAD_ACCESS in swift_retain when copying on concurrent queues
         conf.migrationBlock = nil
         conf.shouldCompactOnLaunch = nil
@@ -173,7 +187,7 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
     
     private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
         let libraryId = searchObj.libraryId
-        let library = container.calibreLibraries[libraryId]
+        let library = librarySnapshotProvider?.calibreLibraries[libraryId]
         
         var sources: [String: LibrarySourceSearchResult] = [:]
         for sourceEntry in searchObj.sources {

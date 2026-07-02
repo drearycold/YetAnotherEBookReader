@@ -407,13 +407,22 @@ class UnifiedCategoryServiceTests: XCTestCase {
     }
 
     private func makeRealmSearchCacheStore() -> (AppContainer, RealmSearchCacheStore) {
-        let config = Realm.Configuration(inMemoryIdentifier: "UnifiedCategoryServiceTests-RealmStore")
-        DatabaseService.shared.setup(conf: config)
-        let container = MockAppContainerFactory.makeContainer(testName: "UnifiedCategoryServiceTests-RealmStore")
+        let identifier = "UnifiedCategoryServiceTests-RealmStore"
+        let config = Realm.Configuration(inMemoryIdentifier: identifier)
+        let container = MockAppContainerFactory.makeContainer(
+            mainRealmConfiguration: config,
+            testName: identifier
+        )
         container.libraryManager.calibreLibraries = [
             mockLibrary1.id: mockLibrary1,
             mockLibrary2.id: mockLibrary2
         ]
-        return (container, RealmSearchCacheStore(config: config, container: container))
+        if let realm = try? Realm(configuration: config) {
+            try? realm.write {
+                realm.delete(realm.objects(CalibreLibraryCategoryObject.self))
+                realm.delete(realm.objects(CalibreLibraryCategoryItemObject.self))
+            }
+        }
+        return (container, RealmSearchCacheStore(container: container))
     }
 }

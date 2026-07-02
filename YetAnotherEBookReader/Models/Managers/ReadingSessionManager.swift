@@ -191,7 +191,7 @@ class ReadingSessionManager {
     
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
         guard let container = container,
-              let realmConf = container.realmConf,
+              let realmConf = container.databaseService.realmConf,
               let realm = try? Realm(configuration: realmConf) else { return [:] }
         
         var pred: NSPredicate?

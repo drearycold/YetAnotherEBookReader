@@ -962,8 +962,8 @@ final class V2MigrationDependencyTests: XCTestCase {
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {
         let repository = MockSearchCacheRepository()
         let libraryProvider = MockLibraryProvider()
-        let logger = CalibreActivityLogger(realmConf: container.realmConf ?? Realm.Configuration())
-        let service = CalibreServerService(logger: logger, config: container, database: DatabaseService.shared)
+        let logger = CalibreActivityLogger(realmConf: container.databaseService.realmConf ?? Realm.Configuration())
+        let service = CalibreServerService(logger: logger, config: container, database: container.databaseService)
         
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [MockURLProtocol.self]

@@ -14,11 +14,14 @@
 //
 
 import Foundation
-import RealmSwift
 import SwiftUI
 
 protocol CalibreServerSnapshotProviding: AnyObject {
     var calibreServers: [String: CalibreServer] { get }
+}
+
+protocol CalibreLibrarySnapshotProviding: AnyObject {
+    var calibreLibraries: [String: CalibreLibrary] { get }
 }
 
 protocol BookCoverCaching: AnyObject {
@@ -27,7 +30,7 @@ protocol BookCoverCaching: AnyObject {
     func removeCover(for url: URL)
 }
 
-protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, CalibreServerSnapshotProviding {
+protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, CalibreServerSnapshotProviding, CalibreLibrarySnapshotProviding {
     // MARK: - Repositories
 
     var serverRepository: ServerRepositoryProtocol { get }
@@ -68,9 +71,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
 
     // MARK: - Runtime state
 
-    var realm: Realm? { get set }
-    var realmSaveBooksMetadata: Realm? { get set }
-    var realmConf: Realm.Configuration? { get set }
     var logger: CalibreActivityLogger? { get set }
     var coverCache: BookCoverCaching { get }
     var presentingStack: [Binding<Bool>] { get set }

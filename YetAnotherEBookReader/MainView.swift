@@ -30,7 +30,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            if let realmConf = container.realmConf {
+            if let realmConf = container.databaseService.realmConf {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)

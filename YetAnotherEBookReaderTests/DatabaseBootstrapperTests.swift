@@ -73,7 +73,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
             schemaVersion: 1,
             migrationBlock: { _, _ in }
         )
-        container.realmConf = badConfig
+        container.databaseService.configure(conf: badConfig)
 
         XCTAssertThrowsError(
             try container.initializeDatabase(),
@@ -89,13 +89,13 @@ final class DatabaseBootstrapperTests: XCTestCase {
     // MARK: - Missing configuration
 
     /// `initializeDatabase` must throw `.realmConfigurationMissing` when
-    /// called before `tryInitializeDatabase` populated the configuration.
+    /// called before the database runtime has a configuration.
     func testInitializeDatabaseThrowsWhenConfigurationMissing() {
-        container.realmConf = nil
+        container.databaseService.reset(clearConfiguration: true)
 
         XCTAssertThrowsError(
             try container.initializeDatabase(),
-            "initializeDatabase must throw when container.realmConf is nil"
+            "initializeDatabase must throw when databaseService.realmConf is nil"
         ) { error in
             guard case DatabaseBootstrapError.realmConfigurationMissing = error else {
                 XCTFail("Expected .realmConfigurationMissing, got \(error)")
@@ -109,21 +109,20 @@ final class DatabaseBootstrapperTests: XCTestCase {
         let realm = try Realm(configuration: config)
         let metadataRealm = try Realm(configuration: config)
 
-        container.realm = realm
-        container.realmSaveBooksMetadata = metadataRealm
+        container.databaseService.realm = realm
+        container.databaseService.metadataRealm = metadataRealm
         let logger = CalibreActivityLogger(realmConf: config)
         container.logger = logger
         container.calibreServerService.logger = logger
-        container.databaseService.setup(conf: config)
+        container.databaseService.configure(conf: config)
 
         XCTAssertTrue(container.isDatabaseReady)
 
         container.resetDatabaseBootstrapState(clearConfiguration: false)
 
-        XCTAssertNil(container.realm)
-        XCTAssertNil(container.realmSaveBooksMetadata)
-        XCTAssertNil(container.logger)
         XCTAssertNil(container.databaseService.realm)
+        XCTAssertNil(container.databaseService.metadataRealm)
+        XCTAssertNil(container.logger)
         XCTAssertNotNil(container.databaseService.realmConf)
         XCTAssertFalse(container.isDatabaseReady)
     }

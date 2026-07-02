@@ -32,7 +32,7 @@ final class IntegrationTests: XCTestCase {
         }
 
         XCTAssertTrue(container.isDatabaseReady)
-        XCTAssertNotNil(container.realm)
+        XCTAssertNotNil(container.databaseService.realm)
     }
     
     func testFullReadingFlow() async throws {

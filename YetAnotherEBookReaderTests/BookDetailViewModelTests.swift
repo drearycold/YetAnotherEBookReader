@@ -62,8 +62,8 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook = CalibreBook(id: 123, library: library)
         mockCalibreBook.title = "Test Book"
         
-        try! mockAppContainer.realm!.write {
-            mockAppContainer.realm!.add(mockBookRealm, update: .modified)
+        try! mockAppContainer.databaseService.realm!.write {
+            mockAppContainer.databaseService.realm!.add(mockBookRealm, update: .modified)
         }
         
         viewModel.setup(bookId: mockBookRealm.primaryKey!)
@@ -72,8 +72,8 @@ class BookDetailViewModelTests: XCTestCase {
 
     override func tearDownWithError() throws {
         if let library = mockAppContainer?.calibreLibraries.first?.value {
-            try? mockAppContainer?.realm!.write {
-                if let serverRealm = mockAppContainer?.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+            try? mockAppContainer?.databaseService.realm!.write {
+                if let serverRealm = mockAppContainer?.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                     serverRealm.dsreaderHelper = nil
                 }
             }
@@ -132,7 +132,7 @@ class BookDetailViewModelTests: XCTestCase {
             .store(in: &cancellables)
 
         try await Task.sleep(nanoseconds: 50_000_000)
-        try mockAppContainer.realm!.write {
+        try mockAppContainer.databaseService.realm!.write {
             mockBookRealm.title = "Updated Book"
         }
 
@@ -289,8 +289,8 @@ class BookDetailViewModelTests: XCTestCase {
         
         guard let library = mockCalibreBook?.library else { return }
         
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -331,8 +331,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -371,8 +371,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -402,8 +402,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -642,7 +642,7 @@ class BookDetailViewModelTests: XCTestCase {
 
         mockAppContainer.refreshDatabase()
         
-        guard let realm = mockAppContainer.realm else {
+        guard let realm = mockAppContainer.databaseService.realm else {
             XCTFail("Realm is nil")
             return
         }
@@ -854,8 +854,8 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     
     override func setUpWithError() throws {
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ReadingPositionRepositoryThreadingTests")
-        try! mockAppContainer.realm!.write {
-            mockAppContainer.realm!.deleteAll()
+        try! mockAppContainer.databaseService.realm!.write {
+            mockAppContainer.databaseService.realm!.deleteAll()
         }
     }
     

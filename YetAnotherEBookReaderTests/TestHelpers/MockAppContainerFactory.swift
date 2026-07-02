@@ -11,10 +11,10 @@
 //      let config = Realm.Configuration(inMemoryIdentifier: ...)
 //      DatabaseService.shared.setup(conf: config)
 //      let container = AppContainer(mock: true)
-//      container.realmConf = config
+//      container.databaseService.configure(conf: config)
 //
 //  which is brittle because the mock init ran `try? tryInitializeDatabase`
-//  before the test's `container.realmConf = config` line, so the
+//  before the test's explicit database configuration line, so the
 //  initial `populateLibraries()` and `populateBookShelf()` calls
 //  ran against the production disk-backed Realm.
 //
