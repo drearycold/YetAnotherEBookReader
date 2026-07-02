@@ -16,6 +16,7 @@ import Combine
     
     override func setUpWithError() throws {
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "RecentShelfViewModelTests")
+        mockAppContainer.bookManager.isShelfLoaded = false
         viewModel = RecentShelfViewModel(container: mockAppContainer)
     }
     
@@ -24,25 +25,28 @@ import Combine
         mockAppContainer = nil
     }
     
-    func testInitialization() throws {
-        XCTAssertNil(viewModel.loadedBooks)
+    func testInitialization() async throws {
+        await waitForViewModelUpdate {
+            self.viewModel.loadedBooks != nil
+        }
+        XCTAssertEqual(viewModel.loadedBooks, [])
         XCTAssertEqual(viewModel.displayBooks.count, 0)
     }
     
-    func testLoadedBooksPublication() throws {
-        XCTAssertNil(viewModel.loadedBooks)
-        
+    func testLoadedBooksPublication() async throws {
         let item = ShelfBookItem(id: "1", title: "Book", coverURL: "", progress: 0, status: .ready)
-        mockAppContainer.recentShelfItemsSubject.send([item])
-        
-        let expectation = XCTestExpectation(description: "Wait for loadedBooks to update")
-        DispatchQueue.main.async {
-            XCTAssertNotNil(self.viewModel.loadedBooks)
-            XCTAssertEqual(self.viewModel.loadedBooks?.count, 1)
-            XCTAssertEqual(self.viewModel.displayBooks.count, 1)
-            expectation.fulfill()
+
+        mockAppContainer.shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: [item]),
+            sendLegacySubject: false
+        )
+        await waitForViewModelUpdate {
+            self.viewModel.loadedBooks?.count == 1
         }
-        wait(for: [expectation], timeout: 1.0)
+
+        XCTAssertNotNil(viewModel.loadedBooks)
+        XCTAssertEqual(viewModel.loadedBooks?.count, 1)
+        XCTAssertEqual(viewModel.displayBooks.count, 1)
     }
     
     func testRefreshShelf() throws {
@@ -92,15 +96,28 @@ import Combine
         }
     }
     
-    func testCalibreUpdatedDeletionDismissal() throws {
+    func testCalibreUpdatedDeletionDismissal() async throws {
         viewModel.presentingBookDetailId = "deleted-book-id"
-        mockAppContainer.calibreUpdatedSubject.send(.deleted("deleted-book-id"))
-        
-        let expectation = XCTestExpectation(description: "Detail dismissed")
-        DispatchQueue.main.async {
-            XCTAssertNil(self.viewModel.presentingBookDetailId)
-            expectation.fulfill()
+        await waitForViewModelUpdate {
+            self.viewModel.loadedBooks != nil
         }
-        self.wait(for: [expectation], timeout: 1.0)
+        mockAppContainer.publishCalibreUpdate(.deleted("deleted-book-id"))
+
+        await waitForViewModelUpdate {
+            self.viewModel.presentingBookDetailId == nil
+        }
+        XCTAssertNil(viewModel.presentingBookDetailId)
+    }
+
+    private func waitForViewModelUpdate(
+        _ predicate: @escaping () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if predicate() { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(predicate(), file: file, line: line)
     }
 }

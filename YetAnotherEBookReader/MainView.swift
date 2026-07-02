@@ -42,7 +42,7 @@ struct MainView: View {
                         }
                         .tag(0)
                         .onAppear {
-                            container.calibreUpdatedSubject.send(.shelf)
+                            container.publishCalibreUpdate(.shelf)
                         }
                         
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)

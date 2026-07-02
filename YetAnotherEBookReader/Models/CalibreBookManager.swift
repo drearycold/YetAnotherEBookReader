@@ -178,7 +178,9 @@ class CalibreBookManager: ObservableObject {
                 }
                 self.isShelfLoaded = true
                 if sendShelfUpdate {
-                    self.container?.calibreUpdatedSubject.send(.shelf)
+                    Task { @MainActor in
+                        self.container?.publishCalibreUpdate(.shelf)
+                    }
                 }
                 finish()
             }
@@ -304,7 +306,9 @@ class CalibreBookManager: ObservableObject {
             }
         }
 
-        container?.calibreUpdatedSubject.send(.book(book))
+        Task { @MainActor in
+            container?.publishCalibreUpdate(.book(book))
+        }
     }
 
     func removeFromShelf(inShelfId: String) {
@@ -344,7 +348,9 @@ class CalibreBookManager: ObservableObject {
             }
         }
 
-        container?.calibreUpdatedSubject.send(.deleted(book.inShelfId))
+        Task { @MainActor in
+            container?.publishCalibreUpdate(.deleted(book.inShelfId))
+        }
     }
 
     // MARK: - Cache Management
@@ -799,10 +805,10 @@ class CalibreBookManager: ObservableObject {
                     id: task.request.books.first!.description
                 )
                ) {
-                container?.calibreUpdatedSubject.send(.book(book))
+                await container?.publishCalibreUpdate(.book(book))
             }
         } else if !task.booksInShelf.isEmpty {
-            container?.calibreUpdatedSubject.send(.shelf)
+            await container?.publishCalibreUpdate(.shelf)
         }
     }
 
@@ -875,7 +881,9 @@ class CalibreBookManager: ObservableObject {
             }
 
         if serverReachableChanged && libraryBooks.isEmpty {
-            container?.calibreUpdatedSubject.send(.shelf)
+            Task { @MainActor in
+                container?.publishCalibreUpdate(.shelf)
+            }
             return
         }
 

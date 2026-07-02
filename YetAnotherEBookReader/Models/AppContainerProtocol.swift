@@ -42,7 +42,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var downloadManager: BookDownloadManager { get }
     var fontsManager: FontsManager { get }
     var databaseBootstrapper: DatabaseBootstrapper { get }
-    var shelfDataModel: YabrShelfDataModel { get }
+    @MainActor var shelfDataModel: YabrShelfDataModel { get }
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding { get set }
 
     // MARK: - Services
@@ -94,6 +94,18 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     var discoverShelfItemsSubject: PassthroughSubject<[ShelfSectionItem], Never> { get }
     var bookReaderActivitySubject: PassthroughSubject<ScenePhase, Never> { get }
     var probeLibraryLastModifiedSubject: PassthroughSubject<CalibreSyncLibraryRequest, Never> { get }
+
+    @MainActor
+    func publishCalibreUpdate(_ signal: calibreUpdatedSignal)
+
+    @MainActor
+    func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
+
+    @MainActor
+    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem])
+
+    @MainActor
+    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem])
 
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which

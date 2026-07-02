@@ -68,7 +68,16 @@ final class DatabaseBootstrapper {
         container.libraryManager.populateLibraries()
         container.bookManager.populateBookShelf(sendShelfUpdate: false) { [weak container] in
             container?.libraryManager.populateLocalLibraryBooks {
-                container?.calibreUpdatedSubject.send(.shelf)
+                guard let container = container else { return }
+                if Thread.isMainThread {
+                    MainActor.assumeIsolated {
+                        container.publishCalibreUpdate(.shelf)
+                    }
+                } else {
+                    Task { @MainActor in
+                        container.publishCalibreUpdate(.shelf)
+                    }
+                }
             }
         }
         container.cleanCalibreActivities(startDatetime: Date(timeIntervalSinceNow: TimeInterval(-86400*7)))

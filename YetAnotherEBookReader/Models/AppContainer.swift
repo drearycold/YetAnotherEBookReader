@@ -160,7 +160,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     lazy var libraryCategoryService = LibraryCategoryService(service: self.calibreServerService, repository: self.categoryCacheRepository)
     lazy var unifiedCategoryService = UnifiedCategoryService(repository: self.categoryCacheRepository, libraryProvider: self)
 
-    lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
+    @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
     let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
 
@@ -169,6 +169,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// inShelfId for single book
     /// empty string for full update
     let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
+    private var calibreUpdateContinuations = [UUID: AsyncStream<calibreUpdatedSignal>.Continuation]()
 
     @Published var fontsManager = FontsManager()
 
@@ -194,6 +195,41 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             realmConf = nil
             databaseService.realmConf = nil
         }
+    }
+
+    deinit {
+        calibreUpdateContinuations.values.forEach { $0.finish() }
+    }
+
+    @MainActor
+    func publishCalibreUpdate(_ signal: calibreUpdatedSignal) {
+        for continuation in calibreUpdateContinuations.values {
+            continuation.yield(signal)
+        }
+        calibreUpdatedSubject.send(signal)
+    }
+
+    @MainActor
+    func calibreUpdates() -> AsyncStream<calibreUpdatedSignal> {
+        let id = UUID()
+        return AsyncStream { [weak self] continuation in
+            self?.calibreUpdateContinuations[id] = continuation
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.calibreUpdateContinuations.removeValue(forKey: id)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem]) {
+        recentShelfItemsSubject.send(books)
+    }
+
+    @MainActor
+    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem]) {
+        discoverShelfItemsSubject.send(sections)
     }
 
     init(
@@ -311,11 +347,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// `init` body stays focused on `objectWillChange` plumbing).
     private func wireCrossManagerSubscriptions() {
         libraryManager.registerProbeLibraryLastModifiedCancellable()
-        registerRecentShelfUpdater()
-
-        downloadManager.bookDownloadedSubject.sink { [weak self] book in
-            self?.calibreUpdatedSubject.send(.book(book))
-        }.store(in: &calibreCancellables)
     }
 
     /// Forward each manager's `objectWillChange` to our own so SwiftUI views

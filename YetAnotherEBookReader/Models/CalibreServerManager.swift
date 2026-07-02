@@ -115,7 +115,7 @@ class CalibreServerManager: ObservableObject {
             await container.libraryManager.removeLibrary(library: library)
         }
         
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
     }
     
     func queryServerDSReaderHelper(server: CalibreServer) -> CalibreServerDSReaderHelper? {
@@ -218,7 +218,9 @@ class CalibreServerManager: ObservableObject {
             }
             
             if serverInfo.reachable {
-                container?.calibreUpdatedSubject.send(.server(serverInfo.server))
+                Task { @MainActor in
+                    container?.publishCalibreUpdate(.server(serverInfo.server))
+                }
                 
                 container?.calibreLibraries.filter {
                     $0.value.server.id == serverInfo.server.id

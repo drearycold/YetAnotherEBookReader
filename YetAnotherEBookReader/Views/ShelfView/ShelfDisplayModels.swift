@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum ShelfBookStatus: String, Codable, Equatable, CaseIterable {
+public enum ShelfBookStatus: String, Codable, Equatable, CaseIterable, Sendable {
     case ready
     case noConnect
     case hasUpdate
@@ -16,7 +16,7 @@ public enum ShelfBookStatus: String, Codable, Equatable, CaseIterable {
     case updating
 }
 
-public struct ShelfBookItem: Identifiable, Equatable {
+public struct ShelfBookItem: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let coverURL: String
@@ -34,7 +34,7 @@ public struct ShelfBookItem: Identifiable, Equatable {
     }
 }
 
-public struct ShelfSectionItem: Identifiable, Equatable {
+public struct ShelfSectionItem: Identifiable, Equatable, Sendable {
     public let id: String
     public let title: String
     public let books: [ShelfBookItem]
@@ -46,7 +46,7 @@ public struct ShelfSectionItem: Identifiable, Equatable {
     }
 }
 
-public struct ShelfLibraryFilterItem: Identifiable, Equatable {
+public struct ShelfLibraryFilterItem: Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
     public var serverName: String
@@ -60,7 +60,7 @@ public struct ShelfLibraryFilterItem: Identifiable, Equatable {
     }
 }
 
-public struct ShelfSelectionState: Equatable {
+public struct ShelfSelectionState: Equatable, Sendable {
     public var selectedBookIds: Set<String> = []
     public var isEditing: Bool = false
     
@@ -69,5 +69,4 @@ public struct ShelfSelectionState: Equatable {
         self.isEditing = isEditing
     }
 }
-
 

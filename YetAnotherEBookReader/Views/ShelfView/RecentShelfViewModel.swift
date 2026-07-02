@@ -28,7 +28,8 @@ enum RecentShelfAlert: Identifiable {
 @MainActor @available(macCatalyst 14.0, *)
 final class RecentShelfViewModel: ObservableObject {
     let container: AppContainer
-    private var cancellables = Set<AnyCancellable>()
+    private var recentSnapshotTask: Task<Void, Never>?
+    private var calibreEventTask: Task<Void, Never>?
     
     @Published private(set) var loadedBooks: [ShelfBookItem]? = nil
     var displayBooks: [ShelfBookItem] {
@@ -42,20 +43,27 @@ final class RecentShelfViewModel: ObservableObject {
     
     init(container: AppContainer) {
         self.container = container
-        setupSubscriptions()
+        setupTasks()
+    }
+
+    deinit {
+        recentSnapshotTask?.cancel()
+        calibreEventTask?.cancel()
     }
     
-    private func setupSubscriptions() {
-        container.recentShelfItemsSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] displayBooks in
-                self?.loadedBooks = displayBooks
+    private func setupTasks() {
+        let snapshots = container.shelfDataModel.recentSnapshots()
+        recentSnapshotTask = Task { [weak self] in
+            for await snapshot in snapshots {
+                guard !Task.isCancelled else { return }
+                self?.loadedBooks = snapshot.books
             }
-            .store(in: &cancellables)
-            
-        container.calibreUpdatedSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] signal in
+        }
+
+        let signals = container.calibreUpdates()
+        calibreEventTask = Task { [weak self] in
+            for await signal in signals {
+                guard !Task.isCancelled else { return }
                 guard let self = self else { return }
                 if case .deleted(let deletedId) = signal {
                     if self.presentingBookDetailId == deletedId {
@@ -63,7 +71,7 @@ final class RecentShelfViewModel: ObservableObject {
                     }
                 }
             }
-            .store(in: &cancellables)
+        }
     }
     
     func refreshShelf() {
@@ -79,7 +87,7 @@ final class RecentShelfViewModel: ObservableObject {
         if selectionState.selectedBookIds.isEmpty {
             selectionState.isEditing = false
         }
-        container.calibreUpdatedSubject.send(.shelf)
+        container.publishCalibreUpdate(.shelf)
     }
 
     func deleteBook(bookId: String) {
@@ -141,7 +149,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
     
     func triggerDownload(book: CalibreBook, format: Format) {
-        container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+        container.downloadManager.requestDownload(book: book, format: format)
     }
     
     func refreshBookFormats(bookId: String) {
@@ -150,7 +158,7 @@ final class RecentShelfViewModel: ObservableObject {
             $1.cached && !$1.cacheUptoDate
         }.keys.forEach {
             guard let format = Format(rawValue: $0) else { return }
-            self.container.downloadManager.bookFormatDownloadSubject.send((book: book, format: format))
+            self.container.downloadManager.requestDownload(book: book, format: format)
         }
     }
 
