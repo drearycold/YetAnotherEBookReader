@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import OSLog
 import RealmSwift
 
@@ -33,13 +32,9 @@ public enum DownloadStartError: Error, LocalizedError, Equatable {
     }
 }
 
-class BookDownloadManager: ObservableObject {
-    @Published var activeDownloads: [URL: BookFormatDownload] = [:]
-    
-    let bookFormatDownloadSubject = PassthroughSubject<(book: CalibreBook, format: Format), Never>()
-    let bookDownloadedSubject = PassthroughSubject<CalibreBook, Never>()
-    
-    private var cancellables = Set<AnyCancellable>()
+class BookDownloadManager {
+    var activeDownloads: [URL: BookFormatDownload] = [:]
+
     private let defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookDownloadManager")
     private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
@@ -50,8 +45,6 @@ class BookDownloadManager: ObservableObject {
     init(container: AppContainerProtocol? = nil, realmConf: Realm.Configuration? = nil) {
         self.container = container
         self.realmConf = realmConf
-        
-        registerBookFormatDownloadHandler()
     }
     
     func setup(container: AppContainerProtocol, realmConf: Realm.Configuration?) {
@@ -74,17 +67,6 @@ class BookDownloadManager: ObservableObject {
         downloadSnapshotContinuations.values.forEach {
             $0.yield(activeDownloads)
         }
-    }
-
-    private func registerBookFormatDownloadHandler() {
-        bookFormatDownloadSubject
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] request in
-                Task { @MainActor in
-                    _ = self?.requestDownload(book: request.book, format: request.format)
-                }
-            }
-            .store(in: &cancellables)
     }
 
     @discardableResult
@@ -351,7 +333,6 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.publishDownloadSnapshot()
 
                 container.publishCalibreUpdate(.book(self.download.book))
-                manager.bookDownloadedSubject.send(self.download.book)
 
                 guard let request = task.originalRequest else { return }
                 let logger = container.logger

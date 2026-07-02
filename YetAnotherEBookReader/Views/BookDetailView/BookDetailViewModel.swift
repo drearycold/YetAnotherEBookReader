@@ -71,6 +71,7 @@ class BookDetailViewModel: ObservableObject {
     
     private weak var container: AppContainer?
     private var fetchTask: Task<Void, Never>?
+    private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
     var readerInfo: ReaderInfo? {
         return container?.sessionManager.readerInfo
@@ -95,6 +96,7 @@ class BookDetailViewModel: ObservableObject {
     
     deinit {
         fetchTask?.cancel()
+        activeDownloadsTask?.cancel()
     }
     
     func setup(bookId: String) {
@@ -103,7 +105,15 @@ class BookDetailViewModel: ObservableObject {
             return
         }
         
-        container.downloadManager.$activeDownloads.assign(to: &$activeDownloads)
+        activeDownloadsTask?.cancel()
+        activeDownloadsTask = Task { [weak self, weak container] in
+            guard let container else { return }
+            for await snapshot in container.downloadManager.downloadSnapshots() {
+                await MainActor.run {
+                    self?.activeDownloads = snapshot
+                }
+            }
+        }
         
         guard let calibreBook = container.bookRepository.getBook(id: bookId) else {
             print("Error: CalibreBook not found for primary key \(bookId)")

@@ -11,7 +11,6 @@ import OSLog
 
 struct LibraryInfoBookListView: View {
     @EnvironmentObject var container: AppContainer
-    @EnvironmentObject var downloadManager: BookDownloadManager
     @EnvironmentObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var viewModel: UnifiedSearchViewModel
 

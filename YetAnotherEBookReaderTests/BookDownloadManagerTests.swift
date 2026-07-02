@@ -6,14 +6,12 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class BookDownloadManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: BookDownloadManager!
-    private var cancellables: Set<AnyCancellable>!
 
     override func setUpWithError() throws {
         container = MockAppContainerFactory.makeContainer(testName: "BookDownloadManagerTests")
@@ -24,8 +22,6 @@ final class BookDownloadManagerTests: XCTestCase {
         let testConfiguration = URLSessionConfiguration.ephemeral
         testConfiguration.protocolClasses = [MockURLProtocol.self]
         manager.sessionConfiguration = testConfiguration
-
-        cancellables = []
 
         MockURLProtocol.requestHandler = { request in
             let responseURL = request.url ?? URL(string: "http://localhost/mock-download")!
@@ -50,7 +46,6 @@ final class BookDownloadManagerTests: XCTestCase {
         AppContainer.shared = nil
         manager = nil
         container = nil
-        cancellables = nil
         MockURLProtocol.requestHandler = nil
     }
 
@@ -123,25 +118,6 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.book.id, 1002)
     }
 
-    func testLegacyBookFormatDownloadSubjectRequestsDownload() throws {
-        let book = try makeDownloadableBook(id: 997, filenamePrefix: "legacy")
-        removeSavedFile(for: book, format: .EPUB)
-
-        let expectation = expectation(description: "Legacy download subject starts request")
-        manager.$activeDownloads
-            .dropFirst()
-            .sink { downloads in
-                if downloads.values.contains(where: { $0.book.id == 997 && $0.format == .EPUB }) {
-                    expectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        manager.bookFormatDownloadSubject.send((book: book, format: .EPUB))
-
-        waitForExpectations(timeout: 1.0)
-    }
-
     func testDownloadSnapshotsYieldInitialAndUpdatedState() async throws {
         let book = try makeDownloadableBook(id: 995, filenamePrefix: "snapshot")
         removeSavedFile(for: book, format: .EPUB)
@@ -160,27 +136,6 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertEqual(updated?.values.first?.book.id, 995)
         XCTAssertEqual(updated?.values.first?.format, .EPUB)
         XCTAssertEqual(updated?.values.first?.isDownloading, true)
-    }
-
-    func testManualBookDownloadedSubjectDoesNotPublishCalibreUpdate() async throws {
-        let book = try makeDownloadableBook(id: 996)
-        let invertedExpectation = expectation(description: "Manual legacy download subject does not publish calibre update")
-        invertedExpectation.isInverted = true
-
-        let task = Task { @MainActor in
-            for await signal in container.calibreUpdates() {
-                if case .book = signal {
-                    invertedExpectation.fulfill()
-                    break
-                }
-            }
-        }
-
-        await Task.yield()
-        manager.bookDownloadedSubject.send(book)
-
-        await fulfillment(of: [invertedExpectation], timeout: 0.2)
-        task.cancel()
     }
 
     func testCancelDownloadClearsActiveStateAndResumeData() async throws {
@@ -312,15 +267,8 @@ final class BookDownloadManagerTests: XCTestCase {
         removeSavedFile(for: book, format: .EPUB)
 
         let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
-        let legacyExpectation = expectation(description: "Legacy download completion triggered")
         let calibreUpdateExpectation = expectation(description: "Download completion publishes calibre update")
-        var bookDownloaded: CalibreBook?
         var calibreUpdatedBook: CalibreBook?
-
-        manager.bookDownloadedSubject.sink { downloadedBook in
-            bookDownloaded = downloadedBook
-            legacyExpectation.fulfill()
-        }.store(in: &cancellables)
 
         let calibreUpdateTask = Task { @MainActor in
             for await signal in container.calibreUpdates() {
@@ -336,10 +284,9 @@ final class BookDownloadManagerTests: XCTestCase {
         delegate.urlSession(URLSession.shared, downloadTask: StubDownloadTask(request: URLRequest(url: download.sourceURL)), didFinishDownloadingTo: tempFileURL)
         delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL), response: httpResponse(url: download.sourceURL, statusCode: 200)), didCompleteWithError: nil)
 
-        await fulfillment(of: [legacyExpectation, calibreUpdateExpectation], timeout: 2.0)
+        await fulfillment(of: [calibreUpdateExpectation], timeout: 2.0)
         calibreUpdateTask.cancel()
 
-        XCTAssertEqual(bookDownloaded?.id, 1013)
         XCTAssertEqual(calibreUpdatedBook?.id, 1013)
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isDownloading, false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: download.savedURL.path))
@@ -387,14 +334,9 @@ final class BookDownloadManagerTests: XCTestCase {
         manager.activeDownloads[download.sourceURL] = download
         let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
 
-        let legacyExpectation = expectation(description: "Failed download does not publish legacy success")
-        legacyExpectation.isInverted = true
         let calibreUpdateExpectation = expectation(description: "Failed download does not publish calibre update")
         calibreUpdateExpectation.isInverted = true
 
-        manager.bookDownloadedSubject.sink { _ in
-            legacyExpectation.fulfill()
-        }.store(in: &cancellables)
         let calibreUpdateTask = Task { @MainActor in
             for await signal in container.calibreUpdates() {
                 if case .book = signal {
@@ -417,7 +359,7 @@ final class BookDownloadManagerTests: XCTestCase {
         )
 
         let snapshot = await snapshotTask.value
-        await fulfillment(of: [legacyExpectation, calibreUpdateExpectation], timeout: 0.2)
+        await fulfillment(of: [calibreUpdateExpectation], timeout: 0.2)
         calibreUpdateTask.cancel()
 
         XCTAssertEqual(snapshot?[download.sourceURL]?.isDownloading, false)
@@ -431,11 +373,17 @@ final class BookDownloadManagerTests: XCTestCase {
         manager.activeDownloads[download.sourceURL] = download
         let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
 
-        let legacyExpectation = expectation(description: "Non-2xx completion does not publish legacy success")
-        legacyExpectation.isInverted = true
-        manager.bookDownloadedSubject.sink { _ in
-            legacyExpectation.fulfill()
-        }.store(in: &cancellables)
+        let calibreUpdateExpectation = expectation(description: "Non-2xx completion does not publish calibre update")
+        calibreUpdateExpectation.isInverted = true
+        let calibreUpdateTask = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                if case .book = signal {
+                    calibreUpdateExpectation.fulfill()
+                    break
+                }
+            }
+        }
+        await Task.yield()
         let snapshotTask = snapshotExpectation {
             $0[download.sourceURL]?.isDownloading == false &&
             $0[download.sourceURL]?.resumeData == nil
@@ -445,7 +393,8 @@ final class BookDownloadManagerTests: XCTestCase {
         delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL), response: httpResponse(url: download.sourceURL, statusCode: 500)), didCompleteWithError: nil)
 
         _ = await snapshotTask.value
-        await fulfillment(of: [legacyExpectation], timeout: 0.2)
+        await fulfillment(of: [calibreUpdateExpectation], timeout: 0.2)
+        calibreUpdateTask.cancel()
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isDownloading, false)
     }
 
@@ -457,11 +406,17 @@ final class BookDownloadManagerTests: XCTestCase {
         removeSavedFile(for: book, format: .EPUB)
         let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
 
-        let legacyExpectation = expectation(description: "Empty file completion does not publish legacy success")
-        legacyExpectation.isInverted = true
-        manager.bookDownloadedSubject.sink { _ in
-            legacyExpectation.fulfill()
-        }.store(in: &cancellables)
+        let calibreUpdateExpectation = expectation(description: "Empty file completion does not publish calibre update")
+        calibreUpdateExpectation.isInverted = true
+        let calibreUpdateTask = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                if case .book = signal {
+                    calibreUpdateExpectation.fulfill()
+                    break
+                }
+            }
+        }
+        await Task.yield()
         let snapshotTask = snapshotExpectation {
             $0[download.sourceURL]?.isDownloading == false
         }
@@ -470,7 +425,8 @@ final class BookDownloadManagerTests: XCTestCase {
         delegate.urlSession(URLSession.shared, task: StubTask(request: URLRequest(url: download.sourceURL), response: httpResponse(url: download.sourceURL, statusCode: 200)), didCompleteWithError: nil)
 
         _ = await snapshotTask.value
-        await fulfillment(of: [legacyExpectation], timeout: 0.2)
+        await fulfillment(of: [calibreUpdateExpectation], timeout: 0.2)
+        calibreUpdateTask.cancel()
         XCTAssertFalse(FileManager.default.fileExists(atPath: download.savedURL.path))
     }
 
