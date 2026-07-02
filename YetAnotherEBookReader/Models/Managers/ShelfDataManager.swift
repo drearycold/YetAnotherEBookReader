@@ -418,10 +418,12 @@ final class YabrShelfDataModel {
         startEventTask()
         initialSnapshotTask = Task { [weak self] in
             await Task.yield()
+            guard !Task.isCancelled else { return }
             guard let self = self else { return }
             if let snapshot = self.booksInShelfSnapshotIfNeeded(for: .shelf) {
                 await self.rebuildShelfCategories(from: snapshot)
             }
+            guard !Task.isCancelled else { return }
             self.scheduleRecentShelfRebuildIfNeeded()
         }
     }

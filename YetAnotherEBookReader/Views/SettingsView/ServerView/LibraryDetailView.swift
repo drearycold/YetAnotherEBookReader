@@ -17,9 +17,15 @@ struct LibraryDetailView: View {
     var body: some View {
         Form {
             Section(header: Text("Browsable")) {
-                Toggle("Include in Discover", isOn: $viewModel.discoverable)
+                Toggle("Include in Discover", isOn: Binding(
+                    get: { viewModel.discoverable },
+                    set: { viewModel.setDiscoverable($0) }
+                ))
                 
-                Toggle("Available when Offline", isOn: $viewModel.autoUpdate)
+                Toggle("Available when Offline", isOn: Binding(
+                    get: { viewModel.autoUpdate },
+                    set: { viewModel.setAutoUpdate($0) }
+                ))
             }
             
             Section(header: Text("Troubleshooting")) {

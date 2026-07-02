@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import Combine
 
 @MainActor
 class UnifiedCategoryViewModel: ObservableObject {
@@ -21,7 +20,7 @@ class UnifiedCategoryViewModel: ObservableObject {
     
     private var currentCategoryName: String?
     private var currentSearchString: String = ""
-    private var cacheUpdateObserver: AnyCancellable?
+    private var cacheUpdateTask: Task<Void, Never>?
     private var observedCategoryName: String?
     
     init(
@@ -35,6 +34,11 @@ class UnifiedCategoryViewModel: ObservableObject {
         self.container = resolvedAppContainer
         self.unifiedCategoryService = unifiedCategoryService ?? resolvedAppContainer.unifiedCategoryService
         self.categoryCacheRepository = categoryCacheRepository ?? resolvedAppContainer.categoryCacheRepository
+    }
+
+    deinit {
+        mergeTask?.cancel()
+        cacheUpdateTask?.cancel()
     }
     
     func mergeCategory(categoryName: String, searchString: String) {
@@ -55,14 +59,18 @@ class UnifiedCategoryViewModel: ObservableObject {
     }
     
     private func setupCategoryObserver(for categoryName: String) {
-        guard observedCategoryName != categoryName || cacheUpdateObserver == nil else { return }
+        guard observedCategoryName != categoryName || cacheUpdateTask == nil else { return }
 
-        cacheUpdateObserver?.cancel()
+        cacheUpdateTask?.cancel()
         observedCategoryName = categoryName
-        cacheUpdateObserver = categoryCacheRepository.observeCategoryCacheUpdates(categoryName: categoryName)
-            .sink { [weak self] in
-                self?.retriggerMerge()
+        cacheUpdateTask = Task { [weak self, categoryCacheRepository] in
+            for await _ in categoryCacheRepository.observeCategoryCacheUpdates(categoryName: categoryName) {
+                guard !Task.isCancelled else { break }
+                await MainActor.run {
+                    self?.retriggerMerge()
+                }
             }
+        }
     }
     
     private func retriggerMerge() {

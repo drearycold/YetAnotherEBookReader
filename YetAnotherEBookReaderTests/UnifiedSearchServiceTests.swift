@@ -730,7 +730,6 @@ class MockSearchCacheRepository: SearchCacheRepository {
     private let lock = NSRecursiveLock()
     
     private var _cachedLibraryResults: [String: LibraryCachedResult] = [:]
-    private var librarySubjects: [String: CurrentValueSubject<LibraryCachedResult, Error>] = [:]
 
     private func makeKey(libraryId: String, search: String, sortBy: SortCriteria, sortAsc: Bool, filters: [String: Set<String>]) -> String {
         let filterStr = filters.keys.sorted().map { "\($0):\(filters[$0]?.sorted() ?? [])" }.joined(separator: ",")
@@ -772,38 +771,7 @@ class MockSearchCacheRepository: SearchCacheRepository {
         cached.sources[sourceUrl] = result
         _cachedLibraryResults[key] = cached
         
-        let subject = librarySubjects[key]
         lock.unlock()
-        
-        if let subject = subject {
-            subject.send(cached)
-        }
-    }
-    
-    func libraryCachedResultPublisher(
-        libraryId: String,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) -> AnyPublisher<LibraryCachedResult, Error> {
-        lock.lock()
-        defer { lock.unlock() }
-        let key = makeKey(libraryId: libraryId, search: search, sortBy: sortBy, sortAsc: sortAsc, filters: filters)
-        if let subject = librarySubjects[key] {
-            return subject.eraseToAnyPublisher()
-        }
-        let initial = _cachedLibraryResults[key] ?? LibraryCachedResult(
-            libraryId: libraryId,
-            search: search,
-            sortBy: sortBy,
-            sortAsc: sortAsc,
-            filters: filters,
-            sources: [:]
-        )
-        let subject = CurrentValueSubject<LibraryCachedResult, Error>(initial)
-        librarySubjects[key] = subject
-        return subject.eraseToAnyPublisher()
     }
 }
 

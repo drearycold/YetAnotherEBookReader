@@ -33,6 +33,7 @@ class LibraryViewModel: ObservableObject {
     @Published var deletedBookIds: [Int32] = []
     
     private var cancellables = Set<AnyCancellable>()
+    private var libraryObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
         self.container = container
@@ -41,6 +42,10 @@ class LibraryViewModel: ObservableObject {
         
         setupBindings()
     }
+
+    deinit {
+        libraryObservationTask?.cancel()
+    }
     
     private func setupBindings() {
         if let persistedLibrary = libraryRepository.getLibrary(id: library.id) {
@@ -48,40 +53,15 @@ class LibraryViewModel: ObservableObject {
             self.autoUpdate = persistedLibrary.autoUpdate
         }
 
-        libraryRepository.observeLibrary(id: library.id)
-            .sink { [weak self] observedLibrary in
-                guard let self = self, let observedLibrary = observedLibrary else { return }
-                self.discoverable = observedLibrary.discoverable
-                self.autoUpdate = observedLibrary.autoUpdate
+        libraryObservationTask?.cancel()
+        libraryObservationTask = Task { [weak self, libraryRepository, libraryId = library.id] in
+            for await observedLibrary in libraryRepository.observeLibrary(id: libraryId) {
+                guard !Task.isCancelled, let observedLibrary else { continue }
+                await MainActor.run { [weak self] in
+                    self?.applyObservedFlags(from: observedLibrary)
+                }
             }
-            .store(in: &cancellables)
-        
-        // Listen to UI changes and save to Realm
-        $discoverable
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                try? self.libraryRepository.updateLibraryFlags(
-                    id: self.library.id,
-                    discoverable: newValue,
-                    autoUpdate: self.autoUpdate
-                )
-            }
-            .store(in: &cancellables)
-            
-        $autoUpdate
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                try? self.libraryRepository.updateLibraryFlags(
-                    id: self.library.id,
-                    discoverable: self.discoverable,
-                    autoUpdate: newValue
-                )
-            }
-            .store(in: &cancellables)
+        }
             
         // Observe container.librarySyncStatus
         container.libraryManager.$librarySyncStatus
@@ -104,6 +84,31 @@ class LibraryViewModel: ObservableObject {
                 self.resolveBookTitles()
             }
             .store(in: &cancellables)
+    }
+
+    func setDiscoverable(_ newValue: Bool) {
+        guard discoverable != newValue else { return }
+        discoverable = newValue
+        try? libraryRepository.updateLibraryFlags(
+            id: library.id,
+            discoverable: newValue,
+            autoUpdate: autoUpdate
+        )
+    }
+
+    func setAutoUpdate(_ newValue: Bool) {
+        guard autoUpdate != newValue else { return }
+        autoUpdate = newValue
+        try? libraryRepository.updateLibraryFlags(
+            id: library.id,
+            discoverable: discoverable,
+            autoUpdate: newValue
+        )
+    }
+
+    private func applyObservedFlags(from library: CalibreLibrary) {
+        discoverable = library.discoverable
+        autoUpdate = library.autoUpdate
     }
     
     private func resolveBookTitles() {

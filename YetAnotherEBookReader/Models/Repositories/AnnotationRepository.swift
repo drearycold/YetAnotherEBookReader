@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 import OSLog
 
@@ -27,7 +26,7 @@ struct ActivityLogUIEntry: Identifiable, Hashable {
 
 protocol ActivityLogRepositoryProtocol {
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry]
-    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never>
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogUIEntry]>
 }
 
 final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
@@ -121,26 +120,38 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
             .map(mapToUI)
     }
 
-    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never> {
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogUIEntry]> {
         guard let realm = getRealm() else {
-            return Just([]).eraseToAnyPublisher()
+            return AsyncStream { continuation in
+                continuation.yield([])
+                continuation.finish()
+            }
         }
 
-        return realm.objects(CalibreActivityLogEntry.self)
+        let results = realm.objects(CalibreActivityLogEntry.self)
             .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
             .sorted(byKeyPath: "startDatetime", ascending: false)
-            .changesetPublisher
-            .map { [weak self] change -> [ActivityLogUIEntry] in
-                guard let self = self else { return [] }
+
+        return AsyncStream { [weak self] continuation in
+            continuation.yield(results.compactMap { self?.mapToUI($0) })
+            let token = results.observe(on: DispatchQueue.main) { [weak self] change in
+                guard let self else {
+                    continuation.yield([])
+                    return
+                }
                 switch change {
-                case .initial(let collection), .update(let collection, _, _, _):
-                    return collection.map(self.mapToUI)
+                case .initial:
+                    break
+                case .update(let collection, _, _, _):
+                    continuation.yield(collection.map(self.mapToUI))
                 case .error:
-                    return []
+                    continuation.yield([])
                 }
             }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
+            continuation.onTermination = { _ in
+                token.invalidate()
+            }
+        }
     }
 }
 

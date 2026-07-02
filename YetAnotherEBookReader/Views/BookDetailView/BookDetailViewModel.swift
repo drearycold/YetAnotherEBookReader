@@ -13,7 +13,7 @@ class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
     @Published var previewViewModel = BookPreviewViewModel()
     @Published var calibreBook: CalibreBook?
-    private var bookObserverToken: AnyCancellable?
+    private var bookObserverTask: Task<Void, Never>?
     
     @Published var alertItem: AlertItem?
     
@@ -97,6 +97,7 @@ class BookDetailViewModel: ObservableObject {
     deinit {
         fetchTask?.cancel()
         activeDownloadsTask?.cancel()
+        bookObserverTask?.cancel()
     }
     
     func setup(bookId: String) {
@@ -130,13 +131,19 @@ class BookDetailViewModel: ObservableObject {
             self.listVM?.positions = container.readingPositionRepository.getPositions(for: calibreBook)
         }
         
-        bookObserverToken = container.bookRepository.observeBook(id: bookId)
-            .sink { [weak self] updatedCalibreBook in
-                guard let self = self, let container = self.container, let updatedCalibreBook = updatedCalibreBook else { return }
-                self.calibreBook = updatedCalibreBook
-                self.listVM?.book = updatedCalibreBook
-                self.listVM?.positions = container.readingPositionRepository.getPositions(for: updatedCalibreBook)
+        bookObserverTask?.cancel()
+        bookObserverTask = Task { [weak self, weak container] in
+            guard let container else { return }
+            for await updatedCalibreBook in container.bookRepository.observeBook(id: bookId) {
+                guard !Task.isCancelled, let updatedCalibreBook else { continue }
+                await MainActor.run { [weak self, weak container] in
+                    guard let self, let container else { return }
+                    self.calibreBook = updatedCalibreBook
+                    self.listVM?.book = updatedCalibreBook
+                    self.listVM?.positions = container.readingPositionRepository.getPositions(for: updatedCalibreBook)
+                }
             }
+        }
     }
     
     func fetchMetadata(book: CalibreBook) {

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 struct LibrarySourceSearchResult: Equatable, Sendable {
     var generation: Date
@@ -70,12 +69,4 @@ protocol SearchCacheRepository: Sendable {
         sourceUrl: String,
         result: LibrarySourceSearchResult
     ) throws
-    func libraryCachedResultPublisher(
-        libraryId: String,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) -> AnyPublisher<LibraryCachedResult, Error>
-    
 }

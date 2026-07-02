@@ -83,7 +83,7 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(viewModel.availableCategories.first?.itemsCount, 1)
     }
 
-    func testLibraryInfoViewModelSetupCategoryObserverUsesRepositoryPublisher() {
+    func testLibraryInfoViewModelSetupCategoryObserverUsesRepositoryAsyncStream() async {
         let container = makeAppContainer()
         let repository = MockCategoryCacheRepository()
         container.categoryCacheRepository = repository
@@ -102,12 +102,18 @@ final class V2MigrationDependencyTests: XCTestCase {
         let viewModel = LibraryInfoView.ViewModel()
         viewModel.setupCategoryObserver()
 
+        await waitForCategorySummaries(in: viewModel) { summaries in
+            summaries.first?.categoryName == "Authors" && summaries.first?.itemsCount == 1
+        }
         XCTAssertTrue(repository.observeCategorySummariesCalled)
         XCTAssertEqual(viewModel.availableCategories.first?.categoryName, "Authors")
         XCTAssertEqual(viewModel.availableCategories.first?.itemsCount, 1)
 
         repository.sendCategorySummaries([updated])
 
+        await waitForCategorySummaries(in: viewModel) { summaries in
+            summaries == [updated]
+        }
         XCTAssertEqual(viewModel.availableCategories, [updated])
     }
 
@@ -1015,6 +1021,19 @@ final class V2MigrationDependencyTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTAssertGreaterThanOrEqual(count(), expectedCount, file: file, line: line)
+    }
+
+    private func waitForCategorySummaries(
+        in viewModel: LibraryInfoView.ViewModel,
+        matching predicate: @escaping ([CategoryCacheSummary]) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<50 {
+            if predicate(viewModel.availableCategories) { return }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(predicate(viewModel.availableCategories), file: file, line: line)
     }
     
     private func makeUnifiedSearchService(container: AppContainer) async throws -> UnifiedSearchService {

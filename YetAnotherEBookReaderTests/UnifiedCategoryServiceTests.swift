@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -23,8 +22,6 @@ class UnifiedCategoryServiceTests: XCTestCase {
 
     var mockLibrary1: CalibreLibrary!
     var mockLibrary2: CalibreLibrary!
-    var cancellables = Set<AnyCancellable>()
-
     override func setUp() async throws {
         try await super.setUp()
 
@@ -84,7 +81,6 @@ class UnifiedCategoryServiceTests: XCTestCase {
         mergeService = nil
         mockLibrary1 = nil
         mockLibrary2 = nil
-        cancellables.removeAll()
         try await super.tearDown()
     }
 
@@ -334,7 +330,7 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertNil(cached, "Cache should remain empty/nil on failure")
     }
 
-    func testRealmSearchCacheStoreObserveCategorySummariesPublishesInitialAndUpdatedSnapshots() throws {
+    func testRealmSearchCacheStoreObserveCategorySummariesPublishesInitialAndUpdatedSnapshots() async throws {
         let (container, store) = makeRealmSearchCacheStore()
 
         let initialResult = LibraryCategoryResult(
@@ -346,24 +342,12 @@ class UnifiedCategoryServiceTests: XCTestCase {
         )
         try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: initialResult)
 
-        let initialExpectation = expectation(description: "initial summaries")
-        let updateExpectation = expectation(description: "updated summaries")
-        var received: [[CategoryCacheSummary]] = []
+        var iterator = store.observeCategorySummaries().makeAsyncIterator()
 
-        store.observeCategorySummaries()
-            .sink { summaries in
-                received.append(summaries)
-                if received.count == 1 {
-                    initialExpectation.fulfill()
-                } else if received.count == 2 {
-                    updateExpectation.fulfill()
-                }
-            }
-            .store(in: &cancellables)
-
-        wait(for: [initialExpectation], timeout: 1.0)
-        XCTAssertEqual(received.first?.first?.categoryName, "Authors")
-        XCTAssertEqual(received.first?.first?.itemsCount, 1)
+        let initialSummaries = await iterator.next() ?? []
+        let initialSummary = initialSummaries.first { $0.categoryName == "Authors" }
+        XCTAssertEqual(initialSummary?.categoryName, "Authors")
+        XCTAssertEqual(initialSummary?.itemsCount, 1)
 
         let updatedResult = LibraryCategoryResult(
             libraryId: mockLibrary2.id,
@@ -377,14 +361,15 @@ class UnifiedCategoryServiceTests: XCTestCase {
         )
         try store.saveLibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Authors", result: updatedResult)
 
-        wait(for: [updateExpectation], timeout: 1.0)
-        XCTAssertEqual(received.last?.first?.categoryName, "Authors")
-        XCTAssertEqual(received.last?.first?.itemsCount, 3)
-        XCTAssertEqual(received.last?.first?.totalNumber, 3)
+        let updatedSummaries = await iterator.next() ?? []
+        let updatedSummary = updatedSummaries.first { $0.categoryName == "Authors" }
+        XCTAssertEqual(updatedSummary?.categoryName, "Authors")
+        XCTAssertEqual(updatedSummary?.itemsCount, 3)
+        XCTAssertEqual(updatedSummary?.totalNumber, 3)
         _ = container
     }
 
-    func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() throws {
+    func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() async throws {
         let (_, store) = makeRealmSearchCacheStore()
 
         let noInitialExpectation = expectation(description: "no initial event")
@@ -392,14 +377,15 @@ class UnifiedCategoryServiceTests: XCTestCase {
         let updateExpectation = expectation(description: "real cache update")
         var updateCount = 0
 
-        store.observeCategoryCacheUpdates(categoryName: "Authors")
-            .sink {
+        let task = Task { @MainActor in
+            for await _ in store.observeCategoryCacheUpdates(categoryName: "Authors") {
                 updateCount += 1
                 updateExpectation.fulfill()
+                break
             }
-            .store(in: &cancellables)
+        }
 
-        wait(for: [noInitialExpectation], timeout: 0.2)
+        await fulfillment(of: [noInitialExpectation], timeout: 0.2)
 
         let seededResult = LibraryCategoryResult(
             libraryId: mockLibrary1.id,
@@ -409,13 +395,14 @@ class UnifiedCategoryServiceTests: XCTestCase {
             totalNumber: 1
         )
         try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: seededResult)
-        wait(for: [updateExpectation], timeout: 1.0)
+        await fulfillment(of: [updateExpectation], timeout: 1.0)
         XCTAssertEqual(updateCount, 1)
+        task.cancel()
 
         let noInvalidationExpectation = expectation(description: "generation invalidation does not publish")
         noInvalidationExpectation.isInverted = true
         try store.invalidateCategoryCache(libraryId: mockLibrary1.id, categoryName: "Authors")
-        wait(for: [noInvalidationExpectation], timeout: 0.2)
+        await fulfillment(of: [noInvalidationExpectation], timeout: 0.2)
         XCTAssertEqual(updateCount, 1)
     }
 

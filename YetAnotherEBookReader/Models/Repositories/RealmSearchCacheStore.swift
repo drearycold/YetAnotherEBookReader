@@ -7,7 +7,6 @@
 
 import Foundation
 import RealmSwift
-import Combine
 import OSLog
 
 final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepository, @unchecked Sendable {
@@ -170,66 +169,6 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         }
     }
     
-
-    func libraryCachedResultPublisher(
-        libraryId: String,
-        search: String,
-        sortBy: SortCriteria,
-        sortAsc: Bool,
-        filters: [String: Set<String>]
-    ) -> AnyPublisher<LibraryCachedResult, Error> {
-        let publisher = Deferred { () -> AnyPublisher<LibraryCachedResult, Error> in
-            do {
-                let realm = try self.getRealm()
-                let results = realm.objects(CalibreLibrarySearchObject.self)
-                    .filter("libraryId == %@ AND search == %@ AND sortAsc == %@", libraryId, search, sortAsc)
-                
-                let mapped = results.changesetPublisher
-                    .tryMap { [weak self] changeset -> LibraryCachedResult? in
-                        guard let self = self else { return nil }
-                        
-                        self.defaultLog.log("libraryCachedResultPublisher \(libraryId) \(search) \(sortAsc)")
-                        
-                        let collection: Results<CalibreLibrarySearchObject>
-                        switch changeset {
-                        case .initial(let col):
-                            collection = col
-                        case .update(let col, _, _, _):
-                            collection = col
-                        case .error(let err):
-                            throw err
-                        }
-                        
-                        let matched = collection
-                            .filter { $0.sortBy == sortBy }
-                            .first { cacheObj in
-                                let objFilters = cacheObj.filters.reduce(into: [String: Set<String>]()) { partial, filter in
-                                    if let values = filter.value?.values {
-                                        partial[filter.key] = Set(values)
-                                    }
-                                }
-                                return objFilters == filters
-                            }
-                        let realm = try self.getRealm()
-                        guard let obj = matched else { return nil }
-                        return self.mapToLibraryCachedResult(obj, realm: realm)
-                    }
-                    .compactMap { $0 }
-                    .eraseToAnyPublisher()
-                
-                return mapped
-            } catch {
-                return Fail(error: error).eraseToAnyPublisher()
-            }
-        }
-        
-        return publisher
-            .subscribe(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
-    }
-    
-
-    
     // MARK: - Mapping Helpers
     
     private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
@@ -358,46 +297,66 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         return mapCategorySummaries(objects: objects)
     }
 
-    func observeCategorySummaries() -> AnyPublisher<[CategoryCacheSummary], Never> {
+    func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
         guard let realm = try? getRealm() else {
-            return Just([]).eraseToAnyPublisher()
-        }
-
-        return realm.objects(CalibreLibraryCategoryObject.self)
-            .changesetPublisher(keyPaths: ["items", "totalNumber"])
-            .map { [weak self] changes -> [CategoryCacheSummary] in
-                guard let self = self else { return [] }
-                switch changes {
-                case .initial(let objects), .update(let objects, _, _, _):
-                    return self.mapCategorySummaries(objects: objects)
-                case .error:
-                    return []
-                }
+            return AsyncStream { continuation in
+                continuation.yield([])
+                continuation.finish()
             }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
-    }
-
-    func observeCategoryCacheUpdates(categoryName: String) -> AnyPublisher<Void, Never> {
-        guard let realm = try? getRealm() else {
-            return Empty().eraseToAnyPublisher()
         }
 
-        return realm.objects(CalibreLibraryCategoryObject.self)
-            .filter("categoryName == %@", categoryName)
-            .changesetPublisher(keyPaths: ["items", "totalNumber"])
-            .compactMap { changes -> Void? in
+        let objects = realm.objects(CalibreLibraryCategoryObject.self)
+        return AsyncStream { [weak self] continuation in
+            if let self {
+                continuation.yield(self.mapCategorySummaries(objects: objects))
+            } else {
+                continuation.yield([])
+            }
+            let token = objects.observe(keyPaths: ["items", "totalNumber"], on: DispatchQueue.main) { [weak self] changes in
+                guard let self else {
+                    continuation.yield([])
+                    return
+                }
                 switch changes {
                 case .initial:
-                    return nil
-                case .update:
-                    return ()
+                    break
+                case .update(let objects, _, _, _):
+                    continuation.yield(self.mapCategorySummaries(objects: objects))
                 case .error:
-                    return nil
+                    continuation.yield([])
                 }
             }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
+            continuation.onTermination = { _ in
+                token.invalidate()
+            }
+        }
+    }
+
+    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
+        guard let realm = try? getRealm() else {
+            return AsyncStream { continuation in
+                continuation.finish()
+            }
+        }
+
+        let objects = realm.objects(CalibreLibraryCategoryObject.self)
+            .filter("categoryName == %@", categoryName)
+
+        return AsyncStream { continuation in
+            let token = objects.observe(keyPaths: ["items", "totalNumber"], on: DispatchQueue.main) { changes in
+                switch changes {
+                case .initial:
+                    break
+                case .update:
+                    continuation.yield(())
+                case .error:
+                    break
+                }
+            }
+            continuation.onTermination = { _ in
+                token.invalidate()
+            }
+        }
     }
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws {

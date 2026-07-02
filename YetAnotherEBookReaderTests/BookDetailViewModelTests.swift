@@ -119,8 +119,8 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.listVM?.book.title, "Test Book")
     }
 
-    func testSetupObservesBookValueTypeUpdates() throws {
-        let expectation = expectation(description: "book publisher update propagates to view model")
+    func testSetupObservesBookValueTypeUpdates() async throws {
+        let expectation = expectation(description: "book stream update propagates to view model")
         viewModel.$calibreBook
             .compactMap { $0?.title }
             .dropFirst()
@@ -131,11 +131,12 @@ class BookDetailViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
 
+        try await Task.sleep(nanoseconds: 50_000_000)
         try mockAppContainer.realm!.write {
             mockBookRealm.title = "Updated Book"
         }
 
-        wait(for: [expectation], timeout: 2.0)
+        await fulfillment(of: [expectation], timeout: 2.0)
         XCTAssertEqual(viewModel.calibreBook?.title, "Updated Book")
         XCTAssertEqual(viewModel.listVM?.book.title, "Updated Book")
     }
@@ -786,15 +787,16 @@ class ActivityListViewModelTests: XCTestCase {
             httpMethod: "POST",
             httpBodyString: "{}"
         )
-        repository.observeEntriesSubject.send([updatedEntry])
+        repository.sendObservedEntries([updatedEntry])
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
 
         XCTAssertEqual(viewModel.activities, [updatedEntry])
     }
 }
 
+@MainActor
 class LibraryViewModelTests: XCTestCase {
-    func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
+    func testInitializationReadsPersistedFlagsAndObservesUpdates() async throws {
         let container = MockAppContainerFactory.makeContainer(testName: "LibraryViewModelTests")
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
@@ -802,14 +804,20 @@ class LibraryViewModelTests: XCTestCase {
 
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
 
+        for _ in 0..<50 where repository.observeLibrarySubscriberCount == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         XCTAssertTrue(repository.getLibraryCalled)
         XCTAssertTrue(repository.observeLibraryCalled)
+        XCTAssertEqual(repository.observeLibrarySubscriberCount, 1)
 
         var updatedLibrary = library
         updatedLibrary.discoverable = true
         updatedLibrary.autoUpdate = true
-        repository.observeLibrarySubject.send(updatedLibrary)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        repository.sendObservedLibrary(updatedLibrary)
+        for _ in 0..<50 where !viewModel.discoverable || !viewModel.autoUpdate {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertTrue(viewModel.discoverable)
         XCTAssertTrue(viewModel.autoUpdate)
@@ -824,8 +832,7 @@ class LibraryViewModelTests: XCTestCase {
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
         repository.updateLibraryFlagsCalled = false
 
-        viewModel.discoverable = !library.discoverable
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        viewModel.setDiscoverable(!library.discoverable)
 
         XCTAssertTrue(repository.updateLibraryFlagsCalled)
         XCTAssertEqual(repository.updateLibraryFlagsIdParam, library.id)
