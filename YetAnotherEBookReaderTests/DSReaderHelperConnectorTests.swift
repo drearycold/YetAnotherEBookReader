@@ -8,7 +8,6 @@
 //
 
 import XCTest
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
 
@@ -19,15 +18,12 @@ final class DSReaderHelperConnectorTests: XCTestCase {
     var server: CalibreServer!
     var library: CalibreLibrary!
     var dsreaderHelperServer: CalibreServerDSReaderHelper!
-    var cancellables: Set<AnyCancellable>!
 
     override func setUp() async throws {
         try await super.setUp()
 
         container = MockAppContainerFactory.makeContainer(testName: "DSReaderHelperConnectorTests")
         service = container.calibreServerService
-        cancellables = []
-
         server = CalibreServer(uuid: UUID(), name: "Server", baseUrl: "http://localhost", hasPublicUrl: false, publicUrl: "", hasAuth: true, username: "user", password: "pass")
         library = CalibreLibrary(server: server, key: "lib1", name: "Library 1")
 
@@ -51,7 +47,6 @@ final class DSReaderHelperConnectorTests: XCTestCase {
 
     override func tearDown() async throws {
         dsreaderHelperServer = nil
-        cancellables = nil
         MockURLProtocol.requestHandler = nil
         library = nil
         server = nil
@@ -288,7 +283,7 @@ final class DSReaderHelperConnectorTests: XCTestCase {
         }
     }
 
-    func testRefreshConfigurationPublisherBridgesAsyncSuccess() async throws {
+    func testRefreshConfigurationAsyncSuccess() async throws {
         let connector = DSReaderHelperConnector(
             calibreServerService: service,
             server: server,
@@ -308,27 +303,13 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             return (response, payload)
         }
 
-        let expectation = expectation(description: "refresh configuration publisher emits")
-        var received: (id: String, port: Int, data: Data)?
-
-        connector.refreshConfiguration()?
-            .sink { completion in
-                if case .failure(let error) = completion {
-                    XCTFail("Expected success, got \(error)")
-                }
-            } receiveValue: { value in
-                received = value
-                expectation.fulfill()
-            }
-            .store(in: &cancellables)
-
-        await fulfillment(of: [expectation], timeout: 2.0)
-        XCTAssertEqual(received?.id, server.uuid.uuidString)
-        XCTAssertEqual(received?.port, 8080)
-        XCTAssertEqual(received?.data, payload)
+        let received = try await connector.refreshConfiguration()
+        XCTAssertEqual(received.id, server.uuid.uuidString)
+        XCTAssertEqual(received.port, 8080)
+        XCTAssertEqual(received.data, payload)
     }
 
-    func testRefreshConfigurationPublisherReturnsNilForInvalidEndpoint() {
+    func testRefreshConfigurationAsyncThrowsForInvalidEndpoint() async throws {
         let unreachableServer = CalibreServer(
             uuid: UUID(),
             name: "Unreachable",
@@ -346,6 +327,13 @@ final class DSReaderHelperConnectorTests: XCTestCase {
             goodreadsSync: nil
         )
 
-        XCTAssertNil(connector.refreshConfiguration())
+        do {
+            _ = try await connector.refreshConfiguration()
+            XCTFail("Expected bad URL")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .badURL)
+        } catch {
+            XCTFail("Expected URLError, got \(error)")
+        }
     }
 }

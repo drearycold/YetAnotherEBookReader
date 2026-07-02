@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 struct DSReaderHelperConnector {
     let calibreServerService: CalibreServerService
@@ -79,22 +78,6 @@ struct DSReaderHelperConnector {
         return urlComponents
     }
 
-    func refreshConfiguration() -> AnyPublisher<(id: String, port: Int, data: Data), URLError>? {
-        guard let url = endpointConfiguration()?.url else { return nil }
-        return Deferred {
-            Future { promise in
-                Task {
-                    do {
-                        promise(.success(try await self.refreshConfiguration(from: url)))
-                    } catch {
-                        promise(.failure(error as? URLError ?? URLError(.unknown)))
-                    }
-                }
-            }
-        }
-        .eraseToAnyPublisher()
-    }
-
     func refreshConfiguration() async throws -> (id: String, port: Int, data: Data) {
         guard let url = endpointConfiguration()?.url else {
             throw URLError(.badURL)
@@ -104,7 +87,8 @@ struct DSReaderHelperConnector {
     }
 
     private func refreshConfiguration(from url: URL) async throws -> (id: String, port: Int, data: Data) {
-        let (data, _) = try await urlSession.data(from: url)
+        let request = URLRequest(url: url)
+        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
         return (id: server.uuid.uuidString, port: dsreaderHelperServer.port, data: data)
     }
 
@@ -113,7 +97,8 @@ struct DSReaderHelperConnector {
             throw URLError(.badURL)
         }
 
-        let (data, _) = try await urlSession.data(from: url)
+        let request = URLRequest(url: url)
+        let (data, _) = try await calibreServerService.validatedData(for: request, server: server)
         let config = try JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
 
         return (config, data)

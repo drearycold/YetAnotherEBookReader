@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 extension CalibreServerService {
     func getProtectionSpace(server: CalibreServer, port: Int?) -> URLProtectionSpace? {
@@ -96,17 +95,6 @@ extension CalibreServerService {
         } catch {
             return task
         }
-    }
-
-    func probeServerReachabilityNew(serverInfo: CalibreServerInfo) -> AnyPublisher<CalibreServerInfo, Never> {
-        Deferred {
-            Future { promise in
-                Task {
-                    promise(.success(await self.probeServerReachability(serverInfo: serverInfo)))
-                }
-            }
-        }
-        .eraseToAnyPublisher()
     }
 
     func buildProbeLibraryTask(library: CalibreLibrary) -> CalibreLibraryProbeTask? {

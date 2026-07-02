@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 extension CalibreServerService {
     func getMetadata(oldbook: CalibreBook) async throws -> CalibreBook {
@@ -319,50 +318,13 @@ extension CalibreServerService {
         )
     }
 
-    func getMetadata(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, CalibreBookEntry), CalibreAPIError> {
-        Deferred {
-            Future { promise in
-                Task {
-                    do {
-                        promise(.success(try await self.getMetadata(task: task)))
-                    } catch {
-                        promise(.failure(CalibreAPIError(error: error)))
-                    }
-                }
-            }
-        }
-        .eraseToAnyPublisher()
-    }
-
     func getMetadata(task: CalibreBookTask) async throws -> (CalibreBookTask, CalibreBookEntry) {
         let (data, _) = try await validatedData(from: task.url, server: task.server)
         return (task, try decodePayload(CalibreBookEntry.self, from: data))
     }
 
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), CalibreAPIError> {
-        Deferred {
-            Future { promise in
-                Task {
-                    do {
-                        promise(.success(try await self.getMetadataNew(task: task)))
-                    } catch {
-                        promise(.failure(CalibreAPIError(error: error)))
-                    }
-                }
-            }
-        }
-        .eraseToAnyPublisher()
-    }
-
     func getMetadataNew(task: CalibreBookTask) async throws -> (CalibreBookTask, Data, URLResponse) {
         let (data, response) = try await validatedData(from: task.url, server: task.server)
         return (task, data, response as URLResponse)
-    }
-
-    @available(*, deprecated, message: "Use CalibreAPIError publisher version instead")
-    func getMetadataNew(task: CalibreBookTask) -> AnyPublisher<(CalibreBookTask, Data, URLResponse), URLError> {
-        getMetadataNew(task: task)
-            .mapError(\.asURLError)
-            .eraseToAnyPublisher()
     }
 }

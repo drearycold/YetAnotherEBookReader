@@ -299,7 +299,7 @@ class CalibreLibraryManager: ObservableObject {
                           let calibreServerService = self.container?.calibreServerService else { return }
 
                     do {
-                        let syncResult = try await calibreServerService.syncLibraryPublisherResult(
+                        let syncResult = try await calibreServerService.syncLegacyLibraryResult(
                             resultPrev: .init(request: request, result: [:]),
                             order: "",
                             filter: "",
