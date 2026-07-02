@@ -76,6 +76,7 @@ final class BookDownloadManagerTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testRequestDownload_addsToActiveDownloads() throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 998, library: library)
@@ -120,6 +121,28 @@ final class BookDownloadManagerTests: XCTestCase {
         manager.bookFormatDownloadSubject.send((book: book, format: .EPUB))
 
         waitForExpectations(timeout: 1.0)
+    }
+
+    func testManualBookDownloadedSubjectDoesNotPublishCalibreUpdate() async throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 996, library: library)
+        let invertedExpectation = expectation(description: "Manual legacy download subject does not publish calibre update")
+        invertedExpectation.isInverted = true
+
+        let task = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                if case .book = signal {
+                    invertedExpectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        await Task.yield()
+        manager.bookDownloadedSubject.send(book)
+
+        await fulfillment(of: [invertedExpectation], timeout: 0.2)
+        task.cancel()
     }
     
     func testCancelDownload_removesFromActive() throws {
@@ -173,7 +196,7 @@ final class BookDownloadManagerTests: XCTestCase {
         waitForExpectations(timeout: 1.0)
     }
     
-    func testDownloadCompletion_updatesState() throws {
+    func testDownloadCompletion_updatesState() async throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         var book = CalibreBook(id: 999, library: library)
         book.formats[Format.EPUB.rawValue] = FormatInfo(selected: nil, filename: "test.epub", serverSize: 1000, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date(), manifest: nil)
@@ -202,13 +225,26 @@ final class BookDownloadManagerTests: XCTestCase {
         
         let delegate = BookFormatDownloadDelegate(download: download, manager: manager)
         
-        let expectation = self.expectation(description: "Download completion triggered")
+        let legacyExpectation = self.expectation(description: "Legacy download completion triggered")
+        let calibreUpdateExpectation = self.expectation(description: "Download completion publishes calibre update")
         var bookDownloaded: CalibreBook?
+        var calibreUpdatedBook: CalibreBook?
         
         manager.bookDownloadedSubject.sink { downloadedBook in
             bookDownloaded = downloadedBook
-            expectation.fulfill()
+            legacyExpectation.fulfill()
         }.store(in: &cancellables)
+
+        let calibreUpdateTask = Task { @MainActor in
+            for await signal in container.calibreUpdates() {
+                if case .book(let book) = signal {
+                    calibreUpdatedBook = book
+                    calibreUpdateExpectation.fulfill()
+                    break
+                }
+            }
+        }
+        await Task.yield()
         
         // 1. Simulate file finished downloading
         delegate.urlSession(URLSession.shared, downloadTask: URLSession.shared.downloadTask(with: url), didFinishDownloadingTo: tempFileUrl)
@@ -227,9 +263,11 @@ final class BookDownloadManagerTests: XCTestCase {
         let stubTask = StubTask(response: httpResponse)
         delegate.urlSession(URLSession.shared, task: stubTask, didCompleteWithError: nil)
         
-        waitForExpectations(timeout: 2.0)
+        await fulfillment(of: [legacyExpectation, calibreUpdateExpectation], timeout: 2.0)
+        calibreUpdateTask.cancel()
         
         XCTAssertEqual(bookDownloaded?.id, 999)
+        XCTAssertEqual(calibreUpdatedBook?.id, 999)
         let updatedDownload = manager.activeDownloads[url]
         XCTAssertEqual(updatedDownload?.isDownloading, false)
         XCTAssertTrue(FileManager.default.fileExists(atPath: savedUrl.path))

@@ -62,12 +62,15 @@ class BookDownloadManager: ObservableObject {
         bookFormatDownloadSubject
             .receive(on: DispatchQueue.main)
             .sink { [weak self] request in
-                _ = self?.requestDownload(book: request.book, format: request.format)
+                Task { @MainActor in
+                    _ = self?.requestDownload(book: request.book, format: request.format)
+                }
             }
             .store(in: &cancellables)
     }
 
     @discardableResult
+    @MainActor
     func requestDownload(book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
         startDownloadNew(book, format: format, overwrite: overwrite)
     }
@@ -324,6 +327,9 @@ class BookFormatDownloadDelegate: CalibreServerTaskDelegate, URLSessionDownloadD
                 manager.activeDownloads[self.download.sourceURL]?.isDownloading = false
                 manager.activeDownloads[self.download.sourceURL]?.resumeData = nil
 
+                MainActor.assumeIsolated {
+                    container.publishCalibreUpdate(.book(self.download.book))
+                }
                 manager.bookDownloadedSubject.send(self.download.book)
 
                 guard let request = task.originalRequest else { return }

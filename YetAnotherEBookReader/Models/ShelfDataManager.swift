@@ -317,6 +317,41 @@ private actor RecentShelfBuilder {
 }
 
 @MainActor
+private final class ShelfSnapshotBroadcaster<Snapshot: Equatable> {
+    private var continuations = [UUID: AsyncStream<Snapshot>.Continuation]()
+    private var lastPublishedSnapshot: Snapshot?
+
+    func stream(initialSnapshot: Snapshot) -> AsyncStream<Snapshot> {
+        let id = UUID()
+        lastPublishedSnapshot = initialSnapshot
+
+        return AsyncStream { [weak self] continuation in
+            continuation.yield(initialSnapshot)
+            self?.continuations[id] = continuation
+
+            continuation.onTermination = { [weak self] _ in
+                Task { @MainActor in
+                    self?.continuations.removeValue(forKey: id)
+                }
+            }
+        }
+    }
+
+    func publish(_ snapshot: Snapshot) {
+        guard lastPublishedSnapshot != snapshot else { return }
+        lastPublishedSnapshot = snapshot
+        for continuation in continuations.values {
+            continuation.yield(snapshot)
+        }
+    }
+
+    func finish() {
+        continuations.values.forEach { $0.finish() }
+        continuations.removeAll()
+    }
+}
+
+@MainActor
 class YabrShelfDataModel: ObservableObject {
 
     struct RecentShelfSnapshot: Equatable, Sendable {
@@ -371,10 +406,8 @@ class YabrShelfDataModel: ObservableObject {
     private var initialSnapshotTask: Task<Void, Never>?
     private var recentRebuildTask: Task<Void, Never>?
     private var categorySearchTasks = [String: Task<Void, Never>]()
-    private var recentSnapshotContinuations = [UUID: AsyncStream<RecentShelfSnapshot>.Continuation]()
-    private var snapshotContinuations = [UUID: AsyncStream<DiscoverShelfSnapshot>.Continuation]()
-    private var lastPublishedRecentSnapshot: RecentShelfSnapshot?
-    private var lastPublishedSnapshot: DiscoverShelfSnapshot?
+    private let recentSnapshotBroadcaster = ShelfSnapshotBroadcaster<RecentShelfSnapshot>()
+    private let discoverSnapshotBroadcaster = ShelfSnapshotBroadcaster<DiscoverShelfSnapshot>()
     private var isFirstRecentShelfPublish = true
 
     @Published var isInitialLoadComplete = false
@@ -409,40 +442,18 @@ class YabrShelfDataModel: ObservableObject {
         initialSnapshotTask?.cancel()
         recentRebuildTask?.cancel()
         categorySearchTasks.values.forEach { $0.cancel() }
-        recentSnapshotContinuations.values.forEach { $0.finish() }
-        snapshotContinuations.values.forEach { $0.finish() }
+        MainActor.assumeIsolated {
+            recentSnapshotBroadcaster.finish()
+            discoverSnapshotBroadcaster.finish()
+        }
     }
 
     func recentSnapshots() -> AsyncStream<RecentShelfSnapshot> {
-        let id = UUID()
-        let initialSnapshot = currentRecentSnapshot()
-
-        return AsyncStream { [weak self] continuation in
-            continuation.yield(initialSnapshot)
-            self?.recentSnapshotContinuations[id] = continuation
-
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in
-                    self?.recentSnapshotContinuations.removeValue(forKey: id)
-                }
-            }
-        }
+        recentSnapshotBroadcaster.stream(initialSnapshot: currentRecentSnapshot())
     }
 
     func snapshots() -> AsyncStream<DiscoverShelfSnapshot> {
-        let id = UUID()
-        let initialSnapshot = currentSnapshot()
-
-        return AsyncStream { [weak self] continuation in
-            continuation.yield(initialSnapshot)
-            self?.snapshotContinuations[id] = continuation
-
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in
-                    self?.snapshotContinuations.removeValue(forKey: id)
-                }
-            }
-        }
+        discoverSnapshotBroadcaster.stream(initialSnapshot: currentSnapshot())
     }
 
     private func startEventTask() {
@@ -687,27 +698,17 @@ class YabrShelfDataModel: ObservableObject {
 
     private func publishRecentShelfSnapshot(sendLegacySubject: Bool) {
         let snapshot = currentRecentSnapshot()
-        if lastPublishedRecentSnapshot != snapshot {
-            lastPublishedRecentSnapshot = snapshot
-            for continuation in recentSnapshotContinuations.values {
-                continuation.yield(snapshot)
-            }
-        }
+        recentSnapshotBroadcaster.publish(snapshot)
         if sendLegacySubject {
-            container.recentShelfItemsSubject.send(snapshot.books)
+            container.publishLegacyRecentShelfItems(snapshot.books)
         }
     }
 
     private func publishDiscoverShelfSnapshot(sendLegacySubject: Bool) {
         let snapshot = currentSnapshot()
-        if lastPublishedSnapshot != snapshot {
-            lastPublishedSnapshot = snapshot
-            for continuation in snapshotContinuations.values {
-                continuation.yield(snapshot)
-            }
-        }
+        discoverSnapshotBroadcaster.publish(snapshot)
         if sendLegacySubject {
-            container.discoverShelfItemsSubject.send(snapshot.sections)
+            container.publishLegacyDiscoverShelfItems(snapshot.sections)
         }
     }
 

@@ -635,6 +635,29 @@ final class V2MigrationDependencyTests: XCTestCase {
         XCTAssertEqual(snapshots.last?.isInitialLoadComplete, true)
     }
 
+    func testShelfDataModelSnapshotsDoNotYieldDuplicateSnapshots() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        var snapshots = [YabrShelfDataModel.DiscoverShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.snapshots() {
+                snapshots.append(snapshot)
+            }
+        }
+
+        await waitForSnapshotCount(1, in: { snapshots.count })
+        shelfDataModel.setDiscoverShelfSnapshotForTesting(
+            .init(sections: [], isInitialLoadComplete: false),
+            sendLegacySubject: false
+        )
+        try await Task.sleep(nanoseconds: 100_000_000)
+        task.cancel()
+
+        XCTAssertEqual(snapshots.count, 1)
+    }
+
     func testShelfDataModelSnapshotTerminationStopsUpdates() async throws {
         let container = makeAppContainer()
         let unifiedSearchService = try await makeUnifiedSearchService(container: container)
@@ -725,6 +748,30 @@ final class V2MigrationDependencyTests: XCTestCase {
         task.cancel()
 
         XCTAssertEqual(snapshots.last?.books, [item])
+    }
+
+    func testShelfDataModelRecentSnapshotsDoNotYieldDuplicateSnapshots() async throws {
+        let container = makeAppContainer()
+        let unifiedSearchService = try await makeUnifiedSearchService(container: container)
+        container.bookManager.isShelfLoaded = false
+        let shelfDataModel = YabrShelfDataModel(unifiedSearchService: unifiedSearchService, container: container)
+
+        var snapshots = [YabrShelfDataModel.RecentShelfSnapshot]()
+        let task = Task { @MainActor in
+            for await snapshot in shelfDataModel.recentSnapshots() {
+                snapshots.append(snapshot)
+            }
+        }
+
+        await waitForSnapshotCount(1, in: { snapshots.count })
+        shelfDataModel.setRecentShelfSnapshotForTesting(
+            .init(books: []),
+            sendLegacySubject: false
+        )
+        try await Task.sleep(nanoseconds: 100_000_000)
+        task.cancel()
+
+        XCTAssertEqual(snapshots.count, 1)
     }
 
     func testShelfDataModelRecentSnapshotTerminationStopsUpdates() async throws {

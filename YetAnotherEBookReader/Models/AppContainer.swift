@@ -222,6 +222,16 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         }
     }
 
+    @MainActor
+    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem]) {
+        recentShelfItemsSubject.send(books)
+    }
+
+    @MainActor
+    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem]) {
+        discoverShelfItemsSubject.send(sections)
+    }
+
     init(
         mock: Bool = false,
         testRealmEnvironment: TestRealmEnvironment? = nil
@@ -337,12 +347,6 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     /// `init` body stays focused on `objectWillChange` plumbing).
     private func wireCrossManagerSubscriptions() {
         libraryManager.registerProbeLibraryLastModifiedCancellable()
-
-        downloadManager.bookDownloadedSubject.sink { [weak self] book in
-            Task { @MainActor in
-                self?.publishCalibreUpdate(.book(book))
-            }
-        }.store(in: &calibreCancellables)
     }
 
     /// Forward each manager's `objectWillChange` to our own so SwiftUI views

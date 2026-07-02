@@ -101,6 +101,12 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     @MainActor
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
 
+    @MainActor
+    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem])
+
+    @MainActor
+    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem])
+
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which
     // take a weak `AppContainerProtocol`) can be reused by both the legacy
