@@ -9,10 +9,9 @@ import SwiftUI
 import KingfisherSwiftUI
 
 struct LibraryInfoBookRow: View {
-    @EnvironmentObject var container: AppContainer
-    
     let book: CalibreBook
     let index: Int
+    let activeDownload: BookFormatDownload?
     let onAppearAction: (() -> Void)?
     
     var body: some View {
@@ -39,7 +38,7 @@ struct LibraryInfoBookRow: View {
                                 .opacity(0.8)
                         }
                         
-                        if let download = container.downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.isActive } ).first?.value {
+                        if let download = activeDownload {
                             ZStack {
                                 Rectangle()
                                     .frame(width: 64, height: 64, alignment: .center)

@@ -114,7 +114,7 @@ final class RecentShelfViewModel: ObservableObject {
         if readerInfo.missing {
             if let activeDownload = container.downloadManager.activeDownloads.first(where: {
                 $0.value.book == book && $0.value.format == readerInfo.format
-            })?.value, activeDownload.isDownloading {
+            })?.value, activeDownload.isActive {
                 activeAlert = .downloadingFormat(book: book, format: readerInfo.format)
             } else {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)

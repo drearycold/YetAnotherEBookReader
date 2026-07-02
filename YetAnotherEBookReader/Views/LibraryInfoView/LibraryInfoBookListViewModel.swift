@@ -11,12 +11,35 @@ import OSLog
 class LibraryInfoBookListViewModel: ObservableObject {
     @Published var selectedBookIds = Set<String>()
     @Published var downloadBookList = [CalibreBook]()
+    @Published private(set) var activeDownloads: [URL: BookFormatDownload] = [:]
     
     @Published var searchString = ""
     
     @Published var batchDownloadSheetPresenting = false
     @Published var booksListInfoPresenting = false
     @Published var searchHistoryPresenting = false
+    private var activeDownloadsTask: Task<Void, Never>?
+
+    deinit {
+        activeDownloadsTask?.cancel()
+    }
+
+    func bindDownloadSnapshots(container: AppContainer) {
+        activeDownloadsTask?.cancel()
+        activeDownloadsTask = Task { [weak self, weak container] in
+            guard let container else { return }
+            for await snapshot in container.downloadManager.downloadSnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.activeDownloads = snapshot
+            }
+        }
+    }
+
+    func activeDownload(for book: CalibreBook) -> BookFormatDownload? {
+        activeDownloads.values.first { download in
+            download.book.id == book.id && download.isActive
+        }
+    }
     
     func syncDraftFromCriteria(_ criteriaSearchString: String) {
         self.searchString = criteriaSearchString

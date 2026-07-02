@@ -77,7 +77,7 @@ struct LibraryInfoBookListContent: View {
                     tag: book.inShelfId,
                     selection: $container.bookManager.selectedBookId
                 ) {
-                    LibraryInfoBookRow(book: book, index: index) {
+                    LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                         onRowAppear(index: index)
                     }
                 }
@@ -92,7 +92,7 @@ struct LibraryInfoBookListContent: View {
                     )
                 }
             } else {
-                LibraryInfoBookRow(book: book, index: index) {
+                LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                     onRowAppear(index: index)
                 }
                 .contextMenu {

@@ -88,6 +88,46 @@ import Combine
             let _ = viewModel.activeAlert
         }
     }
+
+    func testTapBookTreatsPausedDownloadAsActive() throws {
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.calibreLibraries.first?.value)
+        var book = CalibreBook(id: 4321, library: library)
+        book.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "paused-shelf.epub",
+            serverSize: 100,
+            serverMTime: Date(),
+            cached: false,
+            cacheSize: 0,
+            cacheMTime: Date.distantPast
+        )
+        if let savedURL = getSavedUrl(book: book, format: .EPUB) {
+            try? FileManager.default.removeItem(at: savedURL)
+        }
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+
+        let sourceURL = URL(string: "http://localhost/get/EPUB/4321/library")!
+        mockAppContainer.downloadManager.activeDownloads[sourceURL] = BookFormatDownload(
+            isDownloading: false,
+            isPaused: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: book,
+            format: .EPUB,
+            startDatetime: Date(),
+            sourceURL: sourceURL,
+            savedURL: URL(fileURLWithPath: "/tmp/paused-shelf.epub"),
+            modificationDate: Date()
+        )
+
+        viewModel.tapBook(bookId: book.inShelfId)
+
+        guard case .downloadingFormat(let alertBook, let alertFormat) = viewModel.activeAlert else {
+            return XCTFail("Expected paused active download to show downloading alert")
+        }
+        XCTAssertEqual(alertBook.id, book.id)
+        XCTAssertEqual(alertFormat, .EPUB)
+    }
     
     func testRefreshBookFormats() throws {
         if let mockBook = mockAppContainer.bookManager.readingBook {

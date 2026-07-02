@@ -38,6 +38,9 @@ struct LibraryInfoBookListView: View {
                 }
             }
         }
+        .onAppear {
+            listViewModel.bindDownloadSnapshots(container: container)
+        }
     }
     
     @ViewBuilder
