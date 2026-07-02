@@ -169,7 +169,7 @@ class BookDetailViewModel: ObservableObject {
         guard let container = container else { return }
         if book.inShelf {
             container.bookManager.clearCache(inShelfId: book.inShelfId)
-        } else if container.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty {
+        } else if container.downloadManager.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty {
             if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
                 container.bookManager.addToShelf(book: book, formats: [downloadFormat])
             } else {
@@ -180,7 +180,7 @@ class BookDetailViewModel: ObservableObject {
 
     func readBook(book: CalibreBook) {
         guard let container = container else { return }
-        guard container.downloadManager.activeDownloads.filter({ $1.isDownloading && $1.book.id == book.id }).isEmpty else { return }
+        guard container.downloadManager.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty else { return }
 
         if book.inShelf {
             container.sessionManager.readerInfo = container.sessionManager.prepareBookReading(book: book)
@@ -196,7 +196,7 @@ class BookDetailViewModel: ObservableObject {
     func cacheFormat(book: CalibreBook, format: Format) {
         guard let container = container else { return }
         if book.inShelf {
-            switch container.downloadManager.startDownloadNew(book, format: format, overwrite: true) {
+            switch container.downloadManager.startDownload(book, format: format, overwrite: true) {
             case .success:
                 break
             case .failure(let error):
@@ -359,13 +359,13 @@ class BookDetailViewModel: ObservableObject {
     
     func isFormatDownloading(bookId: Int32, format: Format) -> Bool {
         return activeDownloads.values.contains { download in
-            download.book.id == bookId && download.format == format && (download.isDownloading || download.resumeData != nil)
+            download.book.id == bookId && download.format == format && download.isActive
         }
     }
     
     func getActiveDownload(bookId: Int32, format: Format) -> BookFormatDownload? {
         return activeDownloads.values.first { download in
-            download.book.id == bookId && download.format == format && (download.isDownloading || download.resumeData != nil)
+            download.book.id == bookId && download.format == format && download.isActive
         }
     }
     

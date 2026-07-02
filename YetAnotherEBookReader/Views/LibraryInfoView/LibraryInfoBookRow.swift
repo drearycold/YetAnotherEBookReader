@@ -39,7 +39,7 @@ struct LibraryInfoBookRow: View {
                                 .opacity(0.8)
                         }
                         
-                        if let download = container.downloadManager.activeDownloads.filter( { $1.book.id == book.id && ($1.isDownloading || $1.resumeData != nil) } ).first?.value {
+                        if let download = container.downloadManager.activeDownloads.filter( { $1.book.id == book.id && $1.isActive } ).first?.value {
                             ZStack {
                                 Rectangle()
                                     .frame(width: 64, height: 64, alignment: .center)

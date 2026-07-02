@@ -53,7 +53,7 @@ final class BookDownloadManagerTests: XCTestCase {
         let book = try makeDownloadableBook(id: 999)
         removeSavedFile(for: book, format: .EPUB)
 
-        let result = manager.startDownloadNew(book, format: .EPUB, overwrite: true)
+        let result = manager.startDownload(book, format: .EPUB, overwrite: true)
 
         switch result {
         case .success:
@@ -87,7 +87,7 @@ final class BookDownloadManagerTests: XCTestCase {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let book = CalibreBook(id: 1010, library: library)
 
-        let result = manager.startDownloadNew(book, format: .EPUB)
+        let result = manager.startDownload(book, format: .EPUB)
 
         XCTAssertEqual(downloadStartError(from: result), .missingFormatInfo)
         XCTAssertTrue(manager.activeDownloads.isEmpty)
@@ -100,7 +100,7 @@ final class BookDownloadManagerTests: XCTestCase {
         }
         try Data("existing".utf8).write(to: savedURL)
 
-        let result = manager.startDownloadNew(book, format: .EPUB, overwrite: false)
+        let result = manager.startDownload(book, format: .EPUB, overwrite: false)
 
         XCTAssertEqual(downloadStartError(from: result), .fileAlreadyExists)
         XCTAssertTrue(manager.activeDownloads.isEmpty)
@@ -111,7 +111,7 @@ final class BookDownloadManagerTests: XCTestCase {
         let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
         manager.activeDownloads[download.sourceURL] = download
 
-        let result = manager.startDownloadNew(book, format: .EPUB, overwrite: false)
+        let result = manager.startDownload(book, format: .EPUB, overwrite: false)
 
         XCTAssertEqual(downloadStartError(from: result), .downloadAlreadyActive)
         XCTAssertEqual(manager.activeDownloads.count, 1)
@@ -126,7 +126,7 @@ final class BookDownloadManagerTests: XCTestCase {
         let initial = await iterator.next()
         XCTAssertEqual(initial?.count, 0)
 
-        let result = manager.startDownloadNew(book, format: .EPUB, overwrite: true)
+        let result = manager.startDownload(book, format: .EPUB, overwrite: true)
         guard case .success = result else {
             XCTFail("Expected download start to succeed")
             return
@@ -186,6 +186,34 @@ final class BookDownloadManagerTests: XCTestCase {
 
         let snapshot = await snapshotTask.value
         XCTAssertEqual(snapshot?[download.sourceURL]?.resumeData, resumeData)
+        XCTAssertEqual(snapshot?[download.sourceURL]?.isPausing, false)
+        XCTAssertEqual(snapshot?[download.sourceURL]?.isPaused, true)
+    }
+
+    func testPauseDownloadImmediatelyPublishesPausedActiveState() async throws {
+        let book = try makeDownloadableBook(id: 1006, filenamePrefix: "pause-immediate")
+        let downloadTask = StubDownloadTask(
+            request: URLRequest(url: try downloadURL(for: book, format: .EPUB)),
+            resumeData: Data("delayed-resume".utf8),
+            completesPauseImmediately: false
+        )
+        var download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        download.downloadTask = downloadTask
+        manager.activeDownloads[download.sourceURL] = download
+
+        let snapshotTask = snapshotExpectation { snapshots in
+            snapshots[download.sourceURL]?.isDownloading == false &&
+            snapshots[download.sourceURL]?.isPausing == true &&
+            snapshots[download.sourceURL]?.isPaused == true &&
+            snapshots[download.sourceURL]?.isActive == true
+        }
+
+        manager.pauseDownload(book, format: .EPUB)
+
+        let snapshot = await snapshotTask.value
+        XCTAssertNil(snapshot?[download.sourceURL]?.resumeData)
+
+        downloadTask.completePause()
     }
 
     func testPauseDownloadDoesNothingWhenNoActiveDownload() throws {
@@ -199,15 +227,52 @@ final class BookDownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.resumeData, Data("existing".utf8))
     }
 
+    func testPauseDownloadWithNilResumeDataKeepsPausedActiveState() async throws {
+        let book = try makeDownloadableBook(id: 1007, filenamePrefix: "pause-nil")
+        var download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: true)
+        download.downloadTask = StubDownloadTask(request: URLRequest(url: download.sourceURL), resumeData: nil)
+        manager.activeDownloads[download.sourceURL] = download
+
+        let snapshotTask = snapshotExpectation { snapshots in
+            snapshots[download.sourceURL]?.isDownloading == false &&
+            snapshots[download.sourceURL]?.isPausing == false &&
+            snapshots[download.sourceURL]?.isPaused == true &&
+            snapshots[download.sourceURL]?.resumeData == nil &&
+            snapshots[download.sourceURL]?.isActive == true
+        }
+
+        manager.pauseDownload(book, format: .EPUB)
+
+        let snapshot = await snapshotTask.value
+        XCTAssertEqual(snapshot?[download.sourceURL]?.book.id, 1007)
+    }
+
     func testResumeDownloadRestartsPausedDownloadAndClearsResumeData() throws {
         let book = try makeDownloadableBook(id: 1008)
-        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false, resumeData: validResumeData(for: book, format: .EPUB))
+        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false, isPaused: true, resumeData: validResumeData(for: book, format: .EPUB))
         manager.activeDownloads[download.sourceURL] = download
 
         let result = manager.resumeDownload(book, format: .EPUB)
 
         XCTAssertTrue(result)
         XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isDownloading, true)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isPaused, false)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isPausing, false)
+        XCTAssertNil(manager.activeDownloads[download.sourceURL]?.resumeData)
+        XCTAssertNotNil(manager.activeDownloads[download.sourceURL]?.downloadTask)
+    }
+
+    func testResumeDownloadRestartsPausedDownloadWithoutResumeDataFromSourceURL() throws {
+        let book = try makeDownloadableBook(id: 1008, filenamePrefix: "resume-source")
+        let download = try makeActiveDownload(book: book, format: .EPUB, isDownloading: false, isPaused: true, resumeData: nil)
+        manager.activeDownloads[download.sourceURL] = download
+
+        let result = manager.resumeDownload(book, format: .EPUB)
+
+        XCTAssertTrue(result)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isDownloading, true)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isPaused, false)
+        XCTAssertEqual(manager.activeDownloads[download.sourceURL]?.isPausing, false)
         XCTAssertNil(manager.activeDownloads[download.sourceURL]?.resumeData)
         XCTAssertNotNil(manager.activeDownloads[download.sourceURL]?.downloadTask)
     }
@@ -525,6 +590,8 @@ final class BookDownloadManagerTests: XCTestCase {
         book: CalibreBook,
         format: Format,
         isDownloading: Bool,
+        isPaused: Bool = false,
+        isPausing: Bool = false,
         progress: Float = 0.0,
         resumeData: Data? = nil
     ) throws -> BookFormatDownload {
@@ -532,6 +599,8 @@ final class BookDownloadManagerTests: XCTestCase {
         let savedURL = try XCTUnwrap(getSavedUrl(book: book, format: format))
         return BookFormatDownload(
             isDownloading: isDownloading,
+            isPaused: isPaused,
+            isPausing: isPausing,
             progress: progress,
             resumeData: resumeData,
             book: book,
@@ -631,18 +700,30 @@ private final class StubDownloadTask: URLSessionDownloadTask, @unchecked Sendabl
     private let stubRequest: URLRequest?
     private let stubResponse: URLResponse?
     private let stubResumeData: Data?
+    private let completesPauseImmediately: Bool
+    private var pauseCompletionHandler: ((Data?) -> Void)?
 
     override var originalRequest: URLRequest? { stubRequest }
     override var response: URLResponse? { stubResponse }
 
-    init(request: URLRequest?, response: URLResponse? = nil, resumeData: Data? = nil) {
+    init(request: URLRequest?, response: URLResponse? = nil, resumeData: Data? = nil, completesPauseImmediately: Bool = true) {
         self.stubRequest = request
         self.stubResponse = response
         self.stubResumeData = resumeData
+        self.completesPauseImmediately = completesPauseImmediately
         super.init()
     }
 
     override func cancel(byProducingResumeData completionHandler: @escaping (Data?) -> Void) {
-        completionHandler(stubResumeData)
+        if completesPauseImmediately {
+            completionHandler(stubResumeData)
+        } else {
+            pauseCompletionHandler = completionHandler
+        }
+    }
+
+    func completePause() {
+        pauseCompletionHandler?(stubResumeData)
+        pauseCompletionHandler = nil
     }
 }

@@ -501,7 +501,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testGetMetadataNewAsyncSuccess() async throws {
+    func testGetMetadataDataAsyncSuccess() async throws {
         let task = CalibreBookTask(
             server: server,
             bookId: 123,
@@ -521,11 +521,11 @@ final class CalibreServerServiceTests: XCTestCase {
             return (response, mockData)
         }
 
-        let (_, receivedData, _) = try await service.getMetadataNew(task: task)
+        let (_, receivedData, _) = try await service.getMetadataData(task: task)
         XCTAssertEqual(receivedData, mockData)
     }
 
-    func testGetMetadataNewAsyncFailure() async throws {
+    func testGetMetadataDataAsyncFailure() async throws {
         let task = CalibreBookTask(
             server: server,
             bookId: 123,
@@ -544,7 +544,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
 
         do {
-            _ = try await service.getMetadataNew(task: task)
+            _ = try await service.getMetadataData(task: task)
             XCTFail("Expected failure, but received value")
         } catch let receivedError as CalibreAPIError {
             guard case .httpStatus(let statusCode, _) = receivedError else {
@@ -939,13 +939,13 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testStartDownloadNewFailureMissingFormatInfo() async throws {
+    func testStartDownloadFailureMissingFormatInfo() async throws {
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]
         book.formats = [:] // no EPUB format
 
-        let result = container.downloadManager.startDownloadNew(book, format: .EPUB)
+        let result = container.downloadManager.startDownload(book, format: .EPUB)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.missingFormatInfo)
         } else {
@@ -953,7 +953,7 @@ final class CalibreServerServiceTests: XCTestCase {
         }
     }
 
-    func testStartDownloadNewFailureFileAlreadyExists() async throws {
+    func testStartDownloadFailureFileAlreadyExists() async throws {
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]
@@ -971,7 +971,7 @@ final class CalibreServerServiceTests: XCTestCase {
             try? fileManager.removeItem(at: savedURL)
         }
 
-        let result = container.downloadManager.startDownloadNew(book, format: .EPUB, overwrite: false)
+        let result = container.downloadManager.startDownload(book, format: .EPUB, overwrite: false)
         if case .failure(let error) = result {
             XCTAssertEqual(error, DownloadStartError.fileAlreadyExists)
         } else {

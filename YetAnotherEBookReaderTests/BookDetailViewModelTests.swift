@@ -444,6 +444,21 @@ class BookDetailViewModelTests: XCTestCase {
         viewModel.activeDownloads[download.savedURL] = download
         XCTAssertTrue(viewModel.isFormatDownloading(bookId: 123, format: format))
         XCTAssertFalse(viewModel.isFormatDownloading(bookId: 456, format: format))
+
+        let pausedDownload = BookFormatDownload(
+            isDownloading: false,
+            isPaused: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: mockCalibreBook,
+            format: format,
+            startDatetime: Date(),
+            sourceURL: URL(string: "http://localhost/paused")!,
+            savedURL: URL(string: "file:///local-paused")!,
+            modificationDate: Date()
+        )
+        viewModel.activeDownloads = [pausedDownload.savedURL: pausedDownload]
+        XCTAssertTrue(viewModel.isFormatDownloading(bookId: 123, format: format))
         
         viewModel.activeDownloads.removeAll()
     }
@@ -469,6 +484,23 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertNotNil(retrieved)
         XCTAssertEqual(retrieved?.book.id, 123)
         XCTAssertEqual(retrieved?.format, format)
+
+        let pausedDownload = BookFormatDownload(
+            isDownloading: false,
+            isPaused: true,
+            progress: 0.5,
+            resumeData: nil,
+            book: mockCalibreBook,
+            format: format,
+            startDatetime: Date(),
+            sourceURL: URL(string: "http://localhost/paused")!,
+            savedURL: URL(string: "file:///local-paused")!,
+            modificationDate: Date()
+        )
+        viewModel.activeDownloads = [pausedDownload.savedURL: pausedDownload]
+        let pausedRetrieved = viewModel.getActiveDownload(bookId: 123, format: format)
+        XCTAssertNotNil(pausedRetrieved)
+        XCTAssertEqual(pausedRetrieved?.isPaused, true)
         
         viewModel.activeDownloads.removeAll()
     }

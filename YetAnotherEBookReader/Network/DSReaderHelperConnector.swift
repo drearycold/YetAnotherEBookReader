@@ -146,42 +146,4 @@ struct DSReaderHelperConnector {
         _ = try await calibreServerService.validatedData(for: request, server: server)
     }
 
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func addToShelf(goodreads_id: String, shelfName: String) -> Bool {
-        Task {
-            do {
-                try await addToShelf(goodreads_id: goodreads_id, shelfName: shelfName)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
-
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func removeFromShelf(goodreads_id: String, shelfName: String) -> Bool {
-        Task {
-            do {
-                try await removeFromShelf(goodreads_id: goodreads_id, shelfName: shelfName)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
-
-    @available(*, deprecated, message: "Use async throws version instead")
-    @discardableResult
-    func updateReadingProgress(goodreads_id: String, progress: Double) -> Bool {
-        Task {
-            do {
-                try await updateReadingProgress(goodreads_id: goodreads_id, progress: progress)
-            } catch {
-                // Captured error
-            }
-        }
-        return true
-    }
 }
