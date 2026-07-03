@@ -194,7 +194,7 @@ class BookDetailViewModel: ObservableObject {
         guard container.downloadManager.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty else { return }
 
         if book.inShelf {
-            container.sessionManager.readerInfo = container.sessionManager.prepareBookReading(book: book)
+            prepareReadingSession(for: book)
         } else {
             if let downloadFormat = container.sessionManager.getPreferredFormat(for: book) {
                 container.bookManager.addToShelf(book: book, formats: [downloadFormat])
@@ -314,7 +314,11 @@ class BookDetailViewModel: ObservableObject {
     }
     
     func handlePreviewDismiss(book: CalibreBook) {
-        container?.sessionManager.readerInfo = container?.sessionManager.prepareBookReading(book: book)
+        prepareReadingSession(for: book)
+    }
+
+    private func prepareReadingSession(for book: CalibreBook) {
+        container?.bookManager.readingBook = book
     }
 
     func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {

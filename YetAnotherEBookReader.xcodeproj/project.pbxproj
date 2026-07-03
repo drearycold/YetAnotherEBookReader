@@ -356,6 +356,10 @@
 		E71F35A42FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */; };
 		E71F35A62FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
 		E71F35A72FE928AE007AB0B1 /* AnnotationRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */; };
+		E71F35D12FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
+		E71F35D22FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */; };
+		E71F35D42FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
+		E71F35D52FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */; };
 		E71F35A92FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
 		E71F35AA2FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */; };
 		E71F35AC2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */; };
@@ -707,6 +711,8 @@
 		E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadingPositionRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationRealmMappers.swift; sourceTree = "<group>"; };
+		E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceValue.swift; sourceTree = "<group>"; };
+		E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumPreferenceRealmMappers.swift; sourceTree = "<group>"; };
 		E71F35A82FE9621F007AB0B1 /* ReadiumVolumeKeyPagingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinator.swift; sourceTree = "<group>"; };
 		E71F35AB2FE962D4007AB0B1 /* ReadiumVolumeKeyPagingCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReadiumVolumeKeyPagingCoordinatorTests.swift; sourceTree = "<group>"; };
 		E71F35AD2FEA147F007AB0B1 /* FolioReaderProviderBookIdTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolioReaderProviderBookIdTests.swift; sourceTree = "<group>"; };
@@ -1223,6 +1229,7 @@
 				2A73B8F826DC8890004B001D /* BookPreference.swift */,
 				E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
 				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
+				E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */,
 				E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */,
 				E71F34A02FD8FDE4007AB0B1 /* UnifiedSearchModels.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
@@ -1363,6 +1370,7 @@
 				E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */,
 				E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */,
 				E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
+				E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */,
 			);
 			path = Realm;
 			sourceTree = "<group>";
@@ -1683,6 +1691,7 @@
 				E7933FC42872D43F00CE7A15 /* CalibreDateParser.swift in Sources */,
 				E71F35162FDFAD15007AB0B1 /* YabrPDFSearchList.swift in Sources */,
 				E71F35A42FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */,
+				E71F35D42FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */,
 				E7C777A128ED495900939D63 /* YabrPDFChapterList.swift in Sources */,
 				E71F35A02FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
 				E74729C129D4423D007659A1 /* LibraryInfoCategoryListView.swift in Sources */,
@@ -1752,6 +1761,7 @@
 				2A47581927BA8C0200642AD1 /* LibraryDetailView.swift in Sources */,
 				E71F353E2FE4F307007AB0B1 /* CalibreServerRealm.swift in Sources */,
 				E71F35532FE4F345007AB0B1 /* ReadiumPreferenceRealm.swift in Sources */,
+				E71F35D12FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */,
 				E7226E272FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift in Sources */,
 				E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */,
 				2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */,
@@ -1961,6 +1971,7 @@
 				E71F35152FDFAD15007AB0B1 /* YabrPDFSearchList.swift in Sources */,
 				6E7B80E928FBA7AD008B075C /* YabrEBookReaderMetaSource.swift in Sources */,
 				E71F35A32FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift in Sources */,
+				E71F35D52FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift in Sources */,
 				6E7B80EB28FBA7AD008B075C /* YabrReadiumPDFViewController.swift in Sources */,
 				E71F35A12FE928A7007AB0B1 /* CalibreRealmMappers.swift in Sources */,
 				E7226E3D2FEF722D009D3BB3 /* ShelfLegacySectionHeader.swift in Sources */,
@@ -2032,6 +2043,7 @@
 				A04D200130C0000200000001 /* CalibreAPIError.swift in Sources */,
 				E71F353F2FE4F307007AB0B1 /* CalibreServerRealm.swift in Sources */,
 				E71F35542FE4F345007AB0B1 /* ReadiumPreferenceRealm.swift in Sources */,
+				E71F35D22FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */,
 				A04D200130C0000200000004 /* CalibreServerService+Discovery.swift in Sources */,
 				A04D200130C0000200000002 /* CalibreServerService+LibrarySync.swift in Sources */,
 				A04D200130C0000200000003 /* CalibreServerService+Metadata.swift in Sources */,

@@ -151,6 +151,7 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook.inShelf = true
         viewModel.readBook(book: mockCalibreBook)
         XCTAssertNotNil(mockAppContainer.sessionManager.readerInfo, "Reader info should be populated when reading an in-shelf book")
+        XCTAssertEqual(mockAppContainer.sessionManager.readingBook?.inShelfId, mockCalibreBook.inShelfId, "Reading book should be populated when opening a book from detail")
     }
     
     func testParseManifestToTOCSuccess() throws {
