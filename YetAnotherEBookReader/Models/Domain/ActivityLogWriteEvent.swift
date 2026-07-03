@@ -3,7 +3,7 @@
 //  YetAnotherEBookReader
 //
 //  Pure activity-log write values. Persistence-specific mapping belongs in
-//  Models/Realm.
+//  the persistence boundary.
 //
 
 import Foundation

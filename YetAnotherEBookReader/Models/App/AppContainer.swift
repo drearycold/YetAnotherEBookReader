@@ -116,7 +116,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     lazy var activityLogRepository: ActivityLogRepositoryProtocol = RealmActivityLogRepository(databaseService: databaseService, bookRepository: self.bookRepository, container: self)
     lazy var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol = RealmReaderPreferenceRepository { [weak self] server in
         self?.serverScopedRealmProvider.configuration(for: server)
-            ?? BookAnnotation.getBookPreferenceServerConfig(server)
+            ?? DefaultServerScopedRealmConfigurationProvider().configuration(for: server)
     }
     lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.databaseService.realmConf)
 

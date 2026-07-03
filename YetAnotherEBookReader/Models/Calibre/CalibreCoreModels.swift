@@ -8,6 +8,12 @@
 
 import Foundation
 
+enum BookAnnotation {
+    static func PrefId(library: CalibreLibrary, id: Int32) -> String {
+        "\(library.key) - \(id)"
+    }
+}
+
 struct CalibreServer: Hashable, Identifiable {
     static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
     

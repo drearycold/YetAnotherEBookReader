@@ -8,6 +8,8 @@
 import Foundation
 import RealmSwift
 
+extension SortCriteria: PersistableEnum {}
+
 class CalibreLibrarySearchFilterValues: Object {
     @Persisted var values: MutableSet<String>
 }
@@ -69,4 +71,3 @@ class CalibreLibraryCategoryObject: Object, ObjectKeyIdentifiable {
     
     @Persisted var items: List<CalibreLibraryCategoryItemObject>
 }
-

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 
 struct LibrarySearchSort: Hashable, CustomStringConvertible {
     var by = SortCriteria.Modified
@@ -17,7 +16,7 @@ struct LibrarySearchSort: Hashable, CustomStringConvertible {
     }
 }
 
-enum SortCriteria: String, CaseIterable, Identifiable, CustomStringConvertible, PersistableEnum {
+enum SortCriteria: String, CaseIterable, Identifiable, CustomStringConvertible {
     var id: String { self.rawValue }
     
     case Title

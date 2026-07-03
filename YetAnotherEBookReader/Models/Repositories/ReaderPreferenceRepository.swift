@@ -235,7 +235,7 @@ final class RealmReaderPreferenceRepository: ReaderPreferenceRepositoryProtocol 
     init(
         configurationProvider: @escaping ConfigurationProvider = { server in
             AppContainer.shared?.serverScopedRealmProvider.configuration(for: server)
-                ?? BookAnnotation.getBookPreferenceServerConfig(server)
+                ?? DefaultServerScopedRealmConfigurationProvider().configuration(for: server)
         }
     ) {
         self.configurationProvider = configurationProvider
