@@ -162,6 +162,8 @@
 		A073200130D3000300000004 /* CalibreActivityLogRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */; };
 		A073200130D3000300000005 /* CalibreActivityLoggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000003 /* CalibreActivityLoggerTests.swift */; };
 		A073200130D3000300000006 /* ActivityLogRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000004 /* ActivityLogRepositoryTests.swift */; };
+		A073200130D3000300000007 /* ActivityLogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000005 /* ActivityLogRepository.swift */; };
+		A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000005 /* ActivityLogRepository.swift */; };
 		E70A25B72F73DEAD004F006E /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B62F73DEAD004F006E /* ReadiumNavigator */; };
 		E70A25B92F73DEAD004F006E /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B82F73DEAD004F006E /* ReadiumShared */; };
 		E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25BA2F73DEAD004F006E /* ReadiumStreamer */; };
@@ -616,6 +618,7 @@
 		A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreActivityLogRealmMappers.swift; sourceTree = "<group>"; };
 		A073100130D3000100000003 /* CalibreActivityLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreActivityLoggerTests.swift; sourceTree = "<group>"; };
 		A073100130D3000100000004 /* ActivityLogRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogRepositoryTests.swift; sourceTree = "<group>"; };
+		A073100130D3000100000005 /* ActivityLogRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogRepository.swift; sourceTree = "<group>"; };
 		E70A25C92F7BDC8D004F006E /* YabrReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderSettingsView.swift; sourceTree = "<group>"; };
 		E70A25CC2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationViewModel.swift; sourceTree = "<group>"; };
 		E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationView.swift; sourceTree = "<group>"; };
@@ -1318,6 +1321,7 @@
 				E71F34EF2FDE284F007AB0B1 /* BookRepository.swift */,
 				E71F34F22FDE305D007AB0B1 /* ServerRepository.swift */,
 				E71F34F52FDE3060007AB0B1 /* LibraryRepository.swift */,
+				A073100130D3000100000005 /* ActivityLogRepository.swift */,
 				E71F34FE2FDEC37A007AB0B1 /* AnnotationRepository.swift */,
 				E71F35012FDEF06F007AB0B1 /* ReadingPositionRepository.swift */,
 				A051100130D1000100000001 /* ReaderPreferenceRepository.swift */,
@@ -1774,6 +1778,7 @@
 				E71F35532FE4F345007AB0B1 /* ReadiumPreferenceRealm.swift in Sources */,
 				E71F35D12FEAD100007AB0B1 /* ReadiumPreferenceValue.swift in Sources */,
 				A073200130D3000300000001 /* ActivityLogWriteEvent.swift in Sources */,
+				A073200130D3000300000007 /* ActivityLogRepository.swift in Sources */,
 				E7226E272FED5413009D3BB3 /* InMemoryServerScopedRealmConfigurationProvider.swift in Sources */,
 				E7832D5F280D39D9006E6901 /* YabrPDFView.swift in Sources */,
 				2A8464F5269AE3EE000638B2 /* MDictView.swift in Sources */,
@@ -2031,6 +2036,7 @@
 				E71F34C52FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
 				2ADCD7E626F4B96200FBAE11 /* Utils.swift in Sources */,
 				A073200130D3000300000002 /* ActivityLogWriteEvent.swift in Sources */,
+				A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */,
 				E71F35502FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
 				E71F35892FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
 				2ADCD7E726F4B96200FBAE11 /* YabrPDFViewController.swift in Sources */,
