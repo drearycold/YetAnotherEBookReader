@@ -182,8 +182,150 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             sObj.bookIds.append(objectsIn: result.bookIds)
         }
     }
+
+    func fetchBooks(
+        library: CalibreLibrary,
+        bookIds: [Int32]
+    ) throws -> [Int32: CalibreBook] {
+        let realm = try getRealm()
+        let serverUUID = library.server.uuid.uuidString
+
+        return bookIds.reduce(into: [Int32: CalibreBook]()) { partialResult, bookId in
+            let primaryKey = CalibreBookRealm.PrimaryKey(
+                serverUUID: serverUUID,
+                libraryName: library.name,
+                id: bookId.description
+            )
+            guard let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) else {
+                return
+            }
+            partialResult[bookId] = bookRealm.toDomain(library: library)
+        }
+    }
+
+    func searchLocalLibrary(
+        library: CalibreLibrary,
+        criteria: SearchCriteria,
+        offset: Int,
+        limit: Int
+    ) throws -> LocalLibrarySearchResult {
+        let realm = try getRealm()
+        let libraryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [
+            NSPredicate(format: "serverUUID = %@", library.server.uuid.uuidString),
+            NSPredicate(format: "libraryName = %@", library.name)
+        ])
+        let predicates = makeLocalSearchPredicates(criteria: criteria)
+
+        let allBooks = realm.objects(CalibreBookRealm.self)
+            .filter(libraryPredicate)
+            .sorted(byKeyPath: criteria.sortCriteria.by.sortKeyPath, ascending: criteria.sortCriteria.ascending)
+        let filteredBooks = predicates.isEmpty
+            ? allBooks
+            : allBooks.filter(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+
+        var bookIds = [Int32]()
+        if offset < filteredBooks.count {
+            bookIds = filteredBooks[offset..<min(offset + limit, filteredBooks.count)].map { $0.idInLib }
+        }
+
+        return LocalLibrarySearchResult(
+            totalNumber: filteredBooks.count,
+            numBooksWithoutSearch: allBooks.count,
+            offset: offset,
+            num: bookIds.count,
+            sort: criteria.sortCriteria.by.sortQueryParam,
+            bookIds: bookIds
+        )
+    }
+
+    func writeMetadataEntries(
+        library: CalibreLibrary,
+        entries: [String: CalibreBookEntry?],
+        json: NSDictionary?
+    ) throws {
+        let realm = try getRealm()
+        let serverUUID = library.server.uuid.uuidString
+
+        try realm.write {
+            entries.forEach { key, entry in
+                guard let entry = entry else { return }
+                guard let bookId = Int32(key) else { return }
+                let primaryKey = CalibreBookRealm.PrimaryKey(
+                    serverUUID: serverUUID,
+                    libraryName: library.name,
+                    id: bookId.description
+                )
+
+                let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) ?? CalibreBookRealm()
+                if bookRealm.realm == nil {
+                    bookRealm.primaryKey = primaryKey
+                    bookRealm.serverUUID = serverUUID
+                    bookRealm.libraryName = library.name
+                    bookRealm.idInLib = bookId
+                    realm.add(bookRealm)
+                }
+
+                let bookRoot = json?[key] as? NSDictionary ?? NSDictionary()
+                bookRealm.applyMetadataEntry(entry, root: bookRoot)
+            }
+        }
+    }
     
     // MARK: - Mapping Helpers
+
+    private func makeLocalSearchPredicates(criteria: SearchCriteria) -> [NSPredicate] {
+        var predicates = [NSPredicate]()
+        let searchTerms = criteria.searchString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split { $0.isWhitespace }
+            .map { String($0) }
+        if !searchTerms.isEmpty {
+            predicates.append(contentsOf: searchTerms.map {
+                NSCompoundPredicate(orPredicateWithSubpredicates: [
+                    NSPredicate(format: "title CONTAINS[c] %@", $0),
+                    NSPredicate(format: "authorFirst CONTAINS[c] %@", $0),
+                    NSPredicate(format: "authorSecond CONTAINS[c] %@", $0)
+                ])
+            })
+        }
+
+        return criteria.filterCriteriaCategory.reduce(into: predicates) { partialResult, categoryFilter in
+            guard !categoryFilter.value.isEmpty else { return }
+
+            switch categoryFilter.key {
+            case "Tags":
+                partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
+                    NSCompoundPredicate(orPredicateWithSubpredicates: [
+                        NSPredicate(format: "tagFirst = %@", $0),
+                        NSPredicate(format: "tagSecond = %@", $0),
+                        NSPredicate(format: "tagThird = %@", $0)
+                    ])
+                }))
+            case "Authors":
+                partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
+                    NSCompoundPredicate(orPredicateWithSubpredicates: [
+                        NSPredicate(format: "authorFirst = %@", $0),
+                        NSPredicate(format: "authorSecond = %@", $0),
+                        NSPredicate(format: "authorThird = %@", $0)
+                    ])
+                }))
+            case "Series":
+                partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
+                    NSPredicate(format: "series = %@", $0)
+                }))
+            case "Publisher":
+                partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
+                    NSPredicate(format: "publisher = %@", $0)
+                }))
+            case "Rating":
+                partialResult.append(NSCompoundPredicate(orPredicateWithSubpredicates: categoryFilter.value.map {
+                    NSPredicate(format: "rating = %@", NSNumber(value: $0.count * 2))
+                }))
+            default:
+                partialResult.append(NSPredicate(value: false))
+            }
+        }
+    }
     
     private func mapToLibraryCachedResult(_ searchObj: CalibreLibrarySearchObject, realm: Realm) -> LibraryCachedResult {
         let libraryId = searchObj.libraryId

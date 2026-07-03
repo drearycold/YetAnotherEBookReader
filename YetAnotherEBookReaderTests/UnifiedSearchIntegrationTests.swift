@@ -377,6 +377,112 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         token.invalidate()
     }
 
+    func testSearchCacheLocalLibrarySearchFiltersSortsAndPaginates() throws {
+        let config = Realm.Configuration(inMemoryIdentifier: "SearchCacheLocalSearch-\(UUID().uuidString)")
+        let store = RealmSearchCacheStore(config: config, container: container)
+        let realm = try Realm(configuration: config)
+
+        var firstBook = CalibreBook(id: 1, library: mockLibrary)
+        firstBook.title = "Swift Basics"
+        firstBook.authors = ["Taylor"]
+        firstBook.tags = ["Programming"]
+        firstBook.publisher = "Docs"
+
+        var secondBook = CalibreBook(id: 2, library: mockLibrary)
+        secondBook.title = "Advanced Swift"
+        secondBook.authors = ["Morgan"]
+        secondBook.tags = ["Programming"]
+        secondBook.publisher = "Docs"
+
+        var thirdBook = CalibreBook(id: 3, library: mockLibrary)
+        thirdBook.title = "Swift Cooking"
+        thirdBook.authors = ["Casey"]
+        thirdBook.tags = ["Food"]
+        thirdBook.publisher = "Kitchen"
+
+        try realm.write {
+            realm.add(firstBook.makeRealmObject(), update: .modified)
+            realm.add(secondBook.makeRealmObject(), update: .modified)
+            realm.add(thirdBook.makeRealmObject(), update: .modified)
+        }
+
+        let criteria = SearchCriteria(
+            searchString: "swift",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: ["Tags": Set(["Programming"])]
+        )
+
+        let result = try store.searchLocalLibrary(
+            library: mockLibrary,
+            criteria: criteria,
+            offset: 1,
+            limit: 1
+        )
+
+        XCTAssertEqual(result.totalNumber, 2)
+        XCTAssertEqual(result.numBooksWithoutSearch, 3)
+        XCTAssertEqual(result.offset, 1)
+        XCTAssertEqual(result.num, 1)
+        XCTAssertEqual(result.sort, SortCriteria.Title.sortQueryParam)
+        XCTAssertEqual(result.bookIds, [1])
+    }
+
+    func testSearchCacheWriteMetadataEntriesCreatesAndReadsDomainBook() throws {
+        let config = Realm.Configuration(inMemoryIdentifier: "SearchCacheMetadataWrite-\(UUID().uuidString)")
+        let store = RealmSearchCacheStore(config: config, container: container)
+        var entry = CalibreBookEntry()
+        entry.title = "Metadata Book"
+        entry.publisher = "Metadata Press"
+        entry.series = "Boundary"
+        entry.series_index = 2.5
+        entry.pubdate = "2026-01-02T03:04:05+00:00"
+        entry.timestamp = "2026-01-03T03:04:05+00:00"
+        entry.last_modified = "2026-01-04T03:04:05+00:00"
+        entry.authors = ["Author One", "Author Two"]
+        entry.tags = ["Realm", "Search"]
+        entry.rating = 4.0
+        entry.comments = "Created from metadata entry"
+        entry.identifiers = ["isbn": "12345"]
+        entry.format_metadata = [
+            "epub": CalibreBookFormatMetadataEntry(
+                path: "Metadata Book.epub",
+                size: 2048,
+                mtime: "2026-01-05T03:04:05.000+00:00"
+            )
+        ]
+
+        let root: NSDictionary = [
+            "77": [
+                "user_metadata": [
+                    "#genre": [
+                        "label": "Genre",
+                        "#value#": "Reference"
+                    ]
+                ]
+            ]
+        ]
+
+        try store.writeMetadataEntries(
+            library: mockLibrary,
+            entries: ["77": entry],
+            json: root
+        )
+
+        let books = try store.fetchBooks(library: mockLibrary, bookIds: [77])
+        let book = try XCTUnwrap(books[77])
+        XCTAssertEqual(book.title, "Metadata Book")
+        XCTAssertEqual(book.publisher, "Metadata Press")
+        XCTAssertEqual(book.series, "Boundary")
+        XCTAssertEqual(book.seriesIndex, 2.5)
+        XCTAssertEqual(book.authors, ["Author One", "Author Two"])
+        XCTAssertEqual(book.tags, ["Realm", "Search"])
+        XCTAssertEqual(book.rating, 8)
+        XCTAssertEqual(book.comments, "Created from metadata entry")
+        XCTAssertEqual(book.identifiers["isbn"], "12345")
+        XCTAssertEqual(book.formats["EPUB"]?.serverSize, 2048)
+        XCTAssertEqual(book.userMetadatas["Genre"] as? String, "Reference")
+    }
+
     func testUnifiedSearchFailureHttpStatus() async throws {
         debugLog("testUnifiedSearchFailureHttpStatus started")
 

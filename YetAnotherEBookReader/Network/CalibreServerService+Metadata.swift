@@ -63,116 +63,12 @@ extension CalibreServerService {
         }
 
         var book = oldbook
-        book.title = entry.title
-        book.publisher = entry.publisher ?? ""
-        book.series = entry.series ?? ""
-        book.seriesIndex = entry.series_index ?? 0.0
-
-        let parserOne = ISO8601DateFormatter()
-        parserOne.formatOptions = .withInternetDateTime
-        let parserTwo = ISO8601DateFormatter()
-        parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        book.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
-        book.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .init()
-        book.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .init()
-        book.lastSynced = book.lastModified
-
-        book.tags = entry.tags
-
-        book.formats = entry.format_metadata.reduce(into: book.formats) {
-            var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-
-            formatInfo.serverSize = $1.value.size
-
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-            formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
-
-            $0[$1.key.uppercased()] = formatInfo
-        }
-
-        book.size = 0
-        book.rating = Int(entry.rating * 2)
-        book.authors = entry.authors
-        book.identifiers = entry.identifiers
-        book.comments = entry.comments ?? ""
-
-        if let userMetadata = root["user_metadata"] as? NSDictionary {
-            book.userMetadatas = userMetadata.reduce(into: book.userMetadatas) {
-                guard let dict = $1.value as? NSDictionary,
-                      let label = dict["label"] as? String,
-                      let value = dict["#value#"] else {
-                    return
-                }
-                $0[label] = value
-            }
-        }
-
+        book.applyMetadataValue(CalibreBookMetadataValue(entry: entry, root: root))
         return book
     }
 
     func handleLibraryBookOne(library: CalibreLibrary, bookRealm: CalibreBookRealm, entry: CalibreBookEntry, root: NSDictionary) {
-        let decoder = JSONDecoder()
-
-        bookRealm.title = entry.title
-        bookRealm.publisher = entry.publisher ?? ""
-        bookRealm.series = entry.series ?? ""
-        bookRealm.seriesIndex = entry.series_index ?? 0.0
-
-        let parserOne = ISO8601DateFormatter()
-        parserOne.formatOptions = .withInternetDateTime
-        let parserTwo = ISO8601DateFormatter()
-        parserTwo.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        bookRealm.pubDate = parserTwo.date(from: entry.pubdate) ?? parserOne.date(from: entry.pubdate) ?? .distantPast
-        bookRealm.timestamp = parserTwo.date(from: entry.timestamp) ?? parserOne.date(from: entry.timestamp) ?? .distantPast
-        bookRealm.lastModified = parserTwo.date(from: entry.last_modified) ?? parserOne.date(from: entry.last_modified) ?? .distantPast
-        bookRealm.lastSynced = bookRealm.lastModified
-
-        var authors = entry.authors
-        bookRealm.authorFirst = authors.popFirst() ?? "Unknown"
-        bookRealm.authorSecond = authors.popFirst()
-        bookRealm.authorThird = authors.popFirst()
-        bookRealm.authorsMore.replaceSubrange(bookRealm.authorsMore.indices, with: authors)
-
-        var tags = entry.tags
-        bookRealm.tagFirst = tags.popFirst()
-        bookRealm.tagSecond = tags.popFirst()
-        bookRealm.tagThird = tags.popFirst()
-        bookRealm.tagsMore.replaceSubrange(bookRealm.tagsMore.indices, with: tags)
-
-        var formats: [String: FormatInfo] = (try? decoder.decode([String: FormatInfo].self, from: bookRealm.formatsData as Data? ?? .init())) ?? [:]
-
-        formats = entry.format_metadata.reduce(into: formats) {
-            var formatInfo = $0[$1.key.uppercased()] ?? FormatInfo(serverSize: 0, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)
-
-            formatInfo.serverSize = $1.value.size
-
-            let dateFormatter = ISO8601DateFormatter()
-            dateFormatter.formatOptions = .withInternetDateTime.union(.withFractionalSeconds)
-            formatInfo.serverMTime = dateFormatter.date(from: $1.value.mtime) ?? .distantPast
-
-            $0[$1.key.uppercased()] = formatInfo
-        }
-        bookRealm.formatsData = try? JSONEncoder().encode(formats)
-
-        bookRealm.size = 0
-        bookRealm.rating = Int(entry.rating * 2)
-        bookRealm.identifiersData = try? JSONEncoder().encode(entry.identifiers)
-        bookRealm.comments = entry.comments ?? ""
-
-        var userMetadatas = bookRealm.userMetadatas()
-        if let userMetadata = root["user_metadata"] as? NSDictionary {
-            userMetadatas = userMetadata.reduce(into: userMetadatas) {
-                guard let dict = $1.value as? NSDictionary,
-                      let label = dict["label"] as? String,
-                      let value = dict["#value#"] else {
-                    return
-                }
-                $0[label] = value
-            }
-        }
-        bookRealm.userMetaData = try? JSONSerialization.data(withJSONObject: userMetadatas, options: [])
-        bookRealm.lastUpdated = Date()
+        bookRealm.applyMetadataEntry(entry, root: root)
     }
 
     func getBookManifest(book: CalibreBook, format: Format) async throws -> Data {
