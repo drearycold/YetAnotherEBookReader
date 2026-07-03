@@ -335,7 +335,7 @@ class CalibreServerManager {
                   config.dsreader_helper_prefs != nil else {
                 return
             }
-            let dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
+            var dsreaderHelper = CalibreServerDSReaderHelper(port: task.port)
             dsreaderHelper.configurationData = task.data
             updateServerDSReaderHelper(serverId: task.id, dsreaderHelper: dsreaderHelper)
         } catch {

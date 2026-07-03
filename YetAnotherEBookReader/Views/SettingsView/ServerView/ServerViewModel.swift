@@ -352,7 +352,7 @@ class ServerViewModel: ObservableObject {
 
     func setDSReaderStates(server: CalibreServer) {
         let dsHelper = container.serverManager.queryServerDSReaderHelper(server: server) ?? {
-            let dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
+            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
             if let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }

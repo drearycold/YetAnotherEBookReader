@@ -6,31 +6,26 @@
 import Foundation
 import RealmSwift
 
-class CalibreServerDSReaderHelper: EmbeddedObject, ObjectKeyIdentifiable {
+@objc(CalibreServerDSReaderHelper)
+class CalibreServerDSReaderHelperRealm: EmbeddedObject, ObjectKeyIdentifiable {
     @Persisted var port: Int = 0
     @Persisted var configurationData: Data?
-    
-    convenience init(port: Int) {
-        self.init()
-        self.port = port
-    }
-    
-    var configuration: CalibreDSReaderHelperConfiguration? {
-        get {
-            guard let data = configurationData else { return nil }
-            return try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
-        }
-        set {
-            if let newValue = newValue {
-                configurationData = try? JSONEncoder().encode(newValue)
-            } else {
-                configurationData = nil
-            }
-        }
+
+    override class func className() -> String {
+        "CalibreServerDSReaderHelper"
     }
 
-    func update(from other: CalibreServerDSReaderHelper) {
-        self.port = other.port
-        self.configurationData = other.configurationData
+    convenience init(value: CalibreServerDSReaderHelper) {
+        self.init()
+        apply(value)
+    }
+
+    func apply(_ value: CalibreServerDSReaderHelper) {
+        self.port = value.port
+        self.configurationData = value.configurationData
+    }
+
+    func toValue() -> CalibreServerDSReaderHelper {
+        CalibreServerDSReaderHelper(port: port, configurationData: configurationData)
     }
 }

@@ -22,7 +22,7 @@ class CalibreServerRealm: Object {
 
     @Persisted var removed = false
 
-    @Persisted var dsreaderHelper: CalibreServerDSReaderHelper?
+    @Persisted var dsreaderHelper: CalibreServerDSReaderHelperRealm?
 }
 
 extension CalibreServer: Persistable {

@@ -273,14 +273,14 @@ class BookDetailViewModelTests: XCTestCase {
             goodreads_sync_prefs: grPrefs
         )
         
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         
         guard let library = mockCalibreBook?.library else { return }
         
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
     }
@@ -314,7 +314,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -322,7 +322,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         
@@ -354,7 +354,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -362,7 +362,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         
@@ -385,7 +385,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -393,7 +393,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         

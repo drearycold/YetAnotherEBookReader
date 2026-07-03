@@ -9,6 +9,30 @@
 
 import Foundation
 
+struct CalibreServerDSReaderHelper: Hashable {
+    var port: Int
+    var configurationData: Data?
+
+    init(port: Int, configurationData: Data? = nil) {
+        self.port = port
+        self.configurationData = configurationData
+    }
+
+    var configuration: CalibreDSReaderHelperConfiguration? {
+        get {
+            guard let data = configurationData else { return nil }
+            return try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        }
+        set {
+            if let newValue = newValue {
+                configurationData = try? JSONEncoder().encode(newValue)
+            } else {
+                configurationData = nil
+            }
+        }
+    }
+}
+
 struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     struct Options: Codable, Hashable {
         var servicePort = 0

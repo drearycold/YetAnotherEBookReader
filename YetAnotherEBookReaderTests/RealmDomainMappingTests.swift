@@ -15,9 +15,6 @@ final class RealmDomainMappingTests: XCTestCase {
     
     func testCalibreServerMappingRoundTrip() {
         let uuid = UUID()
-        let dsConfig = CalibreDSReaderHelperConfiguration()
-        let helper = CalibreServerDSReaderHelper(port: 8081)
-        helper.configuration = dsConfig
         
         let server = CalibreServer(
             uuid: uuid,
