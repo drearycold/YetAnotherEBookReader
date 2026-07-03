@@ -57,7 +57,7 @@ final class CalibreDataSplitTests: XCTestCase {
         let uuid = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
         let server = CalibreServer(uuid: uuid, name: "S", baseUrl: "http://x", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         let library = CalibreLibrary(server: server, key: "MyLib", name: "MyLib")
-        let expected = CalibreLibraryRealm.PrimaryKey(serverUUID: uuid.uuidString, libraryName: "MyLib")
+        let expected = CalibreLibrary.identity(serverUUID: uuid.uuidString, libraryName: "MyLib")
         XCTAssertEqual(library.id, expected)
     }
 
@@ -91,7 +91,7 @@ final class CalibreDataSplitTests: XCTestCase {
         let library = CalibreLibrary(server: server, key: "lib", name: "lib")
         let book = CalibreBook(id: 42, library: library)
 
-        let expected = CalibreBookRealm.PrimaryKey(
+        let expected = CalibreBook.identity(
             serverUUID: uuid.uuidString,
             libraryName: "lib",
             id: "42"

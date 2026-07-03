@@ -120,23 +120,15 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String, id: String) -> String {
-        return [id, "^", libraryName, "@", serverUUID].joined()
+        CalibreBook.identity(serverUUID: serverUUID, libraryName: libraryName, id: id)
     }
     
     var ratingDescription: String {
-        CalibreBookRealm.RatingDescription(rating)
+        CalibreBook.ratingDescription(for: rating)
     }
     
     static func RatingDescription(_ rating: Int) -> String {
-        if rating == 0 {
-            return "No Rating"
-        } else {
-            let starNum = rating / 2
-            let half = (rating % 2) > 0
-            
-            return Array(repeating: "★", count: starNum).joined()
-            + (half ? "☆" : "")
-        }
+        CalibreBook.ratingDescription(for: rating)
     }
 }
 

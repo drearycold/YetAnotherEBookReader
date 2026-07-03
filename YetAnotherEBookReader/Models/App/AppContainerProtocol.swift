@@ -156,7 +156,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
 
 extension AppContainerProtocol {
     func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
-        return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+        return calibreLibraries[CalibreLibrary.identity(serverUUID: serverUUID, libraryName: libraryName)]
     }
 
     func server(forUUID uuid: String) -> CalibreServer? {

@@ -139,12 +139,12 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         // Output should be sorted by rating descending (8 first, then 2)
         XCTAssertEqual(sections.count, 2)
         XCTAssertEqual(sections[0].id, "8")
-        XCTAssertEqual(sections[0].title, CalibreBookRealm.RatingDescription(8))
+        XCTAssertEqual(sections[0].title, CalibreBook.ratingDescription(for: 8))
         XCTAssertEqual(sections[0].items.count, 1)
         XCTAssertEqual(sections[0].items[0].book.id, 2)
         
         XCTAssertEqual(sections[1].id, "2")
-        XCTAssertEqual(sections[1].title, CalibreBookRealm.RatingDescription(2))
+        XCTAssertEqual(sections[1].title, CalibreBook.ratingDescription(for: 2))
         XCTAssertEqual(sections[1].items.count, 1)
         XCTAssertEqual(sections[1].items[0].book.id, 1)
     }

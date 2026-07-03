@@ -707,6 +707,20 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(mappedHighlight.id, highlight.id)
         XCTAssertEqual(mappedHighlight.note, highlight.note)
     }
+
+    func testRealmSchemaHelpersDelegateToDomainHelpers() {
+        let serverUUID = "11111111-2222-3333-4444-555555555555"
+        XCTAssertEqual(
+            CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: "Main"),
+            CalibreLibrary.identity(serverUUID: serverUUID, libraryName: "Main")
+        )
+        XCTAssertEqual(
+            CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: "Main", id: "42"),
+            CalibreBook.identity(serverUUID: serverUUID, libraryName: "Main", id: "42")
+        )
+        XCTAssertEqual(CalibreBookRealm.RatingDescription(0), CalibreBook.ratingDescription(for: 0))
+        XCTAssertEqual(CalibreBookRealm.RatingDescription(7), CalibreBook.ratingDescription(for: 7))
+    }
     
     func testApplyDomainOnManagedObjects() throws {
         let config = Realm.Configuration(inMemoryIdentifier: "testRealm-\(UUID().uuidString)")

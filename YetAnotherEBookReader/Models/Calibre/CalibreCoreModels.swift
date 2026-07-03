@@ -85,10 +85,14 @@ struct CalibreLibrary: Hashable, Identifiable {
 
     static let PLUGIN_GOODREADS_SYNC = "Goodreads Sync"
     static let PLUGIN_COUNT_PAGES = "Count Pages"
+
+    static func identity(serverUUID: String, libraryName: String) -> String {
+        [libraryName, "@", serverUUID].joined()
+    }
     
     var id: String {
 //        get { return server.id + " - " + name }
-        CalibreLibraryRealm.PrimaryKey(serverUUID: server.uuid.uuidString, libraryName: name)
+        Self.identity(serverUUID: server.uuid.uuidString, libraryName: name)
     }
     static func == (lhs: CalibreLibrary, rhs: CalibreLibrary) -> Bool {
         lhs.server == rhs.server && lhs.id == rhs.id
@@ -154,6 +158,30 @@ struct CalibreLibrary: Hashable, Identifiable {
 }
 
 struct CalibreBook: Hashable {
+    static func identity(serverUUID: String, libraryName: String, id: String) -> String {
+        [id, "^", libraryName, "@", serverUUID].joined()
+    }
+
+    static func identity(library: CalibreLibrary, bookId: Int32) -> String {
+        identity(
+            serverUUID: library.server.uuid.uuidString,
+            libraryName: library.name,
+            id: bookId.description
+        )
+    }
+
+    static func ratingDescription(for rating: Int) -> String {
+        if rating == 0 {
+            return "No Rating"
+        } else {
+            let starNum = rating / 2
+            let half = (rating % 2) > 0
+
+            return Array(repeating: "★", count: starNum).joined()
+            + (half ? "☆" : "")
+        }
+    }
+
     static func == (lhs: CalibreBook, rhs: CalibreBook) -> Bool {
         lhs.inShelfId == rhs.inShelfId
     }
@@ -337,11 +365,7 @@ struct CalibreBook: Hashable {
     }
     
     var inShelfId : String {
-        return CalibreBookRealm.PrimaryKey(
-            serverUUID: library.server.uuid.uuidString,
-            libraryName: library.name,
-            id: id.description
-        )
+        Self.identity(library: library, bookId: id)
     }
     
     var inShelf = false
