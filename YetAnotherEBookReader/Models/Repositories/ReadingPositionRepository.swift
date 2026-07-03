@@ -378,28 +378,17 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
 
         // Index local realms by identity
-        var localRealmsByIdentity = [PositionIdentity: [BookDeviceReadingPositionRealm]]()
-        for obj in localRealms {
-            let identity = obj.identity
-            localRealmsByIdentity[identity, default: []].append(obj)
-        }
+        var localRealmsByIdentity = Dictionary(grouping: localRealms, by: { $0.identity })
         // Sort each by epoch descending
         for (identity, objs) in localRealmsByIdentity {
             localRealmsByIdentity[identity] = objs.sorted(by: { $0.epoch > $1.epoch })
         }
 
         // Deduplicate positionsToSave by identity
-        var uniquePositionsToSave = [PositionIdentity: BookDeviceReadingPosition]()
-        for pos in positionsToSave {
-            let id = pos.identity
-            if let existing = uniquePositionsToSave[id] {
-                if pos.epoch > existing.epoch {
-                    uniquePositionsToSave[id] = pos
-                }
-            } else {
-                uniquePositionsToSave[id] = pos
+        let uniquePositionsToSave = Dictionary(grouping: positionsToSave, by: { $0.identity })
+            .compactMapValues { positions in
+                positions.max(by: { $0.epoch < $1.epoch })
             }
-        }
 
         if !uniquePositionsToSave.isEmpty {
             let changesBlock = {
@@ -437,39 +426,5 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
 
         return tasks
-    }
-}
-
-// MARK: - Position Identity Helpers
-
-struct PositionIdentity: Hashable, Equatable {
-    let deviceId: String
-    let readerName: String
-    let structuralStyle: Int
-    let positionTrackingStyle: Int
-    let structuralRootPageNumber: Int
-}
-
-extension BookDeviceReadingPosition {
-    var identity: PositionIdentity {
-        PositionIdentity(
-            deviceId: id,
-            readerName: readerName,
-            structuralStyle: structuralStyle,
-            positionTrackingStyle: positionTrackingStyle,
-            structuralRootPageNumber: structuralRootPageNumber
-        )
-    }
-}
-
-extension BookDeviceReadingPositionRealm {
-    var identity: PositionIdentity {
-        PositionIdentity(
-            deviceId: deviceId,
-            readerName: readerName,
-            structuralStyle: structuralStyle,
-            positionTrackingStyle: positionTrackingStyle,
-            structuralRootPageNumber: structuralRootPageNumber
-        )
     }
 }
