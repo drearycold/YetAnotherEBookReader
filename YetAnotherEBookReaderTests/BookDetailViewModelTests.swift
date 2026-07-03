@@ -695,20 +695,24 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertNotNil(historyVM.readingStatistics)
     }
 
-    func testHistoryViewModelUsesRepositoryForHistoryBookAndDebugPositions() throws {
-        let repository = MockReadingPositionRepository()
-        repository.historyBookReturn = mockBook
-        repository.debugPositionsReturn = [
+    func testHistoryViewModelUsesBookRepositoryAndReadingPositionRepositoryForHistory() throws {
+        let bookRepository = MockBookRepository()
+        bookRepository.getBookReturn = mockBook
+        mockAppContainer.bookRepository = bookRepository
+
+        let readingPositionRepository = MockReadingPositionRepository()
+        readingPositionRepository.debugPositionsReturn = [
             BookDeviceReadingPosition(id: "debug-device", readerName: ReaderType.YabrEPUB.rawValue)
         ]
-        mockAppContainer.readingPositionRepository = repository
+        mockAppContainer.readingPositionRepository = readingPositionRepository
 
         let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
         historyVM.loadData()
 
-        XCTAssertTrue(repository.historyBookCalled)
-        XCTAssertEqual(repository.historyBookIdParam, mockBook.id)
-        XCTAssertTrue(repository.debugPositionsCalled)
+        XCTAssertTrue(bookRepository.getBookCalled)
+        XCTAssertEqual(bookRepository.getBookBookIdParam, mockBook.id)
+        XCTAssertEqual(bookRepository.getBookLibraryParam, mockBook.library)
+        XCTAssertTrue(readingPositionRepository.debugPositionsCalled)
         XCTAssertEqual(historyVM.listViewModel?.book.id, mockBook.id)
         XCTAssertEqual(historyVM.debugReadingPositions.first?.id, "debug-device")
     }

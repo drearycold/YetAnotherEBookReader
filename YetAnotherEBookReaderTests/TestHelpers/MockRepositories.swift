@@ -414,11 +414,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var debugPositionsBookIdParam: String?
     var debugPositionsReturn: [BookDeviceReadingPosition] = []
 
-    var historyBookCalled = false
-    var historyBookLibraryParam: CalibreLibrary?
-    var historyBookIdParam: Int32?
-    var historyBookReturn: CalibreBook?
-
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
         getPositionCalled = true
         getPositionBookIdParam = bookId
@@ -436,13 +431,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         debugPositionsCalled = true
         debugPositionsBookIdParam = bookId
         return debugPositionsReturn
-    }
-
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
-        historyBookCalled = true
-        historyBookLibraryParam = library
-        historyBookIdParam = bookId
-        return historyBookReturn
     }
 
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {

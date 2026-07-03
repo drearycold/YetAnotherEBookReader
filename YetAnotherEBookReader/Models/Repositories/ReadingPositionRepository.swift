@@ -13,7 +13,6 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
     func getPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
     func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook?
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
@@ -155,20 +154,6 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return objects.map { $0.toDomain() }
     }
 
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
-        let primaryKey = CalibreBookRealm.PrimaryKey(
-            serverUUID: library.server.uuid.uuidString,
-            libraryName: library.name,
-            id: bookId.description
-        )
-
-        guard let realm = Thread.isMainThread ? databaseService.realm : (databaseService.realmConf.flatMap { try? Realm(configuration: $0) }),
-              let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
-        else { return nil }
-
-        return bookRealm.toDomain(library: library)
-    }
-
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {
         guard let realm = getRealm(server: server) else { return }
         try? realm.write {
@@ -237,11 +222,11 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
         var predicate: NSPredicate?
         if let library, let bookId {
-            let historyBookId = "\(library.key) - \(bookId)"
+            let historyEntryBookId = "\(library.key) - \(bookId)"
             if let startDateAfter {
-                predicate = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", historyBookId, startDateAfter as NSDate)
+                predicate = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", historyEntryBookId, startDateAfter as NSDate)
             } else {
-                predicate = NSPredicate(format: "bookId = %@", historyBookId)
+                predicate = NSPredicate(format: "bookId = %@", historyEntryBookId)
             }
         } else if let startDateAfter {
             predicate = NSPredicate(format: "startDatetime >= %@", startDateAfter as NSDate)

@@ -238,7 +238,7 @@ class ReadingPositionHistoryViewModel: ObservableObject {
         if let library = library, let bookId = bookId {
             localActivities = container.sessionManager.listBookDeviceReadingPositionHistory(library: library, bookId: bookId).first?.value ?? []
 
-            if let book = container.readingPositionRepository.historyBook(for: library, bookId: bookId) {
+            if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
             } else if let book = container.bookManager.readingBook {
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
