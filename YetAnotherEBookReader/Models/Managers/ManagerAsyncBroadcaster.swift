@@ -21,18 +21,24 @@ final class ManagerAsyncBroadcaster<Element> {
 
     private func makeStream(initialValue: Element?) -> AsyncStream<Element> {
         AsyncStream { [weak self] continuation in
-            let id = UUID()
-            if let initialValue {
-                continuation.yield(initialValue)
+            guard let self else {
+                continuation.finish()
+                return
             }
-            self?.lock.lock()
-            self?.continuations[id] = continuation
-            self?.lock.unlock()
+            let id = UUID()
+            self.lock.lock()
+            self.continuations[id] = continuation
+            self.lock.unlock()
 
             continuation.onTermination = { [weak self] _ in
-                self?.lock.lock()
-                self?.continuations.removeValue(forKey: id)
-                self?.lock.unlock()
+                guard let self else { return }
+                self.lock.lock()
+                self.continuations.removeValue(forKey: id)
+                self.lock.unlock()
+            }
+
+            if let initialValue {
+                continuation.yield(initialValue)
             }
         }
     }

@@ -11,6 +11,7 @@ import SwiftUI
 final class SettingsViewModel: ObservableObject {
     let container: AppContainer
     private var serverObservationTask: Task<Void, Never>?
+    private var serverInfoObservationTask: Task<Void, Never>?
     private let refreshDatabaseAction: () -> Void
     private let populateBookShelfAction: () -> Void
     private let probeServersReachabilityAction: (Set<String>) -> Void
@@ -24,6 +25,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var selectedServer: String? = nil
     @Published var addServerActive = false
     @Published var alertItem: AlertItem?
+    @Published private(set) var serverInfoStaging = [String: CalibreServerInfo]()
     
     init(
         container: AppContainer,
@@ -37,11 +39,13 @@ final class SettingsViewModel: ObservableObject {
         self.probeServersReachabilityAction = probeServersReachabilityAction ?? { serverIds in
             container.serverManager.probeServersReachability(with: serverIds)
         }
+        self.serverInfoStaging = container.serverManager.calibreServerInfoStaging
         setupSubscriptions()
     }
 
     deinit {
         serverObservationTask?.cancel()
+        serverInfoObservationTask?.cancel()
     }
     
     private func setupSubscriptions() {
@@ -52,10 +56,18 @@ final class SettingsViewModel: ObservableObject {
                 self?.updateServerList()
             }
         }
+
+        serverInfoObservationTask?.cancel()
+        serverInfoObservationTask = Task { @MainActor [weak self, container] in
+            for await snapshot in container.serverManager.serverInfoStagingSnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.serverInfoStaging = snapshot
+            }
+        }
     }
 
     var isRefreshing: Bool {
-        container.serverManager.calibreServerInfoStaging.allSatisfy { $1.probing == false } == false
+        serverInfoStaging.allSatisfy { $1.probing == false } == false
     }
 
     func updateServerList() {
@@ -156,8 +168,8 @@ final class SettingsViewModel: ObservableObject {
     
     func rowState(for server: CalibreServer) -> ServerRowState {
         let hasHelper = (container.serverManager.queryServerDSReaderHelper(server: server)?.configuration?.dsreader_helper_prefs?.plugin_prefs.Options.servicePort ?? 0) > 0
-        let isLocalReachable = container.serverManager.isServerReachable(server: server, isPublic: false)
-        let isPublicReachable = container.serverManager.isServerReachable(server: server, isPublic: true)
+        let isLocalReachable = isServerReachable(server: server, isPublic: false)
+        let isPublicReachable = isServerReachable(server: server, isPublic: true)
 
         let libraryCount = container.libraryManager.calibreLibraries.filter { $0.value.server.id == server.id }.count
 
@@ -174,7 +186,7 @@ final class SettingsViewModel: ObservableObject {
 
         var serverInfoText: String? = nil
         var isServerError = false
-        if let serverInfo = container.serverManager.getServerInfo(server: server) {
+        if let serverInfo = serverInfo(for: server) {
             if serverInfo.reachable {
                 serverInfoText = "Server has \(serverInfo.libraryMap.count) libraries"
             } else {
@@ -193,5 +205,24 @@ final class SettingsViewModel: ObservableObject {
             serverInfoText: serverInfoText,
             isServerError: isServerError
         )
+    }
+
+    private func isServerReachable(server: CalibreServer, isPublic: Bool) -> Bool? {
+        serverInfoStaging.first {
+            $1.server.id == server.id && $1.isPublic == isPublic
+        }?.value.reachable
+    }
+
+    private func serverInfo(for server: CalibreServer) -> CalibreServerInfo? {
+        let serverInfos = serverInfoStaging.filter { $1.server.id == server.id }
+        if serverInfos.count == 2 {
+            if let active = serverInfos.first(where: { !$0.value.isPublic && $0.value.reachable }) {
+                return active.value
+            }
+            if let active = serverInfos.first(where: { $0.value.isPublic && $0.value.reachable }) {
+                return active.value
+            }
+        }
+        return serverInfos.first?.value
     }
 }

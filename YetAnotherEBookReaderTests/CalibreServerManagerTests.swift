@@ -161,6 +161,19 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertEqual(info?.id, infoReachable.id)
     }
 
+    func testManagerAsyncBroadcasterStreamsInitialAndSubsequentValues() async {
+        let broadcaster = ManagerAsyncBroadcaster<Int>()
+        let stream = broadcaster.stream(initialValue: 1)
+        var iterator = stream.makeAsyncIterator()
+
+        let initial = await iterator.next()
+        broadcaster.send(2)
+        let updated = await iterator.next()
+
+        XCTAssertEqual(initial, 1)
+        XCTAssertEqual(updated, 2)
+    }
+
     func testProbeServerSuccess() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Success", baseUrl: "http://localhost/probe_success", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         container.serverManager.calibreServers[server.id] = server
