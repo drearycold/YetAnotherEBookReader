@@ -127,7 +127,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
-    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: databaseService.loggerConfiguration()), config: self, database: self.databaseService)
+    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(repository: self.activityLogRepository), config: self, database: self.databaseService)
     lazy var searchCacheRepository = RealmSearchCacheStore(
         databaseService: self.databaseService,
         librarySnapshotProvider: self

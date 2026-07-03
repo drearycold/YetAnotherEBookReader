@@ -27,12 +27,16 @@ struct ActivityLogUIEntry: Identifiable, Hashable {
 protocol ActivityLogRepositoryProtocol {
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry]
     func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogUIEntry]>
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async
+    func removeCalibreActivity(id: String) async
+    func cleanCalibreActivities(startDatetime: Date) async
 }
 
 final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
     private let databaseService: DatabaseService
     private let bookRepository: BookRepositoryProtocol
     private weak var container: AppContainerProtocol?
+    private let writeQueue = DispatchQueue(label: "activity-log-repository.write", qos: .utility)
 
     init(
         databaseService: DatabaseService = .shared,
@@ -49,13 +53,18 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
             return databaseService.realm
         }
 
-        let key = "ActivityLogRepositoryRealm"
+        guard let conf = databaseService.realmConf else { return nil }
+
+        let configurationIdentifier = conf.inMemoryIdentifier
+            ?? conf.fileURL?.absoluteString
+            ?? "default"
+        let key = "ActivityLogRepositoryRealm-\(configurationIdentifier)"
         if let cachedRealm = Thread.current.threadDictionary[key] as? Realm {
             cachedRealm.refresh()
             return cachedRealm
         }
 
-        if let conf = databaseService.realmConf, let realm = try? Realm(configuration: conf) {
+        if let realm = try? Realm(configuration: conf) {
             Thread.current.threadDictionary[key] = realm
             return realm
         }
@@ -113,6 +122,7 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
 
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
         guard let realm = getRealm() else { return [] }
+        realm.refresh()
 
         return realm.objects(CalibreActivityLogEntry.self)
             .filter(predicate(libraryId: libraryId, bookId: bookId, since: since))
@@ -149,6 +159,81 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
             }
             continuation.onTermination = { _ in
                 token.invalidate()
+            }
+        }
+    }
+
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async {
+        guard !events.isEmpty, let realmConf = databaseService.realmConf else { return }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writeQueue.async {
+                defer { continuation.resume() }
+                autoreleasepool {
+                    guard let realm = try? Realm(configuration: realmConf) else {
+                        return
+                    }
+
+                    try? realm.write {
+                        events.forEach { event in
+                            switch event {
+                            case .start(let value):
+                                realm.add(CalibreActivityLogEntry(startValue: value))
+                            case .finish(let value):
+                                guard let previous = realm.objects(CalibreActivityLogEntry.self)
+                                    .filter(CalibreActivityLogEntry.predicate(matching: value))
+                                    .first
+                                else { return }
+
+                                previous.apply(value)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func removeCalibreActivity(id: String) async {
+        guard let realmConf = databaseService.realmConf else { return }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writeQueue.async {
+                defer { continuation.resume() }
+                autoreleasepool {
+                    guard let realm = try? Realm(configuration: realmConf),
+                          let obj = realm.object(ofType: CalibreActivityLogEntry.self, forPrimaryKey: id)
+                    else {
+                        return
+                    }
+
+                    try? realm.write {
+                        realm.delete(obj)
+                    }
+                }
+            }
+        }
+    }
+
+    func cleanCalibreActivities(startDatetime: Date) async {
+        guard let realmConf = databaseService.realmConf else { return }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            writeQueue.async {
+                defer { continuation.resume() }
+                autoreleasepool {
+                    guard let realm = try? Realm(configuration: realmConf) else {
+                        return
+                    }
+
+                    let activities = realm.objects(CalibreActivityLogEntry.self).filter(
+                        NSPredicate(format: "startDatetime < %@", startDatetime as NSDate)
+                    )
+
+                    try? realm.write {
+                        realm.delete(activities)
+                    }
+                }
             }
         }
     }

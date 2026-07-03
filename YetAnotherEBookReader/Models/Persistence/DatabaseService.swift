@@ -52,10 +52,6 @@ class DatabaseService: ObservableObject {
         configure(conf: configuration)
     }
 
-    func loggerConfiguration() -> Realm.Configuration {
-        realmConf ?? Realm.Configuration.defaultConfiguration
-    }
-    
     func configure(conf: Realm.Configuration) {
         self.realmConf = conf
     }

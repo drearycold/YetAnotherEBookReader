@@ -77,11 +77,11 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         let mockSession = URLSession(configuration: sessionConfig)
 
         // Create test services and pre-populate metadataSessions
-        let logger = CalibreActivityLogger(realmConf: config)
+        let logger = CalibreActivityLogger(repository: container.activityLogRepository)
         let service = CalibreServerService(
             logger: logger,
             config: container,
-            database: DatabaseService.shared
+            database: container.databaseService
         )
 
         // Register mock sessions in the service

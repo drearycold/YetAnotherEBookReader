@@ -48,7 +48,7 @@ final class DatabaseBootstrapper {
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
-        container.logger = CalibreActivityLogger(realmConf: realmConf)
+        container.logger = CalibreActivityLogger(repository: container.activityLogRepository)
         container.calibreServerService.logger = container.logger!
         container.downloadManager.setup(container: container)
         try AppContainer.SaveBooksMetadataRealmQueue.sync {

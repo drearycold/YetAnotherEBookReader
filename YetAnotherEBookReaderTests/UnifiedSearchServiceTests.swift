@@ -27,7 +27,6 @@ class UnifiedSearchServiceTests: XCTestCase {
 
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests")
         DatabaseService.shared.setup(conf: config)
-        let logger = CalibreActivityLogger(realmConf: config)
         container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchServiceTests")
 
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")

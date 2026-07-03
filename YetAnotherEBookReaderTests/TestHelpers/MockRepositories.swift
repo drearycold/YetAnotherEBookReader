@@ -587,6 +587,15 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         observeEntriesBroadcaster.subscriberCount
     }
 
+    var writeActivityLogEventsCalled = false
+    var writeActivityLogEventsParam: [ActivityLogWriteEvent] = []
+
+    var removeCalibreActivityCalled = false
+    var removeCalibreActivityIdParam: String?
+
+    var cleanCalibreActivitiesCalled = false
+    var cleanCalibreActivitiesStartDatetimeParam: Date?
+
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
         fetchEntriesCalled = true
         fetchEntriesLibraryIdParam = libraryId
@@ -605,6 +614,21 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
 
     func sendObservedEntries(_ entries: [ActivityLogUIEntry]) {
         observeEntriesBroadcaster.send(entries)
+    }
+
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async {
+        writeActivityLogEventsCalled = true
+        writeActivityLogEventsParam = events
+    }
+
+    func removeCalibreActivity(id: String) async {
+        removeCalibreActivityCalled = true
+        removeCalibreActivityIdParam = id
+    }
+
+    func cleanCalibreActivities(startDatetime: Date) async {
+        cleanCalibreActivitiesCalled = true
+        cleanCalibreActivitiesStartDatetimeParam = startDatetime
     }
 }
 
