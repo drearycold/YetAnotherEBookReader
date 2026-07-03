@@ -24,13 +24,3 @@ class CalibreServerRealm: Object {
 
     @Persisted var dsreaderHelper: CalibreServerDSReaderHelperRealm?
 }
-
-extension CalibreServer: Persistable {
-    init(managedObject: CalibreServerRealm) {
-        self = managedObject.toDomain()
-    }
-    
-    func managedObject() -> CalibreServerRealm {
-        return self.makeRealmObject()
-    }
-}

@@ -79,18 +79,3 @@ class CalibreBookRealm: Object, ObjectKeyIdentifiable {
         CalibreBook.ratingDescription(for: rating)
     }
 }
-
-extension CalibreBook: Persistable {
-    internal init(managedObject: CalibreBookRealm) {
-        self.id = 0
-        self.library = .init(server: .init(uuid: .init(), name: "", baseUrl: "", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: ""), key: "", name: "")
-    }
-    
-    public init(managedObject: CalibreBookRealm, library: CalibreLibrary) {
-        self = managedObject.toDomain(library: library)
-    }
-    
-    public func managedObject() -> CalibreBookRealm {
-        return self.makeRealmObject()
-    }
-}

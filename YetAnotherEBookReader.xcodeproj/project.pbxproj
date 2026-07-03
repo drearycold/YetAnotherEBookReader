@@ -300,8 +300,8 @@
 		E71F35342FE3B3A9007AB0B1 /* Array+Chunks.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35322FE3B3A9007AB0B1 /* Array+Chunks.swift */; };
 		E71F35362FE3B40A007AB0B1 /* CalibreDataSplitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */; };
 		E71F35382FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */; };
-		E71F353B2FE4F302007AB0B1 /* Persistable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* Persistable.swift */; };
-		E71F353C2FE4F302007AB0B1 /* Persistable.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* Persistable.swift */; };
+		E71F353B2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */; };
+		E71F353C2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */; };
 		E71F353E2FE4F307007AB0B1 /* CalibreServerRealm.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */; };
 		E71F353F2FE4F307007AB0B1 /* CalibreServerRealm.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */; };
 		E71F35412FE4F30B007AB0B1 /* CalibreLibraryRealm.swift in Sources */ = {isa = PBXBuildFile; fileRef = E71F35402FE4F30B007AB0B1 /* CalibreLibraryRealm.swift */; };
@@ -698,7 +698,7 @@
 		E71F35322FE3B3A9007AB0B1 /* Array+Chunks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Array+Chunks.swift"; sourceTree = "<group>"; };
 		E71F35352FE3B40A007AB0B1 /* CalibreDataSplitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreDataSplitTests.swift; sourceTree = "<group>"; };
 		E71F35372FE3CAED007AB0B1 /* DSReaderHelperConnectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DSReaderHelperConnectorTests.swift; sourceTree = "<group>"; };
-		E71F353A2FE4F302007AB0B1 /* Persistable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistable.swift; sourceTree = "<group>"; };
+		E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RealmListExtensions.swift; sourceTree = "<group>"; };
 		E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreServerRealm.swift; sourceTree = "<group>"; };
 		E71F35402FE4F30B007AB0B1 /* CalibreLibraryRealm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreLibraryRealm.swift; sourceTree = "<group>"; };
 		E71F35432FE4F315007AB0B1 /* CalibreBookRealm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreBookRealm.swift; sourceTree = "<group>"; };
@@ -1386,7 +1386,7 @@
 		E71F35392FE4F2F8007AB0B1 /* Realm */ = {
 			isa = PBXGroup;
 			children = (
-				E71F353A2FE4F302007AB0B1 /* Persistable.swift */,
+				E71F353A2FE4F302007AB0B1 /* RealmListExtensions.swift */,
 				E71F353D2FE4F307007AB0B1 /* CalibreServerRealm.swift */,
 				E71F35402FE4F30B007AB0B1 /* CalibreLibraryRealm.swift */,
 				E71F35432FE4F315007AB0B1 /* CalibreBookRealm.swift */,
@@ -1816,7 +1816,7 @@
 				E7A8EA2C2A74F65800D5C95B /* DictTabBarController.swift in Sources */,
 				E71F35092FDFAD01007AB0B1 /* PDFAnnotationManager.swift in Sources */,
 				2AAB29942713CB690080B0CB /* SupportCalibreIntroView.swift in Sources */,
-				E71F353B2FE4F302007AB0B1 /* Persistable.swift in Sources */,
+				E71F353B2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */,
 				E792C7E92F83FD640015E020 /* BookDownloadManager.swift in Sources */,
 				E792835328F7C4EC00EE2FC7 /* YabrPDFThumbnailViewController.swift in Sources */,
 				2A0A0487271BF65A00589B87 /* SupportInfoView.swift in Sources */,
@@ -2107,7 +2107,7 @@
 				E71F34F12FDE284F007AB0B1 /* BookRepository.swift in Sources */,
 				2ADCD7F826F4B96200FBAE11 /* BookPreviewViewModel.swift in Sources */,
 				2ADCD7FA26F4B96200FBAE11 /* MyFolioReaderCenterDelegate.swift in Sources */,
-				E71F353C2FE4F302007AB0B1 /* Persistable.swift in Sources */,
+				E71F353C2FE4F302007AB0B1 /* RealmListExtensions.swift in Sources */,
 				2ADCD7FB26F4B96200FBAE11 /* WebViewUI.swift in Sources */,
 				2ADCD7FD26F4B96200FBAE11 /* BookDetailViewModel.swift in Sources */,
 				E792C7E82F83FD640015E020 /* BookDownloadManager.swift in Sources */,

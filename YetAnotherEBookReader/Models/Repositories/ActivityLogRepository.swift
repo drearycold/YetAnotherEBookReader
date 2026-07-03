@@ -96,6 +96,20 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
         return NSPredicate(format: "startDatetime >= %@", since as NSDate)
     }
 
+    private func formattedDate(
+        _ date: Date?,
+        dateStyle: DateFormatter.Style,
+        timeStyle: DateFormatter.Style,
+        fallback: String
+    ) -> String {
+        guard let date else { return fallback }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = dateStyle
+        dateFormatter.timeStyle = timeStyle
+        dateFormatter.locale = Locale.autoupdatingCurrent
+        return dateFormatter.string(from: date)
+    }
+
     private func mapToUI(_ obj: CalibreActivityLogEntry) -> ActivityLogUIEntry {
         var libraryName = "No Entity"
         var bookTitle = ""
@@ -114,10 +128,30 @@ final class RealmActivityLogRepository: ActivityLogRepositoryProtocol {
             bookTitle: bookTitle,
             type: obj.type ?? "Unknown Type",
             errMsg: obj.errMsg ?? "Unknown Error",
-            startDateString: obj.startDateByLocale ?? "Start Unknown",
-            finishDateString: obj.finishDateByLocale ?? "Finish Unknown",
-            startDateLongString: obj.startDateByLocaleLong ?? "Unknown",
-            finishDateLongString: obj.finishDateByLocaleLong ?? "Unknown",
+            startDateString: formattedDate(
+                obj.startDatetime,
+                dateStyle: .short,
+                timeStyle: .medium,
+                fallback: "Start Unknown"
+            ),
+            finishDateString: formattedDate(
+                obj.finishDatetime,
+                dateStyle: .short,
+                timeStyle: .medium,
+                fallback: "Finish Unknown"
+            ),
+            startDateLongString: formattedDate(
+                obj.startDatetime,
+                dateStyle: .long,
+                timeStyle: .long,
+                fallback: "Unknown"
+            ),
+            finishDateLongString: formattedDate(
+                obj.finishDatetime,
+                dateStyle: .long,
+                timeStyle: .long,
+                fallback: "Unknown"
+            ),
             endpointURL: obj.endpoingURL ?? "Unknown",
             httpMethod: obj.httpMethod ?? "GET",
             httpBodyString: obj.httpBody.flatMap { String(data: $0, encoding: .utf8) }

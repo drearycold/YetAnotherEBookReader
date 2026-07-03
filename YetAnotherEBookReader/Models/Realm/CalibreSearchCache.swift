@@ -44,9 +44,6 @@ class CalibreLibrarySearchObject: Object, ObjectKeyIdentifiable {
     
     //search results
     @Persisted var sources: Map<String, CalibreLibrarySearchValueObject?>
-    
-    var loading = false
-    var error = false
 }
 
 class CalibreLibraryCategoryItemObject: Object, ObjectKeyIdentifiable {
