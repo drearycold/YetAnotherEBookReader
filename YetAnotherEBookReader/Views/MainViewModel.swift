@@ -13,6 +13,7 @@ final class MainViewModel: ObservableObject {
     private let sessionManager: ReadingSessionManager
     private var dismissAllTask: Task<Void, Never>?
     private var bookImportTask: Task<Void, Never>?
+    private var readerPresentationTask: Task<Void, Never>?
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
@@ -21,6 +22,13 @@ final class MainViewModel: ObservableObject {
     @Published var termsWebViewPresenting = false
     @Published var bookImportActionSheetPresenting = false
     @Published var bookImportInfo: BookImportInfo?
+    @Published var presentingEBookReaderFromShelf = false {
+        didSet {
+            if sessionManager.presentingEBookReaderFromShelf != presentingEBookReaderFromShelf {
+                sessionManager.presentingEBookReaderFromShelf = presentingEBookReaderFromShelf
+            }
+        }
+    }
     
     // Reactive triggers for UI-level side effects (consent and URL opening)
     @Published var consentRequestTriggered = false
@@ -43,6 +51,7 @@ final class MainViewModel: ObservableObject {
     deinit {
         dismissAllTask?.cancel()
         bookImportTask?.cancel()
+        readerPresentationTask?.cancel()
     }
     
     private func setupSubscriptions() {
@@ -64,15 +73,19 @@ final class MainViewModel: ObservableObject {
                 self.handleImportedBook(bookImportInfo)
             }
         }
+
+        readerPresentationTask?.cancel()
+        let readerPresentationSnapshots = sessionManager.presentingReaderSnapshots()
+        readerPresentationTask = Task { @MainActor [weak self] in
+            for await isPresenting in readerPresentationSnapshots {
+                guard !Task.isCancelled else { return }
+                self?.presentingEBookReaderFromShelf = isPresenting
+            }
+        }
     }
     
     var showWelcome: Bool {
         activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
-    }
-
-    var presentingEBookReaderFromShelf: Bool {
-        get { sessionManager.presentingEBookReaderFromShelf }
-        set { sessionManager.presentingEBookReaderFromShelf = newValue }
     }
 
     var readingBook: CalibreBook? {

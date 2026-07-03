@@ -80,4 +80,41 @@ import Combine
 
         XCTAssertTrue(viewModel.showWelcome)
     }
+
+    func testRecentShelfTapPublishesReaderPresentation() async throws {
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book
+
+        viewModel.recentShelfViewModel.tapBook(bookId: book.inShelfId)
+
+        let presented = await waitUntil { self.viewModel.presentingEBookReaderFromShelf }
+        XCTAssertTrue(presented)
+        XCTAssertNotNil(viewModel.readingBook)
+        XCTAssertNotNil(viewModel.readerInfo)
+        XCTAssertFalse(viewModel.readerInfo?.missing ?? true)
+    }
+
+    func testReaderPresentationDismissalSyncsSessionState() async throws {
+        mockAppContainer.sessionManager.presentingEBookReaderFromShelf = true
+        let presented = await waitUntil { self.viewModel.presentingEBookReaderFromShelf }
+        XCTAssertTrue(presented)
+
+        viewModel.presentingEBookReaderFromShelf = false
+
+        XCTAssertFalse(mockAppContainer.sessionManager.presentingEBookReaderFromShelf)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1.0,
+        condition: @escaping () -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return condition()
+    }
 }
