@@ -18,7 +18,7 @@ enum BookAnnotation {
         
         return Realm.Configuration(
             fileURL: applicationSupportURL.appendingPathComponent("\(server.uuid.uuidString).realm"),
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { migration, oldSchemaVersion in
                 if oldSchemaVersion < 125 {
                     migration.renameProperty(onType: FolioReaderPreferenceRealm.className(), from: "structuralTocLevel", to: "structuralTrackingTocLevel")

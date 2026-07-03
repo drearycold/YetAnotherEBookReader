@@ -9,6 +9,11 @@ import Foundation
 import RealmSwift
 import os.log
 
+enum DatabaseSchema {
+    static let defaultVersion: UInt64 = 141
+    static var version: UInt64 = defaultVersion
+}
+
 class DatabaseService: ObservableObject {
     @Published var realmConf: Realm.Configuration?
     @Published var realm: Realm?
@@ -19,6 +24,37 @@ class DatabaseService: ObservableObject {
     static let shared = DatabaseService()
     
     init() {}
+
+    func installInitialDefaultConfiguration() {
+        DatabaseSchema.version = DatabaseSchema.defaultVersion
+        let initialConfiguration = Realm.Configuration(
+            schemaVersion: DatabaseSchema.version,
+            migrationBlock: { _, _ in }
+        )
+        Realm.Configuration.defaultConfiguration = initialConfiguration
+        configure(conf: initialConfiguration)
+    }
+
+    func installTestConfiguration(_ configuration: Realm.Configuration) {
+        DatabaseSchema.version = configuration.schemaVersion
+        Realm.Configuration.defaultConfiguration = configuration
+        setup(conf: configuration)
+    }
+
+    func prepareProductionConfiguration(statusHandler: @escaping (String) -> Void) throws {
+        let schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
+        DatabaseSchema.version = schemaVersion
+        let configuration = try DatabaseMigrator().makeConfiguration(
+            schemaVersion: schemaVersion,
+            statusHandler: statusHandler
+        )
+        Realm.Configuration.defaultConfiguration = configuration
+        configure(conf: configuration)
+    }
+
+    func loggerConfiguration() -> Realm.Configuration {
+        realmConf ?? Realm.Configuration.defaultConfiguration
+    }
     
     func configure(conf: Realm.Configuration) {
         self.realmConf = conf

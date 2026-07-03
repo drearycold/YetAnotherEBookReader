@@ -33,7 +33,7 @@ final class InMemoryServerScopedRealmConfigurationProvider: ServerScopedRealmCon
         if let cached = cache[server.uuid] { return cached }
         let config = Realm.Configuration(
             inMemoryIdentifier: "\(identifierPrefix)-\(server.uuid.uuidString)",
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in },
             objectTypes: [
                 BookDeviceReadingPositionRealm.self,

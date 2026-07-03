@@ -28,7 +28,7 @@ struct TestRealmEnvironment {
 
     static func make(
         identifier: String = "Test-\(UUID().uuidString)",
-        mainSchemaVersion: UInt64 = AppContainer.RealmSchemaVersion
+        mainSchemaVersion: UInt64 = DatabaseSchema.version
     ) -> TestRealmEnvironment {
         let main = Realm.Configuration(
             inMemoryIdentifier: "\(identifier)-main",

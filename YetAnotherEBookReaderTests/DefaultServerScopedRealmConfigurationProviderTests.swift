@@ -34,7 +34,7 @@ final class DefaultServerScopedRealmConfigurationProviderTests: XCTestCase {
         XCTAssertEqual(config1.schemaVersion, config2.schemaVersion)
         
         // Assert schema version matches the AppContainer constant
-        XCTAssertEqual(config1.schemaVersion, AppContainer.RealmSchemaVersion)
+        XCTAssertEqual(config1.schemaVersion, DatabaseSchema.version)
     }
     
     func testDifferentServersHaveDifferentConfigurations() {

@@ -22,7 +22,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         )
         folioProfileConfig = Realm.Configuration(
             inMemoryIdentifier: "ReaderPreferenceRepositoryTests-FolioProfiles",
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]
         )

@@ -21,7 +21,7 @@ final class DefaultServerScopedRealmConfigurationProvider: ServerScopedRealmConf
     private let lock = NSLock()
     
     func configuration(for server: CalibreServer) -> Realm.Configuration {
-        let key = CacheKey(serverUUID: server.uuid.uuidString, schemaVersion: AppContainer.RealmSchemaVersion)
+        let key = CacheKey(serverUUID: server.uuid.uuidString, schemaVersion: DatabaseSchema.version)
         
         lock.lock()
         if let cachedConfig = cache[key] {

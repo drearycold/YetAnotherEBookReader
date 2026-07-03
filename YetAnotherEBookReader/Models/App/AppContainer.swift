@@ -5,17 +5,10 @@
 //  Phase 4 of the AppContainer elimination plan: AppContainer is the new
 //  composition root. It owns every repository, manager, service, and
 //  runtime state that used to live on AppContainer, and conforms to the
-//  three narrow protocols (AppContainerProtocol, CalibreServerConfigProvider,
-//  LibraryProvider) that services depend on.
-//
-//  `AppContainer` coexists with `AppContainer` during 4a-4d. Phase 4e deletes
-//  AppContainer and renames all callers; for the transitional period, both
-//  types share `AppContainer.RealmSchemaVersion` so the two can boot
-//  side-by-side in preview contexts.
+//  narrow protocols that services depend on.
 //
 
 import Foundation
-import RealmSwift
 import SwiftUI
 import OSLog
 
@@ -106,8 +99,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     private var defaultLog = Logger()
 
-    static var RealmSchemaVersion: UInt64 = 141
-
     var logger: CalibreActivityLogger?
 
     let coverCache: BookCoverCaching = DefaultBookCoverCache()
@@ -136,7 +127,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
-    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
+    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: databaseService.loggerConfiguration()), config: self, database: self.databaseService)
     lazy var searchCacheRepository = RealmSearchCacheStore(
         databaseService: self.databaseService,
         librarySnapshotProvider: self
@@ -248,8 +239,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             // access. The mock block below calls populateLibraries()
             // and initializeDatabase(), both of which need this to
             // already be wired.
-            Realm.Configuration.defaultConfiguration = env.mainRealmConfiguration
-            databaseService.setup(conf: env.mainRealmConfiguration)
+            databaseService.installTestConfiguration(env.mainRealmConfiguration)
             self.serverScopedRealmProvider = env.serverScopedRealmProvider
         }
 
@@ -316,17 +306,11 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     // MARK: - Init helpers
 
-    /// Pre-populate `Realm.Configuration.defaultConfiguration` with an empty
-    /// migration block so SwiftUI views using `ObservedResults` don't crash
-    /// before `tryInitializeDatabase` has produced the real configuration.
+    /// Pre-populate the Realm default configuration so SwiftUI views using
+    /// `ObservedResults` don't crash before `tryInitializeDatabase` has produced
+    /// the real configuration.
     private func setupRealmDefaults() {
-        AppContainer.RealmSchemaVersion = 141
-        let initialConf = Realm.Configuration(
-            schemaVersion: AppContainer.RealmSchemaVersion,
-            migrationBlock: { _, _ in }
-        )
-        Realm.Configuration.defaultConfiguration = initialConf
-        databaseService.configure(conf: initialConf)
+        databaseService.installInitialDefaultConfiguration()
     }
 
     /// Configure cover cache and authenticated HTTP image requests.
@@ -343,11 +327,7 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-        let schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
-        AppContainer.RealmSchemaVersion = schemaVersion
-        let conf = try DatabaseMigrator().makeConfiguration(schemaVersion: schemaVersion, statusHandler: statusHandler)
-        Realm.Configuration.defaultConfiguration = conf
-        databaseService.configure(conf: conf)
+        try databaseService.prepareProductionConfiguration(statusHandler: statusHandler)
     }
 
     func initializeDatabase() throws {
@@ -416,18 +396,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         Task {
             await logger.logFinishCalibreActivity(type: type, request: request, startDatetime: startDatetime, finishDatetime: finishDatetime, errMsg: errMsg)
         }
-    }
-}
-
-extension AppContainer: LibraryResolver {
-    func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
-        return libraryManager.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
-    }
-}
-
-extension AppContainer: ServerResolver {
-    func server(forUUID uuid: String) -> CalibreServer? {
-        return serverManager.calibreServers[uuid]
     }
 }
 

@@ -755,7 +755,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
         let config = Realm.Configuration(
             inMemoryIdentifier: id,
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]
         )
