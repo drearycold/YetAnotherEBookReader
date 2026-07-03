@@ -164,6 +164,16 @@
 		A073200130D3000300000006 /* ActivityLogRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000004 /* ActivityLogRepositoryTests.swift */; };
 		A073200130D3000300000007 /* ActivityLogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000005 /* ActivityLogRepository.swift */; };
 		A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = A073100130D3000100000005 /* ActivityLogRepository.swift */; };
+		A074200130D4000300000001 /* PDFPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000001 /* PDFPreferenceValue.swift */; };
+		A074200130D4000300000002 /* PDFPreferenceValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000001 /* PDFPreferenceValue.swift */; };
+		A074200130D4000300000003 /* PDFPreferenceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000002 /* PDFPreferenceAdapter.swift */; };
+		A074200130D4000300000004 /* PDFPreferenceAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000002 /* PDFPreferenceAdapter.swift */; };
+		A074200130D4000300000005 /* PDFOptionsRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */; };
+		A074200130D4000300000006 /* PDFOptionsRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */; };
+		A074200130D4000300000007 /* LegacyReadPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */; };
+		A074200130D4000300000008 /* LegacyReadPositionRealmMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */; };
+		A074200130D4000300000009 /* CalibreReadingPositionMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */; };
+		A074200130D4000300000010 /* CalibreReadingPositionMappers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */; };
 		E70A25B72F73DEAD004F006E /* ReadiumNavigator in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B62F73DEAD004F006E /* ReadiumNavigator */; };
 		E70A25B92F73DEAD004F006E /* ReadiumShared in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25B82F73DEAD004F006E /* ReadiumShared */; };
 		E70A25BB2F73DEAD004F006E /* ReadiumStreamer in Frameworks */ = {isa = PBXBuildFile; productRef = E70A25BA2F73DEAD004F006E /* ReadiumStreamer */; };
@@ -619,6 +629,11 @@
 		A073100130D3000100000003 /* CalibreActivityLoggerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreActivityLoggerTests.swift; sourceTree = "<group>"; };
 		A073100130D3000100000004 /* ActivityLogRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogRepositoryTests.swift; sourceTree = "<group>"; };
 		A073100130D3000100000005 /* ActivityLogRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityLogRepository.swift; sourceTree = "<group>"; };
+		A074100130D4000100000001 /* PDFPreferenceValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreferenceValue.swift; sourceTree = "<group>"; };
+		A074100130D4000100000002 /* PDFPreferenceAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFPreferenceAdapter.swift; sourceTree = "<group>"; };
+		A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PDFOptionsRealmMappers.swift; sourceTree = "<group>"; };
+		A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyReadPositionRealmMappers.swift; sourceTree = "<group>"; };
+		A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibreReadingPositionMappers.swift; sourceTree = "<group>"; };
 		E70A25C92F7BDC8D004F006E /* YabrReaderSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderSettingsView.swift; sourceTree = "<group>"; };
 		E70A25CC2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationViewModel.swift; sourceTree = "<group>"; };
 		E70A25CF2F7D1A69004F006E /* YabrReaderNavigationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YabrReaderNavigationView.swift; sourceTree = "<group>"; };
@@ -999,6 +1014,7 @@
 				E7C7779328ED322100939D63 /* ListViews */,
 				2A0A78A026EB2AC300F3C753 /* PDFPageWithBackground.swift */,
 				E7832D5C280AEC3A006E6901 /* YabrPDFModel.swift */,
+				A074100130D4000100000002 /* PDFPreferenceAdapter.swift */,
 				2A890570260076780072B580 /* YabrPDFOptionView.swift */,
 				E7832D5E280D39D9006E6901 /* YabrPDFView.swift */,
 				2A8C26CF25C5A1E000FC7FC0 /* YabrPDFViewController.swift */,
@@ -1220,8 +1236,9 @@
 		E7B100022FF1000000000002 /* Calibre */ = {
 			isa = PBXGroup;
 			children = (
-				E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */,
-				E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */,
+					E7226E432FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift */,
+					A074100130D4000100000005 /* CalibreReadingPositionMappers.swift */,
+					E71F35172FE3B336007AB0B1 /* CalibreCoreModels.swift */,
 				E7933FC32872D43F00CE7A15 /* CalibreDateParser.swift */,
 				E71F351D2FE3B35C007AB0B1 /* CalibreHighlightStyle.swift */,
 				E71F35232FE3B37A007AB0B1 /* CalibrePayloadModels.swift */,
@@ -1239,9 +1256,10 @@
 				E71F34F82FDEC359007AB0B1 /* BookBookmark.swift */,
 				6E7733BF26663D51008318C3 /* BookFiles.swift */,
 				E71F34FB2FDEC35B007AB0B1 /* BookHighlight.swift */,
-				E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
-				2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
-				E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */,
+					E71F34C42FDBD766007AB0B1 /* CategoryModels.swift */,
+					2AAE409E26784D080058A501 /* LibraryBookListFilter.swift */,
+					A074100130D4000100000001 /* PDFPreferenceValue.swift */,
+					E71F35D02FEAD100007AB0B1 /* ReadiumPreferenceValue.swift */,
 				E71F351A2FE3B351007AB0B1 /* ReadingPositionModels.swift */,
 				E71F34A02FD8FDE4007AB0B1 /* UnifiedSearchModels.swift */,
 				2ACE265426A920E10037FCB4 /* YabrData.swift */,
@@ -1382,9 +1400,11 @@
 				E7804CCB29C0220D0066BD43 /* CalibreSearchCache.swift */,
 				E71F359F2FE928A7007AB0B1 /* CalibreRealmMappers.swift */,
 				E71F35A22FE928AA007AB0B1 /* ReadingPositionRealmMappers.swift */,
-				E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
-				A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */,
-				E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */,
+					E71F35A52FE928AE007AB0B1 /* AnnotationRealmMappers.swift */,
+					A073100130D3000100000002 /* CalibreActivityLogRealmMappers.swift */,
+					A074100130D4000100000004 /* LegacyReadPositionRealmMappers.swift */,
+					A074100130D4000100000003 /* PDFOptionsRealmMappers.swift */,
+					E71F35D32FEAD110007AB0B1 /* ReadiumPreferenceRealmMappers.swift */,
 			);
 			path = Realm;
 			sourceTree = "<group>";
@@ -1735,22 +1755,27 @@
 				E7B100082FF1000600000008 /* ManagerAsyncBroadcaster.swift in Sources */,
 				2A107D422661CFBB007DCA20 /* YabrReadiumEPUBViewController.swift in Sources */,
 				E7226E2B2FED5677009D3BB3 /* TestRealmEnvironment.swift in Sources */,
-				E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
-				E71F35652FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
+					E71F35242FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
+					A074200130D4000300000009 /* CalibreReadingPositionMappers.swift in Sources */,
+					E71F35652FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
 				E71F34BC2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
 				E70A25CD2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,
 				E71F35332FE3B3A9007AB0B1 /* Array+Chunks.swift in Sources */,
 				E71F35772FE8C6BD007AB0B1 /* BookFormatRow.swift in Sources */,
-				E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
-				2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
+					E7832D5D280AEC3A006E6901 /* YabrPDFModel.swift in Sources */,
+					A074200130D4000300000003 /* PDFPreferenceAdapter.swift in Sources */,
+					2A6FF9E9270D5DC000811C50 /* MDictViewUIVC.swift in Sources */,
 				2A270B25272F7E07006552A3 /* ActivityList.swift in Sources */,
 				E7DFE3F1297A749800C60E7B /* ReaderOptionsFontHelpView.swift in Sources */,
-				E71F35452FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
-				E71F357B2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
+					E71F35452FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
+					A074200130D4000300000007 /* LegacyReadPositionRealmMappers.swift in Sources */,
+					E71F357B2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
 				E71F34F62FDE3060007AB0B1 /* LibraryRepository.swift in Sources */,
 				E71F34C62FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
-				E71F35512FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
-				E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */,
+					E71F35512FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
+					A074200130D4000300000005 /* PDFOptionsRealmMappers.swift in Sources */,
+					A074200130D4000300000001 /* PDFPreferenceValue.swift in Sources */,
+					E7C777A028ED495900939D63 /* YabrPDFReferenceList.swift in Sources */,
 				E71F35882FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
 				2AF53FD12675F680006E92E0 /* SettingsView.swift in Sources */,
 				E7939151261F1A47004AB011 /* SettingsViewModel.swift in Sources */,
@@ -2023,8 +2048,9 @@
 				E70A25CE2F7D1A5D004F006E /* YabrReaderNavigationViewModel.swift in Sources */,
 				E71F34BD2FDA926F007AB0B1 /* LibrarySearchService.swift in Sources */,
 				E71F35662FE77F01007AB0B1 /* BookProgressSection.swift in Sources */,
-				E71F35252FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
-				2ADCD7D426F4B96200FBAE11 /* SwiftUI_Ad_Banner.swift in Sources */,
+					E71F35252FE3B37A007AB0B1 /* CalibrePayloadModels.swift in Sources */,
+					A074200130D4000300000010 /* CalibreReadingPositionMappers.swift in Sources */,
+					2ADCD7D426F4B96200FBAE11 /* SwiftUI_Ad_Banner.swift in Sources */,
 				2ADCD7DA26F4B96200FBAE11 /* LibraryInfoBatchDownloadSheet.swift in Sources */,
 				E71F35782FE8C6BD007AB0B1 /* BookFormatRow.swift in Sources */,
 				2ADCD7E026F4B96200FBAE11 /* PDFPageWithBackground.swift in Sources */,
@@ -2032,13 +2058,16 @@
 				2ADCD7E426F4B96200FBAE11 /* WebViewUIVC.swift in Sources */,
 				E71F34F72FDE3060007AB0B1 /* LibraryRepository.swift in Sources */,
 				E71F357A2FE8CBD7007AB0B1 /* LibraryInfoBookListViewModel.swift in Sources */,
-				E71F35442FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
-				E71F34C52FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
+					E71F35442FE4F315007AB0B1 /* CalibreBookRealm.swift in Sources */,
+					A074200130D4000300000008 /* LegacyReadPositionRealmMappers.swift in Sources */,
+					E71F34C52FDBD766007AB0B1 /* CategoryModels.swift in Sources */,
 				2ADCD7E626F4B96200FBAE11 /* Utils.swift in Sources */,
 				A073200130D3000300000002 /* ActivityLogWriteEvent.swift in Sources */,
-				A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */,
-				E71F35502FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
-				E71F35892FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
+					A073200130D3000300000008 /* ActivityLogRepository.swift in Sources */,
+					E71F35502FE4F341007AB0B1 /* PDFOptionsRealm.swift in Sources */,
+					A074200130D4000300000006 /* PDFOptionsRealmMappers.swift in Sources */,
+					A074200130D4000300000002 /* PDFPreferenceValue.swift in Sources */,
+					E71F35892FE8CED2007AB0B1 /* LibraryInfoBookListContent.swift in Sources */,
 				2ADCD7E726F4B96200FBAE11 /* YabrPDFViewController.swift in Sources */,
 				E71F349F2FD8FDD0007AB0B1 /* RealmSearchCacheStore.swift in Sources */,
 				2ADCD7E826F4B96200FBAE11 /* ReadingPositionViewModel.swift in Sources */,
@@ -2049,9 +2078,10 @@
 				2ADCD7ED26F4B96200FBAE11 /* EpubFolioReaderContainer.swift in Sources */,
 				E71F35102FDFAD05007AB0B1 /* PDFSearchController.swift in Sources */,
 				E71F35192FDFAD18007AB0B1 /* PDFMarginCropController.swift in Sources */,
-				E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
-				E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
-				E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
+					E71F35222FDFC180007AB0B1 /* YabrPDFViewController+Navigation.swift in Sources */,
+					E71F35252FDFC180007AB0B1 /* YabrPDFViewController+Options.swift in Sources */,
+					A074200130D4000300000004 /* PDFPreferenceAdapter.swift in Sources */,
+					E7226E442FF0B5FC009D3BB3 /* BookMetadataSyncWorker.swift in Sources */,
 				E71F35192FE3B336007AB0B1 /* CalibreCoreModels.swift in Sources */,
 				E7226E312FEF69A5009D3BB3 /* ShelfLegacyStyle.swift in Sources */,
 				E71F35832FE8CDC4007AB0B1 /* LibraryInfoBookListFooter.swift in Sources */,

@@ -185,15 +185,12 @@ final class MockAppContainerFactoryTests: XCTestCase {
 
     /// Two AppContainer instances that resolve the mock
     /// `LocalServerUUID` to different in-memory sidecar
-    /// configurations must NOT share the thread-local Realm cache.
+    /// configurations must NOT share sidecar Realm state.
     /// This is the regression coverage for the P1 audit finding:
     /// the previous `CalibreServer.realmPerf` extension routed
     /// every call through `AppContainer.shared` and keyed the
     /// cache on `realmPerf-<uuid>` only, which aliased both
-    /// containers onto the same slot. The new
-    /// `CalibreServer.realm(in: container)` takes the container
-    /// explicitly and includes `ObjectIdentifier(container)` in the
-    /// cache key, so two containers get two different Realms.
+    /// containers onto the same slot.
     func testPerContainerSidecarRealmDistinguishesContainersByConfig() throws {
         let containerA = MockAppContainerFactory.makeContainer(
             testName: "MockAppContainerFactoryTests-RealmPerfA"
@@ -219,7 +216,7 @@ final class MockAppContainerFactoryTests: XCTestCase {
         // Write a single BookDeviceReadingPositionRealm through
         // containerA's per-server sidecar. The same lookup from
         // containerB must not observe it.
-        let realmA = libraryA.server.realm(in: containerA)
+        let realmA = try Realm(configuration: containerA.serverScopedRealmProvider.configuration(for: libraryA.server))
         try realmA.write {
             let object = BookDeviceReadingPositionRealm()
             object.bookId = "RealmPerfTest"
@@ -234,7 +231,7 @@ final class MockAppContainerFactoryTests: XCTestCase {
             realmA.add(object)
         }
 
-        let realmB = libraryB.server.realm(in: containerB)
+        let realmB = try Realm(configuration: containerB.serverScopedRealmProvider.configuration(for: libraryB.server))
         let leakedCount = realmB
             .objects(BookDeviceReadingPositionRealm.self)
             .filter("bookId == %@", "RealmPerfTest")

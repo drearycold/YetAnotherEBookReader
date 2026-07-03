@@ -117,7 +117,10 @@ final class DatabaseBootstrapper {
                 }
 
                 if let library = container.library(forServerUUID: serverUUID, libraryName: libraryName) {
-                    bookRealm.migrateReadPos(library: library, repository: readingPositionRepository)
+                    let book = CalibreBook(id: bookRealm.idInLib, library: library)
+                    for position in bookRealm.legacyReadPositions() {
+                        readingPositionRepository.savePosition(position, for: book)
+                    }
                 }
 
                 try? freshRealm.write {
