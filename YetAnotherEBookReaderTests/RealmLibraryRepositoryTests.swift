@@ -105,4 +105,45 @@ final class RealmLibraryRepositoryTests: XCTestCase {
         
         XCTAssertEqual(repository.countBooks(for: library), 2)
     }
+
+    func testObserveLibraryPublishesInitialRealmNotificationAndUpdates() async throws {
+        let server = TestFixtures.makeServer()
+        serverResolver.resolvedServers[server.uuid.uuidString] = server
+
+        var library = TestFixtures.makeLibrary(server: server, key: "observe_lib", name: "Observe Library")
+        library.discoverable = true
+        library.autoUpdate = false
+        try repository.saveLibrary(library)
+
+        let initialExpectation = expectation(description: "Initial existing library observed")
+        let updateExpectation = expectation(description: "Library update observed")
+        var observedLibraries: [CalibreLibrary?] = []
+
+        let task = Task { @MainActor [repository] in
+            guard let repository else { return }
+            for await observedLibrary in repository.observeLibrary(id: library.id) {
+                observedLibraries.append(observedLibrary)
+                if observedLibraries.count == 1 {
+                    initialExpectation.fulfill()
+                } else if observedLibraries.count >= 2 {
+                    updateExpectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        await fulfillment(of: [initialExpectation], timeout: 2.0)
+        try repository.updateLibraryFlags(id: library.id, discoverable: false, autoUpdate: true)
+
+        await fulfillment(of: [updateExpectation], timeout: 2.0)
+        task.cancel()
+
+        XCTAssertEqual(observedLibraries.count, 2)
+        XCTAssertEqual(observedLibraries[0]?.id, library.id)
+        XCTAssertEqual(observedLibraries[0]?.discoverable, true)
+        XCTAssertEqual(observedLibraries[0]?.autoUpdate, false)
+        XCTAssertEqual(observedLibraries[1]?.id, library.id)
+        XCTAssertEqual(observedLibraries[1]?.discoverable, false)
+        XCTAssertEqual(observedLibraries[1]?.autoUpdate, true)
+    }
 }

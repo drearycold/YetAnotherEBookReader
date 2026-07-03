@@ -204,8 +204,7 @@ class SectionShelfViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isInitialLoadComplete)
 
         mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [], isInitialLoadComplete: true),
-            sendLegacySubject: false
+            .init(sections: [], isInitialLoadComplete: true)
         )
 
         await waitForViewModelUpdate { self.viewModel.isInitialLoadComplete }
@@ -214,8 +213,7 @@ class SectionShelfViewModelTests: XCTestCase {
 
     private func publishDiscoverSections(_ sections: [ShelfSectionItem], isInitialLoadComplete: Bool = false) {
         mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: sections, isInitialLoadComplete: isInitialLoadComplete),
-            sendLegacySubject: false
+            .init(sections: sections, isInitialLoadComplete: isInitialLoadComplete)
         )
     }
 

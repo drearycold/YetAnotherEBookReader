@@ -321,7 +321,7 @@ struct SectionShelfView: View {
             )) { detailId in
                 NavigationView {
                     BookDetailView(bookId: detailId.value, viewMode: .SHELF)
-                        .environmentObject(viewModel.container)
+                        .environment(\.appContainer, viewModel.container)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {

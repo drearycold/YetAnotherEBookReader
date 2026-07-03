@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Combine
+import SwiftUI
 
 extension LibraryInfoView {
     enum GroupKey: String, CaseIterable, Identifiable, CustomStringConvertible {
@@ -98,7 +98,7 @@ extension LibraryInfoView {
         
         @Published var availableCategories: [CategoryCacheSummary] = []
         
-        private var categoryObserver: AnyCancellable?
+        private var categoryObserverTask: Task<Void, Never>?
         
         func fetchAvailableCategories() {
             guard let container = AppContainer.shared else { return }
@@ -109,15 +109,19 @@ extension LibraryInfoView {
         }
         
         func setupCategoryObserver() {
-            guard let container = AppContainer.shared, categoryObserver == nil else { return }
+            guard let container = AppContainer.shared, categoryObserverTask == nil else { return }
 
-            categoryObserver = container.categoryCacheRepository.observeCategorySummaries()
-                .sink { [weak self] summaries in
+            categoryObserverTask = Task { @MainActor [weak self, repository = container.categoryCacheRepository] in
+                for await summaries in repository.observeCategorySummaries() {
+                    guard !Task.isCancelled else { break }
                     self?.availableCategories = summaries
                 }
+            }
         }
         
-        private var cancellables = Set<AnyCancellable>()
+        deinit {
+            categoryObserverTask?.cancel()
+        }
         
         func getLibraryLoadingCount(container: AppContainer, searchResult: UnifiedSearchResult?, libraryStatuses: [String: LibrarySearchStatus]) -> Int {
             guard let result = searchResult else { return 0 }

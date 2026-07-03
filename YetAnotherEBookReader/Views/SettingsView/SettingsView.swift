@@ -6,10 +6,9 @@
 //
 
 import SwiftUI
-import Combine
 
 struct SettingsView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @ObservedObject var viewModel: SettingsViewModel
     @StateObject private var addServerViewModel: ServerViewModel
     
@@ -189,6 +188,6 @@ struct SettingsView_Previews: PreviewProvider {
             SettingsView(viewModel: SettingsViewModel(container: container))
         }
         .navigationViewStyle(StackNavigationViewStyle())
-        .environmentObject(container)
+        .environment(\.appContainer, container)
     }
 }

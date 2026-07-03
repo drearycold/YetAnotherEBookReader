@@ -104,6 +104,51 @@ import Combine
         XCTAssertTrue(staleRemovedBeforePopulate)
     }
 
+    func testServerInfoSnapshotsUpdateRefreshingAndRowState() async throws {
+        let server = CalibreServer(uuid: UUID(), name: "Status Server", baseUrl: "http://localhost/status", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
+        mockAppContainer.serverManager.calibreServers[server.id] = server
+        viewModel.updateServerList()
+        let initialServerList = viewModel.serverList
+
+        let request = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: true, incremental: true)
+        let probingInfo = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: server.baseUrl)!,
+            probing: true,
+            errorMsg: "Connecting",
+            defaultLibrary: "",
+            libraryMap: [:],
+            request: request
+        )
+        mockAppContainer.serverManager.calibreServerInfoStaging[request.id] = probingInfo
+
+        let receivedProbingSnapshot = await waitUntil { self.viewModel.isRefreshing }
+        XCTAssertTrue(receivedProbingSnapshot)
+        XCTAssertEqual(viewModel.serverList, initialServerList)
+
+        let reachableInfo = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: server.baseUrl)!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: "lib",
+            libraryMap: ["lib": "Library"],
+            request: request
+        )
+        mockAppContainer.serverManager.calibreServerInfoStaging[request.id] = reachableInfo
+
+        let receivedReachableSnapshot = await waitUntil { self.viewModel.isRefreshing == false }
+        XCTAssertTrue(receivedReachableSnapshot)
+        let state = viewModel.rowState(for: server)
+        XCTAssertEqual(state.isLocalReachable, true)
+        XCTAssertEqual(state.serverInfoText, "Server has 1 libraries")
+        XCTAssertFalse(state.isServerError)
+        XCTAssertEqual(viewModel.serverList, initialServerList)
+    }
+
     func testServerViewModelProcessInputNormalizesURLAndAllowsBlankPublicURL() {
         let viewModel = ServerViewModel(container: mockAppContainer, server: nil)
         viewModel.calibreServerUrl = "example.com"
@@ -114,6 +159,20 @@ import Combine
         XCTAssertEqual(viewModel.calibreServerUrl, "http://example.com/")
         XCTAssertEqual(viewModel.calibreServerUrlPublic, "")
         XCTAssertTrue(viewModel.serverCalibreInfoPresenting)
+    }
+
+    private func waitUntil(
+        timeout: TimeInterval = 1.0,
+        condition: @escaping () -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return condition()
     }
 
 }

@@ -494,14 +494,14 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     }
 
     private func clearBookmarks() {
-        guard let realm = container?.realm else { return }
+        guard let realm = container?.databaseService.realm else { return }
         try? realm.write {
             realm.delete(realm.objects(BookBookmarkRealm.self).filter("bookId IN %@", [book?.bookPrefId ?? "", folioReaderBookId]))
         }
     }
 
     private func clearHighlights() {
-        guard let realm = container?.realm else { return }
+        guard let realm = container?.databaseService.realm else { return }
         try? realm.write {
             realm.delete(realm.objects(BookHighlightRealm.self).filter("bookId == %@", book?.bookPrefId ?? ""))
         }
@@ -755,7 +755,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
     private func makeProfileRepository(id: String) -> FolioReaderProfileRepositoryProtocol {
         let config = Realm.Configuration(
             inMemoryIdentifier: id,
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in },
             objectTypes: [FolioReaderPreferenceRealm.self]
         )

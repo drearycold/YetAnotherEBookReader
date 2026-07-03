@@ -168,17 +168,3 @@ struct LibraryInfoBookRow: View {
             }
         }
     }
-
-//struct LibraryInfoBookRow_Previews: PreviewProvider {
-//    static private var container = AppContainer(mock: true)
-//
-//    static var previews: some View {
-//        List{
-//            LibraryInfoBookRow(book: Binding<CalibreBook>(get: {
-//                container.booksInShelf.first!.value
-//            }, set: { _ in
-//
-//            }))
-//        }.environmentObject(container)
-//    }
-//}

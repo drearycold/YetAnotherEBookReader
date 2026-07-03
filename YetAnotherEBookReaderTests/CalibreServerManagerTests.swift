@@ -161,6 +161,19 @@ final class CalibreServerManagerTests: XCTestCase {
         XCTAssertEqual(info?.id, infoReachable.id)
     }
 
+    func testManagerAsyncBroadcasterStreamsInitialAndSubsequentValues() async {
+        let broadcaster = ManagerAsyncBroadcaster<Int>()
+        let stream = broadcaster.stream(initialValue: 1)
+        var iterator = stream.makeAsyncIterator()
+
+        let initial = await iterator.next()
+        broadcaster.send(2)
+        let updated = await iterator.next()
+
+        XCTAssertEqual(initial, 1)
+        XCTAssertEqual(updated, 2)
+    }
+
     func testProbeServerSuccess() async throws {
         let server = CalibreServer(uuid: UUID(), name: "Probe Server Success", baseUrl: "http://localhost/probe_success", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
         container.serverManager.calibreServers[server.id] = server
@@ -307,7 +320,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
 
         let helper = try await waitForHelperConfiguration(serverId: server.id)
         XCTAssertEqual(helper?.port, 8080)
@@ -330,7 +343,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
         try await Task.sleep(nanoseconds: 150_000_000)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
@@ -359,7 +372,7 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(server.id)
+        serverManager.requestServerHelperConfigSync(serverId: server.id)
         try await Task.sleep(nanoseconds: 150_000_000)
 
         let helper = serverManager.queryServerDSReaderHelper(server: server)
@@ -387,8 +400,8 @@ final class CalibreServerManagerTests: XCTestCase {
         }
 
         await Task.yield()
-        serverManager.syncServerHelperConfigSubject.send(serverOne.id)
-        serverManager.syncServerHelperConfigSubject.send(serverTwo.id)
+        serverManager.requestServerHelperConfigSync(serverId: serverOne.id)
+        serverManager.requestServerHelperConfigSync(serverId: serverTwo.id)
 
         let helperOne = try await waitForHelperConfiguration(serverId: serverOne.id)
         let helperTwo = try await waitForHelperConfiguration(serverId: serverTwo.id)

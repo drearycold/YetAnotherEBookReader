@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 
 struct ReaderOptionsView: View {
     @StateObject private var viewModel: ReaderOptionsViewModel

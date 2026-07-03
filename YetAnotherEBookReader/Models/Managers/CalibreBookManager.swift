@@ -6,11 +6,9 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 import SwiftUI
 import OSLog
-import Kingfisher
 import CryptoSwift
 
 #if canImport(R2Shared)
@@ -18,18 +16,41 @@ import R2Shared
 import R2Streamer
 #endif
 
-class CalibreBookManager: ObservableObject {
+class CalibreBookManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreBookManager")
 
     weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
 
-    @Published var booksInShelf = [String: CalibreBook]()
-    @Published var booksAnnotation = [String: CalibreBook]()
-    @Published var isShelfLoaded = false
+    private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
+    private let booksInShelfBroadcaster = ManagerAsyncBroadcaster<[String: CalibreBook]>()
+    private let booksAnnotationBroadcaster = ManagerAsyncBroadcaster<[String: CalibreBook]>()
+    private let isShelfLoadedBroadcaster = ManagerAsyncBroadcaster<Bool>()
+    private let selectedBookIdBroadcaster = ManagerAsyncBroadcaster<String?>()
 
-    @Published var selectedBookId: String? = nil {
+    var booksInShelf = [String: CalibreBook]() {
         didSet {
+            booksInShelfBroadcaster.send(booksInShelf)
+            publishStateChange()
+        }
+    }
+    var booksAnnotation = [String: CalibreBook]() {
+        didSet {
+            booksAnnotationBroadcaster.send(booksAnnotation)
+            publishStateChange()
+        }
+    }
+    var isShelfLoaded = false {
+        didSet {
+            isShelfLoadedBroadcaster.send(isShelfLoaded)
+            publishStateChange()
+        }
+    }
+
+    var selectedBookId: String? = nil {
+        didSet {
+            selectedBookIdBroadcaster.send(selectedBookId)
+            publishStateChange()
             if let selectedBookId = selectedBookId,
                readingBookInShelfId != selectedBookId {
                 readingBookInShelfId = selectedBookId
@@ -102,6 +123,30 @@ class CalibreBookManager: ObservableObject {
             readingPositionRepository: self.readingPositionRepository,
             annotationRepository: self.annotationRepository
         )
+    }
+
+    func stateChanges() -> AsyncStream<Void> {
+        stateChangeBroadcaster.stream()
+    }
+
+    func booksInShelfSnapshots() -> AsyncStream<[String: CalibreBook]> {
+        booksInShelfBroadcaster.stream(initialValue: booksInShelf)
+    }
+
+    func booksAnnotationSnapshots() -> AsyncStream<[String: CalibreBook]> {
+        booksAnnotationBroadcaster.stream(initialValue: booksAnnotation)
+    }
+
+    func isShelfLoadedSnapshots() -> AsyncStream<Bool> {
+        isShelfLoadedBroadcaster.stream(initialValue: isShelfLoaded)
+    }
+
+    func selectedBookIdSnapshots() -> AsyncStream<String?> {
+        selectedBookIdBroadcaster.stream(initialValue: selectedBookId)
+    }
+
+    private func publishStateChange() {
+        stateChangeBroadcaster.send(())
     }
 
     private func getRealm() -> Realm? {
@@ -582,8 +627,8 @@ class CalibreBookManager: ObservableObject {
             }
 
             book.title = publication.metadata.title
-            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL, let kfImageCache = container?.kfImageCache {
-                kfImageCache.storeToDisk(coverData, forKey: coverUrl.absoluteString)
+            if let cover = publication.cover, let coverData = cover.pngData(), let coverUrl = book.coverURL {
+                container?.coverCache.storeCoverData(coverData, for: coverUrl)
             }
 
             self.updateBook(book: book)
@@ -654,7 +699,7 @@ class CalibreBookManager: ObservableObject {
             AppContainer.SaveBooksMetadataRealmQueue.async {
                 guard let entries = task.booksMetadataEntry,
                       let json = task.booksMetadataJSON,
-                      let realmSaveBooksMetadata = self.container?.realmSaveBooksMetadata else {
+                      let realmSaveBooksMetadata = self.databaseService.metadataRealm else {
                     continuation.resume()
                     return
                 }
@@ -870,7 +915,7 @@ class CalibreBookManager: ObservableObject {
     /// `serverReachableChanged` flag is set and no groups remain, send an
     /// empty `.shelf` update so observers re-render.
     func refreshShelfMetadataV2(with serverIds: Set<String> = [], for bookInShelfIds: Set<String> = [], serverReachableChanged: Bool) {
-        let libraryBooks = booksInShelf.values
+        let libraryBooks = booksInShelf.map { $0.value }
             .filter { serverIds.isEmpty || serverIds.contains($0.library.server.id) }
             .filter { bookInShelfIds.isEmpty || bookInShelfIds.contains($0.inShelfId) }
             .reduce(into: [CalibreLibrary: [CalibreBook]]()) { partialResult, book in

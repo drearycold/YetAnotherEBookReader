@@ -6,9 +6,53 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 @testable import YetAnotherEBookReader
+
+final class TestAsyncStreamBroadcaster<Element> {
+    private let lock = NSLock()
+    private var continuations: [UUID: AsyncStream<Element>.Continuation] = [:]
+
+    var subscriberCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return continuations.count
+    }
+
+    func stream() -> AsyncStream<Element> {
+        makeStream(initialValue: nil)
+    }
+
+    func stream(initialValue: Element) -> AsyncStream<Element> {
+        makeStream(initialValue: initialValue)
+    }
+
+    private func makeStream(initialValue: Element?) -> AsyncStream<Element> {
+        AsyncStream { continuation in
+            let id = UUID()
+            if let initialValue {
+                continuation.yield(initialValue)
+            }
+            lock.lock()
+            continuations[id] = continuation
+            lock.unlock()
+            continuation.onTermination = { [weak self] _ in
+                self?.lock.lock()
+                self?.continuations.removeValue(forKey: id)
+                self?.lock.unlock()
+            }
+        }
+    }
+
+    func send(_ value: Element) {
+        lock.lock()
+        let currentContinuations = Array(continuations.values)
+        lock.unlock()
+        for continuation in currentContinuations {
+            continuation.yield(value)
+        }
+    }
+}
 
 class MockServerRepository: ServerRepositoryProtocol {
     var getAllServersCalled = false
@@ -91,7 +135,10 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
 
     var observeLibraryCalled = false
     var observeLibraryIdParam: String?
-    var observeLibrarySubject = PassthroughSubject<CalibreLibrary?, Never>()
+    private let observeLibraryBroadcaster = TestAsyncStreamBroadcaster<CalibreLibrary?>()
+    var observeLibrarySubscriberCount: Int {
+        observeLibraryBroadcaster.subscriberCount
+    }
 
     var updateLibraryFlagsCalled = false
     var updateLibraryFlagsIdParam: String?
@@ -133,10 +180,14 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
         return getLibraryReturn
     }
 
-    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never> {
+    func observeLibrary(id: String) -> AsyncStream<CalibreLibrary?> {
         observeLibraryCalled = true
         observeLibraryIdParam = id
-        return observeLibrarySubject.prepend(getLibraryReturn).eraseToAnyPublisher()
+        return observeLibraryBroadcaster.stream(initialValue: getLibraryReturn)
+    }
+
+    func sendObservedLibrary(_ library: CalibreLibrary?) {
+        observeLibraryBroadcaster.send(library)
     }
 
     func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws {
@@ -188,7 +239,7 @@ class MockBookRepository: BookRepositoryProtocol {
 
     var observeBookCalled = false
     var observeBookIdParam: String?
-    var observeBookSubject = PassthroughSubject<CalibreBook?, Never>()
+    private let observeBookBroadcaster = TestAsyncStreamBroadcaster<CalibreBook?>()
 
     #if DEBUG
     var resetBooksCalled = false
@@ -207,10 +258,14 @@ class MockBookRepository: BookRepositoryProtocol {
         saveBookParam = book
     }
 
-    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never> {
+    func observeBook(id: String) -> AsyncStream<CalibreBook?> {
         observeBookCalled = true
         observeBookIdParam = id
-        return observeBookSubject.prepend(getBookReturn).eraseToAnyPublisher()
+        return observeBookBroadcaster.stream(initialValue: getBookReturn)
+    }
+
+    func sendObservedBook(_ book: CalibreBook?) {
+        observeBookBroadcaster.send(book)
     }
 
     func deleteBook(id: String) {
@@ -527,7 +582,10 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
     var observeEntriesLibraryIdParam: String?
     var observeEntriesBookIdParam: Int32?
     var observeEntriesSinceParam: Date?
-    let observeEntriesSubject = PassthroughSubject<[ActivityLogUIEntry], Never>()
+    private let observeEntriesBroadcaster = TestAsyncStreamBroadcaster<[ActivityLogUIEntry]>()
+    var observeEntriesSubscriberCount: Int {
+        observeEntriesBroadcaster.subscriberCount
+    }
 
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
         fetchEntriesCalled = true
@@ -537,12 +595,16 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         return fetchEntriesReturn
     }
 
-    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AnyPublisher<[ActivityLogUIEntry], Never> {
+    func observeEntries(libraryId: String?, bookId: Int32?, since: Date) -> AsyncStream<[ActivityLogUIEntry]> {
         observeEntriesCalled = true
         observeEntriesLibraryIdParam = libraryId
         observeEntriesBookIdParam = bookId
         observeEntriesSinceParam = since
-        return observeEntriesSubject.prepend(fetchEntriesReturn).eraseToAnyPublisher()
+        return observeEntriesBroadcaster.stream(initialValue: fetchEntriesReturn)
+    }
+
+    func sendObservedEntries(_ entries: [ActivityLogUIEntry]) {
+        observeEntriesBroadcaster.send(entries)
     }
 }
 
@@ -605,11 +667,11 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
     var invalidateCategoryCacheParams: [(libraryId: String, categoryName: String)] = []
 
     var observeCategorySummariesCalled = false
-    let observeCategorySummariesSubject = PassthroughSubject<[CategoryCacheSummary], Never>()
+    private let observeCategorySummariesBroadcaster = TestAsyncStreamBroadcaster<[CategoryCacheSummary]>()
 
     var observeCategoryCacheUpdatesCalled = false
     var observeCategoryCacheUpdatesCategoryNameParam: String?
-    var observeCategoryCacheUpdatesSubjects: [String: PassthroughSubject<Void, Never>] = [:]
+    private var observeCategoryCacheUpdatesBroadcasters: [String: TestAsyncStreamBroadcaster<Void>] = [:]
 
     func fetchLibraryCategoryResult(libraryId: String, categoryName: String) throws -> LibraryCategoryResult? {
         cache["\(libraryId)-\(categoryName)"]
@@ -638,21 +700,21 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
         }.sorted { $0.categoryName < $1.categoryName }
     }
 
-    func observeCategorySummaries() -> AnyPublisher<[CategoryCacheSummary], Never> {
+    func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
         observeCategorySummariesCalled = true
         let initial = (try? fetchCategorySummaries()) ?? []
-        return observeCategorySummariesSubject.prepend(initial).eraseToAnyPublisher()
+        return observeCategorySummariesBroadcaster.stream(initialValue: initial)
     }
 
-    func observeCategoryCacheUpdates(categoryName: String) -> AnyPublisher<Void, Never> {
+    func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void> {
         observeCategoryCacheUpdatesCalled = true
         observeCategoryCacheUpdatesCategoryNameParam = categoryName
-        let subject = observeCategoryCacheUpdatesSubjects[categoryName] ?? {
-            let newSubject = PassthroughSubject<Void, Never>()
-            observeCategoryCacheUpdatesSubjects[categoryName] = newSubject
-            return newSubject
+        let broadcaster = observeCategoryCacheUpdatesBroadcasters[categoryName] ?? {
+            let newBroadcaster = TestAsyncStreamBroadcaster<Void>()
+            observeCategoryCacheUpdatesBroadcasters[categoryName] = newBroadcaster
+            return newBroadcaster
         }()
-        return subject.eraseToAnyPublisher()
+        return broadcaster.stream()
     }
 
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws {
@@ -671,10 +733,10 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
     }
 
     func sendCategorySummaries(_ summaries: [CategoryCacheSummary]) {
-        observeCategorySummariesSubject.send(summaries)
+        observeCategorySummariesBroadcaster.send(summaries)
     }
 
     func sendCategoryCacheUpdate(categoryName: String) {
-        observeCategoryCacheUpdatesSubjects[categoryName]?.send(())
+        observeCategoryCacheUpdatesBroadcasters[categoryName]?.send(())
     }
 }

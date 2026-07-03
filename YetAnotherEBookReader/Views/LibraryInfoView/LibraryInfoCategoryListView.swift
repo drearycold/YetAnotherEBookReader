@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct LibraryInfoCategoryListView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
 
@@ -40,7 +40,7 @@ struct LibraryInfoCategoryListView: View {
 
 struct CategoryDetailView: View {
     let categoryName: String
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     @StateObject private var categoryViewModel = UnifiedCategoryViewModel()

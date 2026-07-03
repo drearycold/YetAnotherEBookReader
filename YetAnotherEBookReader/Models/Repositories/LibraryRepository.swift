@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 
 protocol ServerResolver: AnyObject {
@@ -16,7 +15,7 @@ protocol ServerResolver: AnyObject {
 protocol LibraryRepositoryProtocol {
     func getAllLibraries() -> [CalibreLibrary]
     func getLibrary(id: String) -> CalibreLibrary?
-    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never>
+    func observeLibrary(id: String) -> AsyncStream<CalibreLibrary?>
     func saveLibrary(_ library: CalibreLibrary) throws
     func updateLibraryFlags(id: String, discoverable: Bool, autoUpdate: Bool) throws
     func deleteLibrary(serverUUID: String, name: String) throws
@@ -64,26 +63,36 @@ class RealmLibraryRepository: LibraryRepositoryProtocol {
         return mapLibraryRealm(libraryRealm)
     }
 
-    func observeLibrary(id: String) -> AnyPublisher<CalibreLibrary?, Never> {
+    func observeLibrary(id: String) -> AsyncStream<CalibreLibrary?> {
         guard let realm = getRealm() else {
-            return Just(nil).eraseToAnyPublisher()
+            return AsyncStream { continuation in
+                continuation.yield(nil)
+                continuation.finish()
+            }
         }
 
-        return realm.objects(CalibreLibraryRealm.self)
+        _ = realm.refresh()
+
+        let results = realm.objects(CalibreLibraryRealm.self)
             .filter("primaryKey == %@", id)
-            .changesetPublisher
-            .map { [weak self] change -> CalibreLibrary? in
-                guard let self = self else { return nil }
+
+        return AsyncStream { [weak self] continuation in
+            let token = results.observe(on: DispatchQueue.main) { [weak self] change in
+                guard let self else {
+                    continuation.yield(nil)
+                    return
+                }
                 switch change {
                 case .initial(let collection), .update(let collection, _, _, _):
-                    guard let libraryRealm = collection.first else { return nil }
-                    return self.mapLibraryRealm(libraryRealm)
+                    continuation.yield(collection.first.flatMap { self.mapLibraryRealm($0) })
                 case .error:
-                    return nil
+                    continuation.yield(nil)
                 }
             }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
+            continuation.onTermination = { _ in
+                token.invalidate()
+            }
+        }
     }
     
     func saveLibrary(_ library: CalibreLibrary) throws {

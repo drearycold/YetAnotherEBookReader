@@ -9,7 +9,7 @@ import SwiftUI
 import OSLog
 
 struct AddModServerView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
@@ -286,7 +286,7 @@ struct AddModServerView_Previews: PreviewProvider {
         let viewModel = ServerViewModel(container: container, server: server)
         NavigationView {
             AddModServerView(viewModel: viewModel, server: $server, isActive: $addServerActive)
-                .environmentObject(container)
+                .environment(\.appContainer, container)
                 .onAppear() {
                     if let server = server {
                         container.serverManager.calibreServers[server.id] = server

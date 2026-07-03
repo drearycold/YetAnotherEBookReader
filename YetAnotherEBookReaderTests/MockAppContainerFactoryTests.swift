@@ -62,14 +62,8 @@ final class MockAppContainerFactoryTests: XCTestCase {
             testName: "MockAppContainerFactoryTests-DistinctB"
         )
 
-        // Check the AppContainer's own realmConf (the instance property),
-        // not container.databaseService.realmConf — the latter is the
-        // static DatabaseService.shared.realmConf and always reflects
-        // the most recently initialized container, which would
-        // otherwise mask the per-container isolation we want to
-        // verify.
-        let idA = containerA.realmConf?.inMemoryIdentifier
-        let idB = containerB.realmConf?.inMemoryIdentifier
+        let idA = containerA.databaseService.realmConf?.inMemoryIdentifier
+        let idB = containerB.databaseService.realmConf?.inMemoryIdentifier
         XCTAssertNotEqual(
             idA, idB,
             "Each test container must have a unique main Realm identifier"

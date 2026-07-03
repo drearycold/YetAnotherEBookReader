@@ -62,8 +62,8 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook = CalibreBook(id: 123, library: library)
         mockCalibreBook.title = "Test Book"
         
-        try! mockAppContainer.realm!.write {
-            mockAppContainer.realm!.add(mockBookRealm, update: .modified)
+        try! mockAppContainer.databaseService.realm!.write {
+            mockAppContainer.databaseService.realm!.add(mockBookRealm, update: .modified)
         }
         
         viewModel.setup(bookId: mockBookRealm.primaryKey!)
@@ -72,8 +72,8 @@ class BookDetailViewModelTests: XCTestCase {
 
     override func tearDownWithError() throws {
         if let library = mockAppContainer?.calibreLibraries.first?.value {
-            try? mockAppContainer?.realm!.write {
-                if let serverRealm = mockAppContainer?.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+            try? mockAppContainer?.databaseService.realm!.write {
+                if let serverRealm = mockAppContainer?.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                     serverRealm.dsreaderHelper = nil
                 }
             }
@@ -119,8 +119,8 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.listVM?.book.title, "Test Book")
     }
 
-    func testSetupObservesBookValueTypeUpdates() throws {
-        let expectation = expectation(description: "book publisher update propagates to view model")
+    func testSetupObservesBookValueTypeUpdates() async throws {
+        let expectation = expectation(description: "book stream update propagates to view model")
         viewModel.$calibreBook
             .compactMap { $0?.title }
             .dropFirst()
@@ -131,11 +131,12 @@ class BookDetailViewModelTests: XCTestCase {
             }
             .store(in: &cancellables)
 
-        try mockAppContainer.realm!.write {
+        try await Task.sleep(nanoseconds: 50_000_000)
+        try mockAppContainer.databaseService.realm!.write {
             mockBookRealm.title = "Updated Book"
         }
 
-        wait(for: [expectation], timeout: 2.0)
+        await fulfillment(of: [expectation], timeout: 2.0)
         XCTAssertEqual(viewModel.calibreBook?.title, "Updated Book")
         XCTAssertEqual(viewModel.listVM?.book.title, "Updated Book")
     }
@@ -288,8 +289,8 @@ class BookDetailViewModelTests: XCTestCase {
         
         guard let library = mockCalibreBook?.library else { return }
         
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -330,8 +331,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -370,8 +371,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -401,8 +402,8 @@ class BookDetailViewModelTests: XCTestCase {
             XCTFail("No mock library found")
             return
         }
-        try! mockAppContainer.realm!.write {
-            if let serverRealm = mockAppContainer.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
+        try! mockAppContainer.databaseService.realm!.write {
+            if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
                 serverRealm.dsreaderHelper = helper
             }
         }
@@ -641,7 +642,7 @@ class BookDetailViewModelTests: XCTestCase {
 
         mockAppContainer.refreshDatabase()
         
-        guard let realm = mockAppContainer.realm else {
+        guard let realm = mockAppContainer.databaseService.realm else {
             XCTFail("Realm is nil")
             return
         }
@@ -742,7 +743,7 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.activities.count, 0)
     }
 
-    func testInitializationUsesRepositoryAndReceivesUpdates() throws {
+    func testInitializationUsesRepositoryAndReceivesUpdates() async throws {
         let repository = MockActivityLogRepository()
         let initialEntry = ActivityLogUIEntry(
             id: "1",
@@ -771,6 +772,13 @@ class ActivityListViewModelTests: XCTestCase {
         XCTAssertEqual(repository.fetchEntriesLibraryIdParam, "library-id")
         XCTAssertEqual(repository.fetchEntriesBookIdParam, 7)
         XCTAssertEqual(viewModel.activities, [initialEntry])
+        for _ in 0..<50 where repository.observeEntriesSubscriberCount == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(repository.observeEntriesCalled)
+        XCTAssertEqual(repository.observeEntriesLibraryIdParam, "library-id")
+        XCTAssertEqual(repository.observeEntriesBookIdParam, 7)
+        XCTAssertEqual(repository.observeEntriesSubscriberCount, 1)
 
         let updatedEntry = ActivityLogUIEntry(
             id: "2",
@@ -786,15 +794,18 @@ class ActivityListViewModelTests: XCTestCase {
             httpMethod: "POST",
             httpBodyString: "{}"
         )
-        repository.observeEntriesSubject.send([updatedEntry])
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        repository.sendObservedEntries([updatedEntry])
+        for _ in 0..<50 where viewModel.activities != [updatedEntry] {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertEqual(viewModel.activities, [updatedEntry])
     }
 }
 
+@MainActor
 class LibraryViewModelTests: XCTestCase {
-    func testInitializationReadsPersistedFlagsAndObservesUpdates() throws {
+    func testInitializationReadsPersistedFlagsAndObservesUpdates() async throws {
         let container = MockAppContainerFactory.makeContainer(testName: "LibraryViewModelTests")
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
         let repository = MockLibraryRepository()
@@ -802,14 +813,20 @@ class LibraryViewModelTests: XCTestCase {
 
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
 
+        for _ in 0..<50 where repository.observeLibrarySubscriberCount == 0 {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
         XCTAssertTrue(repository.getLibraryCalled)
         XCTAssertTrue(repository.observeLibraryCalled)
+        XCTAssertEqual(repository.observeLibrarySubscriberCount, 1)
 
         var updatedLibrary = library
         updatedLibrary.discoverable = true
         updatedLibrary.autoUpdate = true
-        repository.observeLibrarySubject.send(updatedLibrary)
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        repository.sendObservedLibrary(updatedLibrary)
+        for _ in 0..<50 where !viewModel.discoverable || !viewModel.autoUpdate {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
 
         XCTAssertTrue(viewModel.discoverable)
         XCTAssertTrue(viewModel.autoUpdate)
@@ -824,8 +841,7 @@ class LibraryViewModelTests: XCTestCase {
         let viewModel = LibraryViewModel(container: container, library: library, libraryRepository: repository)
         repository.updateLibraryFlagsCalled = false
 
-        viewModel.discoverable = !library.discoverable
-        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        viewModel.setDiscoverable(!library.discoverable)
 
         XCTAssertTrue(repository.updateLibraryFlagsCalled)
         XCTAssertEqual(repository.updateLibraryFlagsIdParam, library.id)
@@ -838,8 +854,8 @@ class ReadingPositionRepositoryThreadingTests: XCTestCase {
     
     override func setUpWithError() throws {
         mockAppContainer = MockAppContainerFactory.makeContainer(testName: "ReadingPositionRepositoryThreadingTests")
-        try! mockAppContainer.realm!.write {
-            mockAppContainer.realm!.deleteAll()
+        try! mockAppContainer.databaseService.realm!.write {
+            mockAppContainer.databaseService.realm!.deleteAll()
         }
     }
     

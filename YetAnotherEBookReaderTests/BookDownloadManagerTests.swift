@@ -9,6 +9,7 @@ import XCTest
 import RealmSwift
 @testable import YetAnotherEBookReader
 
+@MainActor
 final class BookDownloadManagerTests: XCTestCase {
     private var container: AppContainer!
     private var manager: BookDownloadManager!
@@ -17,7 +18,7 @@ final class BookDownloadManagerTests: XCTestCase {
         container = MockAppContainerFactory.makeContainer(testName: "BookDownloadManagerTests")
         AppContainer.shared = container
 
-        manager = BookDownloadManager(container: container, realmConf: container.realmConf)
+        manager = BookDownloadManager(container: container)
 
         let testConfiguration = URLSessionConfiguration.ephemeral
         testConfiguration.protocolClasses = [MockURLProtocol.self]

@@ -13,7 +13,7 @@ class MockDatabaseService {
     static func inMemoryConfiguration(identifier: String = UUID().uuidString) -> Realm.Configuration {
         return Realm.Configuration(
             inMemoryIdentifier: identifier,
-            schemaVersion: AppContainer.RealmSchemaVersion,
+            schemaVersion: DatabaseSchema.version,
             migrationBlock: { _, _ in }
         )
     }

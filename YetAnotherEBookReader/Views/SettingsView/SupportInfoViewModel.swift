@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 import ReadiumZIPFoundation
 
 @available(macCatalyst 14.0, *)

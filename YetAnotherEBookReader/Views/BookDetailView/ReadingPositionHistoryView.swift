@@ -218,7 +218,7 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
                 ReadingPositionHistoryView(presenting: $presenting, library: book.library, bookId: book.id)
             }
             .navigationViewStyle(.stack)
-            .environmentObject(container)
+            .environment(\.appContainer, container)
         }
     }
 }

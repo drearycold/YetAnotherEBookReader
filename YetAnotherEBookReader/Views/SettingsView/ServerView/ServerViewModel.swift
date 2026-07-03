@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 
 @MainActor
@@ -33,6 +32,8 @@ class ServerViewModel: ObservableObject {
     
     // Server Detail properties (ServerDetailView)
     @Published var libraryList: [String] = []
+    @Published var hiddenLibraryList: [CalibreLibrary] = []
+    @Published var librarySyncStatus: [String: CalibreSyncStatus] = [:]
     @Published var selectedLibrary: String? = nil
     @Published var syncingLibrary: Bool = false
     @Published var libraryRestoreListActive: Bool = false
@@ -40,15 +41,19 @@ class ServerViewModel: ObservableObject {
     
     // DSReader Helper properties (ServerOptionsDSReaderHelper)
     @Published var dsreaderHelperServer = CalibreServerDSReaderHelper(port: 0)
-    @Published var portStr: String = ""
+    @Published var portStr: String = "" {
+        didSet {
+            updateDSReaderHelperPort(from: portStr)
+        }
+    }
     @Published var configurationData: Data? = nil
     @Published var configuration: CalibreDSReaderHelperConfiguration? = nil
     @Published var helperStatus: String? = nil
     @Published var configAlertItem: AlertItem? = nil
     @Published var dsreaderHelperInstructionPresenting: Bool = false
     
-    private var cancellables = Set<AnyCancellable>()
-    private var refreshCancellable: AnyCancellable?
+    private var libraryObservationTask: Task<Void, Never>?
+    private var librarySyncStatusObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, server: CalibreServer?) {
         self.container = container
@@ -72,33 +77,40 @@ class ServerViewModel: ObservableObject {
         
         setupBindings()
     }
+
+    deinit {
+        libraryObservationTask?.cancel()
+        librarySyncStatusObservationTask?.cancel()
+    }
     
     func setupBindings() {
-        // Observe calibreLibraries to keep libraryList updated
-        container.libraryManager.$calibreLibraries
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.updateLibraryList()
+        libraryObservationTask?.cancel()
+        libraryObservationTask = Task { @MainActor [weak self, container] in
+            for await _ in container.libraryManager.librarySnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.updateLibraryList()
             }
-            .store(in: &cancellables)
-            
-        // Map portStr changes back to dsreaderHelperServer.port
-        $portStr
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                let filtered = newValue.filter { "0123456789".contains($0) }
-                if let num = Int(filtered), num != self.dsreaderHelperServer.port {
-                    if num > 65535 {
-                        self.dsreaderHelperServer.port = 65535
-                    } else if num < 1024 {
-                        self.dsreaderHelperServer.port = 1024
-                    } else {
-                        self.dsreaderHelperServer.port = num
-                    }
-                }
+        }
+        librarySyncStatusObservationTask?.cancel()
+        librarySyncStatusObservationTask = Task { @MainActor [weak self, container] in
+            for await statusMap in container.libraryManager.librarySyncStatusSnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.librarySyncStatus = statusMap
             }
-            .store(in: &cancellables)
+        }
+    }
+
+    private func updateDSReaderHelperPort(from newValue: String) {
+        let filtered = newValue.filter { "0123456789".contains($0) }
+        if let num = Int(filtered), num != dsreaderHelperServer.port {
+            if num > 65535 {
+                dsreaderHelperServer.port = 65535
+            } else if num < 1024 {
+                dsreaderHelperServer.port = 1024
+            } else {
+                dsreaderHelperServer.port = num
+            }
+        }
     }
     
     // MARK: - Add / Modify Server Actions (AddModServerView)
@@ -288,11 +300,15 @@ class ServerViewModel: ObservableObject {
 
     func updateLibraryList() {
         guard let serverId = serverId else { return }
-        libraryList = container.libraryManager.calibreLibraries.values.filter { library in
+        let serverLibraries = container.libraryManager.calibreLibraries.values.filter { library in
             library.server.id == serverId && library.hidden == false
         }
-        .sorted { $0.name < $1.name }
-        .map { $0.id }
+        libraryList = serverLibraries
+            .sorted { $0.name < $1.name }
+            .map { $0.id }
+        hiddenLibraryList = container.libraryManager.calibreLibraries.values
+            .filter { $0.server.id == serverId && $0.hidden }
+            .sorted { $0.id < $1.id }
     }
 
     func deleteLibrary(at offsets: IndexSet) {
@@ -336,7 +352,7 @@ class ServerViewModel: ObservableObject {
 
     func setDSReaderStates(server: CalibreServer) {
         let dsHelper = container.serverManager.queryServerDSReaderHelper(server: server) ?? {
-            var dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
+            let dsreaderHelper = CalibreServerDSReaderHelper(port: 0)
             if let url = container.calibreServerService.getServerUrlByReachability(server: server) ?? URL(string: server.baseUrl) ?? URL(string: server.publicUrl) {
                 dsreaderHelper.port = (url.port ?? -1) + 1
             }
@@ -350,7 +366,6 @@ class ServerViewModel: ObservableObject {
     }
 
     func connectDSReader(server: CalibreServer) {
-        refreshCancellable?.cancel()
         configurationData = nil
         configuration = nil
         helperStatus = "Connecting..."

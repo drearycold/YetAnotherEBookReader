@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct AppInfoView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
 
     @Environment(\.openURL) var openURL
 
@@ -67,6 +67,6 @@ struct ReportView_Previews: PreviewProvider {
 
     static var previews: some View {
         AppInfoView()
-            .environmentObject(container)
+            .environment(\.appContainer, container)
     }
 }

@@ -6,9 +6,7 @@
 //
 
 import SwiftUI
-import Combine
 import AppTrackingTransparency
-import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -17,8 +15,7 @@ import UserMessagingPlatform
 
 @available(macCatalyst 14.0, *)
 struct MainView: View {
-    @EnvironmentObject var container: AppContainer
-    @EnvironmentObject var sessionManager: ReadingSessionManager
+    @Environment(\.appContainer) var container
     @Environment(\.openURL) var openURL
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
@@ -32,7 +29,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            if let realmConf = container.realmConf {
+            if container.databaseService.realmConf != nil {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
@@ -60,13 +57,11 @@ struct MainView: View {
                             Text("Browse")
                         }
                         .tag(2)
-                        .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
                         SettingsView(viewModel: viewModel.settingsViewModel)
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
-                    .environment(\.realmConfiguration, realmConf)
                     .environment(\.horizontalSizeClass, originalSizeClass)
                     .tabItem {
                         Image(systemName: "gearshape.fill")
@@ -262,7 +257,7 @@ struct MainView: View {
         .onOpenURL { url in
             print("onOpenURL \(url)")
             let result = container.bookManager.onOpenURL(url: url, doMove: false, doOverwrite: false, asNew: false)
-            container.bookImportedSubject.send(result)
+            container.publishBookImport(result)
         }.onAppear {
             viewModel.onAppear()
         }
@@ -338,7 +333,6 @@ struct MainView_Previews: PreviewProvider {
     
     static var previews: some View {
         MainView(container: container, viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
-            .environmentObject(container)
-            .environmentObject(container.sessionManager)
+            .environment(\.appContainer, container)
     }
 }

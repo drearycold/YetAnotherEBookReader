@@ -26,8 +26,7 @@ import Combine
         )
 
         mockAppContainer.shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [item]),
-            sendLegacySubject: false
+            .init(books: [item])
         )
         await waitForViewModelUpdate {
             viewModel.displayBooks.first?.id == "test-id"
@@ -70,8 +69,7 @@ import Combine
         )
 
         mockAppContainer.shelfDataModel.setDiscoverShelfSnapshotForTesting(
-            .init(sections: [section], isInitialLoadComplete: false),
-            sendLegacySubject: false
+            .init(sections: [section], isInitialLoadComplete: false)
         )
         await waitForViewModelUpdate {
             viewModel.displaySections.count == 1

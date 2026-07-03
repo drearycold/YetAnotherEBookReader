@@ -7,13 +7,12 @@
 
 import SwiftUI
 import OSLog
-import Combine
 //import struct Kingfisher.KFImage
 import KingfisherSwiftUI
 
 @available(macCatalyst 14.0, *)
 struct LibraryInfoView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
     
     @StateObject var viewModel = ViewModel()
     @StateObject var unifiedSearchViewModel = UnifiedSearchViewModel()
@@ -42,8 +41,6 @@ struct LibraryInfoView: View {
     @State private var alertItem: AlertItem?
     
     @State private var batchDownloadSheetPresenting = false
-    
-    @State private var dismissAllCancellable: AnyCancellable?
     
     @State private var savedFilterCriteriaCategory: [String: Set<String>]? = nil
     
@@ -74,9 +71,10 @@ struct LibraryInfoView: View {
             libraryList = container.libraryManager.calibreLibraries.values
                 .filter { $0.hidden == false }
                 .sorted { $0.name < $1.name }
-
-            dismissAllCancellable?.cancel()
-            dismissAllCancellable = container.dismissAllSubject.sink { _ in
+        }
+        .task {
+            for await _ in container.dismissAllEvents() {
+                guard !Task.isCancelled else { return }
                 batchDownloadSheetPresenting = false
             }
         }
@@ -181,6 +179,6 @@ struct LibraryInfoView_Previews: PreviewProvider {
     static private var container = AppContainer()
     static var previews: some View {
         LibraryInfoView()
-            .environmentObject(AppContainer())
+            .environment(\.appContainer, container)
     }
 }

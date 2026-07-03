@@ -266,7 +266,6 @@ final class DatabaseMigrator {
         AppPerformanceSignpost.end("DatabaseMigration", migrationSignpost)
         conf.migrationBlock = nil
 
-        Realm.Configuration.defaultConfiguration = conf
         return conf
     }
 }

@@ -9,7 +9,7 @@ struct LibraryInfoBookListFooter: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var container: AppContainer
+    let container: AppContainer
     let geometry: GeometryProxy
     
     var body: some View {

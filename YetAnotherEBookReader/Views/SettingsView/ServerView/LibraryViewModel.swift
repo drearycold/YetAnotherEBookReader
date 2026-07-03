@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import Combine
+import SwiftUI
 
 class LibraryViewModel: ObservableObject {
     let container: AppContainer
@@ -32,7 +32,8 @@ class LibraryViewModel: ObservableObject {
     @Published var failedBookIds: [Int32] = []
     @Published var deletedBookIds: [Int32] = []
     
-    private var cancellables = Set<AnyCancellable>()
+    private var libraryObservationTask: Task<Void, Never>?
+    private var syncStatusObservationTask: Task<Void, Never>?
     
     init(container: AppContainer, library: CalibreLibrary, libraryRepository: LibraryRepositoryProtocol? = nil) {
         self.container = container
@@ -41,6 +42,11 @@ class LibraryViewModel: ObservableObject {
         
         setupBindings()
     }
+
+    deinit {
+        libraryObservationTask?.cancel()
+        syncStatusObservationTask?.cancel()
+    }
     
     private func setupBindings() {
         if let persistedLibrary = libraryRepository.getLibrary(id: library.id) {
@@ -48,62 +54,63 @@ class LibraryViewModel: ObservableObject {
             self.autoUpdate = persistedLibrary.autoUpdate
         }
 
-        libraryRepository.observeLibrary(id: library.id)
-            .sink { [weak self] observedLibrary in
-                guard let self = self, let observedLibrary = observedLibrary else { return }
-                self.discoverable = observedLibrary.discoverable
-                self.autoUpdate = observedLibrary.autoUpdate
+        libraryObservationTask?.cancel()
+        libraryObservationTask = Task { @MainActor [weak self, libraryRepository, libraryId = library.id] in
+            for await observedLibrary in libraryRepository.observeLibrary(id: libraryId) {
+                guard !Task.isCancelled, let observedLibrary else { continue }
+                self?.applyObservedFlags(from: observedLibrary)
             }
-            .store(in: &cancellables)
-        
-        // Listen to UI changes and save to Realm
-        $discoverable
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                try? self.libraryRepository.updateLibraryFlags(
-                    id: self.library.id,
-                    discoverable: newValue,
-                    autoUpdate: self.autoUpdate
-                )
-            }
-            .store(in: &cancellables)
+        }
             
-        $autoUpdate
-            .dropFirst()
-            .removeDuplicates()
-            .sink { [weak self] newValue in
-                guard let self = self else { return }
-                try? self.libraryRepository.updateLibraryFlags(
-                    id: self.library.id,
-                    discoverable: self.discoverable,
-                    autoUpdate: newValue
-                )
+        syncStatusObservationTask?.cancel()
+        syncStatusObservationTask = Task { @MainActor [weak self, container] in
+            for await statusMap in container.libraryManager.librarySyncStatusSnapshots() {
+                guard !Task.isCancelled else { return }
+                self?.applySyncStatus(statusMap)
             }
-            .store(in: &cancellables)
-            
-        // Observe container.librarySyncStatus
-        container.libraryManager.$librarySyncStatus
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] statusMap in
-                guard let self = self else { return }
-                let status = statusMap[self.library.id]
-                self.isSync = status?.isSync ?? false
-                self.isUpd = status?.isUpd ?? false
-                self.isError = status?.isError ?? false
-                self.msg = status?.msg ?? "nil"
-                self.cnt = status?.cnt ?? -1
-                self.updCount = status?.upd.count ?? -1
-                self.delCount = status?.del.count ?? -1
-                self.errCount = status?.err.count ?? -1
-                
-                self.failedBookIds = status?.err.map { $0 }.sorted() ?? []
-                self.deletedBookIds = status?.del.map { $0 }.sorted() ?? []
-                
-                self.resolveBookTitles()
-            }
-            .store(in: &cancellables)
+        }
+    }
+
+    func setDiscoverable(_ newValue: Bool) {
+        guard discoverable != newValue else { return }
+        discoverable = newValue
+        try? libraryRepository.updateLibraryFlags(
+            id: library.id,
+            discoverable: newValue,
+            autoUpdate: autoUpdate
+        )
+    }
+
+    func setAutoUpdate(_ newValue: Bool) {
+        guard autoUpdate != newValue else { return }
+        autoUpdate = newValue
+        try? libraryRepository.updateLibraryFlags(
+            id: library.id,
+            discoverable: discoverable,
+            autoUpdate: newValue
+        )
+    }
+
+    private func applyObservedFlags(from library: CalibreLibrary) {
+        discoverable = library.discoverable
+        autoUpdate = library.autoUpdate
+    }
+
+    private func applySyncStatus(_ statusMap: [String: CalibreSyncStatus]) {
+        let status = statusMap[library.id]
+        isSync = status?.isSync ?? false
+        isUpd = status?.isUpd ?? false
+        isError = status?.isError ?? false
+        msg = status?.msg ?? "nil"
+        cnt = status?.cnt ?? -1
+        updCount = status?.upd.count ?? -1
+        delCount = status?.del.count ?? -1
+        errCount = status?.err.count ?? -1
+
+        failedBookIds = status?.err.map { $0 }.sorted() ?? []
+        deletedBookIds = status?.del.map { $0 }.sorted() ?? []
+
+        resolveBookTitles()
     }
     
     private func resolveBookTitles() {

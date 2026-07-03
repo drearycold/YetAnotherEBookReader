@@ -7,7 +7,7 @@
 
 import Foundation
 import UIKit
-import Combine
+import SwiftUI
 
 extension UIViewController {
     /// Finds the first child view controller with the given type, recursively.
@@ -31,7 +31,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     let book: CalibreBook
     let readerInfo: ReaderInfo
     
-    var activityCancellables = Set<AnyCancellable>()
+    private var activityTask: Task<Void, Never>?
     private var currentSessionHandle: ReadingSessionHandle?
     
     init(container: AppContainer, book: CalibreBook, readerInfo: ReaderInfo) {
@@ -52,55 +52,19 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     
     override func viewWillAppear(_ animated: Bool) {
         currentSessionHandle = container.readingPositionRepository.beginSession(at: readerInfo.position, for: book)
-        
-        container.bookReaderActivitySubject.sink { subject in
-            switch subject {
-            case .background:
-                let handleToEnd = self.currentSessionHandle
-                switch self.readerInfo.readerType {
-                case .YabrEPUB:
-                    guard let yabrEPub: EpubFolioReaderContainer = self.findChildViewController() else { break }
-                    yabrEPub.folioReader.saveReaderState {
-                        if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
-                           let handle = handleToEnd {
-                            self.container.readingPositionRepository.endSession(handle, at: position, for: self.book)
-                        }
-                    }
-                case .YabrPDF:
-                    guard let yabrPDF: YabrPDFViewController = self.findChildViewController() else { break }
-                    yabrPDF.updatePageViewPositionHistory()
-                    yabrPDF.updateReadingProgress()
-                    if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
-                       let handle = handleToEnd {
-                        self.container.readingPositionRepository.endSession(handle, at: position, for: self.book)
-                    }
-                case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
-                    guard let yabrReadium: YabrReadiumReaderViewController = self.findChildViewController(),
-                          let locator = yabrReadium.navigator.currentLocation
-                    else { break }
-                    yabrReadium.navigator(yabrReadium.navigator, locationDidChange: locator)
-                    if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
-                       let handle = handleToEnd {
-                        self.container.readingPositionRepository.endSession(handle, at: position, for: self.book)
-                    }
-                case .UNSUPPORTED:
-                    break
-                }
-            case .inactive:
-                break   //trans, do nothing
-            case .active:
-                if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
-                   position.readerName == self.readerInfo.readerType.rawValue {
-                    self.currentSessionHandle = self.container.readingPositionRepository.beginSession(at: position, for: self.book)
-                }
-            @unknown default:
-                break
+        activityTask?.cancel()
+        let activities = container.bookReaderActivities()
+        activityTask = Task { @MainActor [weak self] in
+            for await activity in activities {
+                guard !Task.isCancelled else { return }
+                self?.handleBookReaderActivity(activity)
             }
-        }.store(in: &activityCancellables)
+        }
     }
     
     override func viewWillDisappear(_ animated: Bool) {
-        activityCancellables.removeAll()
+        activityTask?.cancel()
+        activityTask = nil
         
         if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
            let handle = currentSessionHandle {
@@ -113,6 +77,51 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         
         Task {
             await self.container.sessionManager.onBookReaderClosed(book: bookToClose, lastPosition: positionAtClose)
+        }
+    }
+
+    private func handleBookReaderActivity(_ activity: ScenePhase) {
+        switch activity {
+        case .background:
+            let handleToEnd = currentSessionHandle
+            switch readerInfo.readerType {
+            case .YabrEPUB:
+                guard let yabrEPub: EpubFolioReaderContainer = findChildViewController() else { break }
+                yabrEPub.folioReader.saveReaderState {
+                    if let position = self.container.readingPositionRepository.getPosition(for: self.book, policy: .latestForDevice(self.container.deviceName)),
+                       let handle = handleToEnd {
+                        self.container.readingPositionRepository.endSession(handle, at: position, for: self.book)
+                    }
+                }
+            case .YabrPDF:
+                guard let yabrPDF: YabrPDFViewController = findChildViewController() else { break }
+                yabrPDF.updatePageViewPositionHistory()
+                yabrPDF.updateReadingProgress()
+                if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container.deviceName)),
+                   let handle = handleToEnd {
+                    container.readingPositionRepository.endSession(handle, at: position, for: book)
+                }
+            case .ReadiumEPUB, .ReadiumPDF, .ReadiumCBZ:
+                guard let yabrReadium: YabrReadiumReaderViewController = findChildViewController(),
+                      let locator = yabrReadium.navigator.currentLocation
+                else { break }
+                yabrReadium.navigator(yabrReadium.navigator, locationDidChange: locator)
+                if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container.deviceName)),
+                   let handle = handleToEnd {
+                    container.readingPositionRepository.endSession(handle, at: position, for: book)
+                }
+            case .UNSUPPORTED:
+                break
+            }
+        case .inactive:
+            break
+        case .active:
+            if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(container.deviceName)),
+               position.readerName == readerInfo.readerType.rawValue {
+                currentSessionHandle = container.readingPositionRepository.beginSession(at: position, for: book)
+            }
+        @unknown default:
+            break
         }
     }
 }

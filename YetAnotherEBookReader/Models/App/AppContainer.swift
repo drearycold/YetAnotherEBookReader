@@ -5,24 +5,14 @@
 //  Phase 4 of the AppContainer elimination plan: AppContainer is the new
 //  composition root. It owns every repository, manager, service, and
 //  runtime state that used to live on AppContainer, and conforms to the
-//  three narrow protocols (AppContainerProtocol, CalibreServerConfigProvider,
-//  LibraryProvider) that services depend on.
-//
-//  `AppContainer` coexists with `AppContainer` during 4a-4d. Phase 4e deletes
-//  AppContainer and renames all callers; for the transitional period, both
-//  types share `AppContainer.RealmSchemaVersion` so the two can boot
-//  side-by-side in preview contexts.
+//  narrow protocols that services depend on.
 //
 
 import Foundation
-import Combine
-import RealmSwift
 import SwiftUI
 import OSLog
-import Kingfisher
-import CryptoSwift
 
-final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvider {
+final class AppContainer: AppContainerProtocol, LibraryProvider {
     static var shared: AppContainer?
 
     func getLibraries() -> [String: CalibreLibrary] {
@@ -72,7 +62,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         set { bookManager.booksInShelf = newValue }
     }
 
-    @Published var deviceName = UIDevice.current.name {
+    var deviceName = UIDevice.current.name {
         didSet {
             calibreServerService.updateDeviceName(deviceName)
         }
@@ -80,22 +70,17 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
 
-    let bookImportedSubject = PassthroughSubject<BookImportInfo, Never>()
-    let dismissAllSubject = PassthroughSubject<String, Never>()
-
-    let recentShelfItemsSubject = PassthroughSubject<[ShelfBookItem], Never>()
-    let discoverShelfItemsSubject = PassthroughSubject<[ShelfSectionItem], Never>()
+    private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
+    private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
     var presentingStack = [Binding<Bool>]()
 
-    let bookReaderActivitySubject = PassthroughSubject<ScenePhase, Never>()
+    private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
 
-    var calibreCancellables = Set<AnyCancellable>()
-
-    @Published var downloadManager = BookDownloadManager()
+    var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
 
-    @Published var updatingMetadata = false {
+    var updatingMetadata = false {
         didSet {
             if updatingMetadata {
                 updatingMetadataSucceed = false
@@ -103,28 +88,22 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             }
         }
     }
-    @Published var updatingMetadataStatus = "" {
+    var updatingMetadataStatus = "" {
         didSet {
             if updatingMetadataStatus == "Success" || updatingMetadataStatus == "Deleted" {
                 updatingMetadataSucceed = true
             }
         }
     }
-    @Published var updatingMetadataSucceed = false
+    var updatingMetadataSucceed = false
 
     private var defaultLog = Logger()
 
-    static var RealmSchemaVersion: UInt64 = 141
-    var realm: Realm?
-    var realmSaveBooksMetadata: Realm?
-    var realmConf: Realm.Configuration?
-
     var logger: CalibreActivityLogger?
 
-    let kfImageCache = ImageCache.default
-    var authResponsor = AuthResponsor()
+    let coverCache: BookCoverCaching = DefaultBookCoverCache()
 
-    var databaseService = DatabaseService.shared
+    let databaseService = DatabaseService()
 
     lazy var serverRepository: ServerRepositoryProtocol = RealmServerRepository(databaseService: databaseService)
     lazy var libraryRepository: LibraryRepositoryProtocol = RealmLibraryRepository(databaseService: databaseService, serverResolver: self)
@@ -139,7 +118,7 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
         self?.serverScopedRealmProvider.configuration(for: server)
             ?? BookAnnotation.getBookPreferenceServerConfig(server)
     }
-    lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.realmConf)
+    lazy var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol = RealmFolioReaderProfileRepository(realmConfiguration: self.databaseService.realmConf)
 
     lazy var serverManager = CalibreServerManager(container: self, databaseService: self.databaseService, serverRepository: self.serverRepository)
     lazy var libraryManager = CalibreLibraryManager(container: self, databaseService: self.databaseService, libraryRepository: self.libraryRepository)
@@ -148,8 +127,11 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
-    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: Realm.Configuration.defaultConfiguration), config: self, database: self.databaseService)
-    lazy var searchCacheRepository = RealmSearchCacheStore(container: self)
+    lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(realmConf: databaseService.loggerConfiguration()), config: self, database: self.databaseService)
+    lazy var searchCacheRepository = RealmSearchCacheStore(
+        databaseService: self.databaseService,
+        librarySnapshotProvider: self
+    )
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
@@ -162,19 +144,16 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     @MainActor lazy var shelfDataModel = YabrShelfDataModel(unifiedSearchService: self.unifiedSearchService, container: self)
 
-    let probeLibraryLastModifiedSubject = PassthroughSubject<CalibreSyncLibraryRequest, Never>()
-
-    var probeTimer: AnyCancellable?
+    private let probeLibraryLastModifiedBroadcaster = ManagerAsyncBroadcaster<CalibreSyncLibraryRequest>()
 
     /// inShelfId for single book
     /// empty string for full update
-    let calibreUpdatedSubject = PassthroughSubject<calibreUpdatedSignal, Never>()
-    private var calibreUpdateContinuations = [UUID: AsyncStream<calibreUpdatedSignal>.Continuation]()
+    private let calibreUpdateBroadcaster = ManagerAsyncBroadcaster<calibreUpdatedSignal>()
 
-    @Published var fontsManager = FontsManager()
+    var fontsManager = FontsManager()
 
     var isDatabaseReady: Bool {
-        realm != nil && realmSaveBooksMetadata != nil && databaseService.realm != nil
+        databaseService.realm != nil && databaseService.metadataRealm != nil
     }
 
     func getBook(for primaryKey: String) -> CalibreBook? {
@@ -183,53 +162,65 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     @MainActor
     func refreshDatabase() {
-        databaseService.realm?.refresh()
+        databaseService.refreshMainRealm()
     }
 
     func resetDatabaseBootstrapState(clearConfiguration: Bool = false) {
-        realm = nil
-        realmSaveBooksMetadata = nil
         logger = nil
-        databaseService.realm = nil
-        if clearConfiguration {
-            realmConf = nil
-            databaseService.realmConf = nil
-        }
+        databaseService.reset(clearConfiguration: clearConfiguration)
     }
 
     deinit {
-        calibreUpdateContinuations.values.forEach { $0.finish() }
+        calibreUpdateBroadcaster.finish()
+        bookImportBroadcaster.finish()
+        dismissAllBroadcaster.finish()
+        bookReaderActivityBroadcaster.finish()
+        probeLibraryLastModifiedBroadcaster.finish()
+    }
+
+    @MainActor
+    func publishBookImport(_ info: BookImportInfo) {
+        bookImportBroadcaster.send(info)
+    }
+
+    func bookImportEvents() -> AsyncStream<BookImportInfo> {
+        bookImportBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishDismissAll(_ reason: String) {
+        dismissAllBroadcaster.send(reason)
+    }
+
+    func dismissAllEvents() -> AsyncStream<String> {
+        dismissAllBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishBookReaderActivity(_ phase: ScenePhase) {
+        bookReaderActivityBroadcaster.send(phase)
+    }
+
+    func bookReaderActivities() -> AsyncStream<ScenePhase> {
+        bookReaderActivityBroadcaster.stream()
     }
 
     @MainActor
     func publishCalibreUpdate(_ signal: calibreUpdatedSignal) {
-        for continuation in calibreUpdateContinuations.values {
-            continuation.yield(signal)
-        }
-        calibreUpdatedSubject.send(signal)
+        calibreUpdateBroadcaster.send(signal)
     }
 
     @MainActor
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal> {
-        let id = UUID()
-        return AsyncStream { [weak self] continuation in
-            self?.calibreUpdateContinuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { @MainActor in
-                    self?.calibreUpdateContinuations.removeValue(forKey: id)
-                }
-            }
-        }
+        calibreUpdateBroadcaster.stream()
     }
 
-    @MainActor
-    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem]) {
-        recentShelfItemsSubject.send(books)
+    func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest) {
+        probeLibraryLastModifiedBroadcaster.send(request)
     }
 
-    @MainActor
-    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem]) {
-        discoverShelfItemsSubject.send(sections)
+    func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest> {
+        probeLibraryLastModifiedBroadcaster.stream()
     }
 
     init(
@@ -248,15 +239,12 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
             // access. The mock block below calls populateLibraries()
             // and initializeDatabase(), both of which need this to
             // already be wired.
-            Realm.Configuration.defaultConfiguration = env.mainRealmConfiguration
-            self.realmConf = env.mainRealmConfiguration
-            DatabaseService.shared.setup(conf: env.mainRealmConfiguration)
+            databaseService.installTestConfiguration(env.mainRealmConfiguration)
             self.serverScopedRealmProvider = env.serverScopedRealmProvider
         }
 
-        setupImageCache()
+        setupCoverCache()
         wireCrossManagerSubscriptions()
-        wireObjectWillChangeForwarding()
 
         if mock {
             // In the test path the in-memory main Realm is already
@@ -318,68 +306,39 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
 
     // MARK: - Init helpers
 
-    /// Pre-populate `Realm.Configuration.defaultConfiguration` with an empty
-    /// migration block so SwiftUI views using `ObservedResults` don't crash
-    /// before `tryInitializeDatabase` has produced the real configuration.
+    /// Pre-populate the Realm default configuration so SwiftUI views using
+    /// `ObservedResults` don't crash before `tryInitializeDatabase` has produced
+    /// the real configuration.
     private func setupRealmDefaults() {
-        AppContainer.RealmSchemaVersion = 141
-        let initialConf = Realm.Configuration(
-            schemaVersion: AppContainer.RealmSchemaVersion,
-            migrationBlock: { _, _ in }
-        )
-        Realm.Configuration.defaultConfiguration = initialConf
-        self.realmConf = initialConf
+        databaseService.installInitialDefaultConfiguration()
     }
 
-    /// Configure the Kingfisher image cache and register the auth challenge
-    /// responder so the rest of the app can issue authenticated HTTP image
-    /// requests via `KFImage`.
-    private func setupImageCache() {
-        kfImageCache.diskStorage.config.expiration = .days(28)
-        KingfisherManager.shared.defaultOptions = [.requestModifier(AuthPlugin(container: self))]
-        ImageDownloader.default.authenticationChallengeResponder = authResponsor
+    /// Configure cover cache and authenticated HTTP image requests.
+    private func setupCoverCache() {
+        coverCache.configureAuthentication(serverProvider: self)
 
         downloadManager.container = self
         fontsManager.reloadCustomFonts()
     }
 
-    /// Wire subscriptions that cross manager boundaries (so the originating
-    /// `init` body stays focused on `objectWillChange` plumbing).
+    /// Wire subscriptions that cross manager boundaries.
     private func wireCrossManagerSubscriptions() {
-        libraryManager.registerProbeLibraryLastModifiedCancellable()
-    }
-
-    /// Forward each manager's `objectWillChange` to our own so SwiftUI views
-    /// observing the container redraw on manager-level mutations.
-    private func wireObjectWillChangeForwarding() {
-        forwardObjectWillChange(of: serverManager)
-        forwardObjectWillChange(of: libraryManager)
-        forwardObjectWillChange(of: bookManager)
-        forwardObjectWillChange(of: sessionManager)
-    }
-
-    private func forwardObjectWillChange<Manager: ObservableObject>(of manager: Manager) {
-        manager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.objectWillChange.send() }
-            .store(in: &calibreCancellables)
+        libraryManager.startProbeLibraryLastModifiedTask()
     }
 
     func tryInitializeDatabase(statusHandler: @escaping (String) -> Void) throws {
-        let schemaVersion = UInt64(YabrAppInfo.shared.build) ?? 1
-        AppContainer.RealmSchemaVersion = schemaVersion
-        let conf = try DatabaseMigrator().makeConfiguration(schemaVersion: schemaVersion, statusHandler: statusHandler)
-        Realm.Configuration.defaultConfiguration = conf
-        realmConf = conf
+        try databaseService.prepareProductionConfiguration(statusHandler: statusHandler)
     }
 
     func initializeDatabase() throws {
-        guard let realmConf = realmConf else {
+        guard let realmConf = databaseService.realmConf else {
             defaultLog.error("initializeDatabase called without a Realm configuration")
             throw DatabaseBootstrapError.realmConfigurationMissing
         }
         do {
-            try databaseBootstrapper.bootstrap(realmConf: realmConf)
+            try MainActor.assumeIsolated {
+                try databaseBootstrapper.bootstrap(realmConf: realmConf)
+            }
         } catch {
             defaultLog.error("initializeDatabase failed: \(error.localizedDescription)")
             throw error
@@ -440,14 +399,19 @@ final class AppContainer: ObservableObject, AppContainerProtocol, LibraryProvide
     }
 }
 
-extension AppContainer: LibraryResolver {
-    func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
-        return libraryManager.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+private struct AppContainerEnvironmentKey: EnvironmentKey {
+    static var defaultValue: AppContainer {
+        guard let shared = AppContainer.shared else {
+            assertionFailure("Missing AppContainer environment")
+            return AppContainer(mock: true)
+        }
+        return shared
     }
 }
 
-extension AppContainer: ServerResolver {
-    func server(forUUID uuid: String) -> CalibreServer? {
-        return serverManager.calibreServers[uuid]
+extension EnvironmentValues {
+    var appContainer: AppContainer {
+        get { self[AppContainerEnvironmentKey.self] }
+        set { self[AppContainerEnvironmentKey.self] = newValue }
     }
 }

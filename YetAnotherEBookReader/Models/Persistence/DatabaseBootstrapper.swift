@@ -8,7 +8,6 @@
 
 import Foundation
 import RealmSwift
-import Combine
 import OSLog
 
 /// Errors thrown by `DatabaseBootstrapper.bootstrap` when the database cannot
@@ -34,15 +33,16 @@ final class DatabaseBootstrapper {
     /// servers/libraries/books and clean stale activity entries.
     ///
     /// Throws `DatabaseBootstrapError.realmOpenFailed` if the main Realm
-    /// cannot be opened. On throw, the caller should leave `AppContainer.realm`
-    /// nil so the upgrade UI stays visible.
+    /// cannot be opened. On throw, the caller should leave the database runtime's
+    /// main Realm nil so the upgrade UI stays visible.
+    @MainActor
     func bootstrap(realmConf: Realm.Configuration) throws {
         let bootstrapSignpost = AppPerformanceSignpost.begin("DatabaseBootstrap")
         defer {
             AppPerformanceSignpost.end("DatabaseBootstrap", bootstrapSignpost)
         }
         do {
-            container.realm = try Realm(configuration: realmConf)
+            try container.databaseService.openMainRealm(conf: realmConf)
         } catch {
             container.resetDatabaseBootstrapState(clearConfiguration: false)
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
@@ -50,12 +50,12 @@ final class DatabaseBootstrapper {
         }
         container.logger = CalibreActivityLogger(realmConf: realmConf)
         container.calibreServerService.logger = container.logger!
-        container.databaseService.setup(conf: realmConf)
-        container.downloadManager.setup(container: container, realmConf: realmConf)
+        container.downloadManager.setup(container: container)
         try AppContainer.SaveBooksMetadataRealmQueue.sync {
             do {
-                container.realmSaveBooksMetadata = try Realm(
-                    configuration: realmConf, queue: AppContainer.SaveBooksMetadataRealmQueue
+                try container.databaseService.openMetadataRealm(
+                    conf: realmConf,
+                    queue: AppContainer.SaveBooksMetadataRealmQueue
                 )
             } catch {
                 container.resetDatabaseBootstrapState(clearConfiguration: false)
@@ -91,7 +91,7 @@ final class DatabaseBootstrapper {
         let container = self.container
         let logger = self.logger
         DispatchQueue.global(qos: .background).async {
-            guard let realmConf = container.realmConf,
+            guard let realmConf = container.databaseService.realmConf,
                   let realm = try? Realm(configuration: realmConf) else {
                 return
             }
@@ -107,7 +107,7 @@ final class DatabaseBootstrapper {
             let readingPositionRepository = container.readingPositionRepository
 
             for key in bookKeysToMigrate {
-                guard let realmConf = container.realmConf,
+                guard let realmConf = container.databaseService.realmConf,
                       let freshRealm = try? Realm(configuration: realmConf),
                       let bookRealm = freshRealm.object(ofType: CalibreBookRealm.self, forPrimaryKey: key),
                       let serverUUID = bookRealm.serverUUID,

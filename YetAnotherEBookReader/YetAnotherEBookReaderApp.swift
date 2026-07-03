@@ -15,16 +15,19 @@ struct YetAnotherEBookReaderApp: App {
         case failed(message: String)
     }
 
-    @StateObject private var container: AppContainer
+    private let container: AppContainer
     @StateObject private var mainViewModel: MainViewModel
     @Environment(\.scenePhase) private var scenePhase
     
     @State private var launchState: LaunchState = .initializing(status: "Initializing...")
     @State private var bootstrapInFlight = false
+    @State private var probeTimerTask: Task<Void, Never>?
+
+    private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
     
     init() {
         let containerInstance = AppContainer()
-        _container = StateObject(wrappedValue: containerInstance)
+        self.container = containerInstance
         _mainViewModel = StateObject(wrappedValue: MainViewModel(container: containerInstance, sessionManager: containerInstance.sessionManager))
         
         setupAppearance()
@@ -96,9 +99,7 @@ struct YetAnotherEBookReaderApp: App {
                     
                 case .ready:
                     MainView(container: container, viewModel: mainViewModel)
-                        .environmentObject(container)
-                        .environmentObject(container.sessionManager)
-                        .environmentObject(container.fontsManager)
+                        .environment(\.appContainer, container)
                 }
             }
         }
@@ -109,7 +110,7 @@ struct YetAnotherEBookReaderApp: App {
 
                 if case .ready = launchState, container.isDatabaseReady {
                     enableProbeTimer()
-                    container.bookReaderActivitySubject.send(newScenePhase)
+                    container.publishBookReaderActivity(newScenePhase)
                 } else {
                     bootstrapInFlight = true
                     launchState = .initializing(status: "Initializing...")
@@ -132,7 +133,7 @@ struct YetAnotherEBookReaderApp: App {
                                     return
                                 }
                                 enableProbeTimer()
-                                container.bookReaderActivitySubject.send(newScenePhase)
+                                container.publishBookReaderActivity(newScenePhase)
                             }
                         } catch {
                             DispatchQueue.main.async {
@@ -146,7 +147,7 @@ struct YetAnotherEBookReaderApp: App {
                 break
             case .background:
                 disableProbeTimer()
-                container.bookReaderActivitySubject.send(newScenePhase)
+                container.publishBookReaderActivity(newScenePhase)
                 break
             @unknown default:
                 break
@@ -154,17 +155,26 @@ struct YetAnotherEBookReaderApp: App {
         }
     }
     
+    @MainActor
     func enableProbeTimer() {
+        probeTimerTask?.cancel()
         container.serverManager.probeServersReachability(with: [], updateLibrary: true)
-        container.probeTimer = Timer.publish(every: 60, on: .main, in: .default)
-            .autoconnect()
-            .receive(on: DispatchQueue.main)
-            .sink { timer in
-//                container.probeServersReachability(with: [], updateLibrary: true)
+        probeTimerTask = Task { @MainActor in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: Self.probeIntervalNanoseconds)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled else { break }
+                container.serverManager.probeServersReachability(with: [], updateLibrary: true)
             }
+        }
     }
     
+    @MainActor
     func disableProbeTimer() {
-        container.probeTimer?.cancel()
+        probeTimerTask?.cancel()
+        probeTimerTask = nil
     }
 }

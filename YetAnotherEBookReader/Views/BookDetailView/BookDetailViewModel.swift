@@ -6,14 +6,14 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 
+@MainActor
 class BookDetailViewModel: ObservableObject {
     @Published var listVM: ReadingPositionListViewModel?
     @Published var previewViewModel = BookPreviewViewModel()
     @Published var calibreBook: CalibreBook?
-    private var bookObserverToken: AnyCancellable?
+    private var bookObserverTask: Task<Void, Never>?
     
     @Published var alertItem: AlertItem?
     
@@ -97,6 +97,7 @@ class BookDetailViewModel: ObservableObject {
     deinit {
         fetchTask?.cancel()
         activeDownloadsTask?.cancel()
+        bookObserverTask?.cancel()
     }
     
     func setup(bookId: String) {
@@ -130,19 +131,25 @@ class BookDetailViewModel: ObservableObject {
             self.listVM?.positions = container.readingPositionRepository.getPositions(for: calibreBook)
         }
         
-        bookObserverToken = container.bookRepository.observeBook(id: bookId)
-            .sink { [weak self] updatedCalibreBook in
-                guard let self = self, let container = self.container, let updatedCalibreBook = updatedCalibreBook else { return }
-                self.calibreBook = updatedCalibreBook
-                self.listVM?.book = updatedCalibreBook
-                self.listVM?.positions = container.readingPositionRepository.getPositions(for: updatedCalibreBook)
+        bookObserverTask?.cancel()
+        let bookUpdates = container.bookRepository.observeBook(id: bookId)
+        bookObserverTask = Task { [weak self, weak container] in
+            guard let container else { return }
+            for await updatedCalibreBook in bookUpdates {
+                guard !Task.isCancelled, let updatedCalibreBook else { continue }
+                await MainActor.run { [weak self, weak container] in
+                    guard let self, let container else { return }
+                    self.applyBookUpdate(updatedCalibreBook, container: container)
+                }
             }
+        }
     }
     
     func fetchMetadata(book: CalibreBook) {
         guard let container = container else { return }
         fetchTask?.cancel()
-        fetchTask = Task {
+        fetchTask = Task { [weak self, weak container] in
+            guard let self, let container else { return }
             await container.bookManager.getBooksMetadata(
                 request: .init(
                     library: book.library,
@@ -150,6 +157,10 @@ class BookDetailViewModel: ObservableObject {
                     getAnnotations: true
                 )
             )
+            guard !Task.isCancelled else { return }
+            container.refreshDatabase()
+            guard let updatedBook = container.bookRepository.getBook(id: book.inShelfId) else { return }
+            self.applyBookUpdate(updatedBook, container: container)
         }
     }
     
@@ -159,7 +170,7 @@ class BookDetailViewModel: ObservableObject {
             // TODO cancel logic if needed
         } else {
             if let coverUrl = book.coverURL {
-                container.kfImageCache.removeImage(forKey: coverUrl.absoluteString)
+                container.coverCache.removeCover(for: coverUrl)
             }
             fetchMetadata(book: book)
         }
@@ -221,6 +232,12 @@ class BookDetailViewModel: ObservableObject {
 
     func clearFormat(book: CalibreBook, format: Format) {
         container?.bookManager.clearCache(book: book, format: format)
+    }
+
+    private func applyBookUpdate(_ book: CalibreBook, container: AppContainer) {
+        calibreBook = book
+        listVM?.book = book
+        listVM?.positions = container.readingPositionRepository.getPositions(for: book)
     }
     
     func prepareReadingPositionHistory(book: CalibreBook) {

@@ -6,12 +6,11 @@
 //
 
 import Foundation
-import Combine
 import RealmSwift
 
 protocol BookRepositoryProtocol {
     func getBook(id: String) -> CalibreBook?
-    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never>
+    func observeBook(id: String) -> AsyncStream<CalibreBook?>
     func saveBook(_ book: CalibreBook)
     func deleteBook(id: String)
     func getAllBooksInShelf() -> [CalibreBook]
@@ -64,26 +63,36 @@ class RealmBookRepository: BookRepositoryProtocol {
         return mapBookRealm(bookRealm)
     }
 
-    func observeBook(id: String) -> AnyPublisher<CalibreBook?, Never> {
+    func observeBook(id: String) -> AsyncStream<CalibreBook?> {
         guard let realm = getRealm() else {
-            return Just(nil).eraseToAnyPublisher()
+            return AsyncStream { continuation in
+                continuation.yield(nil)
+                continuation.finish()
+            }
         }
 
-        return realm.objects(CalibreBookRealm.self)
+        _ = realm.refresh()
+
+        let results = realm.objects(CalibreBookRealm.self)
             .filter("primaryKey == %@", id)
-            .changesetPublisher
-            .map { [weak self] change -> CalibreBook? in
-                guard let self = self else { return nil }
+
+        return AsyncStream { [weak self] continuation in
+            let token = results.observe(on: DispatchQueue.main) { [weak self] change in
+                guard let self else {
+                    continuation.yield(nil)
+                    return
+                }
                 switch change {
                 case .initial(let collection), .update(let collection, _, _, _):
-                    guard let bookRealm = collection.first else { return nil }
-                    return self.mapBookRealm(bookRealm)
+                    continuation.yield(collection.first.flatMap { self.mapBookRealm($0) })
                 case .error:
-                    return nil
+                    continuation.yield(nil)
                 }
             }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
+            continuation.onTermination = { _ in
+                token.invalidate()
+            }
+        }
     }
     
     func saveBook(_ book: CalibreBook) {

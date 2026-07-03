@@ -7,7 +7,6 @@
 
 import XCTest
 import RealmSwift
-import Combine
 @testable import YetAnotherEBookReader
 
 final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
@@ -228,31 +227,42 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertEqual(fetched?.lastSynced.timeIntervalSince1970, 0)
     }
     
-    func testObserveBook() throws {
+    func testObserveBookPublishesInitialRealmNotificationAndUpdates() async throws {
         let server = TestFixtures.makeServer()
         let library = TestFixtures.makeLibrary(server: server, name: "Observe Library")
         resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
         
-        let book = TestFixtures.makeBook(id: 100, library: library)
-        
-        let expectation = self.expectation(description: "Book saved and observed")
-        var observedBooks: [CalibreBook?] = []
-        
-        let cancellable = repository.observeBook(id: book.inShelfId)
-            .sink { book in
-                observedBooks.append(book)
-                if observedBooks.count >= 2 {
-                    expectation.fulfill()
-                }
-            }
-        
+        var book = TestFixtures.makeBook(id: 100, library: library)
+        book.title = "Initial Title"
         repository.saveBook(book)
         
-        waitForExpectations(timeout: 2.0)
+        let initialExpectation = expectation(description: "Initial existing book observed")
+        let updateExpectation = expectation(description: "Book update observed")
+        var observedBooks: [CalibreBook?] = []
+        
+        let task = Task { @MainActor [repository] in
+            guard let repository else { return }
+            for await observedBook in repository.observeBook(id: book.inShelfId) {
+                observedBooks.append(observedBook)
+                if observedBooks.count == 1 {
+                    initialExpectation.fulfill()
+                } else if observedBooks.count >= 2 {
+                    updateExpectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        await fulfillment(of: [initialExpectation], timeout: 2.0)
+        book.title = "Updated Title"
+        repository.saveBook(book)
+        
+        await fulfillment(of: [updateExpectation], timeout: 2.0)
+        task.cancel()
         
         XCTAssertEqual(observedBooks.count, 2)
-        XCTAssertNil(observedBooks[0])
+        XCTAssertEqual(observedBooks[0]?.title, "Initial Title")
         XCTAssertEqual(observedBooks[1]?.id, book.id)
-        cancellable.cancel()
+        XCTAssertEqual(observedBooks[1]?.title, "Updated Title")
     }
 }

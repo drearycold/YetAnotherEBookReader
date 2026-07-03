@@ -106,7 +106,7 @@ struct ReadingPositionDetailView: View {
         .fullScreenCover(isPresented: $_VM.presentingReadSheet) {
             if let book = _VM.readingBook, let readerInfo = _VM.readerInfo {
                 YabrEBookReader(book: book, readerInfo: readerInfo)
-                    .environmentObject(_VM.container)
+                    .environment(\.appContainer, _VM.container)
             } else {
                 Text("Nil Book")
             }
@@ -118,7 +118,7 @@ struct ReadingPositionDetailView: View {
 }
 
 struct ReadingPositionDetailView_Previews: PreviewProvider {
-    @StateObject static var container = AppContainer(mock: true)
+    static let container = AppContainer(mock: true)
 
     static var previews: some View {
         let listModel = ReadingPositionListViewModel(

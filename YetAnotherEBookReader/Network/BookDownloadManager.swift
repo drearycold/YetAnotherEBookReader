@@ -7,7 +7,6 @@
 
 import Foundation
 import OSLog
-import RealmSwift
 
 public enum DownloadStartError: Error, LocalizedError, Equatable {
     case missingFormatInfo
@@ -33,46 +32,44 @@ public enum DownloadStartError: Error, LocalizedError, Equatable {
 }
 
 class BookDownloadManager {
+    @MainActor
     var activeDownloads: [URL: BookFormatDownload] = [:]
 
     private let defaultLog = Logger(subsystem: "io.github.dsreader", category: "BookDownloadManager")
-    private let downloadSnapshotLock = NSRecursiveLock()
+    @MainActor
     private var downloadSnapshotContinuations = [UUID: AsyncStream<[URL: BookFormatDownload]>.Continuation]()
     
     var container: AppContainerProtocol?
-    private var realmConf: Realm.Configuration?
+    @MainActor
     var sessionConfiguration: URLSessionConfiguration = .default
 
-    init(container: AppContainerProtocol? = nil, realmConf: Realm.Configuration? = nil) {
+    init(container: AppContainerProtocol? = nil) {
         self.container = container
-        self.realmConf = realmConf
     }
     
-    func setup(container: AppContainerProtocol, realmConf: Realm.Configuration?) {
+    @MainActor
+    func setup(container: AppContainerProtocol) {
         self.container = container
-        self.realmConf = realmConf
     }
 
+    @MainActor
     func downloadSnapshots() -> AsyncStream<[URL: BookFormatDownload]> {
         AsyncStream { continuation in
             let id = UUID()
-            downloadSnapshotLock.lock()
             downloadSnapshotContinuations[id] = continuation
-            downloadSnapshotLock.unlock()
             continuation.yield(activeDownloads)
             continuation.onTermination = { [weak self] _ in
                 guard let self else { return }
-                self.downloadSnapshotLock.lock()
-                defer { self.downloadSnapshotLock.unlock() }
-                self.downloadSnapshotContinuations.removeValue(forKey: id)
+                Task { @MainActor in
+                    self.downloadSnapshotContinuations.removeValue(forKey: id)
+                }
             }
         }
     }
 
+    @MainActor
     fileprivate func publishDownloadSnapshot() {
-        downloadSnapshotLock.lock()
         let continuations = Array(downloadSnapshotContinuations.values)
-        downloadSnapshotLock.unlock()
         continuations.forEach {
             $0.yield(activeDownloads)
         }
@@ -84,6 +81,7 @@ class BookDownloadManager {
         startDownload(book, format: format, overwrite: overwrite)
     }
 
+    @MainActor
     func cancelDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
                     $1.book.id == book.id && $1.format == format
@@ -106,6 +104,7 @@ class BookDownloadManager {
         publishDownloadSnapshot()
     }
     
+    @MainActor
     func pauseDownload(_ book: CalibreBook, format: Format) {
         guard let download = activeDownloads.filter({
                     $1.isDownloading && $1.book.id == book.id && $1.format == format
@@ -139,6 +138,7 @@ class BookDownloadManager {
         }
     }
     
+    @MainActor
     func resumeDownload(_ book: CalibreBook, format: Format) -> Bool {
         guard let bookFormatDownloadIndex = activeDownloads.firstIndex (where: {
                 $1.book.id == book.id && $1.format == format && ($1.resumeData != nil || $1.isPaused)
@@ -179,6 +179,7 @@ class BookDownloadManager {
         return true
     }
     
+    @MainActor
     func startDownload(_ book: CalibreBook, format: Format, overwrite: Bool = false) -> Result<Void, DownloadStartError> {
         guard let formatInfo = book.formats[format.rawValue] else {
             return .failure(.missingFormatInfo)
@@ -258,6 +259,7 @@ class BookDownloadManager {
         return .success(())
     }
 
+    @MainActor
     func startBatchDownload(books: [CalibreBook], formats: [String]) {
         books.forEach { book in
             let downloadFormats = formats.compactMap { format -> Format? in

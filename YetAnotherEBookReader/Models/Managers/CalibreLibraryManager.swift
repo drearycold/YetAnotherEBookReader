@@ -6,32 +6,71 @@
 //
 
 import Foundation
-import Combine
 import SwiftUI
 import OSLog
 
-class CalibreLibraryManager: ObservableObject {
+class CalibreLibraryManager {
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "CalibreLibraryManager")
 
     weak var container: AppContainerProtocol?
     let databaseService: DatabaseService
     private let libraryRepository: LibraryRepositoryProtocol
 
-    @Published var calibreLibraries = [String: CalibreLibrary]() {
+    private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
+    private let libraryBroadcaster = ManagerAsyncBroadcaster<[String: CalibreLibrary]>()
+    private let libraryInfoStagingBroadcaster = ManagerAsyncBroadcaster<[String: CalibreLibraryInfo]>()
+    private let librarySyncStatusBroadcaster = ManagerAsyncBroadcaster<[String: CalibreSyncStatus]>()
+    private var probeLibraryLastModifiedTask: Task<Void, Never>?
+
+    var calibreLibraries = [String: CalibreLibrary]() {
         didSet {
             container?.calibreServerService.updateCalibreLibraries(calibreLibraries)
+            libraryBroadcaster.send(calibreLibraries)
+            publishStateChange()
         }
     }
-    @Published var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]()
-    @Published var librarySyncStatus = [String: CalibreSyncStatus]()
+    var calibreLibraryInfoStaging = [String: CalibreLibraryInfo]() {
+        didSet {
+            libraryInfoStagingBroadcaster.send(calibreLibraryInfoStaging)
+            publishStateChange()
+        }
+    }
+    var librarySyncStatus = [String: CalibreSyncStatus]() {
+        didSet {
+            librarySyncStatusBroadcaster.send(librarySyncStatus)
+            publishStateChange()
+        }
+    }
     var localLibrary: CalibreLibrary?
-
-    private var calibreCancellables = Set<AnyCancellable>()
 
     init(container: AppContainerProtocol, databaseService: DatabaseService, libraryRepository: LibraryRepositoryProtocol) {
         self.container = container
         self.databaseService = databaseService
         self.libraryRepository = libraryRepository
+    }
+
+    deinit {
+        probeLibraryLastModifiedTask?.cancel()
+    }
+
+    func stateChanges() -> AsyncStream<Void> {
+        stateChangeBroadcaster.stream()
+    }
+
+    func librarySnapshots() -> AsyncStream<[String: CalibreLibrary]> {
+        libraryBroadcaster.stream(initialValue: calibreLibraries)
+    }
+
+    func libraryInfoStagingSnapshots() -> AsyncStream<[String: CalibreLibraryInfo]> {
+        libraryInfoStagingBroadcaster.stream(initialValue: calibreLibraryInfoStaging)
+    }
+
+    func librarySyncStatusSnapshots() -> AsyncStream<[String: CalibreSyncStatus]> {
+        librarySyncStatusBroadcaster.stream(initialValue: librarySyncStatus)
+    }
+
+    private func publishStateChange() {
+        stateChangeBroadcaster.send(())
     }
 
     // MARK: - Migrated Methods
@@ -138,7 +177,7 @@ class CalibreLibraryManager: ObservableObject {
                 }
             }
 
-            let booksInShelfValues = Array(booksInShelfSnapshot.values)
+            let booksInShelfValues = booksInShelfSnapshot.map { $0.value }
             let removedBooks: [CalibreBook] = booksInShelfValues.compactMap { (book: CalibreBook) -> CalibreBook? in
                 guard book.library.server.isLocal else { return nil }
                 let existingFormats: [String] = book.formats.compactMap {
@@ -286,49 +325,51 @@ class CalibreLibraryManager: ObservableObject {
         self.librarySyncStatus[library.id]?.isSync = false
     }
 
-    func registerProbeLibraryLastModifiedCancellable() {
+    func startProbeLibraryLastModifiedTask() {
         let dateFormatter = ISO8601DateFormatter()
         let dateFormatter2 = ISO8601DateFormatter()
         dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
 
         guard let container = self.container else { return }
-        container.probeLibraryLastModifiedSubject
-            .sink { [weak self] request in
-                Task { [weak self] in
-                    guard let self = self,
-                          let calibreServerService = self.container?.calibreServerService else { return }
+        let requests = container.probeLibraryLastModifiedRequests()
+        probeLibraryLastModifiedTask?.cancel()
+        probeLibraryLastModifiedTask = Task { [weak self] in
+            for await request in requests {
+                guard !Task.isCancelled,
+                      let self,
+                      let calibreServerService = self.container?.calibreServerService else { return }
 
-                    do {
-                        let syncResult = try await calibreServerService.syncLegacyLibraryResult(
-                            resultPrev: .init(request: request, result: [:]),
-                            order: "",
-                            filter: "",
-                            limit: 1
-                        )
+                do {
+                    let syncResult = try await calibreServerService.syncLegacyLibraryResult(
+                        resultPrev: .init(request: request, result: [:]),
+                        order: "",
+                        filter: "",
+                        limit: 1
+                    )
 
-                        await MainActor.run {
-                            guard var library = self.calibreLibraries[syncResult.request.library.id],
-                                  let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
-                                  let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
-                            else {
-                                return
-                            }
-                            if lastModified > library.lastModified {
-                                library.lastModified = lastModified
-                                self.calibreLibraries[syncResult.request.library.id] = library
-                                try? self.libraryRepository.saveLibrary(library)
-                            }
-
-                            self.container?.publishCalibreUpdate(.library(library))
+                    await MainActor.run {
+                        guard var library = self.calibreLibraries[syncResult.request.library.id],
+                              let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
+                              let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
+                        else {
+                            return
                         }
-                    } catch {
-                        self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
+                        if lastModified > library.lastModified {
+                            library.lastModified = lastModified
+                            self.calibreLibraries[syncResult.request.library.id] = library
+                            try? self.libraryRepository.saveLibrary(library)
+                        }
+
+                        self.container?.publishCalibreUpdate(.library(library))
                     }
+                } catch {
+                    self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
                 }
             }
-            .store(in: &calibreCancellables)
+        }
     }
 
+    @MainActor
     func syncLibrary(request: CalibreSyncLibraryRequest) async {
         guard let container = self.container else { return }
         let calibreServerService = container.calibreServerService
@@ -433,7 +474,7 @@ class CalibreLibraryManager: ObservableObject {
 
                 if container.serverManager.isServerReachable(server: library.server) {
                     await container.publishCalibreUpdate(.server(library.server))
-                    container.probeLibraryLastModifiedSubject.send(.init(library: library, autoUpdateOnly: false, incremental: false))
+                    container.publishProbeLibraryLastModifiedRequest(.init(library: library, autoUpdateOnly: false, incremental: false))
                 }
             }
         } else {

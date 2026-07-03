@@ -6,10 +6,9 @@
 //
 
 import SwiftUI
-import Combine
 
 struct ServerDetailView: View {
-    @EnvironmentObject var container: AppContainer
+    @Environment(\.appContainer) var container
 
     @Binding var server: CalibreServer
     @StateObject private var viewModel: ServerViewModel
@@ -72,19 +71,12 @@ struct ServerDetailView: View {
                 label: {
                     Text("Restore Hidden Libraries")
                 }
-            ).disabled(
-                container.libraryManager.calibreLibraries
-                    .filter { $0.value.server.id == server.id }
-                    .allSatisfy { $0.value.hidden == false }
-            )
+            ).disabled(viewModel.hiddenLibraryList.isEmpty)
         }
         .navigationTitle(server.name)
         .onAppear() {
             viewModel.updateLibraryList()
         }
-        .onChange(of: container.libraryManager.calibreLibraries, perform: { _ in
-            viewModel.updateLibraryList()
-        })
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button(action: {
@@ -92,7 +84,7 @@ struct ServerDetailView: View {
                 }) {
                     Image(systemName: "xmark.bin")
                 }.disabled(
-                    container.libraryManager.librarySyncStatus.filter {
+                    viewModel.librarySyncStatus.filter {
                         $0.value.library.server.id == server.id && $0.value.del.count > 0
                     }.isEmpty
                 )
@@ -112,7 +104,7 @@ struct ServerDetailView: View {
         HStack {
             Text("Libraries")
             Spacer()
-            if container.libraryManager.librarySyncStatus.filter({
+            if viewModel.librarySyncStatus.filter({
                 $0.value.library.server.id == server.id
             }).allSatisfy({ $1.isSync == false }) == false {
                 ProgressView()
@@ -134,7 +126,7 @@ struct ServerDetailView: View {
     private func libraryRestoreHiddenView() -> some View {
         List(selection: $viewModel.libraryRestoreListSelection) {
             ForEach(
-                container.libraryManager.calibreLibraries.filter { $0.value.hidden && $0.value.server.id == server.id }.map{$0.value}.sorted{$0.id < $1.id},
+                viewModel.hiddenLibraryList,
                 id: \.id
             ) { library in
                 Text(library.name)
@@ -179,7 +171,7 @@ struct ServerDetailView: View {
             
             Spacer()
             VStack(alignment: .trailing) {
-                if let status = container.libraryManager.librarySyncStatus[library.id] {
+                if let status = viewModel.librarySyncStatus[library.id] {
                     if status.isSync {
                         if let msg = status.msg {
                             Text("processing\n\(msg)")
@@ -212,7 +204,7 @@ struct ServerDetailView: View {
                 }
             }.font(.caption2)
             ZStack {
-                if container.libraryManager.librarySyncStatus[library.id]?.isSync ?? false {
+                if viewModel.librarySyncStatus[library.id]?.isSync ?? false {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle())
                 } else {
@@ -221,7 +213,7 @@ struct ServerDetailView: View {
                         .hidden()
                 }
 
-                if let status = container.libraryManager.librarySyncStatus[library.id],
+                if let status = viewModel.librarySyncStatus[library.id],
                    status.isSync == false,
                    status.isError == false,
                    status.msg == "Success" {
@@ -233,8 +225,8 @@ struct ServerDetailView: View {
                         .hidden()
                 }
 
-                if container.libraryManager.librarySyncStatus[library.id]?.isSync == false,
-                   container.libraryManager.librarySyncStatus[library.id]?.isError == true {
+                if viewModel.librarySyncStatus[library.id]?.isSync == false,
+                   viewModel.librarySyncStatus[library.id]?.isError == true {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(.red)
                 } else {
@@ -255,7 +247,7 @@ struct ServerDetailView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
             ServerDetailView(server: $server)
-                .environmentObject(container)
+                .environment(\.appContainer, container)
         }
         .navigationViewStyle(StackNavigationViewStyle())
     }

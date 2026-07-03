@@ -10,7 +10,7 @@ struct LibraryInfoBookListContent: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var libraryInfoViewModel: LibraryInfoView.ViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    @ObservedObject var container: AppContainer
+    let container: AppContainer
     let geometry: GeometryProxy
     
     var body: some View {
@@ -75,7 +75,7 @@ struct LibraryInfoBookListContent: View {
                 NavigationLink (
                     destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
                     tag: book.inShelfId,
-                    selection: $container.bookManager.selectedBookId
+                    selection: selectedBookIdBinding
                 ) {
                     LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                         onRowAppear(index: index)
@@ -112,6 +112,13 @@ struct LibraryInfoBookListContent: View {
         guard let result = viewModel.unifiedSearchResult else { return }
         guard index + 1 > result.limitNumber - 20 else { return }
         viewModel.expandSearchUnifiedBookLimit()
+    }
+
+    private var selectedBookIdBinding: Binding<String?> {
+        Binding(
+            get: { container.bookManager.selectedBookId },
+            set: { container.bookManager.selectedBookId = $0 }
+        )
     }
     
     @ViewBuilder

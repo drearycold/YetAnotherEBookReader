@@ -37,8 +37,7 @@ import Combine
         let item = ShelfBookItem(id: "1", title: "Book", coverURL: "", progress: 0, status: .ready)
 
         mockAppContainer.shelfDataModel.setRecentShelfSnapshotForTesting(
-            .init(books: [item]),
-            sendLegacySubject: false
+            .init(books: [item])
         )
         await waitForViewModelUpdate {
             self.viewModel.loadedBooks?.count == 1

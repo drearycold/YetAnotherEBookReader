@@ -14,12 +14,23 @@
 //
 
 import Foundation
-import Combine
-import RealmSwift
 import SwiftUI
-import Kingfisher
 
-protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
+protocol CalibreServerSnapshotProviding: AnyObject {
+    var calibreServers: [String: CalibreServer] { get }
+}
+
+protocol CalibreLibrarySnapshotProviding: AnyObject {
+    var calibreLibraries: [String: CalibreLibrary] { get }
+}
+
+protocol BookCoverCaching: AnyObject {
+    func configureAuthentication(serverProvider: CalibreServerSnapshotProviding)
+    func storeCoverData(_ data: Data, for url: URL)
+    func removeCover(for url: URL)
+}
+
+protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, CalibreServerSnapshotProviding, CalibreLibrarySnapshotProviding {
     // MARK: - Repositories
 
     var serverRepository: ServerRepositoryProtocol { get }
@@ -60,14 +71,8 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
 
     // MARK: - Runtime state
 
-    var realm: Realm? { get set }
-    var realmSaveBooksMetadata: Realm? { get set }
-    var realmConf: Realm.Configuration? { get set }
     var logger: CalibreActivityLogger? { get set }
-    var probeTimer: AnyCancellable? { get set }
-    var calibreCancellables: Set<AnyCancellable> { get set }
-    var authResponsor: AuthResponsor { get }
-    var kfImageCache: ImageCache { get }
+    var coverCache: BookCoverCaching { get }
     var presentingStack: [Binding<Bool>] { get set }
 
     // MARK: - Calibre cache (used directly by services/repositories)
@@ -87,14 +92,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
 
     // MARK: - App-wide events
 
-    var calibreUpdatedSubject: PassthroughSubject<calibreUpdatedSignal, Never> { get }
-    var bookImportedSubject: PassthroughSubject<BookImportInfo, Never> { get }
-    var dismissAllSubject: PassthroughSubject<String, Never> { get }
-    var recentShelfItemsSubject: PassthroughSubject<[ShelfBookItem], Never> { get }
-    var discoverShelfItemsSubject: PassthroughSubject<[ShelfSectionItem], Never> { get }
-    var bookReaderActivitySubject: PassthroughSubject<ScenePhase, Never> { get }
-    var probeLibraryLastModifiedSubject: PassthroughSubject<CalibreSyncLibraryRequest, Never> { get }
-
     @MainActor
     func publishCalibreUpdate(_ signal: calibreUpdatedSignal)
 
@@ -102,10 +99,23 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver {
     func calibreUpdates() -> AsyncStream<calibreUpdatedSignal>
 
     @MainActor
-    func publishLegacyRecentShelfItems(_ books: [ShelfBookItem])
+    func publishBookImport(_ info: BookImportInfo)
+
+    func bookImportEvents() -> AsyncStream<BookImportInfo>
 
     @MainActor
-    func publishLegacyDiscoverShelfItems(_ sections: [ShelfSectionItem])
+    func publishDismissAll(_ reason: String)
+
+    func dismissAllEvents() -> AsyncStream<String>
+
+    @MainActor
+    func publishBookReaderActivity(_ phase: ScenePhase)
+
+    func bookReaderActivities() -> AsyncStream<ScenePhase>
+
+    func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest)
+
+    func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest>
 
     // MARK: - Database lifecycle / activity log helpers
     // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which
