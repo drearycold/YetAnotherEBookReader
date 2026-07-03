@@ -18,6 +18,7 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
+    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
     func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
@@ -229,6 +230,32 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition {
         return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
+    }
+
+    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        guard let realm = getRealm(server: nil) else { return [] }
+
+        var predicate: NSPredicate?
+        if let library, let bookId {
+            let historyBookId = "\(library.key) - \(bookId)"
+            if let startDateAfter {
+                predicate = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", historyBookId, startDateAfter as NSDate)
+            } else {
+                predicate = NSPredicate(format: "bookId = %@", historyBookId)
+            }
+        } else if let startDateAfter {
+            predicate = NSPredicate(format: "startDatetime >= %@", startDateAfter as NSDate)
+        }
+
+        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+        if let predicate {
+            results = results.filter(predicate)
+        }
+
+        return results
+            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+            .filter { $0.endPosition != nil }
+            .map { $0.toDomain() }
     }
 
     func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {

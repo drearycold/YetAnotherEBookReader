@@ -138,9 +138,21 @@ struct CalibreSyncLibraryResult {
     var lastModified: Date? = nil
 }
 
+struct BookMetadataSyncRecord {
+    let id: Int32
+    let lastModified: Date
+}
+
+struct BookMetadataPersistenceResult {
+    var booksUpdated = Set<Int32>()
+    var booksDeleted = Set<Int32>()
+    var booksInShelf = [CalibreBook]()
+    var booksAnnotation = [CalibreBook]()
+}
+
 struct CalibreSyncLibraryBooksMetadata {
     enum Action {
-        case save([[String: Any]])
+        case save([BookMetadataSyncRecord])
         case updateDeleted([String: CalibreCdbCmdListResult.DateValue])
         case complete(Date?, [String: CalibreCustomColumnInfo])
     }

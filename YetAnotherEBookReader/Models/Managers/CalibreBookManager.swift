@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 import SwiftUI
 import OSLog
 import CryptoSwift
@@ -149,15 +148,6 @@ class CalibreBookManager {
         stateChangeBroadcaster.send(())
     }
 
-    private func getRealm() -> Realm? {
-        if Thread.isMainThread {
-            return databaseService.realm
-        } else if let conf = databaseService.realmConf {
-            return try? Realm(configuration: conf)
-        }
-        return nil
-    }
-
     // MARK: - Initialization & Realm Sync
 
     func populateBookShelf(sendShelfUpdate: Bool = true, completion: (() -> Void)? = nil) {
@@ -244,29 +234,6 @@ class CalibreBookManager {
         }
     }
 
-    // MARK: - Realm Converters
-
-    func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-        guard let library = queryLibrary(for: bookRealm) else { return nil }
-        return convert(library: library, bookRealm: bookRealm)
-    }
-
-    func convert(library: CalibreLibrary, bookRealm: CalibreBookRealm) -> CalibreBook {
-        return bookRealm.toDomain(library: library)
-    }
-
-    func queryLibrary(for bookRealm: CalibreBookRealm) -> CalibreLibrary? {
-        guard let serverUUID = bookRealm.serverUUID,
-              let libraryName = bookRealm.libraryName
-        else { return nil }
-
-        return container?.calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
-    }
-
-    func getBookRealm(forPrimaryKey: String) -> CalibreBookRealm? {
-        return bookRepository.getBookRealm(id: forPrimaryKey)
-    }
-
     // MARK: - Realm CRUD
 
     func updateBook(book: CalibreBook) {
@@ -289,21 +256,11 @@ class CalibreBookManager {
         }
     }
 
-    func queryBookRealm(book: CalibreBook, realm: Realm) -> CalibreBookRealm? {
-        let key = CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description)
-        return bookRepository.getBookRealm(id: key)
+    func deleteBook(book: CalibreBook) {
+        deleteBook(forPrimaryKey: bookRepository.primaryKey(for: book))
     }
 
-    func updateBookRealm(book: CalibreBook, realm: Realm) {
-        bookRepository.saveBook(book)
-    }
-
-    func removeFromRealm(book: CalibreBook) {
-        let key = CalibreBookRealm.PrimaryKey(serverUUID: book.library.server.uuid.uuidString, libraryName: book.library.name, id: book.id.description)
-        removeFromRealm(for: key)
-    }
-
-    func removeFromRealm(for primaryKey: String) {
+    func deleteBook(forPrimaryKey primaryKey: String) {
         bookRepository.deleteBook(id: primaryKey)
     }
 
@@ -364,8 +321,7 @@ class CalibreBookManager {
         guard var book = booksInShelf[inShelfId] else { return }
         book.inShelf = false
 
-        guard let realm = getRealm() else { return }
-        updateBookRealm(book: book, realm: realm)
+        updateBook(book: book)
 
         booksInShelf.removeValue(forKey: inShelfId)
 
@@ -588,9 +544,8 @@ class CalibreBookManager {
             library: library
         )
 
-        guard let realm = getRealm() else { return nil }
-        if let bookRealm = queryBookRealm(book: book, realm: realm) {
-            book = convert(library: library, bookRealm: bookRealm)
+        if let existingBook = bookRepository.getBook(library: library, bookId: book.id) {
+            book = existingBook
         }
 
         book.title = fileURL.deletingPathExtension().lastPathComponent
@@ -695,50 +650,30 @@ class CalibreBookManager {
         }
         AppPerformanceSignpost.end("MetadataHTTPFetch", fetchSignpost, "Library: \(request.library.id), Books: \(books.count), Annotations: \(annotationCount)")
 
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        let metadataPersistenceResult = await withCheckedContinuation { (continuation: CheckedContinuation<BookMetadataPersistenceResult, Never>) in
             AppContainer.SaveBooksMetadataRealmQueue.async {
                 guard let entries = task.booksMetadataEntry,
-                      let json = task.booksMetadataJSON,
-                      let realmSaveBooksMetadata = self.databaseService.metadataRealm else {
-                    continuation.resume()
+                      let json = task.booksMetadataJSON else {
+                    continuation.resume(returning: BookMetadataPersistenceResult())
                     return
                 }
 
-                let serverUUID = task.library.server.uuid.uuidString
-                let libraryName = task.library.name
                 let saveSignpost = AppPerformanceSignpost.begin("MetadataRealmSave", "Library: \(task.library.id), Books: \(task.books.count)")
-                try? realmSaveBooksMetadata.write {
-                    task.books.map {
-                        (
-                            obj: realmSaveBooksMetadata.object(
-                                ofType: CalibreBookRealm.self,
-                                forPrimaryKey: CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: $0.description)
-                            ),
-                            entry: entries[$0.description],
-                            root: json[$0.description] as? NSDictionary
-                        )
-                    }.forEach {
-                        guard let obj = $0.obj else { return }
-
-                        if let entryOptional = $0.entry, let entry = entryOptional, let root = $0.root {
-                            calibreServerService.handleLibraryBookOne(library: task.library, bookRealm: obj, entry: entry, root: root)
-                            task.booksUpdated.insert(obj.idInLib)
-                            if obj.inShelf {
-                                task.booksInShelf.append(self.convert(library: task.library, bookRealm: obj))
-                            } else if task.annotationsData != nil {
-                                task.booksAnnotation.append(self.convert(library: task.library, bookRealm: obj))
-                            }
-                        } else {
-                            // null data, treat as deleted, update lastSynced to lastModified to prevent further actions
-                            obj.lastSynced = obj.lastModified
-                            task.booksDeleted.insert(obj.idInLib)
-                        }
-                    }
-                }
+                let result = self.bookRepository.persistMetadataEntries(
+                    library: task.library,
+                    bookIds: task.books,
+                    entries: entries,
+                    json: json,
+                    includeAnnotationBooks: task.annotationsData != nil
+                )
                 AppPerformanceSignpost.end("MetadataRealmSave", saveSignpost, "Library: \(task.library.id), Books: \(task.books.count)")
-                continuation.resume()
+                continuation.resume(returning: result)
             }
         }
+        task.booksUpdated.formUnion(metadataPersistenceResult.booksUpdated)
+        task.booksDeleted.formUnion(metadataPersistenceResult.booksDeleted)
+        task.booksInShelf.append(contentsOf: metadataPersistenceResult.booksInShelf)
+        task.booksAnnotation.append(contentsOf: metadataPersistenceResult.booksAnnotation)
 
         task.booksInShelf.forEach { newBook in
             self.booksInShelf[newBook.inShelfId] = newBook
@@ -844,11 +779,7 @@ class CalibreBookManager {
 
         if request.books.count == 1 {
             if let book = self.getBook(
-                for: CalibreBookRealm.PrimaryKey(
-                    serverUUID: task.library.server.uuid.uuidString,
-                    libraryName: task.library.name,
-                    id: task.request.books.first!.description
-                )
+                for: bookRepository.primaryKey(library: task.library, bookId: task.request.books.first!)
                ) {
                 await container?.publishCalibreUpdate(.book(book))
             }
@@ -875,26 +806,11 @@ class CalibreBookManager {
             var progress = 0
             let total = lss.value.del.count
             DispatchQueue.global(qos: .userInitiated).async {
-                guard let realmConf = self.databaseService.realmConf,
-                      let realm = try? Realm(configuration: realmConf) else { return }
-
-                try? realm.write {
-                    lss.value.del.forEach { id in
-                        if progress % 100 == 0 {
-                            DispatchQueue.main.async {
-                                self.container?.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
-                            }
-                        }
-
-                        let primaryKey = CalibreBookRealm.PrimaryKey(
-                            serverUUID: lss.value.library.server.uuid.uuidString,
-                            libraryName: lss.value.library.name,
-                            id: id.description)
-
-                        if let object = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey) {
-                            realm.delete(object)
-                        }
-                        progress += 1
+                Array(lss.value.del).chunks(size: 100).forEach { chunk in
+                    self.bookRepository.deleteBooks(library: lss.value.library, ids: chunk)
+                    progress += chunk.count
+                    DispatchQueue.main.async {
+                        self.container?.librarySyncStatus[lss.key]?.msg = "Removing deleted \(progress) / \(total)"
                     }
                 }
 

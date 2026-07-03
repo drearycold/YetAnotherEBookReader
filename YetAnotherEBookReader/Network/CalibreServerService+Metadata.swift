@@ -67,10 +67,6 @@ extension CalibreServerService {
         return book
     }
 
-    func handleLibraryBookOne(library: CalibreLibrary, bookRealm: CalibreBookRealm, entry: CalibreBookEntry, root: NSDictionary) {
-        bookRealm.applyMetadataEntry(entry, root: root)
-    }
-
     func getBookManifest(book: CalibreBook, format: Format) async throws -> Data {
         let endpointURL = try makeEndpointURL(
             server: book.library.server,

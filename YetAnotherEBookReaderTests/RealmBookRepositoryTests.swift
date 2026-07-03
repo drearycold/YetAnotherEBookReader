@@ -126,7 +126,7 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         XCTAssertTrue(repository.bookExists(id: book.inShelfId))
     }
     
-    func testBulkUpdateBooks() throws {
+    func testSaveBookSyncRecords() throws {
         let server = TestFixtures.makeServer()
         let library = TestFixtures.makeLibrary(server: server, name: "Bulk Library")
         resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
@@ -137,15 +137,18 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         repository.saveBook(book1)
         repository.saveBook(book2)
         
-        let records: [[String: Any]] = [
-            ["primaryKey": book1.inShelfId, "title": "Bulk Updated Title 1"],
-            ["primaryKey": book2.inShelfId, "title": "Bulk Updated Title 2"]
+        let now = Date()
+        let records = [
+            BookMetadataSyncRecord(id: book1.id, lastModified: now),
+            BookMetadataSyncRecord(id: book2.id, lastModified: now.addingTimeInterval(10))
         ]
         
-        repository.bulkUpdateBooks(records: records)
+        repository.saveBookSyncRecords(records, library: library)
         
-        XCTAssertEqual(repository.getBook(id: book1.inShelfId)?.title, "Bulk Updated Title 1")
-        XCTAssertEqual(repository.getBook(id: book2.inShelfId)?.title, "Bulk Updated Title 2")
+        let fetchedBook1 = try XCTUnwrap(repository.getBook(id: book1.inShelfId))
+        let fetchedBook2 = try XCTUnwrap(repository.getBook(id: book2.inShelfId))
+        XCTAssertEqual(fetchedBook1.lastModified.timeIntervalSince1970, now.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertEqual(fetchedBook2.lastModified.timeIntervalSince1970, now.addingTimeInterval(10).timeIntervalSince1970, accuracy: 0.001)
     }
     
     func testFindDeletedBookIds() throws {
@@ -169,12 +172,59 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         let activeIds: [String: Any] = ["101": true]
         
         let deletedIds = repository.findDeletedBookIds(
-            serverUUID: server.uuid.uuidString,
-            libraryName: library.name,
-            activeIds: activeIds
+            library: library,
+            activeIds: activeIds.mapValues { _ in CalibreCdbCmdListResult.DateValue(v: "2026-01-01T00:00:00+00:00") }
         )
         
         XCTAssertEqual(deletedIds, [102])
+    }
+
+    func testPersistMetadataEntriesUpdatesExistingBookAndReturnsShelfBook() throws {
+        let server = TestFixtures.makeServer()
+        let library = TestFixtures.makeLibrary(server: server, name: "Metadata Library")
+        resolvedLibraries["\(server.uuid.uuidString)_\(library.name)"] = library
+
+        var book = TestFixtures.makeBook(id: 301, library: library)
+        book.title = "Old Title"
+        book.inShelf = true
+        repository.saveBook(book)
+
+        var entry = CalibreBookEntry()
+        entry.title = "Updated Metadata Title"
+        entry.publisher = "Metadata Publisher"
+        entry.last_modified = "2026-07-03T01:02:03+00:00"
+        entry.timestamp = "2026-07-03T01:02:03+00:00"
+        entry.pubdate = "2026-07-02T01:02:03+00:00"
+        entry.authors = ["Metadata Author"]
+        entry.tags = ["Repository"]
+        entry.format_metadata = [
+            "EPUB": CalibreBookFormatMetadataEntry(
+                path: "Updated Metadata Title.epub",
+                size: 4096,
+                mtime: "2026-07-03T01:02:03.000+00:00"
+            )
+        ]
+
+        let result = repository.persistMetadataEntries(
+            library: library,
+            bookIds: [book.id],
+            entries: [book.id.description: entry],
+            json: [
+                book.id.description: [
+                    "user_metadata": [
+                        "#genre": [
+                            "label": "Genre",
+                            "#value#": "Reference"
+                        ]
+                    ]
+                ]
+            ],
+            includeAnnotationBooks: false
+        )
+
+        XCTAssertEqual(result.booksUpdated, [book.id])
+        XCTAssertEqual(result.booksInShelf.first?.title, "Updated Metadata Title")
+        XCTAssertEqual(repository.getBook(id: book.inShelfId)?.publisher, "Metadata Publisher")
     }
     
     func testCountAndNeedUpdateBooks() throws {
@@ -200,8 +250,7 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         repository.saveBook(book3)
         
         let result = repository.countAndNeedUpdateBooks(
-            serverUUID: server.uuid.uuidString,
-            libraryName: library.name
+            library: library
         )
         
         XCTAssertEqual(result.count, 3)

@@ -199,18 +199,6 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
     }
 
-    func testConvertBookRealm() throws {
-        let nonQueryableBook = CalibreBookRealm()
-        nonQueryableBook.serverUUID = "non-existent-uuid"
-        nonQueryableBook.libraryName = "Non Existent Library"
-        nonQueryableBook.idInLib = 999
-        nonQueryableBook.title = "Non Queryable Book"
-        nonQueryableBook.updatePrimaryKey()
-        
-        let result = viewModel.convert(bookRealm: nonQueryableBook)
-        XCTAssertNil(result, "Should return nil if library is not queryable in mock model data")
-    }
-
     func testPresentationSheetProperties() throws {
         XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
         

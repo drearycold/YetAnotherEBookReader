@@ -321,10 +321,6 @@ class BookDetailViewModel: ObservableObject {
         container?.bookManager.readingBook = book
     }
 
-    func convert(bookRealm: CalibreBookRealm) -> CalibreBook? {
-        return container?.bookManager.convert(bookRealm: bookRealm)
-    }
-
     var updatingMetadata: Bool {
         return container?.updatingMetadata ?? false
     }

@@ -111,7 +111,7 @@ class CalibreLibraryManager {
             container.serverManager.calibreServers[tmpServer.id] = tmpServer
             container.serverManager.documentServer = container.serverManager.calibreServers[tmpServer.id]
             do {
-                try container.serverManager.updateServerRealm(server: container.serverManager.documentServer!)
+                try container.serverManager.saveServer(server: container.serverManager.documentServer!)
             } catch {
                 logger.error("Failed to update server realm for document folder: \(error.localizedDescription)")
             }
@@ -224,7 +224,7 @@ class CalibreLibraryManager {
         }
     }
 
-    func updateLibraryRealm(library: CalibreLibrary, realm: Any? = nil) throws {
+    func saveLibrary(library: CalibreLibrary) throws {
         try libraryRepository.saveLibrary(library)
     }
 
@@ -275,7 +275,7 @@ class CalibreLibraryManager {
             mutableServer.defaultLibrary = serverInfo.defaultLibrary
             serverManager.calibreServers[serverInfo.server.id] = mutableServer
             do {
-                try serverManager.updateServerRealm(server: mutableServer)
+                try serverManager.saveServer(server: mutableServer)
             } catch {
                 logger.error("Failed to update server realm defaultLibrary: \(error.localizedDescription)")
             }
@@ -400,7 +400,7 @@ class CalibreLibraryManager {
         if shouldSyncBooks {
             var filter = ""
             if request.incremental,
-               let cachedLib = calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: result.request.library.server.uuid.uuidString, libraryName: result.request.library.name)] {
+               let cachedLib = calibreLibraries[result.request.library.id] {
                 let formatter = ISO8601DateFormatter()
                 formatter.formatOptions.formUnion(.withColonSeparatorInTimeZone)
                 formatter.timeZone = .current
@@ -414,7 +414,6 @@ class CalibreLibraryManager {
 
             if result.isError == false {
                 let library = result.request.library
-                let serverUUID = library.server.uuid.uuidString
 
                 await withCheckedContinuation { continuation in
                     AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
@@ -445,23 +444,17 @@ class CalibreLibraryManager {
                 let total = result.list.book_ids.count
                 for chunk in result.list.book_ids.chunks(size: 1024) {
                     let preMsg = "\(progress) / \(total)"
-                    let list = chunk.compactMap { id -> [String: Any]? in
+                    let list = chunk.compactMap { id -> BookMetadataSyncRecord? in
                         let idStr = id.description
                         guard let lastModifiedStr = result.list.data.last_modified[idStr]?.v,
                               let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr) else { return nil }
-                        return [
-                            "primaryKey": CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: library.name, id: idStr),
-                            "serverUUID": serverUUID,
-                            "libraryName": library.name,
-                            "lastModified": lastModified,
-                            "idInLib": id
-                        ]
+                        return BookMetadataSyncRecord(id: id, lastModified: lastModified)
                     }
                     progress += chunk.count
                     let postMsg = "\(progress) / \(total)"
                     await saveBookMetadata(metadata: .init(library: library, action: .save(list), preMsg: preMsg, postMsg: postMsg))
 
-                    if let lastMod = list.last?["lastModified"] as? Date {
+                    if let lastMod = list.last?.lastModified {
                         result.lastModified = lastMod
                     }
                 }
@@ -522,19 +515,15 @@ class CalibreLibraryManager {
 
                 switch metadataResult.action {
                 case let .save(list):
-                    bookRepository.bulkUpdateBooks(records: list)
+                    bookRepository.saveBookSyncRecords(list, library: metadataResult.library)
                 case let .updateDeleted(last_modified):
                     metadataResult.bookDeleted = bookRepository.findDeletedBookIds(
-                        serverUUID: metadataResult.library.server.uuid.uuidString,
-                        libraryName: metadataResult.library.name,
+                        library: metadataResult.library,
                         activeIds: last_modified
                     )
                 case .complete:
                     if metadataResult.library.autoUpdate {
-                        let syncInfo = bookRepository.countAndNeedUpdateBooks(
-                            serverUUID: metadataResult.library.server.uuid.uuidString,
-                            libraryName: metadataResult.library.name
-                        )
+                        let syncInfo = bookRepository.countAndNeedUpdateBooks(library: metadataResult.library)
                         metadataResult.bookCount = syncInfo.count
                         metadataResult.bookToUpdate = syncInfo.needUpdateIds
                     }
@@ -593,7 +582,7 @@ class CalibreLibraryManager {
         case .updateDeleted:
             self.librarySyncStatus[library.id]?.del.formUnion(metadataResult.bookDeleted)
         case let .save(list):
-            let bookIds = list.compactMap { $0["idInLib"] as? Int32 }
+            let bookIds = list.map(\.id)
             bookIds.chunks(size: 256).forEach { chunk in
                 Task {
                     await container.bookManager.getBooksMetadata(request: .init(library: library, books: chunk, getAnnotations: false))

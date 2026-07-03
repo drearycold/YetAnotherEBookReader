@@ -124,14 +124,14 @@ class CalibreServerManager {
         }
         
         do {
-            try updateServerRealm(server: server)
+            try saveServer(server: server)
             calibreServers[server.id] = server
         } catch {
             logger.error("Failed to update server realm: \(error.localizedDescription)")
         }
     }
     
-    func updateServerRealm(server: CalibreServer) throws {
+    func saveServer(server: CalibreServer) throws {
         try serverRepository.saveServer(server)
     }
     
@@ -298,7 +298,7 @@ class CalibreServerManager {
     // MARK: - DSReader Helper Config Sync
 
     /// For every requested server id, fetch the latest DSReader Helper
-    /// configuration from the helper endpoint and persist it back into Realm.
+    /// configuration from the helper endpoint and persist it through the repository.
     private func registerSyncServerHelperConfigTask() {
         let serverIds = helperConfigRequestBroadcaster.stream()
         syncServerHelperConfigTask = Task { [weak self] in

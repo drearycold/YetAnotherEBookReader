@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import RealmSwift
 import OSLog
 
 class ReadingSessionManager {
@@ -190,33 +189,13 @@ class ReadingSessionManager {
     }
     
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {
-        guard let container = container,
-              let realmConf = container.databaseService.realmConf,
-              let realm = try? Realm(configuration: realmConf) else { return [:] }
-        
-        var pred: NSPredicate?
-        if let library = library, let bookId = bookId {
-            pred = NSPredicate(format: "bookId = %@", "\(library.key) - \(bookId)")
-            if let startDateAfter = startDateAfter {
-                pred = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", "\(library.key) - \(bookId)", startDateAfter as NSDate)
-            }
-        } else {
-            if let startDateAfter = startDateAfter {
-                pred = NSPredicate(
-                    format: "startDatetime >= %@",
-                    startDateAfter as NSDate
-                )
-            }
-        }
-        
-        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self);
-        if let predNotNil = pred {
-            results = results.filter(predNotNil)
-        }
-        results = results.sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
-        
-        var historyList: [BookDeviceReadingPositionHistory] = results.filter { $0.endPosition != nil }
-            .map { $0.toDomain() }
+        guard let container = container else { return [:] }
+
+        var historyList = container.readingPositionRepository.positionHistory(
+            library: library,
+            bookId: bookId,
+            startDateAfter: startDateAfter
+        )
         
         if let library = library, let bookId = bookId {
             let bookInShelfId = CalibreBook(id: bookId, library: library).inShelfId

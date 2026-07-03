@@ -106,7 +106,7 @@ final class SettingsViewModel: ObservableObject {
 
         container.serverManager.calibreServers[server.id]?.removed = true
         if let updatedServer = container.serverManager.calibreServers[server.id] {
-            try? container.serverManager.updateServerRealm(server: updatedServer)
+            try? container.serverManager.saveServer(server: updatedServer)
         }
         Task {
             await self.container.serverManager.removeServer(server: server)
@@ -117,7 +117,7 @@ final class SettingsViewModel: ObservableObject {
     func updateServer(oldServer: CalibreServer, newServer: CalibreServer) {
         if oldServer.id == newServer.id {
             container.serverManager.calibreServers[newServer.id] = newServer
-            try? container.serverManager.updateServerRealm(server: newServer)
+            try? container.serverManager.saveServer(server: newServer)
             if let index = serverList.firstIndex(where: { $0.id == newServer.id }) {
                 serverList[index] = newServer
             }

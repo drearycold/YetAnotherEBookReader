@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class CalibreBookManagerTests: XCTestCase {
@@ -155,13 +154,13 @@ final class CalibreBookManagerTests: XCTestCase {
         XCTAssertFalse(bookManager.bookExists(forPrimaryKey: "fake-id"))
     }
 
-    func testRemoveFromRealm() {
+    func testDeleteBook() {
         var book = CalibreBook(id: 104, library: library)
         book.title = "Delete Me"
         bookManager.updateBook(book: book)
         XCTAssertTrue(bookManager.bookExists(forPrimaryKey: book.inShelfId))
 
-        bookManager.removeFromRealm(book: book)
+        bookManager.deleteBook(book: book)
         XCTAssertFalse(bookManager.bookExists(forPrimaryKey: book.inShelfId))
     }
 
@@ -223,23 +222,16 @@ final class CalibreBookManagerTests: XCTestCase {
         XCTAssertNil(bookManager.getCacheInfo(book: book, format: .EPUB))
     }
 
-    func testConvertRealmBookToDomain() {
-        let realm = try! Realm(configuration: container.databaseService.realmConf!)
-        let bookRealm = CalibreBookRealm()
-        bookRealm.serverUUID = library.server.uuid.uuidString
-        bookRealm.libraryName = library.name
-        bookRealm.idInLib = 106
-        bookRealm.title = "Realm Title"
-        bookRealm.inShelf = true
-        bookRealm.updatePrimaryKey()
+    func testGetBookReturnsRepositoryDomainBook() {
+        var book = CalibreBook(id: 106, library: library)
+        book.title = "Repository Title"
+        book.inShelf = true
 
-        try! realm.write {
-            realm.add(bookRealm, update: .modified)
-        }
+        bookManager.updateBook(book: book)
 
-        let domainBook = bookManager.convert(bookRealm: bookRealm)
+        let domainBook = bookManager.getBook(for: book.inShelfId)
         XCTAssertNotNil(domainBook)
-        XCTAssertEqual(domainBook?.title, "Realm Title")
+        XCTAssertEqual(domainBook?.title, "Repository Title")
         XCTAssertEqual(domainBook?.id, 106)
     }
 
