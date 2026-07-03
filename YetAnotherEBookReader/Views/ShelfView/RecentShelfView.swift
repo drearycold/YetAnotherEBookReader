@@ -279,7 +279,6 @@ struct RecentShelfView: View {
                             bookId: book.id
                         )
                         .environment(\.appContainer, viewModel.container)
-                        .environment(\.realmConfiguration, book.library.server.realm(in: viewModel.container).configuration)
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {

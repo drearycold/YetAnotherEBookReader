@@ -7,7 +7,6 @@
 
 import SwiftUI
 import AppTrackingTransparency
-import RealmSwift
 
 #if canImport(GoogleMobileAds)
 import GoogleMobileAds
@@ -30,7 +29,7 @@ struct MainView: View {
 
     var body: some View {
         ZStack {
-            if let realmConf = container.databaseService.realmConf {
+            if container.databaseService.realmConf != nil {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
@@ -58,13 +57,11 @@ struct MainView: View {
                             Text("Browse")
                         }
                         .tag(2)
-                        .environment(\.realmConfiguration, realmConf)
                     
                     NavigationView {
                         SettingsView(viewModel: viewModel.settingsViewModel)
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
-                    .environment(\.realmConfiguration, realmConf)
                     .environment(\.horizontalSizeClass, originalSizeClass)
                     .tabItem {
                         Image(systemName: "gearshape.fill")
