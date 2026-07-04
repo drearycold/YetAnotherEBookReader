@@ -46,8 +46,9 @@ actor LibrarySearchService {
         let targetSource = getTargetSource(for: library)
         let sourceObj = cacheResult?.sources[targetSource]
 
+        let shouldRebuildCache = force || sourceObj == nil || sourceObj!.generation < library.lastModified
         let needsFetch: Bool
-        if force || sourceObj == nil || sourceObj!.generation < library.lastModified {
+        if shouldRebuildCache {
             needsFetch = true
         } else if sourceObj!.bookIds.count < limit && sourceObj!.bookIds.count < sourceObj!.totalNumber {
             needsFetch = true
@@ -59,12 +60,123 @@ actor LibrarySearchService {
             return cached
         }
 
-        // Build search parameters
-        let offset = sourceObj?.bookIds.count ?? 0
-        let numToFetch = limit - offset
+        var offset = shouldRebuildCache ? 0 : (sourceObj?.bookIds.count ?? 0)
+        var searchResult = try await fetchSearchResult(
+            library: library,
+            criteria: criteria,
+            targetSource: targetSource,
+            num: max(limit - offset, 0),
+            offset: offset
+        )
 
+        if !shouldRebuildCache,
+           offset > 0,
+           let sourceObj,
+           shouldRebuildAfterIncrementalFetch(source: sourceObj, searchResult: searchResult) {
+            offset = 0
+            searchResult = try await fetchSearchResult(
+                library: library,
+                criteria: criteria,
+                targetSource: targetSource,
+                num: limit,
+                offset: offset
+            )
+        }
+
+        var toFetchIDs = [Int32]()
+
+        var currentBookIds = offset == 0 ? [] : (sourceObj?.bookIds ?? [])
+        let cachedBooksById = (offset == 0 ? [] : (sourceObj?.books ?? [])).reduce(into: [Int32: CalibreBook]()) { partialResult, book in
+            if partialResult[book.id] == nil {
+                partialResult[book.id] = book
+            }
+        }
+
+        if offset == currentBookIds.count {
+            currentBookIds.append(contentsOf: searchResult.book_ids)
+        } else {
+            currentBookIds = searchResult.book_ids
+        }
+
+        currentBookIds = currentBookIds.uniquedPreservingOrder()
+
+        var booksById = cachedBooksById
+        let existingBooks = try repository.fetchBooks(library: library, bookIds: currentBookIds)
+        booksById.merge(existingBooks) { current, _ in current }
+
+        for bookId in currentBookIds where booksById[bookId] == nil {
+            toFetchIDs.append(bookId)
+        }
+
+        try Task.checkCancellation()
+
+        if !toFetchIDs.isEmpty {
+            let metadataTask = service.buildBooksMetadataTask(
+                library: library,
+                books: toFetchIDs.map { CalibreBook(id: $0, library: library) },
+                getAnnotations: false
+            )
+            if let metadataTask = metadataTask {
+                let completedTask = await service.getBooksMetadata(task: metadataTask)
+
+                try Task.checkCancellation()
+
+                if let entries = completedTask.booksMetadataEntry {
+                    try repository.writeMetadataEntries(
+                        library: library,
+                        entries: entries,
+                        json: completedTask.booksMetadataJSON
+                    )
+
+                    let fetchedBooks = try repository.fetchBooks(library: library, bookIds: toFetchIDs)
+                    booksById.merge(fetchedBooks) { current, _ in current }
+                }
+            }
+        }
+
+        try Task.checkCancellation()
+
+        let currentBooks = currentBookIds.compactMap { booksById[$0] }
+
+        let updatedSourceResult = LibrarySourceSearchResult(
+            generation: library.lastModified,
+            totalNumber: searchResult.total_num,
+            bookIds: currentBookIds,
+            books: currentBooks
+        )
+
+        try repository.saveLibrarySourceResult(
+            libraryId: library.id,
+            search: criteria.searchString,
+            sortBy: criteria.sortCriteria.by,
+            sortAsc: criteria.sortCriteria.ascending,
+            filters: criteria.filterCriteriaCategory,
+            sourceUrl: targetSource,
+            result: updatedSourceResult
+        )
+
+        if let updatedCachedResult = try repository.fetchLibraryCachedResult(
+            libraryId: library.id,
+            search: criteria.searchString,
+            sortBy: criteria.sortCriteria.by,
+            sortAsc: criteria.sortCriteria.ascending,
+            filters: criteria.filterCriteriaCategory
+        ) {
+            return updatedCachedResult
+        }
+
+        throw SearchError.database("Failed to fetch updated search result from cache.")
+    }
+
+    private func fetchSearchResult(
+        library: CalibreLibrary,
+        criteria: SearchCriteria,
+        targetSource: String,
+        num: Int,
+        offset: Int
+    ) async throws -> CalibreLibraryBooksResult.SearchResult {
         var parameters = [String: (generation: Date, num: Int, offset: Int)]()
-        parameters[targetSource] = (generation: library.lastModified, num: numToFetch, offset: offset)
+        parameters[targetSource] = (generation: library.lastModified, num: num, offset: offset)
 
         let searchTasks = service.buildLibrarySearchTasks(library: library, searchCriteria: criteria, parameters: parameters)
         guard let task = searchTasks.first(where: {
@@ -98,89 +210,19 @@ actor LibrarySearchService {
         guard let searchResult = finalTask.ajaxSearchResult else {
             throw SearchError.invalidState("Search did not yield results.")
         }
+        return searchResult
+    }
 
-        var toFetchIDs = [Int32]()
-
-        var currentBookIds = sourceObj?.bookIds ?? []
-        var currentBooks = sourceObj?.books ?? []
-
-        if offset == currentBookIds.count {
-            currentBookIds.append(contentsOf: searchResult.book_ids)
-        } else {
-            currentBookIds = searchResult.book_ids
-            currentBooks = []
+    private func shouldRebuildAfterIncrementalFetch(
+        source: LibrarySourceSearchResult,
+        searchResult: CalibreLibraryBooksResult.SearchResult
+    ) -> Bool {
+        if source.totalNumber != searchResult.total_num {
+            return true
         }
 
-        let unresolvedBookIds = Array(currentBookIds[currentBooks.count...])
-        let existingBooks = try repository.fetchBooks(library: library, bookIds: unresolvedBookIds)
-        for bookId in unresolvedBookIds {
-            if let book = existingBooks[bookId] {
-                currentBooks.append(book)
-            } else {
-                toFetchIDs.append(bookId)
-            }
-        }
-
-        try Task.checkCancellation()
-
-        if !toFetchIDs.isEmpty {
-            let metadataTask = service.buildBooksMetadataTask(
-                library: library,
-                books: toFetchIDs.map { CalibreBook(id: $0, library: library) },
-                getAnnotations: false
-            )
-            if let metadataTask = metadataTask {
-                let completedTask = await service.getBooksMetadata(task: metadataTask)
-
-                try Task.checkCancellation()
-
-                if let entries = completedTask.booksMetadataEntry {
-                    try repository.writeMetadataEntries(
-                        library: library,
-                        entries: entries,
-                        json: completedTask.booksMetadataJSON
-                    )
-
-                    let fetchedBooks = try repository.fetchBooks(library: library, bookIds: toFetchIDs)
-                    for bookId in toFetchIDs {
-                        if let book = fetchedBooks[bookId] {
-                            currentBooks.append(book)
-                        }
-                    }
-                }
-            }
-        }
-
-        try Task.checkCancellation()
-
-        let updatedSourceResult = LibrarySourceSearchResult(
-            generation: library.lastModified,
-            totalNumber: searchResult.total_num,
-            bookIds: currentBookIds,
-            books: currentBooks
-        )
-
-        try repository.saveLibrarySourceResult(
-            libraryId: library.id,
-            search: criteria.searchString,
-            sortBy: criteria.sortCriteria.by,
-            sortAsc: criteria.sortCriteria.ascending,
-            filters: criteria.filterCriteriaCategory,
-            sourceUrl: targetSource,
-            result: updatedSourceResult
-        )
-
-        if let updatedCachedResult = try repository.fetchLibraryCachedResult(
-            libraryId: library.id,
-            search: criteria.searchString,
-            sortBy: criteria.sortCriteria.by,
-            sortAsc: criteria.sortCriteria.ascending,
-            filters: criteria.filterCriteriaCategory
-        ) {
-            return updatedCachedResult
-        }
-
-        throw SearchError.database("Failed to fetch updated search result from cache.")
+        let existingIds = Set(source.bookIds)
+        return searchResult.book_ids.contains { existingIds.contains($0) }
     }
 
     private func performLocalSearch(task: CalibreLibrarySearchTask) throws -> CalibreLibrarySearchTask {
@@ -205,5 +247,12 @@ actor LibrarySearchService {
             vl: ""
         )
         return completedTask
+    }
+}
+
+private extension Array where Element: Hashable {
+    func uniquedPreservingOrder() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
     }
 }

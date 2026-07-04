@@ -140,6 +140,87 @@ class UnifiedSearchServiceTests: XCTestCase {
         return book
     }
 
+    struct CapturedSearchRequest: Equatable {
+        let offset: Int
+        let num: Int
+    }
+
+    final class SearchRequestRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requests = [CapturedSearchRequest]()
+
+        func append(_ request: CapturedSearchRequest) {
+            lock.lock()
+            requests.append(request)
+            lock.unlock()
+        }
+
+        func snapshot() -> [CapturedSearchRequest] {
+            lock.lock()
+            defer { lock.unlock() }
+            return requests
+        }
+    }
+
+    nonisolated static func makeSearchResultJSON(total: Int, offset: Int, num: Int, bookIds: [Int32], query: String = "test") -> String {
+        """
+        {
+            "total_num": \(total),
+            "sort_order": "asc",
+            "num_books_without_search": \(total),
+            "offset": \(offset),
+            "num": \(num),
+            "sort": "title",
+            "base_url": "/ajax/search/lib1",
+            "query": "\(query)",
+            "library_id": "lib1",
+            "book_ids": [\(bookIds.map(String.init).joined(separator: ","))],
+            "vl": ""
+        }
+        """
+    }
+
+    nonisolated static func makeMetadataJSON(bookIds: [Int32]) -> String {
+        let entries = bookIds.map { id in
+            """
+            "\(id)": {
+                "thumbnail": "/get/thumb/\(id)/lib1",
+                "series": null,
+                "languages": ["eng"],
+                "title_sort": "Book \(id)",
+                "identifiers": {},
+                "user_categories": {},
+                "pages": 0,
+                "authors": ["Author \(id)"],
+                "link_maps": {},
+                "cover": "/get/cover/\(id)/lib1",
+                "author_sort": "Author \(id)",
+                "title": "Book \(id)",
+                "publisher": null,
+                "author_sort_map": {"Author \(id)": "Author \(id)"},
+                "tags": [],
+                "user_metadata": {},
+                "uuid": "uuid-\(id)",
+                "last_modified": "2026-01-01T00:00:00+00:00",
+                "series_index": null,
+                "pubdate": "2026-01-01T00:00:00+00:00",
+                "application_id": \(id),
+                "rating": 0.0,
+                "comments": "",
+                "timestamp": "2026-01-01T00:00:00+00:00",
+                "format_metadata": {
+                    "epub": { "path": "book-\(id).epub", "size": 100, "mtime": "2026-01-01T00:00:00+00:00" }
+                },
+                "formats": ["epub"],
+                "main_format": {"epub": "/get/epub/\(id)/lib1"},
+                "other_formats": {},
+                "category_urls": {}
+            }
+            """
+        }.joined(separator: ",")
+        return "{\(entries)}"
+    }
+
     private func collectResults(
         for key: SearchCriteriaMergedKey,
         timeout: TimeInterval = 5.0,
@@ -165,6 +246,153 @@ class UnifiedSearchServiceTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: timeout)
         task.cancel()
         return results
+    }
+
+    func testLibrarySearchForceRefreshRebuildsFromFirstPage() async throws {
+        let criteria = SearchCriteria(
+            searchString: "force-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let cachedBooks = (1...100).map { createMockBook(id: Int32($0), title: "Cached \($0)", library: mockLibrary1) }
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 196,
+                bookIds: (1...100).map(Int32.init),
+                books: cachedBooks
+            )
+        )
+
+        let searchRequests = SearchRequestRecorder()
+        let firstPageIds = (1...100).map(Int32.init)
+        let metadataJSON = Self.makeMetadataJSON(bookIds: firstPageIds)
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                searchRequests.append(CapturedSearchRequest(offset: offset, num: num))
+
+                let json = Self.makeSearchResultJSON(total: 198, offset: offset, num: num, bookIds: firstPageIds, query: "force-refresh")
+                return (response, json.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 100,
+            force: true
+        )
+
+        let capturedRequests = searchRequests.snapshot()
+
+        XCTAssertEqual(capturedRequests, [CapturedSearchRequest(offset: 0, num: 100)])
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+        XCTAssertEqual(source.totalNumber, 198)
+        XCTAssertEqual(source.bookIds, firstPageIds)
+    }
+
+    func testLibrarySearchRebuildsWhenIncrementalPageOverlapsAfterServerInsert() async throws {
+        let criteria = SearchCriteria(
+            searchString: "overlap-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let cachedIds = (1...100).map(Int32.init)
+        let cachedBooks = cachedIds.map { createMockBook(id: $0, title: "Cached \($0)", library: mockLibrary1) }
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 196,
+                bookIds: cachedIds,
+                books: cachedBooks
+            )
+        )
+
+        let overlappingPageIds = (99...196).map(Int32.init)
+        let rebuiltIds = [Int32(201), Int32(202)] + (1...196).map(Int32.init)
+        let metadataJSON = Self.makeMetadataJSON(bookIds: rebuiltIds)
+        let searchRequests = SearchRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                searchRequests.append(CapturedSearchRequest(offset: offset, num: num))
+
+                if offset == 100 {
+                    let json = Self.makeSearchResultJSON(total: 198, offset: offset, num: num, bookIds: overlappingPageIds, query: "overlap-refresh")
+                    return (response, json.data(using: .utf8)!)
+                }
+                if offset == 0 {
+                    let json = Self.makeSearchResultJSON(total: 198, offset: offset, num: num, bookIds: rebuiltIds, query: "overlap-refresh")
+                    return (response, json.data(using: .utf8)!)
+                }
+                throw URLError(.badServerResponse)
+            } else if url.path.contains("ajax/books/lib1") {
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 198,
+            force: false
+        )
+
+        let capturedRequests = searchRequests.snapshot()
+
+        XCTAssertEqual(capturedRequests, [
+            CapturedSearchRequest(offset: 100, num: 98),
+            CapturedSearchRequest(offset: 0, num: 198)
+        ])
+
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+        XCTAssertEqual(source.totalNumber, 198)
+        XCTAssertEqual(source.bookIds.count, 198)
+        XCTAssertEqual(Set(source.bookIds).count, 198)
+        XCTAssertTrue(source.bookIds.contains(201))
+        XCTAssertTrue(source.bookIds.contains(202))
+        XCTAssertEqual(source.books.count, 198)
     }
     
     func testAsyncStreamAndIncrementalMerging() async throws {
