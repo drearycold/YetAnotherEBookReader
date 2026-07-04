@@ -9,6 +9,30 @@
 
 import Foundation
 
+struct CalibreServerDSReaderHelper: Hashable {
+    var port: Int
+    var configurationData: Data?
+
+    init(port: Int, configurationData: Data? = nil) {
+        self.port = port
+        self.configurationData = configurationData
+    }
+
+    var configuration: CalibreDSReaderHelperConfiguration? {
+        get {
+            guard let data = configurationData else { return nil }
+            return try? JSONDecoder().decode(CalibreDSReaderHelperConfiguration.self, from: data)
+        }
+        set {
+            if let newValue = newValue {
+                configurationData = try? JSONEncoder().encode(newValue)
+            } else {
+                configurationData = nil
+            }
+        }
+    }
+}
+
 struct CalibreDSReaderHelperPrefs: Codable, Hashable {
     struct Options: Codable, Hashable {
         var servicePort = 0
@@ -97,4 +121,31 @@ struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var dsreader_helper_prefs: CalibreDSReaderHelperPrefs? = nil
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
+}
+
+enum CalibreLibraryPluginPreferences {
+    static func dsReaderHelperOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        configuration?.dsreader_helper_prefs?.plugin_prefs.Options ?? .init()
+    }
+
+    static func dictionaryViewerOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        dsReaderHelperOptions(configuration: configuration)
+    }
+
+    static func goodreadsSyncPreferences(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreGoodreadsSyncPrefs.PluginPrefs {
+        configuration?.goodreads_sync_prefs?.plugin_prefs ?? .init(Goodreads: .init(), Users: [:])
+    }
+
+    static func countPagesConfiguration(
+        configuration: CalibreDSReaderHelperConfiguration?,
+        libraryName: String
+    ) -> CalibreCountPagesPrefs.LibraryConfig {
+        configuration?.count_pages_prefs?.library_config?[libraryName] ?? .init()
+    }
 }

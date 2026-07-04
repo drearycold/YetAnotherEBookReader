@@ -111,7 +111,7 @@ final class DatabaseBootstrapperTests: XCTestCase {
 
         container.databaseService.realm = realm
         container.databaseService.metadataRealm = metadataRealm
-        let logger = CalibreActivityLogger(realmConf: config)
+        let logger = CalibreActivityLogger(repository: container.activityLogRepository)
         container.logger = logger
         container.calibreServerService.logger = logger
         container.databaseService.configure(conf: config)

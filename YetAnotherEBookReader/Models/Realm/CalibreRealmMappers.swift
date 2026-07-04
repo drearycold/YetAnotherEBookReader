@@ -192,6 +192,49 @@ extension CalibreBookRealm {
         self.userMetaData = try? JSONSerialization.data(withJSONObject: book.userMetadatas, options: [])
         self.readPosData = nil
     }
+
+    func applyMetadataEntry(_ entry: CalibreBookEntry, root: NSDictionary) {
+        applyMetadataValue(CalibreBookMetadataValue(entry: entry, root: root))
+    }
+
+    func applyMetadataValue(_ metadata: CalibreBookMetadataValue) {
+        self.title = metadata.title
+        self.publisher = metadata.publisher
+        self.series = metadata.series
+        self.seriesIndex = metadata.seriesIndex
+        self.pubDate = metadata.pubDate
+        self.timestamp = metadata.timestamp ?? .distantPast
+        self.lastModified = metadata.lastModified ?? .distantPast
+        self.lastSynced = self.lastModified
+
+        var authors = metadata.authors
+        self.authorFirst = authors.popFirst() ?? "Unknown"
+        self.authorSecond = authors.popFirst()
+        self.authorThird = authors.popFirst()
+        self.authorsMore.replaceAll(authors)
+
+        var tags = metadata.tags
+        self.tagFirst = tags.popFirst()
+        self.tagSecond = tags.popFirst()
+        self.tagThird = tags.popFirst()
+        self.tagsMore.replaceAll(tags)
+
+        let existingFormats = (try? JSONDecoder().decode(
+            [String: FormatInfo].self,
+            from: self.formatsData as Data? ?? .init()
+        )) ?? [:]
+        self.formatsData = try? JSONEncoder().encode(metadata.mergedFormats(with: existingFormats))
+
+        self.size = metadata.size
+        self.rating = metadata.rating
+        self.identifiersData = try? JSONEncoder().encode(metadata.identifiers)
+        self.comments = metadata.comments
+        self.userMetaData = try? JSONSerialization.data(
+            withJSONObject: metadata.mergedUserMetadatas(with: self.userMetadatas()),
+            options: []
+        )
+        self.lastUpdated = Date()
+    }
 }
 
 extension CalibreBook {

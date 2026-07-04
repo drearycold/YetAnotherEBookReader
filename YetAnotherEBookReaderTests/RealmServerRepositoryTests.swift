@@ -84,4 +84,22 @@ final class RealmServerRepositoryTests: XCTestCase {
         let retrievedUpdated = repository.getDSReaderHelper(for: server.id)
         XCTAssertEqual(retrievedUpdated?.port, 5678)
     }
+
+    func testDSReaderHelperRealmMapperPreservesSchemaClassName() throws {
+        XCTAssertEqual(CalibreServerDSReaderHelperRealm.className(), "CalibreServerDSReaderHelper")
+
+        var helper = CalibreServerDSReaderHelper(port: 9090)
+        helper.configuration = CalibreDSReaderHelperConfiguration(
+            dsreader_helper_prefs: CalibreDSReaderHelperPrefs(
+                plugin_prefs: .init(Options: .init())
+            )
+        )
+
+        let realmObject = CalibreServerDSReaderHelperRealm(value: helper)
+        let value = realmObject.toValue()
+
+        XCTAssertEqual(value.port, 9090)
+        XCTAssertEqual(value.configurationData, helper.configurationData)
+        XCTAssertNotNil(value.configuration?.dsreader_helper_prefs)
+    }
 }

@@ -8,6 +8,12 @@
 
 import Foundation
 
+enum BookAnnotation {
+    static func PrefId(library: CalibreLibrary, id: Int32) -> String {
+        "\(library.key) - \(id)"
+    }
+}
+
 struct CalibreServer: Hashable, Identifiable {
     static let LocalServerUUID = UUID(uuidString: "c54ba2ae-67af-46f6-af64-504fd5d756eb")!
     
@@ -79,10 +85,14 @@ struct CalibreLibrary: Hashable, Identifiable {
 
     static let PLUGIN_GOODREADS_SYNC = "Goodreads Sync"
     static let PLUGIN_COUNT_PAGES = "Count Pages"
+
+    static func identity(serverUUID: String, libraryName: String) -> String {
+        [libraryName, "@", serverUUID].joined()
+    }
     
     var id: String {
 //        get { return server.id + " - " + name }
-        CalibreLibraryRealm.PrimaryKey(serverUUID: server.uuid.uuidString, libraryName: name)
+        Self.identity(serverUUID: server.uuid.uuidString, libraryName: name)
     }
     static func == (lhs: CalibreLibrary, rhs: CalibreLibrary) -> Bool {
         lhs.server == rhs.server && lhs.id == rhs.id
@@ -103,37 +113,31 @@ struct CalibreLibrary: Hashable, Identifiable {
     
     var customColumnInfos = [String: CalibreCustomColumnInfo]() //label as key
     
-    var pluginDSReaderHelperWithDefault: CalibreDSReaderHelperPrefs.Options {
-        guard let container = AppContainer.shared,
-              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
-              let prefs = configuration.dsreader_helper_prefs?.plugin_prefs
-        else { return .init() }
-        
-        return prefs.Options
+    func pluginDSReaderHelperOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        CalibreLibraryPluginPreferences.dsReaderHelperOptions(configuration: configuration)
     }
 
-    var pluginDictionaryViewerWithDefault: CalibreDSReaderHelperPrefs.Options {
-        return pluginDSReaderHelperWithDefault
+    func pluginDictionaryViewerOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        CalibreLibraryPluginPreferences.dictionaryViewerOptions(configuration: configuration)
     }
     
-    var pluginGoodreadsSyncWithDefault: CalibreGoodreadsSyncPrefs.PluginPrefs {
-        guard let container = AppContainer.shared,
-              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
-              let grsync_plugin_prefs = configuration.goodreads_sync_prefs?.plugin_prefs
-        else {
-            return .init(Goodreads: .init(), Users: [:])
-        }
-        
-        return grsync_plugin_prefs
+    func pluginGoodreadsSyncPreferences(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreGoodreadsSyncPrefs.PluginPrefs {
+        CalibreLibraryPluginPreferences.goodreadsSyncPreferences(configuration: configuration)
     }
     
-    var pluginCountPagesWithDefault: CalibreCountPagesPrefs.LibraryConfig {
-        guard let container = AppContainer.shared,
-              let configuration = container.serverManager.queryServerDSReaderHelper(server: server)?.configuration,
-              let library_config = configuration.count_pages_prefs?.library_config?[name]
-        else { return .init() }
-        
-        return library_config
+    func pluginCountPagesConfiguration(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreCountPagesPrefs.LibraryConfig {
+        CalibreLibraryPluginPreferences.countPagesConfiguration(
+            configuration: configuration,
+            libraryName: name
+        )
     }
     
     var urlForDeleteBook: URL? {
@@ -148,6 +152,30 @@ struct CalibreLibrary: Hashable, Identifiable {
 }
 
 struct CalibreBook: Hashable {
+    static func identity(serverUUID: String, libraryName: String, id: String) -> String {
+        [id, "^", libraryName, "@", serverUUID].joined()
+    }
+
+    static func identity(library: CalibreLibrary, bookId: Int32) -> String {
+        identity(
+            serverUUID: library.server.uuid.uuidString,
+            libraryName: library.name,
+            id: bookId.description
+        )
+    }
+
+    static func ratingDescription(for rating: Int) -> String {
+        if rating == 0 {
+            return "No Rating"
+        } else {
+            let starNum = rating / 2
+            let half = (rating % 2) > 0
+
+            return Array(repeating: "★", count: starNum).joined()
+            + (half ? "☆" : "")
+        }
+    }
+
     static func == (lhs: CalibreBook, rhs: CalibreBook) -> Bool {
         lhs.inShelfId == rhs.inShelfId
     }
@@ -205,8 +233,9 @@ struct CalibreBook: Hashable {
             return "☆"
         }
     }
-    var ratingGRDescription: String? {
-        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+    func ratingGRDescription(
+        pluginGoodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs
+    ) -> String? {
         guard pluginGoodreadsSync.isEnabled,
               let rating = userMetadatas[pluginGoodreadsSync.ratingColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? Int else { return nil }
 
@@ -259,8 +288,9 @@ struct CalibreBook: Hashable {
     var lastSynced  = Date(timeIntervalSince1970: .zero)
     var lastUpdated = Date(timeIntervalSince1970: .zero)
 
-    var readDateGRByLocale: String? {
-        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+    func readDateGRByLocale(
+        pluginGoodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs
+    ) -> String? {
         guard pluginGoodreadsSync.isEnabled,
               let dateReadString = userMetadatas[pluginGoodreadsSync.dateReadColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? String else { return nil }
 
@@ -276,8 +306,9 @@ struct CalibreBook: Hashable {
         return dateFormatter.string(from: dateRead)
     }
     
-    var readProgressGRDescription: String? {
-        let pluginGoodreadsSync = library.pluginGoodreadsSyncWithDefault
+    func readProgressGRDescription(
+        pluginGoodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs
+    ) -> String? {
         guard pluginGoodreadsSync.isEnabled,
               let progressAny = userMetadatas[pluginGoodreadsSync.readingProgressColumnName.trimmingCharacters(in: CharacterSet(["#"]))],
               let prog = progressAny else { return nil }
@@ -317,9 +348,6 @@ struct CalibreBook: Hashable {
         }
         
         let url = URL(string: "\(library.server.serverUrl)/get/thumb/\(id)/\(keyEncoded)?sz=300x400&username=\(library.server.username)")
-//        if url != nil {
-//            print("coverURL: \(url!.absoluteString)")
-//        }
         return url
     }
     var commentBaseURL : URL? {
@@ -331,11 +359,7 @@ struct CalibreBook: Hashable {
     }
     
     var inShelfId : String {
-        return CalibreBookRealm.PrimaryKey(
-            serverUUID: library.server.uuid.uuidString,
-            libraryName: library.name,
-            id: id.description
-        )
+        Self.identity(library: library, bookId: id)
     }
     
     var inShelf = false

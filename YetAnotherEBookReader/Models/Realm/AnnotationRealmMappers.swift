@@ -34,6 +34,23 @@ extension BookBookmarkRealm {
         self.date = domain.date
         self.removed = domain.removed
     }
+
+    func toValue() -> BookBookmark {
+        return self.toDomain()
+    }
+
+    convenience init(value: BookBookmark) {
+        self.init()
+        let object = value.makeRealmObject()
+        self._id = object._id
+        self.bookId = object.bookId
+        self.page = object.page
+        self.pos_type = object.pos_type
+        self.pos = object.pos
+        self.title = object.title
+        self.date = object.date
+        self.removed = object.removed
+    }
 }
 
 extension BookBookmark {
@@ -89,6 +106,34 @@ extension BookHighlightRealm {
         self.spineName = domain.spineName
         self.ranges = domain.ranges
         self.removed = domain.removed
+    }
+
+    func toValue() -> BookHighlight {
+        return self.toDomain()
+    }
+
+    convenience init(value: BookHighlight) {
+        self.init()
+        let object = value.makeRealmObject()
+        self.highlightId = object.highlightId
+        self.bookId = object.bookId
+        self.readerName = object.readerName
+        self.page = object.page
+        self.startOffset = object.startOffset
+        self.endOffset = object.endOffset
+        self.date = object.date
+        self.type = object.type
+        self.note = object.note
+        self.tocFamilyTitles.removeAll()
+        self.tocFamilyTitles.append(objectsIn: object.tocFamilyTitles)
+        self.content = object.content
+        self.contentPost = object.contentPost
+        self.contentPre = object.contentPre
+        self.cfiStart = object.cfiStart
+        self.cfiEnd = object.cfiEnd
+        self.spineName = object.spineName
+        self.ranges = object.ranges
+        self.removed = object.removed
     }
 }
 

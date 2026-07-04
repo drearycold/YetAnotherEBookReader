@@ -15,9 +15,6 @@ final class RealmDomainMappingTests: XCTestCase {
     
     func testCalibreServerMappingRoundTrip() {
         let uuid = UUID()
-        let dsConfig = CalibreDSReaderHelperConfiguration()
-        let helper = CalibreServerDSReaderHelper(port: 8081)
-        helper.configuration = dsConfig
         
         let server = CalibreServer(
             uuid: uuid,
@@ -33,7 +30,7 @@ final class RealmDomainMappingTests: XCTestCase {
         )
         
         // Domain to Realm
-        let realmObj = server.managedObject()
+        let realmObj = server.makeRealmObject()
         XCTAssertEqual(realmObj.primaryKey, uuid.uuidString)
         XCTAssertEqual(realmObj.name, "Test Server")
         XCTAssertEqual(realmObj.baseUrl, "http://192.168.1.100:8080")
@@ -46,7 +43,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertFalse(realmObj.removed)
         
         // Realm to Domain
-        let mappedServer = CalibreServer(managedObject: realmObj)
+        let mappedServer = realmObj.toDomain()
         XCTAssertEqual(mappedServer.uuid, server.uuid)
         XCTAssertEqual(mappedServer.name, server.name)
         XCTAssertEqual(mappedServer.baseUrl, server.baseUrl)
@@ -64,7 +61,7 @@ final class RealmDomainMappingTests: XCTestCase {
         realmObj.baseUrl = "http://localhost"
         realmObj.primaryKey = nil
         
-        let server = CalibreServer(managedObject: realmObj)
+        let server = realmObj.toDomain()
         XCTAssertEqual(server.name, "http://localhost")
         XCTAssertEqual(server.baseUrl, "http://localhost")
         XCTAssertFalse(server.hasPublicUrl)
@@ -203,7 +200,7 @@ final class RealmDomainMappingTests: XCTestCase {
         book.userMetadatas = ["#pages": 300, "#read": true]
         
         // Domain to Realm
-        let realmObj = book.managedObject()
+        let realmObj = book.makeRealmObject()
         XCTAssertEqual(realmObj.serverUUID, server.uuid.uuidString)
         XCTAssertEqual(realmObj.libraryName, library.name)
         XCTAssertEqual(realmObj.idInLib, 42)
@@ -230,7 +227,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertTrue(realmObj.inShelf)
         
         // Realm to Domain
-        let mappedBook = CalibreBook(managedObject: realmObj, library: library)
+        let mappedBook = realmObj.toDomain(library: library)
         XCTAssertEqual(mappedBook.id, book.id)
         XCTAssertEqual(mappedBook.library.id, book.library.id)
         XCTAssertEqual(mappedBook.title, book.title)
@@ -262,23 +259,23 @@ final class RealmDomainMappingTests: XCTestCase {
         // Empty authors fallback
         var bookNoAuthors = CalibreBook(id: 1, library: library)
         bookNoAuthors.authors = []
-        let realmObjNoAuthors = bookNoAuthors.managedObject()
+        let realmObjNoAuthors = bookNoAuthors.makeRealmObject()
         XCTAssertEqual(realmObjNoAuthors.authorFirst, "Unknown")
         XCTAssertNil(realmObjNoAuthors.authorSecond)
         XCTAssertNil(realmObjNoAuthors.authorThird)
         
-        let mappedNoAuthors = CalibreBook(managedObject: realmObjNoAuthors, library: library)
+        let mappedNoAuthors = realmObjNoAuthors.toDomain(library: library)
         XCTAssertEqual(mappedNoAuthors.authors, ["Unknown"])
         
         // Empty tags
         var bookNoTags = CalibreBook(id: 2, library: library)
         bookNoTags.tags = []
-        let realmObjNoTags = bookNoTags.managedObject()
+        let realmObjNoTags = bookNoTags.makeRealmObject()
         XCTAssertNil(realmObjNoTags.tagFirst)
         XCTAssertNil(realmObjNoTags.tagSecond)
         XCTAssertNil(realmObjNoTags.tagThird)
         
-        let mappedNoTags = CalibreBook(managedObject: realmObjNoTags, library: library)
+        let mappedNoTags = realmObjNoTags.toDomain(library: library)
         XCTAssertTrue(mappedNoTags.tags.isEmpty)
         
         // Legacy format formatsVer1 fallback (formatsData is nil)
@@ -290,7 +287,7 @@ final class RealmDomainMappingTests: XCTestCase {
         let legacyFormats = ["PDF": FormatInfo(serverSize: 99, serverMTime: .distantPast, cached: false, cacheSize: 0, cacheMTime: .distantPast)]
         realmObjLegacyFormats.formatsData = try? JSONEncoder().encode(legacyFormats)
         
-        let mappedLegacy = CalibreBook(managedObject: realmObjLegacyFormats, library: library)
+        let mappedLegacy = realmObjLegacyFormats.toDomain(library: library)
         XCTAssertNotNil(mappedLegacy.formats["PDF"])
         XCTAssertEqual(mappedLegacy.formats["PDF"]?.serverSize, 99)
     }
@@ -319,7 +316,7 @@ final class RealmDomainMappingTests: XCTestCase {
         )
         
         // Domain to Realm
-        let realmObj = position.managedObject(bookId: "book-abc")
+        let realmObj = position.makeRealmObject(bookId: "book-abc")
         XCTAssertEqual(realmObj.bookId, "book-abc")
         XCTAssertEqual(realmObj.deviceId, "device-123")
         XCTAssertEqual(realmObj.readerName, "YabrEPUB")
@@ -340,7 +337,7 @@ final class RealmDomainMappingTests: XCTestCase {
         XCTAssertEqual(realmObj.lastBundleProgress, 0.5)
         
         // Realm to Domain
-        let mappedPosition = BookDeviceReadingPosition(managedObject: realmObj)
+        let mappedPosition = realmObj.toDomain()
         XCTAssertEqual(mappedPosition.id, position.id)
         XCTAssertEqual(mappedPosition.readerName, position.readerName)
         XCTAssertEqual(mappedPosition.maxPage, position.maxPage)
@@ -407,13 +404,13 @@ final class RealmDomainMappingTests: XCTestCase {
             endPosition: endPosition
         )
         
-        let realmObj = history.managedObject()
+        let realmObj = history.makeRealmObject()
         XCTAssertEqual(realmObj.bookId, "book-xyz")
         XCTAssertEqual(realmObj.startDatetime, Date(timeIntervalSince1970: 5000))
         XCTAssertEqual(realmObj.startPosition?.deviceId, "d1")
         XCTAssertEqual(realmObj.endPosition?.deviceId, "d1")
         
-        let mappedHistory = BookDeviceReadingPositionHistory(managedObject: realmObj)
+        let mappedHistory = realmObj.toDomain()
         XCTAssertEqual(mappedHistory.bookId, history.bookId)
         XCTAssertEqual(mappedHistory.startDatetime, history.startDatetime)
         XCTAssertEqual(mappedHistory.startPosition?.id, history.startPosition?.id)
@@ -709,6 +706,20 @@ final class RealmDomainMappingTests: XCTestCase {
         let mappedHighlight = highlightRealm.toDomain()
         XCTAssertEqual(mappedHighlight.id, highlight.id)
         XCTAssertEqual(mappedHighlight.note, highlight.note)
+    }
+
+    func testRealmSchemaHelpersDelegateToDomainHelpers() {
+        let serverUUID = "11111111-2222-3333-4444-555555555555"
+        XCTAssertEqual(
+            CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: "Main"),
+            CalibreLibrary.identity(serverUUID: serverUUID, libraryName: "Main")
+        )
+        XCTAssertEqual(
+            CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: "Main", id: "42"),
+            CalibreBook.identity(serverUUID: serverUUID, libraryName: "Main", id: "42")
+        )
+        XCTAssertEqual(CalibreBookRealm.RatingDescription(0), CalibreBook.ratingDescription(for: 0))
+        XCTAssertEqual(CalibreBookRealm.RatingDescription(7), CalibreBook.ratingDescription(for: 7))
     }
     
     func testApplyDomainOnManagedObjects() throws {

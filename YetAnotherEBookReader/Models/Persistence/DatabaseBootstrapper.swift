@@ -48,14 +48,14 @@ final class DatabaseBootstrapper {
             logger.error("Failed to open main Realm: \(error.localizedDescription)")
             throw DatabaseBootstrapError.realmOpenFailed(underlying: error)
         }
-        container.logger = CalibreActivityLogger(realmConf: realmConf)
+        container.logger = CalibreActivityLogger(repository: container.activityLogRepository)
         container.calibreServerService.logger = container.logger!
         container.downloadManager.setup(container: container)
-        try AppContainer.SaveBooksMetadataRealmQueue.sync {
+        try DatabaseService.metadataWriteQueue.sync {
             do {
                 try container.databaseService.openMetadataRealm(
                     conf: realmConf,
-                    queue: AppContainer.SaveBooksMetadataRealmQueue
+                    queue: DatabaseService.metadataWriteQueue
                 )
             } catch {
                 container.resetDatabaseBootstrapState(clearConfiguration: false)
@@ -117,7 +117,10 @@ final class DatabaseBootstrapper {
                 }
 
                 if let library = container.library(forServerUUID: serverUUID, libraryName: libraryName) {
-                    bookRealm.migrateReadPos(library: library, repository: readingPositionRepository)
+                    let book = CalibreBook(id: bookRealm.idInLib, library: library)
+                    for position in bookRealm.legacyReadPositions() {
+                        readingPositionRepository.savePosition(position, for: book)
+                    }
                 }
 
                 try? freshRealm.write {

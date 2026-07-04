@@ -114,13 +114,9 @@ class LibraryViewModel: ObservableObject {
     }
     
     private func resolveBookTitles() {
-        let serverUUID = library.server.uuid.uuidString
-        let libraryName = library.name
-
         var tempFailed: [Int32: String] = [:]
         for bookId in failedBookIds {
-            let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = container.bookManager.getBook(for: primaryKey) {
+            if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
                 tempFailed[bookId] = book.title
             }
         }
@@ -128,8 +124,7 @@ class LibraryViewModel: ObservableObject {
 
         var tempDeleted: [Int32: String] = [:]
         for bookId in deletedBookIds {
-            let primaryKey = CalibreBookRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName, id: bookId.description)
-            if let book = container.bookManager.getBook(for: primaryKey) {
+            if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
                 tempDeleted[bookId] = book.title
             }
         }

@@ -78,7 +78,7 @@ final class CalibreServerManagerTests: XCTestCase {
 
     func testUpdateServerRealm() throws {
         let server = CalibreServer(uuid: UUID(), name: "Server X", baseUrl: "http://localhost/x", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        try serverManager.updateServerRealm(server: server)
+        try serverManager.saveServer(server: server)
         
         let allServers = serverRepository.getAllServers()
         XCTAssertTrue(allServers.contains(where: { $0.id == server.id }))

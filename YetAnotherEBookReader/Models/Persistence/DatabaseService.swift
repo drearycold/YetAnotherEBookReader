@@ -15,6 +15,8 @@ enum DatabaseSchema {
 }
 
 class DatabaseService: ObservableObject {
+    static let metadataWriteQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
+
     @Published var realmConf: Realm.Configuration?
     @Published var realm: Realm?
     var metadataRealm: Realm?
@@ -52,10 +54,6 @@ class DatabaseService: ObservableObject {
         configure(conf: configuration)
     }
 
-    func loggerConfiguration() -> Realm.Configuration {
-        realmConf ?? Realm.Configuration.defaultConfiguration
-    }
-    
     func configure(conf: Realm.Configuration) {
         self.realmConf = conf
     }

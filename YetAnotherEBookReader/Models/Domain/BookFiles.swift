@@ -7,6 +7,9 @@
 
 import Foundation
 import CryptoKit
+import OSLog
+
+private let bookFilesLogger = Logger(subsystem: "YetAnotherEBookReader", category: "BookFiles")
 
 private struct DownloadDirCache {
     static let url: URL? = {
@@ -95,7 +98,7 @@ func removeFolioCache(book: CalibreBook, format: Format) {
     do {
         try FileManager.default.removeItem(at: folioUnzippedPath.appendingPathComponent(savedURL.lastPathComponent, isDirectory: true))
     } catch {
-        print(error)
+        bookFilesLogger.error("Failed to remove FolioReader unzip path: \(error.localizedDescription)")
     }
 }
 

@@ -36,7 +36,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
             password: ""
         )
         container.serverManager.calibreServers[server.id] = server
-        try? container.serverManager.updateServerRealm(server: server)
+        try? container.serverManager.saveServer(server: server)
         
         library = CalibreLibrary(server: server, key: "test_lib", name: "Test Library")
         libraryManager.calibreLibraries[library.id] = library
@@ -76,7 +76,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
         var lib = library!
         lib.name = "Updated Library Name"
         
-        try libraryManager.updateLibraryRealm(library: lib)
+        try libraryManager.saveLibrary(library: lib)
         
         let allLibs = libraryRepository.getAllLibraries()
         let updated = allLibs.first { $0.id == lib.id }

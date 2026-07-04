@@ -27,7 +27,6 @@ class UnifiedSearchServiceTests: XCTestCase {
 
         let config = Realm.Configuration(inMemoryIdentifier: "UnifiedSearchServiceTests")
         DatabaseService.shared.setup(conf: config)
-        let logger = CalibreActivityLogger(realmConf: config)
         container = MockAppContainerFactory.makeContainer(testName: "UnifiedSearchServiceTests")
 
         let server1 = CalibreServer(uuid: UUID(), name: "Server1", baseUrl: "http://localhost/1", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
@@ -730,6 +729,8 @@ class MockSearchCacheRepository: SearchCacheRepository {
     private let lock = NSRecursiveLock()
     
     private var _cachedLibraryResults: [String: LibraryCachedResult] = [:]
+    private var _booksByLibrary: [String: [Int32: CalibreBook]] = [:]
+    var localSearchResult = LocalLibrarySearchResult()
 
     private func makeKey(libraryId: String, search: String, sortBy: SortCriteria, sortAsc: Bool, filters: [String: Set<String>]) -> String {
         let filterStr = filters.keys.sorted().map { "\($0):\(filters[$0]?.sorted() ?? [])" }.joined(separator: ",")
@@ -772,6 +773,56 @@ class MockSearchCacheRepository: SearchCacheRepository {
         _cachedLibraryResults[key] = cached
         
         lock.unlock()
+    }
+
+    func fetchBooks(
+        library: CalibreLibrary,
+        bookIds: [Int32]
+    ) throws -> [Int32: CalibreBook] {
+        lock.lock()
+        defer { lock.unlock() }
+        let books = _booksByLibrary[library.id] ?? [:]
+        return bookIds.reduce(into: [Int32: CalibreBook]()) { partialResult, bookId in
+            partialResult[bookId] = books[bookId]
+        }
+    }
+
+    func searchLocalLibrary(
+        library: CalibreLibrary,
+        criteria: SearchCriteria,
+        offset: Int,
+        limit: Int
+    ) throws -> LocalLibrarySearchResult {
+        lock.lock()
+        defer { lock.unlock() }
+        var result = localSearchResult
+        result.offset = offset
+        result.num = result.bookIds.count
+        return result
+    }
+
+    func writeMetadataEntries(
+        library: CalibreLibrary,
+        entries: [String: CalibreBookEntry?],
+        json: NSDictionary?
+    ) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        var books = _booksByLibrary[library.id] ?? [:]
+        entries.forEach { key, entry in
+            guard let entry = entry, let bookId = Int32(key) else { return }
+            var book = books[bookId] ?? CalibreBook(id: bookId, library: library)
+            book.title = entry.title
+            book.publisher = entry.publisher ?? ""
+            book.series = entry.series ?? ""
+            book.seriesIndex = entry.series_index ?? 0.0
+            book.rating = Int(entry.rating * 2)
+            book.authors = entry.authors
+            book.tags = entry.tags
+            book.comments = entry.comments ?? ""
+            books[bookId] = book
+        }
+        _booksByLibrary[library.id] = books
     }
 }
 

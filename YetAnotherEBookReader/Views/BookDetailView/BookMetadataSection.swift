@@ -22,7 +22,7 @@ struct BookMetadataSection: View {
             HStack {
                 metadataIcon(systemName: "face.smiling")
                 Text(book.ratingDescription)
-                if let ratingGRDescription = book.ratingGRDescription {
+                if let ratingGRDescription = viewModel.ratingGRDescription(for: book) {
                     Text(" (\(ratingGRDescription))")
                 }
             }
@@ -104,10 +104,7 @@ struct BookMetadataSection: View {
                 
                 HStack {
                     metadataIcon(systemName: "books.vertical")
-                    let pluginGoodreadsSync = book.library.pluginGoodreadsSyncWithDefault
-                    if pluginGoodreadsSync.isEnabled, pluginGoodreadsSync.tagsColumnName.count > 0,
-                       let shelves = book.userMetadatas[pluginGoodreadsSync.tagsColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? [String],
-                       shelves.count > 0 {
+                    if let shelves = viewModel.goodreadsShelves(for: book) {
                         Text(shelves.joined(separator: ", "))
                     } else {
                         Text("Unspecified")

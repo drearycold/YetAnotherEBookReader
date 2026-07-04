@@ -151,6 +151,7 @@ class BookDetailViewModelTests: XCTestCase {
         mockCalibreBook.inShelf = true
         viewModel.readBook(book: mockCalibreBook)
         XCTAssertNotNil(mockAppContainer.sessionManager.readerInfo, "Reader info should be populated when reading an in-shelf book")
+        XCTAssertEqual(mockAppContainer.sessionManager.readingBook?.inShelfId, mockCalibreBook.inShelfId, "Reading book should be populated when opening a book from detail")
     }
     
     func testParseManifestToTOCSuccess() throws {
@@ -196,18 +197,6 @@ class BookDetailViewModelTests: XCTestCase {
         
         viewModel.popPresenting()
         XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-    }
-
-    func testConvertBookRealm() throws {
-        let nonQueryableBook = CalibreBookRealm()
-        nonQueryableBook.serverUUID = "non-existent-uuid"
-        nonQueryableBook.libraryName = "Non Existent Library"
-        nonQueryableBook.idInLib = 999
-        nonQueryableBook.title = "Non Queryable Book"
-        nonQueryableBook.updatePrimaryKey()
-        
-        let result = viewModel.convert(bookRealm: nonQueryableBook)
-        XCTAssertNil(result, "Should return nil if library is not queryable in mock model data")
     }
 
     func testPresentationSheetProperties() throws {
@@ -284,14 +273,14 @@ class BookDetailViewModelTests: XCTestCase {
             goodreads_sync_prefs: grPrefs
         )
         
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         
         guard let library = mockCalibreBook?.library else { return }
         
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
     }
@@ -325,7 +314,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -333,7 +322,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         
@@ -365,7 +354,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -373,7 +362,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         
@@ -396,7 +385,7 @@ class BookDetailViewModelTests: XCTestCase {
             count_pages_prefs: nil,
             goodreads_sync_prefs: nil
         )
-        let helper = CalibreServerDSReaderHelper(port: 8080)
+        var helper = CalibreServerDSReaderHelper(port: 8080)
         helper.configuration = config
         guard let library = mockAppContainer.calibreLibraries.first?.value else {
             XCTFail("No mock library found")
@@ -404,7 +393,7 @@ class BookDetailViewModelTests: XCTestCase {
         }
         try! mockAppContainer.databaseService.realm!.write {
             if let serverRealm = mockAppContainer.databaseService.realm!.object(ofType: CalibreServerRealm.self, forPrimaryKey: library.server.uuid.uuidString) {
-                serverRealm.dsreaderHelper = helper
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
         
@@ -706,20 +695,24 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertNotNil(historyVM.readingStatistics)
     }
 
-    func testHistoryViewModelUsesRepositoryForHistoryBookAndDebugPositions() throws {
-        let repository = MockReadingPositionRepository()
-        repository.historyBookReturn = mockBook
-        repository.debugPositionsReturn = [
+    func testHistoryViewModelUsesBookRepositoryAndReadingPositionRepositoryForHistory() throws {
+        let bookRepository = MockBookRepository()
+        bookRepository.getBookReturn = mockBook
+        mockAppContainer.bookRepository = bookRepository
+
+        let readingPositionRepository = MockReadingPositionRepository()
+        readingPositionRepository.debugPositionsReturn = [
             BookDeviceReadingPosition(id: "debug-device", readerName: ReaderType.YabrEPUB.rawValue)
         ]
-        mockAppContainer.readingPositionRepository = repository
+        mockAppContainer.readingPositionRepository = readingPositionRepository
 
         let historyVM = ReadingPositionHistoryViewModel(container: mockAppContainer, library: mockBook.library, bookId: mockBook.id)
         historyVM.loadData()
 
-        XCTAssertTrue(repository.historyBookCalled)
-        XCTAssertEqual(repository.historyBookIdParam, mockBook.id)
-        XCTAssertTrue(repository.debugPositionsCalled)
+        XCTAssertTrue(bookRepository.getBookCalled)
+        XCTAssertEqual(bookRepository.getBookBookIdParam, mockBook.id)
+        XCTAssertEqual(bookRepository.getBookLibraryParam, mockBook.library)
+        XCTAssertTrue(readingPositionRepository.debugPositionsCalled)
         XCTAssertEqual(historyVM.listViewModel?.book.id, mockBook.id)
         XCTAssertEqual(historyVM.debugReadingPositions.first?.id, "debug-device")
     }

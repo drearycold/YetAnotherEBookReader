@@ -65,9 +65,7 @@ class RealmServerRepository: ServerRepositoryProtocol {
         guard let realm = getRealm(),
               let serverRealm = realm.object(ofType: CalibreServerRealm.self, forPrimaryKey: serverId),
               let helper = serverRealm.dsreaderHelper else { return nil }
-        let unmanaged = CalibreServerDSReaderHelper(port: helper.port)
-        unmanaged.configurationData = helper.configurationData
-        return unmanaged
+        return helper.toValue()
     }
     
     func saveDSReaderHelper(_ helper: CalibreServerDSReaderHelper, for serverId: String) throws {
@@ -76,9 +74,9 @@ class RealmServerRepository: ServerRepositoryProtocol {
         else { return }
         try realm.write {
             if let existing = serverRealm.dsreaderHelper {
-                existing.update(from: helper)
+                existing.apply(helper)
             } else {
-                serverRealm.dsreaderHelper = CalibreServerDSReaderHelper(value: helper)
+                serverRealm.dsreaderHelper = CalibreServerDSReaderHelperRealm(value: helper)
             }
         }
     }

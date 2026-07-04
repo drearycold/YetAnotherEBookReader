@@ -51,6 +51,31 @@ struct LibraryCachedResult: Equatable, Sendable {
     }
 }
 
+struct LocalLibrarySearchResult: Equatable, Sendable {
+    var totalNumber: Int
+    var numBooksWithoutSearch: Int
+    var offset: Int
+    var num: Int
+    var sort: String
+    var bookIds: [Int32]
+
+    init(
+        totalNumber: Int = 0,
+        numBooksWithoutSearch: Int = 0,
+        offset: Int = 0,
+        num: Int = 0,
+        sort: String = "",
+        bookIds: [Int32] = []
+    ) {
+        self.totalNumber = totalNumber
+        self.numBooksWithoutSearch = numBooksWithoutSearch
+        self.offset = offset
+        self.num = num
+        self.sort = sort
+        self.bookIds = bookIds
+    }
+}
+
 protocol SearchCacheRepository: Sendable {
     func fetchLibraryCachedResult(
         libraryId: String,
@@ -68,5 +93,23 @@ protocol SearchCacheRepository: Sendable {
         filters: [String: Set<String>],
         sourceUrl: String,
         result: LibrarySourceSearchResult
+    ) throws
+
+    func fetchBooks(
+        library: CalibreLibrary,
+        bookIds: [Int32]
+    ) throws -> [Int32: CalibreBook]
+
+    func searchLocalLibrary(
+        library: CalibreLibrary,
+        criteria: SearchCriteria,
+        offset: Int,
+        limit: Int
+    ) throws -> LocalLibrarySearchResult
+
+    func writeMetadataEntries(
+        library: CalibreLibrary,
+        entries: [String: CalibreBookEntry?],
+        json: NSDictionary?
     ) throws
 }

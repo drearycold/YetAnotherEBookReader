@@ -13,11 +13,11 @@ protocol ReadingPositionRepositoryProtocol: Sendable {
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition?
     func getPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
     func debugPositions(forBookId bookId: String, server: CalibreServer?) -> [BookDeviceReadingPosition]
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook?
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func removePosition(deviceName: String, forBookId bookId: String, server: CalibreServer?)
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?)
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition
+    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
     func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory]
     func beginSession(at position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) -> ReadingSessionHandle?
     func endSession(_ handle: ReadingSessionHandle, at position: BookDeviceReadingPosition, server: CalibreServer?)
@@ -154,20 +154,6 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         return objects.map { $0.toDomain() }
     }
 
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
-        let primaryKey = CalibreBookRealm.PrimaryKey(
-            serverUUID: library.server.uuid.uuidString,
-            libraryName: library.name,
-            id: bookId.description
-        )
-
-        guard let realm = Thread.isMainThread ? databaseService.realm : (databaseService.realmConf.flatMap { try? Realm(configuration: $0) }),
-              let bookRealm = realm.object(ofType: CalibreBookRealm.self, forPrimaryKey: primaryKey)
-        else { return nil }
-
-        return bookRealm.toDomain(library: library)
-    }
-
     func removePosition(position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {
         guard let realm = getRealm(server: server) else { return }
         try? realm.write {
@@ -229,6 +215,32 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
 
     func createInitial(deviceName: String, reader: ReaderType) -> BookDeviceReadingPosition {
         return BookDeviceReadingPosition(id: deviceName, readerName: reader.rawValue)
+    }
+
+    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        guard let realm = getRealm(server: nil) else { return [] }
+
+        var predicate: NSPredicate?
+        if let library, let bookId {
+            let historyEntryBookId = "\(library.key) - \(bookId)"
+            if let startDateAfter {
+                predicate = NSPredicate(format: "bookId = %@ AND startDatetime >= %@", historyEntryBookId, startDateAfter as NSDate)
+            } else {
+                predicate = NSPredicate(format: "bookId = %@", historyEntryBookId)
+            }
+        } else if let startDateAfter {
+            predicate = NSPredicate(format: "startDatetime >= %@", startDateAfter as NSDate)
+        }
+
+        var results = realm.objects(BookDeviceReadingPositionHistoryRealm.self)
+        if let predicate {
+            results = results.filter(predicate)
+        }
+
+        return results
+            .sorted(by: [SortDescriptor(keyPath: "startDatetime", ascending: false)])
+            .filter { $0.endPosition != nil }
+            .map { $0.toDomain() }
     }
 
     func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
@@ -366,28 +378,17 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
 
         // Index local realms by identity
-        var localRealmsByIdentity = [PositionIdentity: [BookDeviceReadingPositionRealm]]()
-        for obj in localRealms {
-            let identity = obj.identity
-            localRealmsByIdentity[identity, default: []].append(obj)
-        }
+        var localRealmsByIdentity = Dictionary(grouping: localRealms, by: { $0.identity })
         // Sort each by epoch descending
         for (identity, objs) in localRealmsByIdentity {
             localRealmsByIdentity[identity] = objs.sorted(by: { $0.epoch > $1.epoch })
         }
 
         // Deduplicate positionsToSave by identity
-        var uniquePositionsToSave = [PositionIdentity: BookDeviceReadingPosition]()
-        for pos in positionsToSave {
-            let id = pos.identity
-            if let existing = uniquePositionsToSave[id] {
-                if pos.epoch > existing.epoch {
-                    uniquePositionsToSave[id] = pos
-                }
-            } else {
-                uniquePositionsToSave[id] = pos
+        let uniquePositionsToSave = Dictionary(grouping: positionsToSave, by: { $0.identity })
+            .compactMapValues { positions in
+                positions.max(by: { $0.epoch < $1.epoch })
             }
-        }
 
         if !uniquePositionsToSave.isEmpty {
             let changesBlock = {
@@ -425,39 +426,5 @@ final class RealmReadingPositionRepository: ReadingPositionRepositoryProtocol, @
         }
 
         return tasks
-    }
-}
-
-// MARK: - Position Identity Helpers
-
-struct PositionIdentity: Hashable, Equatable {
-    let deviceId: String
-    let readerName: String
-    let structuralStyle: Int
-    let positionTrackingStyle: Int
-    let structuralRootPageNumber: Int
-}
-
-extension BookDeviceReadingPosition {
-    var identity: PositionIdentity {
-        PositionIdentity(
-            deviceId: id,
-            readerName: readerName,
-            structuralStyle: structuralStyle,
-            positionTrackingStyle: positionTrackingStyle,
-            structuralRootPageNumber: structuralRootPageNumber
-        )
-    }
-}
-
-extension BookDeviceReadingPositionRealm {
-    var identity: PositionIdentity {
-        PositionIdentity(
-            deviceId: deviceId,
-            readerName: readerName,
-            structuralStyle: structuralStyle,
-            positionTrackingStyle: positionTrackingStyle,
-            structuralRootPageNumber: structuralRootPageNumber
-        )
     }
 }

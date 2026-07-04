@@ -7,9 +7,10 @@
 
 import Foundation
 import CoreText
-import SwiftUI
+import OSLog
 
 class FontsManager {
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "FontsManager")
     private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
     private let fontInfoBroadcaster = ManagerAsyncBroadcaster<[String: FontInfo]>()
 
@@ -59,7 +60,7 @@ class FontsManager {
                 try FileManager.default.moveItem(atPath: url.path, toPath: fontDestFile.path)
                 fontDescriptorArrays.append(ctFontDescriptorArray)
             } catch {
-                print("importCustomFonts \(error.localizedDescription)")
+                logger.error("importCustomFonts \(error.localizedDescription)")
             }
         }
         
@@ -103,7 +104,7 @@ class FontsManager {
         
         var userFontDescriptors = [String: CTFontDescriptor]()
         while let file = fontsEnumerator.nextObject() as? String {
-            print("FONTDIR \(file)")
+            logger.debug("FONTDIR \(file)")
             let fileURL = fontsDirectory.appendingPathComponent(file)
             
             if let ctFontDescriptorArray = CTFontManagerCreateFontDescriptorsFromURL(fileURL as CFURL) {
@@ -119,7 +120,7 @@ class FontsManager {
                     let valuePointer = CFArrayGetValueAtIndex(ctFontDescriptorArray, CFIndex(i))
                     let ctFontDescriptor = unsafeBitCast(valuePointer, to: CTFontDescriptor.self)
                     let ctFontName = unsafeBitCast(CTFontDescriptorCopyAttribute(ctFontDescriptor, kCTFontNameAttribute), to: CFString.self)
-                    print("CTFONT \(ctFontName) \(fileURL)")
+                    logger.debug("CTFONT \(ctFontName as String) \(fileURL.absoluteString)")
                     userFontDescriptors[ctFontName as String] = ctFontDescriptor
                 }
             }

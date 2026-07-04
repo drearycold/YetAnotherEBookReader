@@ -26,7 +26,7 @@ class CalibreLibraryRealm: Object, ObjectKeyIdentifiable {
     }
     
     static func PrimaryKey(serverUUID: String, libraryName: String) -> String {
-        return [libraryName, "@", serverUUID].joined()
+        CalibreLibrary.identity(serverUUID: serverUUID, libraryName: libraryName)
     }
     
     @Persisted var customColumnsData: Data?

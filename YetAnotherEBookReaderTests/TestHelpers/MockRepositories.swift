@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import RealmSwift
 @testable import YetAnotherEBookReader
 
 final class TestAsyncStreamBroadcaster<Element> {
@@ -202,8 +201,14 @@ class MockLibraryRepository: LibraryRepositoryProtocol {
 }
 
 class MockBookRepository: BookRepositoryProtocol {
+    var primaryKeyBookParam: CalibreBook?
+    var primaryKeyLibraryParam: CalibreLibrary?
+    var primaryKeyBookIdParam: Int32?
+
     var getBookCalled = false
     var getBookIdParam: String?
+    var getBookLibraryParam: CalibreLibrary?
+    var getBookBookIdParam: Int32?
     var getBookReturn: CalibreBook?
 
     var saveBookCalled = false
@@ -212,6 +217,10 @@ class MockBookRepository: BookRepositoryProtocol {
     var deleteBookCalled = false
     var deleteBookIdParam: String?
 
+    var deleteBooksCalled = false
+    var deleteBooksLibraryParam: CalibreLibrary?
+    var deleteBooksIdsParam: [Int32]?
+
     var getAllBooksInShelfCalled = false
     var getAllBooksInShelfReturn: [CalibreBook] = []
 
@@ -219,23 +228,23 @@ class MockBookRepository: BookRepositoryProtocol {
     var bookExistsIdParam: String?
     var bookExistsReturn: Bool = false
 
-    var bulkUpdateBooksCalled = false
-    var bulkUpdateBooksParam: [[String: Any]]?
+    var saveBookSyncRecordsCalled = false
+    var saveBookSyncRecordsParam: [BookMetadataSyncRecord]?
+    var saveBookSyncRecordsLibraryParam: CalibreLibrary?
+
+    var persistMetadataEntriesCalled = false
+    var persistMetadataEntriesLibraryParam: CalibreLibrary?
+    var persistMetadataEntriesBookIdsParam: [Int32]?
+    var persistMetadataEntriesReturn = BookMetadataPersistenceResult()
 
     var findDeletedBookIdsCalled = false
-    var findDeletedBookIdsServerUUIDParam: String?
-    var findDeletedBookIdsLibraryNameParam: String?
-    var findDeletedBookIdsActiveIdsParam: [String: Any]?
+    var findDeletedBookIdsLibraryParam: CalibreLibrary?
+    var findDeletedBookIdsActiveIdsParam: [String: CalibreCdbCmdListResult.DateValue]?
     var findDeletedBookIdsReturn: [Int32] = []
 
     var countAndNeedUpdateBooksCalled = false
-    var countAndNeedUpdateBooksServerUUIDParam: String?
-    var countAndNeedUpdateBooksLibraryNameParam: String?
+    var countAndNeedUpdateBooksLibraryParam: CalibreLibrary?
     var countAndNeedUpdateBooksReturn: (count: Int, needUpdateIds: [Int32]) = (0, [])
-
-    var getBookRealmCalled = false
-    var getBookRealmIdParam: String?
-    var getBookRealmReturn: CalibreBookRealm?
 
     var observeBookCalled = false
     var observeBookIdParam: String?
@@ -247,9 +256,27 @@ class MockBookRepository: BookRepositoryProtocol {
     var resetBooksLibraryNameParam: String?
     #endif
 
+    func primaryKey(for book: CalibreBook) -> String {
+        primaryKeyBookParam = book
+        return primaryKey(library: book.library, bookId: book.id)
+    }
+
+    func primaryKey(library: CalibreLibrary, bookId: Int32) -> String {
+        primaryKeyLibraryParam = library
+        primaryKeyBookIdParam = bookId
+        return "\(bookId)^\(library.name)@\(library.server.uuid.uuidString)"
+    }
+
     func getBook(id: String) -> CalibreBook? {
         getBookCalled = true
         getBookIdParam = id
+        return getBookReturn
+    }
+
+    func getBook(library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
+        getBookCalled = true
+        getBookLibraryParam = library
+        getBookBookIdParam = bookId
         return getBookReturn
     }
 
@@ -273,6 +300,12 @@ class MockBookRepository: BookRepositoryProtocol {
         deleteBookIdParam = id
     }
 
+    func deleteBooks(library: CalibreLibrary, ids: [Int32]) {
+        deleteBooksCalled = true
+        deleteBooksLibraryParam = library
+        deleteBooksIdsParam = ids
+    }
+
     func getAllBooksInShelf() -> [CalibreBook] {
         getAllBooksInShelfCalled = true
         return getAllBooksInShelfReturn
@@ -284,30 +317,36 @@ class MockBookRepository: BookRepositoryProtocol {
         return bookExistsReturn
     }
 
-    func bulkUpdateBooks(records: [[String : Any]]) {
-        bulkUpdateBooksCalled = true
-        bulkUpdateBooksParam = records
+    func saveBookSyncRecords(_ records: [BookMetadataSyncRecord], library: CalibreLibrary) {
+        saveBookSyncRecordsCalled = true
+        saveBookSyncRecordsParam = records
+        saveBookSyncRecordsLibraryParam = library
     }
 
-    func findDeletedBookIds(serverUUID: String, libraryName: String, activeIds: [String : Any]) -> [Int32] {
+    func persistMetadataEntries(
+        library: CalibreLibrary,
+        bookIds: [Int32],
+        entries: [String: CalibreBookEntry?],
+        json: NSDictionary,
+        includeAnnotationBooks: Bool
+    ) -> BookMetadataPersistenceResult {
+        persistMetadataEntriesCalled = true
+        persistMetadataEntriesLibraryParam = library
+        persistMetadataEntriesBookIdsParam = bookIds
+        return persistMetadataEntriesReturn
+    }
+
+    func findDeletedBookIds(library: CalibreLibrary, activeIds: [String: CalibreCdbCmdListResult.DateValue]) -> [Int32] {
         findDeletedBookIdsCalled = true
-        findDeletedBookIdsServerUUIDParam = serverUUID
-        findDeletedBookIdsLibraryNameParam = libraryName
+        findDeletedBookIdsLibraryParam = library
         findDeletedBookIdsActiveIdsParam = activeIds
         return findDeletedBookIdsReturn
     }
 
-    func countAndNeedUpdateBooks(serverUUID: String, libraryName: String) -> (count: Int, needUpdateIds: [Int32]) {
+    func countAndNeedUpdateBooks(library: CalibreLibrary) -> (count: Int, needUpdateIds: [Int32]) {
         countAndNeedUpdateBooksCalled = true
-        countAndNeedUpdateBooksServerUUIDParam = serverUUID
-        countAndNeedUpdateBooksLibraryNameParam = libraryName
+        countAndNeedUpdateBooksLibraryParam = library
         return countAndNeedUpdateBooksReturn
-    }
-
-    func getBookRealm(id: String) -> CalibreBookRealm? {
-        getBookRealmCalled = true
-        getBookRealmIdParam = id
-        return getBookRealmReturn
     }
 
     #if DEBUG
@@ -346,6 +385,12 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var createInitialReaderParam: ReaderType?
     var createInitialReturn: BookDeviceReadingPosition?
 
+    var positionHistoryCalled = false
+    var positionHistoryLibraryParam: CalibreLibrary?
+    var positionHistoryBookIdParam: Int32?
+    var positionHistoryStartDateAfterParam: Date?
+    var positionHistoryReturn: [BookDeviceReadingPositionHistory] = []
+
     var sessionsCalled = false
     var sessionsBookIdParam: String?
     var sessionsStartDateAfterParam: Date?
@@ -369,11 +414,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
     var debugPositionsBookIdParam: String?
     var debugPositionsReturn: [BookDeviceReadingPosition] = []
 
-    var historyBookCalled = false
-    var historyBookLibraryParam: CalibreLibrary?
-    var historyBookIdParam: Int32?
-    var historyBookReturn: CalibreBook?
-
     func getPosition(forBookId bookId: String, server: CalibreServer?, policy: ReadingPositionSelectionPolicy) -> BookDeviceReadingPosition? {
         getPositionCalled = true
         getPositionBookIdParam = bookId
@@ -391,13 +431,6 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         debugPositionsCalled = true
         debugPositionsBookIdParam = bookId
         return debugPositionsReturn
-    }
-
-    func historyBook(for library: CalibreLibrary, bookId: Int32) -> CalibreBook? {
-        historyBookCalled = true
-        historyBookLibraryParam = library
-        historyBookIdParam = bookId
-        return historyBookReturn
     }
 
     func savePosition(_ position: BookDeviceReadingPosition, forBookId bookId: String, server: CalibreServer?) {
@@ -423,6 +456,14 @@ class MockReadingPositionRepository: ReadingPositionRepositoryProtocol, @uncheck
         createInitialDeviceNameParam = deviceName
         createInitialReaderParam = reader
         return createInitialReturn ?? TestFixtures.makeReadingPosition(id: deviceName, readerName: reader.rawValue)
+    }
+
+    func positionHistory(library: CalibreLibrary?, bookId: Int32?, startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
+        positionHistoryCalled = true
+        positionHistoryLibraryParam = library
+        positionHistoryBookIdParam = bookId
+        positionHistoryStartDateAfterParam = startDateAfter
+        return positionHistoryReturn
     }
 
     func sessions(forBookId bookId: String, server: CalibreServer?, list startDateAfter: Date?) -> [BookDeviceReadingPositionHistory] {
@@ -587,6 +628,15 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
         observeEntriesBroadcaster.subscriberCount
     }
 
+    var writeActivityLogEventsCalled = false
+    var writeActivityLogEventsParam: [ActivityLogWriteEvent] = []
+
+    var removeCalibreActivityCalled = false
+    var removeCalibreActivityIdParam: String?
+
+    var cleanCalibreActivitiesCalled = false
+    var cleanCalibreActivitiesStartDatetimeParam: Date?
+
     func fetchEntries(libraryId: String?, bookId: Int32?, since: Date) -> [ActivityLogUIEntry] {
         fetchEntriesCalled = true
         fetchEntriesLibraryIdParam = libraryId
@@ -605,6 +655,21 @@ final class MockActivityLogRepository: ActivityLogRepositoryProtocol {
 
     func sendObservedEntries(_ entries: [ActivityLogUIEntry]) {
         observeEntriesBroadcaster.send(entries)
+    }
+
+    func writeActivityLogEvents(_ events: [ActivityLogWriteEvent]) async {
+        writeActivityLogEventsCalled = true
+        writeActivityLogEventsParam = events
+    }
+
+    func removeCalibreActivity(id: String) async {
+        removeCalibreActivityCalled = true
+        removeCalibreActivityIdParam = id
+    }
+
+    func cleanCalibreActivities(startDatetime: Date) async {
+        cleanCalibreActivitiesCalled = true
+        cleanCalibreActivitiesStartDatetimeParam = startDatetime
     }
 }
 

@@ -9,45 +9,6 @@ import Foundation
 import CoreGraphics
 import UIKit
 
-enum PDFAutoScaler: String, CaseIterable, Identifiable {
-    case Custom
-    case Width
-    case Height
-    case Page
-    
-    var id: String { self.rawValue }
-}
-
-enum PDFReadDirection: String, CaseIterable, Identifiable {
-    case LtR_TtB
-    case TtB_RtL
-    
-    var id: String { self.rawValue }
-}
-
-enum PDFScrollDirection: String, CaseIterable, Identifiable {
-    case Vertical
-    case Horizontal
-    
-    var id: String { self.rawValue }
-}
-
-enum PDFThemeMode: String, CaseIterable, Identifiable {
-    case none
-    case serpia
-    case forest
-    case dark
-    
-    var id: String { self.rawValue }
-}
-
-enum PDFLayoutMode: String, CaseIterable, Identifiable {
-    case Page
-    case Scroll
-    
-    var id: String { self.rawValue }
-}
-
 struct PageViewPosition {
 
     var scaler = CGFloat()

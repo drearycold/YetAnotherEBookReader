@@ -760,7 +760,16 @@ final class CalibreServerServiceTests: XCTestCase {
         var book = CalibreBook(id: 123, library: library)
         book.title = "Test Book"
         book.authors = ["Author 1"]
-        book.formats = ["EPUB": FormatInfo(serverSize: 100, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date())]
+        let cachedMTime = Date(timeIntervalSince1970: 100)
+        book.formats = [
+            "EPUB": FormatInfo(
+                serverSize: 100,
+                serverMTime: Date(timeIntervalSince1970: 50),
+                cached: true,
+                cacheSize: 99,
+                cacheMTime: cachedMTime
+            )
+        ]
 
         var entry = CalibreBookEntry()
         entry.title = "Updated Title"
@@ -794,6 +803,10 @@ final class CalibreServerServiceTests: XCTestCase {
         XCTAssertEqual(result.title, "Updated Title")
         XCTAssertEqual(result.publisher, "Publisher X")
         XCTAssertEqual(result.rating, 9)
+        XCTAssertEqual(result.formats["EPUB"]?.serverSize, 200)
+        XCTAssertEqual(result.formats["EPUB"]?.cached, true)
+        XCTAssertEqual(result.formats["EPUB"]?.cacheSize, 99)
+        XCTAssertEqual(result.formats["EPUB"]?.cacheMTime, cachedMTime)
     }
 
     func testGetMetadataAsyncFailure() async throws {

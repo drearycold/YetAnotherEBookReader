@@ -5,47 +5,10 @@
 
 import Foundation
 import UIKit
-import RealmSwift
 import ReadiumNavigator
 import ReadiumShared
 
-struct ReadiumPreferenceValue: Equatable {
-    var id: String = ""
-
-    var themeMode: Int = 0
-    var fontSizePercentage: Double = 100.0
-    var fontFamily: String = "Original"
-    var lineHeight: Double = 1.2
-    var pageMargins: Double = 1.0
-    var publisherStyles: Bool = true
-    var scroll: Bool = false
-    var textAlign: Int = 0
-
-    var columnCount: Int = 0
-    var fontWeight: Double = 1.0
-    var letterSpacing: Double = 0.0
-    var wordSpacing: Double = 0.0
-    var hyphens: Bool = false
-    var imageFilter: Int = 0
-    var textNormalization: Bool = false
-    var typeScale: Double = 1.2
-    var paragraphIndent: Double = 0.0
-    var paragraphSpacing: Double = 0.0
-
-    var volumeKeyPaging: Bool = false
-    var verticalMargin: Double = 0.0
-    var readingProgression: Int = 0
-
-    var fit: Int = 0
-    var ligatures: Bool = false
-    var offsetFirstPage: Bool?
-    var spread: Int = 0
-    var verticalText: Bool = false
-
-    var pageSpacing: Double = 0.0
-    var scrollAxis: Int = 0
-    var visibleScrollbar: Bool = true
-
+extension ReadiumPreferenceValue {
     var themeColor: UIColor {
         switch themeMode {
         case 1:
@@ -335,83 +298,5 @@ struct ReadiumPreferenceValue: Equatable {
         scroll = preferences.scroll
         scrollAxis = preferences.scrollDirection
         volumeKeyPaging = preferences.volumeKeyPaging
-    }
-}
-
-extension ReadiumPreferenceRealm {
-    convenience init(id: String, value: ReadiumPreferenceValue) {
-        self.init()
-        self.id = id
-        apply(value)
-    }
-
-    func apply(_ value: ReadiumPreferenceValue) {
-        if realm == nil, !value.id.isEmpty {
-            id = value.id
-        }
-        themeMode = value.themeMode
-        fontSizePercentage = value.fontSizePercentage
-        fontFamily = value.fontFamily
-        lineHeight = value.lineHeight
-        pageMargins = value.pageMargins
-        publisherStyles = value.publisherStyles
-        scroll = value.scroll
-        textAlign = value.textAlign
-        columnCount = value.columnCount
-        fontWeight = value.fontWeight
-        letterSpacing = value.letterSpacing
-        wordSpacing = value.wordSpacing
-        hyphens = value.hyphens
-        imageFilter = value.imageFilter
-        textNormalization = value.textNormalization
-        typeScale = value.typeScale
-        paragraphIndent = value.paragraphIndent
-        paragraphSpacing = value.paragraphSpacing
-        volumeKeyPaging = value.volumeKeyPaging
-        verticalMargin = value.verticalMargin
-        readingProgression = value.readingProgression
-        fit = value.fit
-        ligatures = value.ligatures
-        offsetFirstPage = value.offsetFirstPage
-        spread = value.spread
-        verticalText = value.verticalText
-        pageSpacing = value.pageSpacing
-        scrollAxis = value.scrollAxis
-        visibleScrollbar = value.visibleScrollbar
-    }
-
-    func toValue() -> ReadiumPreferenceValue {
-        ReadiumPreferenceValue(
-            id: id,
-            themeMode: themeMode,
-            fontSizePercentage: fontSizePercentage,
-            fontFamily: fontFamily,
-            lineHeight: lineHeight,
-            pageMargins: pageMargins,
-            publisherStyles: publisherStyles,
-            scroll: scroll,
-            textAlign: textAlign,
-            columnCount: columnCount,
-            fontWeight: fontWeight,
-            letterSpacing: letterSpacing,
-            wordSpacing: wordSpacing,
-            hyphens: hyphens,
-            imageFilter: imageFilter,
-            textNormalization: textNormalization,
-            typeScale: typeScale,
-            paragraphIndent: paragraphIndent,
-            paragraphSpacing: paragraphSpacing,
-            volumeKeyPaging: volumeKeyPaging,
-            verticalMargin: verticalMargin,
-            readingProgression: readingProgression,
-            fit: fit,
-            ligatures: ligatures,
-            offsetFirstPage: offsetFirstPage,
-            spread: spread,
-            verticalText: verticalText,
-            pageSpacing: pageSpacing,
-            scrollAxis: scrollAxis,
-            visibleScrollbar: visibleScrollbar
-        )
     }
 }

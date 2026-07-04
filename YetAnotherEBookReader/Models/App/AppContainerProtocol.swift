@@ -41,7 +41,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     var activityLogRepository: ActivityLogRepositoryProtocol { get }
     var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol { get }
     var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol { get }
-    var searchCacheRepository: RealmSearchCacheStore { get }
+    var searchCacheRepository: SearchCacheRepository { get }
     var categoryCacheRepository: CategoryCacheRepository { get }
 
     // MARK: - Managers
@@ -118,9 +118,8 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     func probeLibraryLastModifiedRequests() -> AsyncStream<CalibreSyncLibraryRequest>
 
     // MARK: - Database lifecycle / activity log helpers
-    // Exposed so `DatabaseBootstrapper` and `CalibreActivityLogger` (which
-    // take a weak `AppContainerProtocol`) can be reused by both the legacy
-    // `AppContainer` and the new `AppContainer` during Phase 4.
+    // Exposed so `DatabaseBootstrapper` and legacy helper call sites can be
+    // reused through the container facade.
 
     func getBook(for primaryKey: String) -> CalibreBook?
 
@@ -157,7 +156,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
 
 extension AppContainerProtocol {
     func library(forServerUUID serverUUID: String, libraryName: String) -> CalibreLibrary? {
-        return calibreLibraries[CalibreLibraryRealm.PrimaryKey(serverUUID: serverUUID, libraryName: libraryName)]
+        return calibreLibraries[CalibreLibrary.identity(serverUUID: serverUUID, libraryName: libraryName)]
     }
 
     func server(forUUID uuid: String) -> CalibreServer? {

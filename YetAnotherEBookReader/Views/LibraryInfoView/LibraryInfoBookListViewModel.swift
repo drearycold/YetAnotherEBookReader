@@ -84,7 +84,7 @@ class LibraryInfoBookListViewModel: ObservableObject {
                 return sortedKeys.map { key in
                     LibraryInfoBookSection(
                         id: String(key),
-                        title: CalibreBookRealm.RatingDescription(key),
+                        title: CalibreBook.ratingDescription(for: key),
                         items: (grouped[key] ?? []).map { index, book in
                             LibraryInfoBookSection.Item(id: String(book.id), index: index, book: book)
                         }

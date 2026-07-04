@@ -8,6 +8,14 @@
 import Foundation
 import RealmSwift
 
+struct PositionIdentity: Hashable, Equatable {
+    let deviceId: String
+    let readerName: String
+    let structuralStyle: Int
+    let positionTrackingStyle: Int
+    let structuralRootPageNumber: Int
+}
+
 extension BookDeviceReadingPositionRealm {
     func toDomain() -> BookDeviceReadingPosition {
         return BookDeviceReadingPosition(
@@ -54,6 +62,16 @@ extension BookDeviceReadingPositionRealm {
         self.lastReadBook = domain.lastReadBook
         self.lastBundleProgress = domain.lastBundleProgress
     }
+
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: deviceId,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
+    }
 }
 
 extension BookDeviceReadingPosition {
@@ -61,6 +79,16 @@ extension BookDeviceReadingPosition {
         let obj = BookDeviceReadingPositionRealm()
         obj.applyDomain(self, bookId: bookId)
         return obj
+    }
+
+    var identity: PositionIdentity {
+        PositionIdentity(
+            deviceId: id,
+            readerName: readerName,
+            structuralStyle: structuralStyle,
+            positionTrackingStyle: positionTrackingStyle,
+            structuralRootPageNumber: structuralRootPageNumber
+        )
     }
 }
 
