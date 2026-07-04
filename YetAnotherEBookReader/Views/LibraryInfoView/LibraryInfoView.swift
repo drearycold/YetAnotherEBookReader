@@ -33,8 +33,6 @@ struct LibraryInfoView: View {
     
 //    @State private var categoryFilterString = ""
     
-    @State private var selectedBookIds = Set<String>()
-    
     @State private var booksListInfoPresenting = false
     @State private var searchHistoryPresenting = false
     

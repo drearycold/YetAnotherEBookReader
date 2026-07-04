@@ -264,7 +264,8 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
             // this state will fail their own assertions, but the
             // container still constructs and the rest of the app stays
             // usable.
-            guard let library = libraryManager.calibreLibraries.first?.value else {
+            let uiTestingMockLibrary = makeUITestingMockLibraryIfNeeded()
+            guard let library = uiTestingMockLibrary ?? libraryManager.calibreLibraries.first?.value else {
                 return
             }
 
@@ -298,9 +299,57 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
             self.bookManager.booksInShelf[self.bookManager.readingBook!.inShelfId] = self.bookManager.readingBook
 
+            if ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") {
+                seedMockBrowseSearchCache(book: book, library: library)
+            }
+
             cleanCalibreActivities(startDatetime: Date())
             logStartCalibreActivity(type: "Mock", request: URLRequest(url: URL(string: "http://calibre-server.lan:8080/")!), startDatetime: Date(), bookId: 1, libraryId: library.id)
         }
+    }
+
+    private func seedMockBrowseSearchCache(book: CalibreBook, library: CalibreLibrary) {
+        let targetSource = library.server.isLocal
+            ? URL(fileURLWithPath: "/realm").absoluteString
+            : library.server.baseUrl.replacingOccurrences(of: ".", with: "_")
+        try? searchCacheRepository.saveLibrarySourceResult(
+            libraryId: library.id,
+            search: "",
+            sortBy: .Modified,
+            sortAsc: false,
+            filters: [:],
+            sourceUrl: targetSource,
+            result: LibrarySourceSearchResult(
+                generation: library.lastModified,
+                totalNumber: 1,
+                bookIds: [book.id],
+                books: [book]
+            )
+        )
+    }
+
+    private func makeUITestingMockLibraryIfNeeded() -> CalibreLibrary? {
+        guard ProcessInfo.processInfo.arguments.contains("--ui-testing-mock-library") else { return nil }
+
+        let server = CalibreServer(
+            uuid: UUID(uuidString: "11111111-2222-3333-4444-555555555555")!,
+            name: "UI Test Server",
+            baseUrl: ".",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        var library = CalibreLibrary(server: server, key: "ui-test", name: "UI Test Library")
+        library.lastModified = Date(timeIntervalSince1970: 1645495322)
+
+        try? serverRepository.saveServer(server)
+        serverManager.calibreServers[server.id] = server
+        try? libraryRepository.saveLibrary(library)
+        libraryManager.calibreLibraries[library.id] = library
+
+        return library
     }
 
     // MARK: - Init helpers

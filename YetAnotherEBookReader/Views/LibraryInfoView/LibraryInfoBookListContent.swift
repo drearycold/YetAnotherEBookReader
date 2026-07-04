@@ -15,7 +15,7 @@ struct LibraryInfoBookListContent: View {
     
     var body: some View {
         ScrollViewReader { proxy in
-            List(selection: $listViewModel.selectedBookIds) {
+            List {
                 #if DEBUG
                 debugView()
                 #endif
@@ -72,11 +72,12 @@ struct LibraryInfoBookListContent: View {
     private func listEntryView(book: CalibreBook, index: Int) -> some View {
         Group {
             if container.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
-                NavigationLink (
-                    destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
-                    tag: book.inShelfId,
-                    selection: selectedBookIdBinding
-                ) {
+                NavigationLink {
+                    BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY)
+                        .onAppear {
+                            container.bookManager.selectedBookId = book.inShelfId
+                        }
+                } label: {
                     LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                         onRowAppear(index: index)
                     }
@@ -114,13 +115,6 @@ struct LibraryInfoBookListContent: View {
         viewModel.expandSearchUnifiedBookLimit()
     }
 
-    private var selectedBookIdBinding: Binding<String?> {
-        Binding(
-            get: { container.bookManager.selectedBookId },
-            set: { container.bookManager.selectedBookId = $0 }
-        )
-    }
-    
     @ViewBuilder
     private func debugView() -> some View {
         Group {

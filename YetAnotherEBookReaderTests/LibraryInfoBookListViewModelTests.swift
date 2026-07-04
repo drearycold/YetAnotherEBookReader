@@ -37,12 +37,32 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
     }
     
     func testInitialization() {
-        XCTAssertTrue(listViewModel.selectedBookIds.isEmpty)
         XCTAssertTrue(listViewModel.downloadBookList.isEmpty)
         XCTAssertEqual(listViewModel.searchString, "")
         XCTAssertFalse(listViewModel.batchDownloadSheetPresenting)
         XCTAssertFalse(listViewModel.booksListInfoPresenting)
         XCTAssertFalse(listViewModel.searchHistoryPresenting)
+    }
+
+    func testBrowseBookRowsUseDirectNavigationLinkInsteadOfSelectionDrivenNavigation() throws {
+        let source = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListContent.swift"
+        ))
+        let parentSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListView.swift"
+        ))
+
+        XCTAssertTrue(source.contains("NavigationLink {"))
+        XCTAssertTrue(source.contains("BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY)"))
+        XCTAssertTrue(source.contains("container.bookManager.selectedBookId = book.inShelfId"))
+
+        XCTAssertFalse(source.contains("List(selection:"))
+        XCTAssertFalse(source.contains("tag: book.inShelfId"))
+        XCTAssertFalse(source.contains("selection: selectedBookIdBinding"))
+        XCTAssertFalse(source.contains("selectedBookIdBinding"))
+
+        XCTAssertFalse(parentSource.contains(".sheet(item:"))
+        XCTAssertFalse(parentSource.contains("presentingBookDetailId"))
     }
     
     func testSyncDraftFromCriteria() {
@@ -244,5 +264,12 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
         XCTAssertTrue(predicate(), file: file, line: line)
+    }
+
+    private func sourceFileURL(_ repositoryRelativePath: String) -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent(repositoryRelativePath)
     }
 }

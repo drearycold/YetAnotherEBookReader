@@ -8,7 +8,6 @@ import OSLog
 
 @MainActor
 class LibraryInfoBookListViewModel: ObservableObject {
-    @Published var selectedBookIds = Set<String>()
     @Published var downloadBookList = [CalibreBook]()
     @Published private(set) var activeDownloads: [URL: BookFormatDownload] = [:]
     

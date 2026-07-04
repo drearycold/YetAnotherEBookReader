@@ -24,11 +24,22 @@ struct YetAnotherEBookReaderApp: App {
     @State private var probeTimerTask: Task<Void, Never>?
 
     private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
+    private static let uiTestingMockLibraryArgument = "--ui-testing-mock-library"
     
     init() {
-        let containerInstance = AppContainer()
+        let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains(Self.uiTestingMockLibraryArgument)
+        let containerInstance = isUITestingMockLibrary
+            ? AppContainer(
+                mock: true,
+                testRealmEnvironment: TestRealmEnvironment.make(identifier: "UI-\(UUID().uuidString)")
+            )
+            : AppContainer()
         self.container = containerInstance
         _mainViewModel = StateObject(wrappedValue: MainViewModel(container: containerInstance, sessionManager: containerInstance.sessionManager))
+        if isUITestingMockLibrary {
+            _launchState = State(initialValue: .ready)
+            UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
+        }
         
         setupAppearance()
     }
