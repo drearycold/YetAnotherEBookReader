@@ -51,11 +51,11 @@ final class DatabaseBootstrapper {
         container.logger = CalibreActivityLogger(repository: container.activityLogRepository)
         container.calibreServerService.logger = container.logger!
         container.downloadManager.setup(container: container)
-        try AppContainer.SaveBooksMetadataRealmQueue.sync {
+        try DatabaseService.metadataWriteQueue.sync {
             do {
                 try container.databaseService.openMetadataRealm(
                     conf: realmConf,
-                    queue: AppContainer.SaveBooksMetadataRealmQueue
+                    queue: DatabaseService.metadataWriteQueue
                 )
             } catch {
                 container.resetDatabaseBootstrapState(clearConfiguration: false)

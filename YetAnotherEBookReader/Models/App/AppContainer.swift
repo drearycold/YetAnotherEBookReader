@@ -68,8 +68,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         }
     }
 
-    static let SaveBooksMetadataRealmQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
-
     private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
@@ -128,17 +126,18 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     var serverScopedRealmProvider: ServerScopedRealmConfigurationProviding = DefaultServerScopedRealmConfigurationProvider()
 
     lazy var calibreServerService = CalibreServerService(logger: self.logger ?? CalibreActivityLogger(repository: self.activityLogRepository), config: self, database: self.databaseService)
-    lazy var searchCacheRepository = RealmSearchCacheStore(
+    private lazy var defaultSearchCacheStore = RealmSearchCacheStore(
         databaseService: self.databaseService,
         librarySnapshotProvider: self
     )
+    lazy var searchCacheRepository: SearchCacheRepository = self.defaultSearchCacheStore
     lazy var librarySearchService = LibrarySearchService(service: self.calibreServerService, repository: self.searchCacheRepository)
     lazy var unifiedSearchService = UnifiedSearchService(
         repository: self.searchCacheRepository,
         librarySearchService: self.librarySearchService,
         libraryProvider: self
     )
-    lazy var categoryCacheRepository: CategoryCacheRepository = self.searchCacheRepository
+    lazy var categoryCacheRepository: CategoryCacheRepository = self.defaultSearchCacheStore
     lazy var libraryCategoryService = LibraryCategoryService(service: self.calibreServerService, repository: self.categoryCacheRepository)
     lazy var unifiedCategoryService = UnifiedCategoryService(repository: self.categoryCacheRepository, libraryProvider: self)
 
@@ -358,7 +357,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     func getCustomDictViewerNew(library: CalibreLibrary) -> (Bool, URL?) {
         var result: (Bool, URL?) = (false, nil)
         guard let dsreaderHelperServer = serverManager.queryServerDSReaderHelper(server: library.server) else { return result }
-        let pluginDictionaryViewer = library.pluginDictionaryViewerWithDefault
+        let pluginDictionaryViewer = library.pluginDictionaryViewerOptions(
+            configuration: dsreaderHelperServer.configuration
+        )
         guard pluginDictionaryViewer.isEnabled else { return result }
 
         let connector = DSReaderHelperConnector(calibreServerService: calibreServerService, server: library.server, dsreaderHelperServer: dsreaderHelperServer, goodreadsSync: nil)

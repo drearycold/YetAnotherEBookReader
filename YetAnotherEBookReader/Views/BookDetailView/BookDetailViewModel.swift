@@ -356,10 +356,11 @@ class BookDetailViewModel: ObservableObject {
     
     func getReadingProgressSummary(for book: CalibreBook) -> ReadingProgressSummary? {
         guard let repository = container?.readingPositionRepository else { return nil }
+        let goodreadsSync = goodreadsSyncPreferences(for: book.library)
         
-        if let readDateGR = book.readDateGRByLocale {
+        if let readDateGR = book.readDateGRByLocale(pluginGoodreadsSync: goodreadsSync) {
             return .goodreadsReadDate(readDateGR)
-        } else if let readProgressGR = book.readProgressGRDescription {
+        } else if let readProgressGR = book.readProgressGRDescription(pluginGoodreadsSync: goodreadsSync) {
             return .goodreadsProgress(readProgressGR)
         } else if let position = repository.getPosition(for: book, policy: .latestForDevice(deviceName))
                     ?? repository.getPosition(for: book, policy: .latest) {
@@ -367,6 +368,33 @@ class BookDetailViewModel: ObservableObject {
         } else {
             return nil
         }
+    }
+
+    func dsReaderHelperConfiguration(for library: CalibreLibrary) -> CalibreDSReaderHelperConfiguration? {
+        container?.serverManager.queryServerDSReaderHelper(server: library.server)?.configuration
+    }
+
+    func goodreadsSyncPreferences(for library: CalibreLibrary) -> CalibreGoodreadsSyncPrefs.PluginPrefs {
+        library.pluginGoodreadsSyncPreferences(configuration: dsReaderHelperConfiguration(for: library))
+    }
+
+    func countPagesConfiguration(for library: CalibreLibrary) -> CalibreCountPagesPrefs.LibraryConfig {
+        library.pluginCountPagesConfiguration(configuration: dsReaderHelperConfiguration(for: library))
+    }
+
+    func ratingGRDescription(for book: CalibreBook) -> String? {
+        book.ratingGRDescription(pluginGoodreadsSync: goodreadsSyncPreferences(for: book.library))
+    }
+
+    func goodreadsShelves(for book: CalibreBook) -> [String]? {
+        let goodreadsSync = goodreadsSyncPreferences(for: book.library)
+        guard goodreadsSync.isEnabled,
+              goodreadsSync.tagsColumnName.count > 0,
+              let shelves = book.userMetadatas[goodreadsSync.tagsColumnName.trimmingCharacters(in: CharacterSet(["#"]))] as? [String],
+              shelves.count > 0 else {
+            return nil
+        }
+        return shelves
     }
     
     func hasReadingHistory(for book: CalibreBook) -> Bool {

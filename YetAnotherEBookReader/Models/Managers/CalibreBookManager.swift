@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftUI
 import OSLog
 import CryptoSwift
 
@@ -96,7 +95,7 @@ class CalibreBookManager {
         if let repo = bookRepository {
             self.bookRepository = repo
         } else {
-            guard let resolver = container ?? AppContainer.shared else {
+            guard let resolver = container else {
                 fatalError("LibraryResolver must be available if no repository is provided")
             }
             self.bookRepository = RealmBookRepository(databaseService: databaseService, libraryResolver: resolver)
@@ -274,11 +273,11 @@ class CalibreBookManager {
         guard let configuration = dsreaderHelperServer.configuration, let dsreader_helper_prefs = configuration.dsreader_helper_prefs, dsreader_helper_prefs.plugin_prefs.Options.goodreadsSyncEnabled else { return nil }
 
         // check if user disabled auto update
-        let dsreaderHelperLibrary = library.pluginDSReaderHelperWithDefault
+        let dsreaderHelperLibrary = library.pluginDSReaderHelperOptions(configuration: configuration)
         guard dsreaderHelperLibrary.isEnabled else { return nil }
 
         // check if profile name exists
-        let goodreadsSync = library.pluginGoodreadsSyncWithDefault
+        let goodreadsSync = library.pluginGoodreadsSyncPreferences(configuration: configuration)
         guard goodreadsSync.isEnabled else { return nil }
         guard let goodreads_sync_prefs = configuration.goodreads_sync_prefs, goodreads_sync_prefs.plugin_prefs.Users.contains(where: { $0.key == goodreadsSync.profileName }) else { return nil }
 
@@ -375,7 +374,7 @@ class CalibreBookManager {
 
         if let cacheInfo = getCacheInfo(book: newBook, format: format),
            let cacheMTime = cacheInfo.1 {
-            print("cacheInfo: \(cacheInfo.0) \(cacheInfo.1!) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
+            logger.debug("cacheInfo: \(cacheInfo.0) \(cacheMTime) vs \(formatInfo.serverSize) \(formatInfo.serverMTime)")
             formatInfo.cached = true
             formatInfo.cacheSize = cacheInfo.0
             formatInfo.cacheMTime = cacheMTime
@@ -460,7 +459,7 @@ class CalibreBookManager {
 
             do {
                 guard let bookId = knownBookId ?? calcLocalFileBookId(for: url) else { return bookImportInfo.with(error: .idCalcFail) }
-                print("onOpenURL \(bookId)")
+                logger.debug("onOpenURL \(bookId)")
                 bookImportInfo.bookId = bookId
 
                 // check for identical file
@@ -519,7 +518,7 @@ class CalibreBookManager {
                 }
 
             } catch {
-                print("onOpenURL \(error)")
+                logger.error("onOpenURL \(error.localizedDescription)")
                 return bookImportInfo.with(error: .fileOpFail)
             }
         }
@@ -577,7 +576,7 @@ class CalibreBookManager {
         let streamer = Streamer()
         streamer.open(asset: FileAsset(url: fileURL), allowUserInteraction: false) { result in
             guard let publication = try? result.get() else {
-                print("Streamer \(fileURL)")
+                self.logger.error("Failed to open local publication with streamer: \(fileURL.absoluteString)")
                 return
             }
 
@@ -651,7 +650,7 @@ class CalibreBookManager {
         AppPerformanceSignpost.end("MetadataHTTPFetch", fetchSignpost, "Library: \(request.library.id), Books: \(books.count), Annotations: \(annotationCount)")
 
         let metadataPersistenceResult = await withCheckedContinuation { (continuation: CheckedContinuation<BookMetadataPersistenceResult, Never>) in
-            AppContainer.SaveBooksMetadataRealmQueue.async {
+            DatabaseService.metadataWriteQueue.async {
                 guard let entries = task.booksMetadataEntry,
                       let json = task.booksMetadataJSON else {
                     continuation.resume(returning: BookMetadataPersistenceResult())

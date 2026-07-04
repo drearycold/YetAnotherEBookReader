@@ -41,7 +41,7 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     var activityLogRepository: ActivityLogRepositoryProtocol { get }
     var readerPreferenceRepository: ReaderPreferenceRepositoryProtocol { get }
     var folioReaderProfileRepository: FolioReaderProfileRepositoryProtocol { get }
-    var searchCacheRepository: RealmSearchCacheStore { get }
+    var searchCacheRepository: SearchCacheRepository { get }
     var categoryCacheRepository: CategoryCacheRepository { get }
 
     // MARK: - Managers

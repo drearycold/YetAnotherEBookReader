@@ -32,7 +32,7 @@ struct BookDetailContentView: View {
                     BookFormatList(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                         .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                     
-                    let countPage = book.library.pluginCountPagesWithDefault
+                    let countPage = viewModel.countPagesConfiguration(for: book.library)
                     if countPage.isEnabled {
                         BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
@@ -52,7 +52,7 @@ struct BookDetailContentView: View {
                         BookFormatList(viewModel: viewModel, book: book, lastUpdated: book.lastUpdated, isCompat: isCompat)
                             .frame(minWidth: 300, maxWidth: 300, alignment: .leading)
                         
-                        let countPage = book.library.pluginCountPagesWithDefault
+                        let countPage = viewModel.countPagesConfiguration(for: book.library)
                         if countPage.isEnabled {
                             BookCountPagesCorner(book: book, lastUpdated: book.lastUpdated, countPage: countPage, isCompat: isCompat)
                                 .frame(minWidth: 300, maxWidth: 300, alignment: .leading)

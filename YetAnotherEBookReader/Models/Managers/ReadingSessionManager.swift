@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SwiftUI
+import UIKit
 import OSLog
 
 class ReadingSessionManager {

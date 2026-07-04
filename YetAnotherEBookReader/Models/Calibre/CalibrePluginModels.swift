@@ -122,3 +122,30 @@ struct CalibreDSReaderHelperConfiguration: Codable, Hashable {
     var count_pages_prefs: CalibreCountPagesPrefs? = nil
     var goodreads_sync_prefs: CalibreGoodreadsSyncPrefs? = nil
 }
+
+enum CalibreLibraryPluginPreferences {
+    static func dsReaderHelperOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        configuration?.dsreader_helper_prefs?.plugin_prefs.Options ?? .init()
+    }
+
+    static func dictionaryViewerOptions(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreDSReaderHelperPrefs.Options {
+        dsReaderHelperOptions(configuration: configuration)
+    }
+
+    static func goodreadsSyncPreferences(
+        configuration: CalibreDSReaderHelperConfiguration?
+    ) -> CalibreGoodreadsSyncPrefs.PluginPrefs {
+        configuration?.goodreads_sync_prefs?.plugin_prefs ?? .init(Goodreads: .init(), Users: [:])
+    }
+
+    static func countPagesConfiguration(
+        configuration: CalibreDSReaderHelperConfiguration?,
+        libraryName: String
+    ) -> CalibreCountPagesPrefs.LibraryConfig {
+        configuration?.count_pages_prefs?.library_config?[libraryName] ?? .init()
+    }
+}

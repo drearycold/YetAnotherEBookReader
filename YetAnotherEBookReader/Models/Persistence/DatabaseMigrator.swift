@@ -11,6 +11,8 @@ import RealmSwift
 import OSLog
 
 final class DatabaseMigrator {
+    private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "DatabaseMigrator")
+
     /// Build a fully-configured Realm.Configuration with all v42→v141 migration
     /// blocks and the application-support file path. The supplied `statusHandler`
     /// receives human-readable progress updates (currently only emitted from the
@@ -22,6 +24,7 @@ final class DatabaseMigrator {
         fileURL: URL? = nil,
         statusHandler: @escaping (String) -> Void
     ) throws -> Realm.Configuration {
+        let migrationLogger = logger
         var conf = Realm.Configuration(
             schemaVersion: schemaVersion,
             migrationBlock: { migration, oldSchemaVersion in
@@ -44,7 +47,6 @@ final class DatabaseMigrator {
                 }
                 if oldSchemaVersion < 42 {  //CalibreServerRealm's hasPublicUrl and hasAuth
                     migration.enumerateObjects(ofType: CalibreServerRealm.className()) { oldObject, newObject in
-                        //print("migrationBlock \(String(describing: oldObject)) \(String(describing: newObject))")
                         if let publicUrl = oldObject!["publicUrl"] as? String {
                             newObject!["hasPublicUrl"] = publicUrl.count > 0
                         }
@@ -116,7 +118,7 @@ final class DatabaseMigrator {
 //                        let uuidObject = oldObject.copy()
                         newObject["primaryKey"] = serverUUID.uuidString
 //                        migration.create(CalibreServerRealm.className(), value: uuidObject)
-                        print("\(#function) oldObject=\(oldObject) newObject=\(newObject)")
+                        migrationLogger.debug("\(#function) oldObject=\(String(describing: oldObject)) newObject=\(String(describing: newObject))")
 
                         servers[serverUUID] = (baseUrl: baseUrl, username: oldObject["username"] as? String)
                     }
@@ -132,7 +134,7 @@ final class DatabaseMigrator {
 
                         newObject["serverUUID"] = serverUUID.uuidString
                         newObject["primaryKey"] = primaryKey
-                        print("\(#function) primaryKey=\(primaryKey) oldObject=\(oldObject) newObject=\(newObject)")
+                        migrationLogger.debug("\(#function) primaryKey=\(primaryKey) oldObject=\(String(describing: oldObject)) newObject=\(String(describing: newObject))")
 
                         libraries[primaryKey] = (
                             serverUUID: serverUUID,
@@ -167,7 +169,9 @@ final class DatabaseMigrator {
                         newObject["primaryKey"] = primaryKey
                         count += 1
 
-                        print("\(#function) count=\(count) oldKey=\(oldObject["primaryKey"]!) newKey=\(newObject["primaryKey"]!)")
+                        migrationLogger.debug(
+                            "\(#function) count=\(count) oldKey=\(String(describing: oldObject["primaryKey"])) newKey=\(String(describing: newObject["primaryKey"]))"
+                        )
 
                         if count % 1000 == 0 {
                             statusHandler("Progress \(count)")
@@ -204,7 +208,7 @@ final class DatabaseMigrator {
                         newObject?["id"] = UUID().uuidString
                         count += 1
                     }
-                    print("Migrated \(count) CalibreActivityLogEntry records.")
+                    migrationLogger.debug("Migrated \(count) CalibreActivityLogEntry records.")
                 }
 
                 if oldSchemaVersion < 134 {

@@ -15,6 +15,8 @@ enum DatabaseSchema {
 }
 
 class DatabaseService: ObservableObject {
+    static let metadataWriteQueue = DispatchQueue(label: "saveBooksMetadata", qos: .userInitiated)
+
     @Published var realmConf: Realm.Configuration?
     @Published var realm: Realm?
     var metadataRealm: Realm?

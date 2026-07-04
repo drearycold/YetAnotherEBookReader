@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import SwiftUI
 import OSLog
 
 class CalibreLibraryManager {
@@ -123,7 +122,7 @@ class CalibreLibraryManager {
             do {
                 try FileManager.default.createDirectory(atPath: localLibraryURL.path, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                print(error)
+                logger.error("Failed to create local library directory: \(error.localizedDescription)")
             }
         }
 
@@ -170,7 +169,7 @@ class CalibreLibraryManager {
                 if fileName.hasSuffix(".cv") { return }
                 if fileName.hasSuffix(".mx") { return }
 
-                print("populateLocalLibraryBooks \(fileName)")
+                self.logger.debug("populateLocalLibraryBooks \(fileName)")
                 if let localBaseUrl = documentServer.localBaseUrl {
                     let fileURL = localBaseUrl.appendingPathComponent(localLibrary.key, isDirectory: true).appendingPathComponent(fileName, isDirectory: false)
                     container.bookManager.loadLocalLibraryBookMetadata(fileURL: fileURL, in: localLibrary, on: documentServer)
@@ -205,7 +204,7 @@ class CalibreLibraryManager {
             let publish = {
                 removedBooks.forEach {
                     container.bookManager.removeFromShelf(inShelfId: $0.inShelfId)
-                    print("populateLocalLibraryBooks removeFromShelf \($0)")
+                    self.logger.debug("populateLocalLibraryBooks removeFromShelf \($0.inShelfId)")
                 }
                 finish()
             }
@@ -416,7 +415,7 @@ class CalibreLibraryManager {
                 let library = result.request.library
 
                 await withCheckedContinuation { continuation in
-                    AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
+                    DatabaseService.metadataWriteQueue.async { [weak self] in
                         guard let self = self else {
                             continuation.resume()
                             return
@@ -507,7 +506,7 @@ class CalibreLibraryManager {
         var metadataResult = metadata
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
+            DatabaseService.metadataWriteQueue.async { [weak self] in
                 guard let self = self, let bookRepository = self.container?.bookRepository else {
                     continuation.resume()
                     return
@@ -555,7 +554,7 @@ class CalibreLibraryManager {
             if let libraryUpdated = libraryUpdated {
                 self.calibreLibraries[library.id] = libraryUpdated
                 await withCheckedContinuation { continuation in
-                    AppContainer.SaveBooksMetadataRealmQueue.async { [weak self] in
+                    DatabaseService.metadataWriteQueue.async { [weak self] in
                         guard let self = self else {
                             continuation.resume()
                             return
