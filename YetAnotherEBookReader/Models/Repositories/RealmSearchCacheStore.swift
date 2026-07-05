@@ -583,14 +583,18 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
 
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
         return AsyncStream { [weak self] continuation in
-            let token = objects.observe(keyPaths: ["items", "totalNumber"], on: DispatchQueue.main) { [weak self] changes in
+            var lastSummaries: [CategoryCacheSummary]?
+            let token = objects.observe(on: DispatchQueue.main) { [weak self] changes in
                 guard let self else {
                     continuation.yield([])
                     return
                 }
                 switch changes {
                 case .initial(let objects), .update(let objects, _, _, _):
-                    continuation.yield(self.mapCategorySummaries(objects: objects))
+                    let summaries = self.mapCategorySummaries(objects: objects)
+                    guard summaries != lastSummaries else { return }
+                    lastSummaries = summaries
+                    continuation.yield(summaries)
                 case .error:
                     continuation.yield([])
                 }
@@ -614,11 +618,32 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
             .filter("categoryName == %@", categoryName)
 
         return AsyncStream { continuation in
-            let token = objects.observe(keyPaths: ["items", "totalNumber"], on: DispatchQueue.main) { changes in
+            var lastFingerprint: [Int]?
+            let makeFingerprint: (Results<CalibreLibraryCategoryObject>) -> [Int] = { objects in
+                objects.map { object in
+                    var hasher = Hasher()
+                    hasher.combine(object.libraryId)
+                    hasher.combine(object.categoryName)
+                    hasher.combine(object.totalNumber)
+                    hasher.combine(object.items.count)
+                    for item in object.items {
+                        hasher.combine(item.name)
+                        hasher.combine(item.url)
+                        hasher.combine(item.count)
+                        hasher.combine(item.averageRating)
+                    }
+                    return hasher.finalize()
+                }.sorted()
+            }
+
+            let token = objects.observe(on: DispatchQueue.main) { changes in
                 switch changes {
-                case .initial:
-                    break
-                case .update:
+                case .initial(let objects):
+                    lastFingerprint = makeFingerprint(objects)
+                case .update(let objects, _, _, _):
+                    let fingerprint = makeFingerprint(objects)
+                    guard fingerprint != lastFingerprint else { return }
+                    lastFingerprint = fingerprint
                     continuation.yield(())
                 case .error:
                     break
@@ -638,6 +663,32 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                 .first {
                 cacheObj.generation = .distantPast
             }
+        }
+    }
+
+    func removeLibraryCategoryResultsNotIn(
+        libraryId: String,
+        activeCategoryNames: Set<String>
+    ) throws {
+        let realm = try getRealm()
+        try realm.write {
+            let libraryCategories = realm.objects(CalibreLibraryCategoryObject.self)
+                .filter("libraryId == %@", libraryId)
+            let staleCategories: [CalibreLibraryCategoryObject]
+            if activeCategoryNames.isEmpty {
+                staleCategories = Array(libraryCategories)
+            } else {
+                staleCategories = Array(
+                    libraryCategories.filter("NOT categoryName IN %@", Array(activeCategoryNames))
+                )
+            }
+
+            guard !staleCategories.isEmpty else { return }
+            realm.delete(staleCategories)
+
+            let orphanedItems = realm.objects(CalibreLibraryCategoryItemObject.self)
+                .filter("assignee.@count == 0")
+            realm.delete(orphanedItems)
         }
     }
 }

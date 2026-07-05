@@ -36,4 +36,9 @@ protocol CategoryCacheRepository: Sendable {
     func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void>
     
     func invalidateCategoryCache(libraryId: String, categoryName: String) throws
+
+    func removeLibraryCategoryResultsNotIn(
+        libraryId: String,
+        activeCategoryNames: Set<String>
+    ) throws
 }

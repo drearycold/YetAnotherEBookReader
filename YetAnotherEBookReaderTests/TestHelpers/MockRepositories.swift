@@ -865,6 +865,15 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
         }
     }
 
+    func removeLibraryCategoryResultsNotIn(
+        libraryId: String,
+        activeCategoryNames: Set<String>
+    ) throws {
+        cache = cache.filter { _, result in
+            result.libraryId != libraryId || activeCategoryNames.contains(result.categoryName)
+        }
+    }
+
     func sendCategorySummaries(_ summaries: [CategoryCacheSummary]) {
         observeCategorySummariesBroadcaster.send(summaries)
     }

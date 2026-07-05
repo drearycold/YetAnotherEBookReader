@@ -775,6 +775,117 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(updateCount, 1)
     }
 
+    func testRealmSearchCacheStoreRemovesMissingLibraryCategories() async throws {
+        let (_, store) = makeRealmSearchCacheStore()
+
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "author-a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Tags",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Tags",
+                items: [LibraryCategoryItem(name: "Tag A", averageRating: 0.0, count: 1, url: "tag-a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Publisher",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Publisher",
+                items: [LibraryCategoryItem(name: "Publisher A", averageRating: 0.0, count: 1, url: "publisher-a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+
+        try store.removeLibraryCategoryResultsNotIn(
+            libraryId: mockLibrary1.id,
+            activeCategoryNames: ["Authors", "Tags"]
+        )
+
+        let summaries = try store.fetchCategorySummaries(libraryIds: [mockLibrary1.id])
+        XCTAssertEqual(summaries.map(\.categoryName).sorted(), ["Authors", "Tags"])
+        XCTAssertNil(try store.fetchLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Publisher"))
+
+        let publisherPage = try store.fetchUnifiedCategoryItemsPage(
+            categoryName: "Publisher",
+            searchString: "",
+            libraryIds: [mockLibrary1.id],
+            offset: 0,
+            limit: 10
+        )
+        XCTAssertTrue(publisherPage.items.isEmpty)
+        XCTAssertEqual(publisherPage.totalNumber, 0)
+    }
+
+    func testRealmSearchCacheStoreCategoryRemovalPublishesSummaryAndDetailUpdates() async throws {
+        let (_, store) = makeRealmSearchCacheStore()
+
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Publisher",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Publisher",
+                items: [LibraryCategoryItem(name: "Publisher A", averageRating: 0.0, count: 1, url: "publisher-a")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+
+        let summaryReadyExpectation = expectation(description: "summary observer ready")
+        let summaryExpectation = expectation(description: "summary removal update")
+        let summaryTask = Task { @MainActor in
+            var didSkipInitial = false
+            for await summaries in store.observeCategorySummaries() {
+                if !didSkipInitial {
+                    didSkipInitial = true
+                    summaryReadyExpectation.fulfill()
+                    continue
+                }
+                if !summaries.contains(where: { $0.categoryName == "Publisher" }) {
+                    summaryExpectation.fulfill()
+                    break
+                }
+            }
+        }
+
+        let detailReadyExpectation = expectation(description: "detail observer ready")
+        let detailExpectation = expectation(description: "detail removal update")
+        let detailTask = Task { @MainActor in
+            let updates = store.observeCategoryCacheUpdates(categoryName: "Publisher")
+            detailReadyExpectation.fulfill()
+            for await _ in updates {
+                detailExpectation.fulfill()
+                break
+            }
+        }
+
+        await fulfillment(of: [summaryReadyExpectation, detailReadyExpectation], timeout: 1.0)
+        try store.removeLibraryCategoryResultsNotIn(
+            libraryId: mockLibrary1.id,
+            activeCategoryNames: []
+        )
+
+        await fulfillment(of: [summaryExpectation, detailExpectation], timeout: 1.0)
+        summaryTask.cancel()
+        detailTask.cancel()
+    }
+
     private func makeRealmSearchCacheStore() -> (AppContainer, RealmSearchCacheStore) {
         let identifier = "UnifiedCategoryServiceTests-RealmStore"
         let config = Realm.Configuration(inMemoryIdentifier: identifier)
