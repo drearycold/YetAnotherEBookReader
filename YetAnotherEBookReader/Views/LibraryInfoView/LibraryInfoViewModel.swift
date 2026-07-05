@@ -154,7 +154,7 @@ extension LibraryInfoView {
         func fetchAvailableCategories() {
             guard let container = AppContainer.shared else { return }
             let repository = container.categoryCacheRepository
-            if let summaries = try? repository.fetchCategorySummaries() {
+            if let summaries = try? repository.fetchCategorySummaries(libraryIds: filterCriteriaLibraries) {
                 self.availableCategories = summaries
             }
         }
@@ -163,9 +163,12 @@ extension LibraryInfoView {
             guard let container = AppContainer.shared, categoryObserverTask == nil else { return }
 
             categoryObserverTask = Task { @MainActor [weak self, repository = container.categoryCacheRepository] in
-                for await summaries in repository.observeCategorySummaries() {
+                for await _ in repository.observeCategorySummaries() {
                     guard !Task.isCancelled else { break }
-                    self?.availableCategories = summaries
+                    guard let self else { continue }
+                    if let summaries = try? repository.fetchCategorySummaries(libraryIds: self.filterCriteriaLibraries) {
+                        self.availableCategories = summaries
+                    }
                 }
             }
         }

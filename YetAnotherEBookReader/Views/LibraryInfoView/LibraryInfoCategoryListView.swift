@@ -103,6 +103,10 @@ struct CategoryDetailView: View {
     
     private func triggerMerge() {
         viewModel.categoryName = categoryName
-        categoryViewModel.mergeCategory(categoryName: categoryName, searchString: viewModel.categoryFilter)
+        categoryViewModel.mergeCategory(
+            categoryName: categoryName,
+            searchString: viewModel.categoryFilter,
+            libraryIds: viewModel.filterCriteriaLibraries
+        )
     }
 }

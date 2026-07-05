@@ -21,6 +21,8 @@ protocol CategoryCacheRepository: Sendable {
     
     func fetchCategorySummaries() throws -> [CategoryCacheSummary]
 
+    func fetchCategorySummaries(libraryIds: Set<String>) throws -> [CategoryCacheSummary]
+
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]>
 
     func observeCategoryCacheUpdates(categoryName: String) -> AsyncStream<Void>

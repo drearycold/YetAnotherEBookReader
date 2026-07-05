@@ -22,9 +22,17 @@ actor UnifiedCategoryService {
         self.libraryProvider = libraryProvider
     }
     
-    func mergeCategory(categoryName: String, searchString: String) async -> UnifiedCategoryResult {
+    func mergeCategory(
+        categoryName: String,
+        searchString: String,
+        libraryIds: Set<String> = []
+    ) async -> UnifiedCategoryResult {
         let calibreLibraries = await libraryProvider.getLibraries()
-        let activeLibraries = calibreLibraries.values.filter { !$0.hidden && !$0.server.removed }
+        let activeLibraries = calibreLibraries.values.filter { library in
+            !library.hidden
+                && !library.server.removed
+                && (libraryIds.isEmpty || libraryIds.contains(library.id))
+        }
         
         var results: [LibraryCategoryResult] = []
         for library in activeLibraries {

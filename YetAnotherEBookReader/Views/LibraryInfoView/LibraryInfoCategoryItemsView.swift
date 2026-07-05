@@ -52,7 +52,10 @@ struct LibraryInfoCategoryItemsView: View {
         }
         .toolbar {
             Button {
-                categoryViewModel.forceRefreshCategory(categoryName: categoryName)
+                categoryViewModel.forceRefreshCategory(
+                    categoryName: categoryName,
+                    libraryIds: viewModel.filterCriteriaLibraries
+                )
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }

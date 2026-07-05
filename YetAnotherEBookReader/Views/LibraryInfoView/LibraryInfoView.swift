@@ -90,6 +90,7 @@ struct LibraryInfoView: View {
 //                        resetSearchCriteria()
                         _ = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()
                         viewModel.filterCriteriaLibraries = []
+                        viewModel.fetchAvailableCategories()
                         resetToFirstPage()
                     }
                 
@@ -119,6 +120,7 @@ struct LibraryInfoView: View {
                                 }
                             }
                             viewModel.filterCriteriaLibraries.insert(library.id)
+                            viewModel.fetchAvailableCategories()
                             resetToFirstPage()
                         }
                 } label: {

@@ -747,8 +747,17 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
     }
 
     func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
+        try fetchCategorySummaries(libraryIds: [])
+    }
+
+    func fetchCategorySummaries(libraryIds: Set<String>) throws -> [CategoryCacheSummary] {
         var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
         for result in cache.values {
+            if !libraryIds.isEmpty,
+               !libraryIds.contains(result.libraryId) {
+                continue
+            }
+
             let name = result.categoryName
             let current = summariesByName[name] ?? (0, 0)
             summariesByName[name] = (

@@ -106,6 +106,9 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         let parentSource = try String(contentsOf: sourceFileURL(
             "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoView.swift"
         ))
+        let categoryDetailSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoCategoryListView.swift"
+        ))
 
         XCTAssertTrue(source.contains("if preservesLibraryScope"))
         XCTAssertTrue(source.contains("Button {"))
@@ -116,6 +119,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertTrue(source.contains("selectRootCategoryItem(categoryItem.name)"))
         XCTAssertTrue(parentSource.contains("let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()"))
         XCTAssertTrue(parentSource.contains("if !preserveFilters"))
+        XCTAssertTrue(parentSource.contains("viewModel.fetchAvailableCategories()"))
+        XCTAssertTrue(categoryDetailSource.contains("libraryIds: viewModel.filterCriteriaLibraries"))
     }
 
     func testFilterCriteriaCategoryAPIsUpdateCriteriaAndVisibleItems() {

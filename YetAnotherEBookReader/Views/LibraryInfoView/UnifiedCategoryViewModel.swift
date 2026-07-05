@@ -20,6 +20,7 @@ class UnifiedCategoryViewModel: ObservableObject {
     
     private var currentCategoryName: String?
     private var currentSearchString: String = ""
+    private var currentLibraryIds = Set<String>()
     private var cacheUpdateTask: Task<Void, Never>?
     private var observedCategoryName: String?
     
@@ -41,9 +42,14 @@ class UnifiedCategoryViewModel: ObservableObject {
         cacheUpdateTask?.cancel()
     }
     
-    func mergeCategory(categoryName: String, searchString: String) {
+    func mergeCategory(
+        categoryName: String,
+        searchString: String,
+        libraryIds: Set<String> = []
+    ) {
         self.currentCategoryName = categoryName
         self.currentSearchString = searchString
+        self.currentLibraryIds = libraryIds
         
         setupCategoryObserver(for: categoryName)
         
@@ -51,7 +57,11 @@ class UnifiedCategoryViewModel: ObservableObject {
         isLoading = true
         
         mergeTask = Task {
-            let result = await unifiedCategoryService.mergeCategory(categoryName: categoryName, searchString: searchString)
+            let result = await unifiedCategoryService.mergeCategory(
+                categoryName: categoryName,
+                searchString: searchString,
+                libraryIds: libraryIds
+            )
             guard !Task.isCancelled else { return }
             self.unifiedCategoryResult = result
             self.isLoading = false
@@ -76,16 +86,26 @@ class UnifiedCategoryViewModel: ObservableObject {
     private func retriggerMerge() {
         guard let categoryName = currentCategoryName else { return }
         mergeTask?.cancel()
+        let searchString = currentSearchString
+        let libraryIds = currentLibraryIds
         mergeTask = Task {
-            let result = await unifiedCategoryService.mergeCategory(categoryName: categoryName, searchString: self.currentSearchString)
+            let result = await unifiedCategoryService.mergeCategory(
+                categoryName: categoryName,
+                searchString: searchString,
+                libraryIds: libraryIds
+            )
             guard !Task.isCancelled else { return }
             self.unifiedCategoryResult = result
         }
     }
     
-    func forceRefreshCategory(categoryName: String) {
+    func forceRefreshCategory(categoryName: String, libraryIds: Set<String> = []) {
         let calibreLibraries = container.libraryManager.calibreLibraries.values
-        let activeLibraries = calibreLibraries.filter { !$0.hidden && !$0.server.removed }
+        let activeLibraries = calibreLibraries.filter { library in
+            !library.hidden
+                && !library.server.removed
+                && (libraryIds.isEmpty || libraryIds.contains(library.id))
+        }
         let repository = container.categoryCacheRepository
 
         for library in activeLibraries {

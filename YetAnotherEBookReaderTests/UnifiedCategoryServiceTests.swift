@@ -294,6 +294,42 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(merged.items[1].count, 2)
     }
 
+    func testUnifiedCategoryServiceMergeCanScopeToRequestedLibraries() async throws {
+        let result1 = LibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Tags",
+            items: [
+                LibraryCategoryItem(name: "Shared", averageRating: 0.0, count: 5, url: "tag-shared-lib1"),
+                LibraryCategoryItem(name: "Lib One Only", averageRating: 0.0, count: 1, url: "tag-one")
+            ],
+            generation: Date(),
+            totalNumber: 2
+        )
+        try repository.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Tags", result: result1)
+
+        let result2 = LibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Tags",
+            items: [
+                LibraryCategoryItem(name: "Shared", averageRating: 0.0, count: 10, url: "tag-shared-lib2"),
+                LibraryCategoryItem(name: "Lib Two Only", averageRating: 0.0, count: 2, url: "tag-two")
+            ],
+            generation: Date(),
+            totalNumber: 2
+        )
+        try repository.saveLibraryCategoryResult(libraryId: mockLibrary2.id, categoryName: "Tags", result: result2)
+
+        let merged = await unifiedCategoryService.mergeCategory(
+            categoryName: "Tags",
+            searchString: "",
+            libraryIds: [mockLibrary1.id]
+        )
+
+        XCTAssertEqual(merged.items.map(\.name), ["Lib One Only", "Shared"])
+        XCTAssertEqual(merged.items.first { $0.name == "Shared" }?.count, 5)
+        XCTAssertNil(merged.items.first { $0.name == "Lib Two Only" })
+    }
+
     func testFetchAndCacheCategoryFailureHttpStatus() async throws {
         let category = CalibreLibraryCategory(name: "Authors", url: "http://localhost/1/ajax/category/Authors", icon: "user", is_category: true)
 
@@ -367,6 +403,43 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertEqual(updatedSummary?.itemsCount, 3)
         XCTAssertEqual(updatedSummary?.totalNumber, 3)
         _ = container
+    }
+
+    func testRealmSearchCacheStoreFetchCategorySummariesCanScopeToLibraries() async throws {
+        let (_, store) = makeRealmSearchCacheStore()
+
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "author-a-lib1")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Tags",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary2.id,
+                categoryName: "Tags",
+                items: [
+                    LibraryCategoryItem(name: "Tag B", averageRating: 0.0, count: 2, url: "tag-b-lib2"),
+                    LibraryCategoryItem(name: "Tag C", averageRating: 0.0, count: 1, url: "tag-c-lib2")
+                ],
+                generation: Date(),
+                totalNumber: 2
+            )
+        )
+
+        let scoped = try store.fetchCategorySummaries(libraryIds: [mockLibrary1.id])
+        XCTAssertEqual(scoped.map(\.categoryName), ["Authors"])
+        XCTAssertEqual(scoped.first?.itemsCount, 1)
+
+        let global = try store.fetchCategorySummaries(libraryIds: [])
+        XCTAssertEqual(global.map(\.categoryName), ["Authors", "Tags"])
     }
 
     func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() async throws {

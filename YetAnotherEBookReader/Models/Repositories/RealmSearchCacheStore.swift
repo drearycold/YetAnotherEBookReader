@@ -453,6 +453,17 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         return mapCategorySummaries(objects: objects)
     }
 
+    func fetchCategorySummaries(libraryIds: Set<String>) throws -> [CategoryCacheSummary] {
+        guard !libraryIds.isEmpty else {
+            return try fetchCategorySummaries()
+        }
+
+        let realm = try getRealm()
+        let objects = realm.objects(CalibreLibraryCategoryObject.self)
+            .filter("libraryId IN %@", Array(libraryIds))
+        return mapCategorySummaries(objects: objects)
+    }
+
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
         guard let realm = try? getRealm() else {
             return AsyncStream { continuation in
