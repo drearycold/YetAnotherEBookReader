@@ -158,7 +158,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertTrue(parentSource.contains("let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()"))
         XCTAssertTrue(parentSource.contains("if !preserveFilters"))
         XCTAssertTrue(parentSource.contains("viewModel.fetchAvailableCategories()"))
-        XCTAssertTrue(categoryDetailSource.contains("libraryIds: viewModel.filterCriteriaLibraries"))
+        XCTAssertTrue(categoryDetailSource.contains("let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []"))
+        XCTAssertTrue(categoryDetailSource.contains("libraryIds: scopedLibraryIds"))
         XCTAssertTrue(categoryDetailSource.contains("categoryViewModel.reloadCategory("))
         XCTAssertTrue(categoryDetailSource.contains("scheduleFilterReload()"))
         XCTAssertFalse(categoryDetailSource.contains("categoryViewModel.mergeCategory("))
@@ -177,6 +178,34 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
 
         XCTAssertFalse(source.contains("Found \\(result.itemsCount) items, too many to list them all, please use filter"))
         XCTAssertFalse(source.contains("ForEach(result.items)"))
+    }
+
+    func testCategoryDetailScopesRootAndHeaderFlowsSeparately() throws {
+        let categoryDetailSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoCategoryListView.swift"
+        ))
+        let categoryItemsSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoCategoryItemsView.swift"
+        ))
+
+        XCTAssertTrue(categoryDetailSource.contains("let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []"))
+        XCTAssertTrue(categoryDetailSource.contains("libraryIds: scopedLibraryIds"))
+        XCTAssertFalse(categoryDetailSource.contains("libraryIds: viewModel.filterCriteriaLibraries"))
+
+        XCTAssertTrue(categoryItemsSource.contains("let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []"))
+        XCTAssertTrue(categoryItemsSource.contains("libraryIds: scopedLibraryIds"))
+    }
+
+    func testCategoryCacheObserverDoesNotFingerprintEveryItem() throws {
+        let source = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Models/Repositories/RealmSearchCacheStore.swift"
+        ))
+
+        XCTAssertTrue(source.contains("hasher.combine(object.generation)"))
+        XCTAssertTrue(source.contains("hasher.combine(object.totalNumber)"))
+        XCTAssertTrue(source.contains("hasher.combine(object.items.count)"))
+        XCTAssertFalse(source.contains("for item in object.items"))
+        XCTAssertFalse(source.contains("hasher.combine(item.name)"))
     }
 
     func testFilterCriteriaCategoryAPIsUpdateCriteriaAndVisibleItems() {

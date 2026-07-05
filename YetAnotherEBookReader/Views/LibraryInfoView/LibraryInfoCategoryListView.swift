@@ -108,10 +108,11 @@ struct CategoryDetailView: View {
     
     private func triggerMerge() {
         viewModel.categoryName = categoryName
+        let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []
         categoryViewModel.reloadCategory(
             categoryName: categoryName,
             searchString: viewModel.categoryFilter,
-            libraryIds: viewModel.filterCriteriaLibraries
+            libraryIds: scopedLibraryIds
         )
     }
 

@@ -57,9 +57,10 @@ struct LibraryInfoCategoryItemsView: View {
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {
+                    let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []
                     categoryViewModel.forceRefreshCategory(
                         categoryName: categoryName,
-                        libraryIds: viewModel.filterCriteriaLibraries
+                        libraryIds: scopedLibraryIds
                     )
                 } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")

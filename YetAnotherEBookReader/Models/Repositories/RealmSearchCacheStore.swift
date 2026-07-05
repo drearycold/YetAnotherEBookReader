@@ -624,14 +624,9 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
                     var hasher = Hasher()
                     hasher.combine(object.libraryId)
                     hasher.combine(object.categoryName)
+                    hasher.combine(object.generation)
                     hasher.combine(object.totalNumber)
                     hasher.combine(object.items.count)
-                    for item in object.items {
-                        hasher.combine(item.name)
-                        hasher.combine(item.url)
-                        hasher.combine(item.count)
-                        hasher.combine(item.averageRating)
-                    }
                     return hasher.finalize()
                 }.sorted()
             }

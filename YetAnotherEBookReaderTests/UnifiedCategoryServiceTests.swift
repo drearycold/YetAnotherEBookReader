@@ -738,8 +738,24 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertNil(scopedPage.items.first { $0.name == "Beta" })
     }
 
-    func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() async throws {
+    func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndPublishesLightweightChanges() async throws {
         let (_, store) = makeRealmSearchCacheStore()
+
+        let seededResult = LibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            items: (0..<2_000).map {
+                LibraryCategoryItem(
+                    name: "Author \($0)",
+                    averageRating: 4.0,
+                    count: 1,
+                    url: "author-\($0)"
+                )
+            },
+            generation: Date(),
+            totalNumber: 2_000
+        )
+        try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: seededResult)
 
         let noInitialExpectation = expectation(description: "no initial event")
         noInitialExpectation.isInverted = true
@@ -756,23 +772,10 @@ class UnifiedCategoryServiceTests: XCTestCase {
 
         await fulfillment(of: [noInitialExpectation], timeout: 0.2)
 
-        let seededResult = LibraryCategoryResult(
-            libraryId: mockLibrary1.id,
-            categoryName: "Authors",
-            items: [LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a")],
-            generation: Date(),
-            totalNumber: 1
-        )
-        try store.saveLibraryCategoryResult(libraryId: mockLibrary1.id, categoryName: "Authors", result: seededResult)
+        try store.invalidateCategoryCache(libraryId: mockLibrary1.id, categoryName: "Authors")
         await fulfillment(of: [updateExpectation], timeout: 1.0)
         XCTAssertEqual(updateCount, 1)
         task.cancel()
-
-        let noInvalidationExpectation = expectation(description: "generation invalidation does not publish")
-        noInvalidationExpectation.isInverted = true
-        try store.invalidateCategoryCache(libraryId: mockLibrary1.id, categoryName: "Authors")
-        await fulfillment(of: [noInvalidationExpectation], timeout: 0.2)
-        XCTAssertEqual(updateCount, 1)
     }
 
     func testRealmSearchCacheStoreRemovesMissingLibraryCategories() async throws {
