@@ -16,6 +16,17 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
 
     var defaultLog = Logger()
 
+    private struct CategoryItemCursor {
+        let libraryId: String
+        let items: Results<CalibreLibraryCategoryItemObject>
+        var index = 0
+
+        var current: CalibreLibraryCategoryItemObject? {
+            guard index < items.count else { return nil }
+            return items[index]
+        }
+    }
+
     init(
         config: Realm.Configuration? = nil,
         databaseService: DatabaseService,
@@ -462,6 +473,102 @@ final class RealmSearchCacheStore: SearchCacheRepository, CategoryCacheRepositor
         let objects = realm.objects(CalibreLibraryCategoryObject.self)
             .filter("libraryId IN %@", Array(libraryIds))
         return mapCategorySummaries(objects: objects)
+    }
+
+    func fetchUnifiedCategoryItemsPage(
+        categoryName: String,
+        searchString: String,
+        libraryIds: Set<String>,
+        offset: Int,
+        limit: Int
+    ) throws -> UnifiedCategoryPageResult {
+        let realm = try getRealm()
+        let trimmedSearch = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeOffset = max(0, offset)
+        let safeLimit = max(1, limit)
+
+        var categoryObjects = realm.objects(CalibreLibraryCategoryObject.self)
+            .filter("categoryName == %@", categoryName)
+        if !libraryIds.isEmpty {
+            categoryObjects = categoryObjects.filter("libraryId IN %@", Array(libraryIds))
+        }
+
+        var sourceTotalNumber = 0
+        var cursors: [CategoryItemCursor] = []
+        for categoryObject in categoryObjects {
+            sourceTotalNumber += categoryObject.totalNumber
+            let itemResults: Results<CalibreLibraryCategoryItemObject>
+            if trimmedSearch.isEmpty {
+                itemResults = categoryObject.items.sorted(byKeyPath: "name", ascending: true)
+            } else {
+                itemResults = categoryObject.items
+                    .filter("name CONTAINS[c] %@", trimmedSearch)
+                    .sorted(byKeyPath: "name", ascending: true)
+            }
+
+            if !itemResults.isEmpty {
+                cursors.append(CategoryItemCursor(libraryId: categoryObject.libraryId, items: itemResults))
+            }
+        }
+
+        var processedUniqueCount = 0
+        var pageItems: [UnifiedCategoryItem] = []
+        let collectionLimit = safeLimit + 1
+
+        while pageItems.count < collectionLimit {
+            guard let nextName = cursors.compactMap({ $0.current?.name }).min(by: { lhs, rhs in
+                lhs.localizedCompare(rhs) == .orderedAscending
+            }) else {
+                break
+            }
+
+            var libraryItems: [String: LibraryCategoryItem] = [:]
+            for cursorIndex in cursors.indices {
+                while let current = cursors[cursorIndex].current,
+                      current.name == nextName {
+                    libraryItems[cursors[cursorIndex].libraryId] = LibraryCategoryItem(
+                        name: current.name,
+                        averageRating: current.averageRating,
+                        count: current.count,
+                        url: current.url
+                    )
+                    cursors[cursorIndex].index += 1
+                }
+            }
+
+            if processedUniqueCount >= safeOffset {
+                let stats = libraryItems.values.reduce((0, 0.0)) { partialResult, item in
+                    (partialResult.0 + item.count, partialResult.1 + item.averageRating * Double(item.count))
+                }
+                let totalCount = stats.0
+                let averageRating = totalCount > 0 ? stats.1 / Double(totalCount) : 0.0
+
+                pageItems.append(
+                    UnifiedCategoryItem(
+                        categoryName: categoryName,
+                        name: nextName,
+                        averageRating: averageRating,
+                        count: totalCount,
+                        libraryItems: libraryItems
+                    )
+                )
+            }
+
+            processedUniqueCount += 1
+        }
+
+        let hasMore = pageItems.count > safeLimit
+        let visibleItems = hasMore ? Array(pageItems.prefix(safeLimit)) : pageItems
+
+        return UnifiedCategoryPageResult(
+            categoryName: categoryName,
+            search: trimmedSearch,
+            totalNumber: sourceTotalNumber,
+            itemsCount: processedUniqueCount,
+            items: visibleItems,
+            hasMore: hasMore,
+            nextOffset: safeOffset + visibleItems.count
+        )
     }
 
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {

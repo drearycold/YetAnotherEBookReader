@@ -39,6 +39,16 @@ struct UnifiedCategoryResult: Equatable, Sendable {
     let items: [UnifiedCategoryItem]
 }
 
+struct UnifiedCategoryPageResult: Equatable, Sendable {
+    let categoryName: String
+    let search: String
+    let totalNumber: Int
+    let itemsCount: Int
+    let items: [UnifiedCategoryItem]
+    let hasMore: Bool
+    let nextOffset: Int
+}
+
 struct CategoryCacheSummary: Equatable, Sendable, Identifiable {
     var id: String { categoryName }
     let categoryName: String

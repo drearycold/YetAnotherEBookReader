@@ -43,4 +43,50 @@ actor UnifiedCategoryService {
         
         return mergeService.merge(categoryName: categoryName, searchString: searchString, results: results)
     }
+
+    func mergeCategoryPage(
+        categoryName: String,
+        searchString: String,
+        libraryIds: Set<String> = [],
+        offset: Int,
+        limit: Int
+    ) async -> UnifiedCategoryPageResult {
+        let calibreLibraries = await libraryProvider.getLibraries()
+        let activeLibraryIds = Set(calibreLibraries.values.compactMap { library -> String? in
+            guard !library.hidden,
+                  !library.server.removed,
+                  (libraryIds.isEmpty || libraryIds.contains(library.id)) else {
+                return nil
+            }
+            return library.id
+        })
+
+        guard !activeLibraryIds.isEmpty else {
+            return UnifiedCategoryPageResult(
+                categoryName: categoryName,
+                search: searchString.trimmingCharacters(in: .whitespacesAndNewlines),
+                totalNumber: 0,
+                itemsCount: 0,
+                items: [],
+                hasMore: false,
+                nextOffset: 0
+            )
+        }
+
+        return (try? repository.fetchUnifiedCategoryItemsPage(
+            categoryName: categoryName,
+            searchString: searchString,
+            libraryIds: activeLibraryIds,
+            offset: offset,
+            limit: limit
+        )) ?? UnifiedCategoryPageResult(
+            categoryName: categoryName,
+            search: searchString.trimmingCharacters(in: .whitespacesAndNewlines),
+            totalNumber: 0,
+            itemsCount: 0,
+            items: [],
+            hasMore: false,
+            nextOffset: 0
+        )
+    }
 }

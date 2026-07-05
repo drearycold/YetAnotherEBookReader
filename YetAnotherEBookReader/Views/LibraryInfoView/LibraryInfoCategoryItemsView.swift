@@ -31,18 +31,20 @@ struct LibraryInfoCategoryItemsView: View {
 
     var body: some View {
         VStack {
-
-            if let result = categoryViewModel.unifiedCategoryResult {
-                if result.items.isEmpty,
-                   result.itemsCount > 999,
-                   result.totalNumber > 999 {
-                    VStack {
-                        Text("Found \(result.itemsCount) items, too many to list them all, please use filter")
+            if !categoryViewModel.items.isEmpty {
+                List {
+                    ForEach(categoryViewModel.items) { categoryItem in
+                        categoryItemRow(categoryItem)
+                            .onAppear {
+                                categoryViewModel.loadNextPageIfNeeded(currentItem: categoryItem)
+                            }
                     }
-                } else {
-                    List {
-                        ForEach(result.items) { categoryItem in
-                            categoryItemRow(categoryItem)
+
+                    if categoryViewModel.isLoadingMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
                         }
                     }
                 }

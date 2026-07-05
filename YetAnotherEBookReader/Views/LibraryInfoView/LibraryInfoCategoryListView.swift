@@ -45,6 +45,7 @@ struct CategoryDetailView: View {
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     @StateObject private var categoryViewModel = UnifiedCategoryViewModel()
+    @State private var filterReloadTask: Task<Void, Never>?
 
     init(categoryName: String, preservesLibraryScope: Bool = false) {
         self.categoryName = categoryName
@@ -55,18 +56,21 @@ struct CategoryDetailView: View {
         VStack(spacing: 0) {
             ZStack {
                 TextField("Filter \(categoryName)", text: $viewModel.categoryFilterString, onCommit: {
+                    filterReloadTask?.cancel()
                     triggerMerge()
                 })
                 .keyboardType(.webSearch)
                 .padding([.leading, .trailing], 24)
                 .onChange(of: viewModel.categoryFilterString) { newValue in
                     viewModel.categoryFilter = viewModel.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    scheduleFilterReload()
                 }
                 HStack {
                     Spacer()
                     Button {
                         viewModel.categoryFilterString = ""
                         viewModel.categoryFilter = ""
+                        filterReloadTask?.cancel()
                         triggerMerge()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -95,6 +99,7 @@ struct CategoryDetailView: View {
             triggerMerge()
         }
         .onDisappear {
+            filterReloadTask?.cancel()
             if viewModel.categoriesSelected == nil {
                 viewModel.categoryName = ""
             }
@@ -103,10 +108,21 @@ struct CategoryDetailView: View {
     
     private func triggerMerge() {
         viewModel.categoryName = categoryName
-        categoryViewModel.mergeCategory(
+        categoryViewModel.reloadCategory(
             categoryName: categoryName,
             searchString: viewModel.categoryFilter,
             libraryIds: viewModel.filterCriteriaLibraries
         )
+    }
+
+    private func scheduleFilterReload() {
+        filterReloadTask?.cancel()
+        filterReloadTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                triggerMerge()
+            }
+        }
     }
 }

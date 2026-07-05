@@ -330,6 +330,205 @@ class UnifiedCategoryServiceTests: XCTestCase {
         XCTAssertNil(merged.items.first { $0.name == "Lib Two Only" })
     }
 
+    func testUnifiedCategoryServiceMergeCategoryPageAggregatesAndPages() async throws {
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 2, url: "a-lib1"),
+                    LibraryCategoryItem(name: "Author B", averageRating: 2.0, count: 1, url: "b-lib1")
+                ],
+                generation: Date(),
+                totalNumber: 3
+            )
+        )
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary2.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author A", averageRating: 2.0, count: 2, url: "a-lib2"),
+                    LibraryCategoryItem(name: "Author C", averageRating: 5.0, count: 1, url: "c-lib2")
+                ],
+                generation: Date(),
+                totalNumber: 3
+            )
+        )
+
+        let firstPage = await unifiedCategoryService.mergeCategoryPage(
+            categoryName: "Authors",
+            searchString: "",
+            offset: 0,
+            limit: 2
+        )
+
+        XCTAssertEqual(firstPage.items.map(\.name), ["Author A", "Author B"])
+        XCTAssertTrue(firstPage.hasMore)
+        XCTAssertEqual(firstPage.nextOffset, 2)
+        XCTAssertEqual(firstPage.totalNumber, 6)
+        XCTAssertEqual(firstPage.items.first?.count, 4)
+        XCTAssertEqual(firstPage.items.first?.averageRating, 3.0)
+        XCTAssertEqual(firstPage.items.first?.libraryItems.count, 2)
+
+        let secondPage = await unifiedCategoryService.mergeCategoryPage(
+            categoryName: "Authors",
+            searchString: "",
+            offset: firstPage.nextOffset,
+            limit: 2
+        )
+
+        XCTAssertEqual(secondPage.items.map(\.name), ["Author C"])
+        XCTAssertFalse(secondPage.hasMore)
+    }
+
+    func testUnifiedCategoryServiceMergeCategoryPageCanScopeAndFilter() async throws {
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author One", averageRating: 4.0, count: 1, url: "one"),
+                    LibraryCategoryItem(name: "Shared Author", averageRating: 4.0, count: 1, url: "shared-one")
+                ],
+                generation: Date(),
+                totalNumber: 2
+            )
+        )
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary2.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author Two", averageRating: 3.0, count: 1, url: "two"),
+                    LibraryCategoryItem(name: "Shared Author", averageRating: 3.0, count: 1, url: "shared-two")
+                ],
+                generation: Date(),
+                totalNumber: 2
+            )
+        )
+
+        let scopedPage = await unifiedCategoryService.mergeCategoryPage(
+            categoryName: "Authors",
+            searchString: "author",
+            libraryIds: [mockLibrary1.id],
+            offset: 0,
+            limit: 10
+        )
+
+        XCTAssertEqual(scopedPage.items.map(\.name), ["Author One", "Shared Author"])
+        XCTAssertEqual(scopedPage.items.first { $0.name == "Shared Author" }?.count, 1)
+        XCTAssertNil(scopedPage.items.first { $0.name == "Author Two" })
+    }
+
+    func testUnifiedCategoryViewModelReloadAndLoadMorePages() async throws {
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Author A", averageRating: 4.0, count: 1, url: "a"),
+                    LibraryCategoryItem(name: "Author B", averageRating: 4.0, count: 1, url: "b"),
+                    LibraryCategoryItem(name: "Author C", averageRating: 4.0, count: 1, url: "c")
+                ],
+                generation: Date(),
+                totalNumber: 3
+            )
+        )
+
+        let viewModel = UnifiedCategoryViewModel(
+            unifiedCategoryService: unifiedCategoryService,
+            categoryCacheRepository: repository,
+            container: container
+        )
+
+        viewModel.reloadCategory(categoryName: "Authors", searchString: "", pageSize: 2)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.items.map(\.name), ["Author A", "Author B"])
+        XCTAssertTrue(viewModel.hasMore)
+        XCTAssertEqual(viewModel.nextOffset, 2)
+        XCTAssertEqual(viewModel.unifiedCategoryResult?.items.map(\.name), ["Author A", "Author B"])
+
+        viewModel.loadNextPageIfNeeded(currentItem: viewModel.items.last)
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.items.map(\.name), ["Author A", "Author B", "Author C"])
+        XCTAssertFalse(viewModel.hasMore)
+        XCTAssertEqual(viewModel.nextOffset, 3)
+    }
+
+    func testUnifiedCategoryViewModelCacheObserverReloadsFirstPageWithScopeAndSearch() async throws {
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Scoped Author", averageRating: 4.0, count: 1, url: "scoped")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary2.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Other Author", averageRating: 4.0, count: 1, url: "other")],
+                generation: Date(),
+                totalNumber: 1
+            )
+        )
+
+        let viewModel = UnifiedCategoryViewModel(
+            unifiedCategoryService: unifiedCategoryService,
+            categoryCacheRepository: repository,
+            container: container
+        )
+
+        viewModel.reloadCategory(
+            categoryName: "Authors",
+            searchString: "Scoped",
+            libraryIds: [mockLibrary1.id],
+            pageSize: 1
+        )
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(viewModel.items.map(\.name), ["Scoped Author"])
+
+        try repository.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Scoped Author", averageRating: 4.0, count: 1, url: "scoped"),
+                    LibraryCategoryItem(name: "Scoped Writer", averageRating: 5.0, count: 1, url: "scoped-writer")
+                ],
+                generation: Date(),
+                totalNumber: 2
+            )
+        )
+        repository.sendCategoryCacheUpdate(categoryName: "Authors")
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(viewModel.items.map(\.name), ["Scoped Author"])
+        XCTAssertTrue(viewModel.hasMore)
+        XCTAssertNil(viewModel.items.first { $0.name == "Other Author" })
+    }
+
     func testFetchAndCacheCategoryFailureHttpStatus() async throws {
         let category = CalibreLibraryCategory(name: "Authors", url: "http://localhost/1/ajax/category/Authors", icon: "user", is_category: true)
 
@@ -440,6 +639,103 @@ class UnifiedCategoryServiceTests: XCTestCase {
 
         let global = try store.fetchCategorySummaries(libraryIds: [])
         XCTAssertEqual(global.map(\.categoryName), ["Authors", "Tags"])
+    }
+
+    func testRealmSearchCacheStoreFetchUnifiedCategoryItemsPageHandlesLargeAuthors() throws {
+        let (_, store) = makeRealmSearchCacheStore()
+        let items = (0..<50_000).map { index in
+            LibraryCategoryItem(
+                name: String(format: "Author %05d", index),
+                averageRating: 0.0,
+                count: 1,
+                url: "author-\(index)"
+            )
+        }
+
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: items,
+                generation: Date(),
+                totalNumber: items.count
+            )
+        )
+
+        let page = try store.fetchUnifiedCategoryItemsPage(
+            categoryName: "Authors",
+            searchString: "",
+            libraryIds: [mockLibrary1.id],
+            offset: 0,
+            limit: 100
+        )
+
+        XCTAssertEqual(page.items.count, 100)
+        XCTAssertEqual(page.items.first?.name, "Author 00000")
+        XCTAssertEqual(page.items.last?.name, "Author 00099")
+        XCTAssertTrue(page.hasMore)
+        XCTAssertEqual(page.nextOffset, 100)
+    }
+
+    func testRealmSearchCacheStoreFetchUnifiedCategoryItemsPageFiltersScopesAndAggregates() throws {
+        let (_, store) = makeRealmSearchCacheStore()
+
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary1.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary1.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Alpha", averageRating: 4.0, count: 2, url: "alpha-one"),
+                    LibraryCategoryItem(name: "Shared", averageRating: 5.0, count: 1, url: "shared-one")
+                ],
+                generation: Date(),
+                totalNumber: 3
+            )
+        )
+        try store.saveLibraryCategoryResult(
+            libraryId: mockLibrary2.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: mockLibrary2.id,
+                categoryName: "Authors",
+                items: [
+                    LibraryCategoryItem(name: "Beta", averageRating: 2.0, count: 1, url: "beta-two"),
+                    LibraryCategoryItem(name: "Shared", averageRating: 3.0, count: 3, url: "shared-two")
+                ],
+                generation: Date(),
+                totalNumber: 4
+            )
+        )
+
+        let globalPage = try store.fetchUnifiedCategoryItemsPage(
+            categoryName: "Authors",
+            searchString: "sha",
+            libraryIds: [],
+            offset: 0,
+            limit: 10
+        )
+
+        XCTAssertEqual(globalPage.items.map(\.name), ["Shared"])
+        XCTAssertEqual(globalPage.items.first?.count, 4)
+        XCTAssertEqual(globalPage.items.first?.averageRating, 3.5)
+        XCTAssertEqual(globalPage.items.first?.libraryItems.count, 2)
+        XCTAssertFalse(globalPage.hasMore)
+
+        let scopedPage = try store.fetchUnifiedCategoryItemsPage(
+            categoryName: "Authors",
+            searchString: "",
+            libraryIds: [mockLibrary1.id],
+            offset: 0,
+            limit: 10
+        )
+
+        XCTAssertEqual(scopedPage.items.map(\.name), ["Alpha", "Shared"])
+        XCTAssertEqual(scopedPage.totalNumber, 3)
+        XCTAssertNil(scopedPage.items.first { $0.name == "Beta" })
     }
 
     func testRealmSearchCacheStoreObserveCategoryCacheUpdatesSkipsInitialAndGenerationInvalidation() async throws {

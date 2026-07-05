@@ -159,6 +159,24 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertTrue(parentSource.contains("if !preserveFilters"))
         XCTAssertTrue(parentSource.contains("viewModel.fetchAvailableCategories()"))
         XCTAssertTrue(categoryDetailSource.contains("libraryIds: viewModel.filterCriteriaLibraries"))
+        XCTAssertTrue(categoryDetailSource.contains("categoryViewModel.reloadCategory("))
+        XCTAssertTrue(categoryDetailSource.contains("scheduleFilterReload()"))
+        XCTAssertFalse(categoryDetailSource.contains("categoryViewModel.mergeCategory("))
+    }
+
+    func testCategoryDetailUsesPagedItemsInsteadOfFullMergedResult() throws {
+        let source = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoCategoryItemsView.swift"
+        ))
+
+        XCTAssertTrue(source.contains("if !categoryViewModel.items.isEmpty"))
+        XCTAssertTrue(source.contains("ForEach(categoryViewModel.items)"))
+        XCTAssertTrue(source.contains("categoryViewModel.loadNextPageIfNeeded(currentItem: categoryItem)"))
+        XCTAssertTrue(source.contains("categoryViewModel.isLoadingMore"))
+        XCTAssertTrue(source.contains("ProgressView()"))
+
+        XCTAssertFalse(source.contains("Found \\(result.itemsCount) items, too many to list them all, please use filter"))
+        XCTAssertFalse(source.contains("ForEach(result.items)"))
     }
 
     func testFilterCriteriaCategoryAPIsUpdateCriteriaAndVisibleItems() {
