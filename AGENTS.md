@@ -41,20 +41,27 @@ This file is the working guide for agents contributing to YetAnotherEBookReader
 Use the shared Xcode project and scheme:
 
 ```bash
-xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' build
+xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages build
 ```
 
 For runtime behavior, repository logic, search, reader changes, or any non-trivial
-Swift change, prefer tests:
+Swift change, prefer tests. Before any `xcodebuild test`, shut down running
+simulators so stale app/process state cannot affect the run:
 
 ```bash
-xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData
+xcrun simctl shutdown all
+```
+
+Then run the focused or full test command:
+
+```bash
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
 ```
 
 Mac Catalyst build command:
 
 ```bash
-xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' build
+xcodebuild -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader-Catalyst -destination 'platform=macOS,variant=Mac Catalyst' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages build
 ```
 
 If a full test run is too expensive for the change, run the narrowest relevant

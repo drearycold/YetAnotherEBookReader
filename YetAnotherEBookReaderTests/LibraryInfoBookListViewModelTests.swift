@@ -40,6 +40,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertTrue(listViewModel.downloadBookList.isEmpty)
         XCTAssertEqual(listViewModel.searchString, "")
         XCTAssertFalse(listViewModel.batchDownloadSheetPresenting)
+        XCTAssertFalse(listViewModel.isBatchSelectionMode)
+        XCTAssertTrue(listViewModel.selectedBatchDownloadBookIds.isEmpty)
         XCTAssertFalse(listViewModel.booksListInfoPresenting)
         XCTAssertFalse(listViewModel.searchHistoryPresenting)
     }
@@ -63,6 +65,30 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
 
         XCTAssertFalse(parentSource.contains(".sheet(item:"))
         XCTAssertFalse(parentSource.contains("presentingBookDetailId"))
+    }
+
+    func testBatchDownloadSelectionUsesExplicitModeAndBottomActions() throws {
+        let contentSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListContent.swift"
+        ))
+        let toolbarSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListToolbar.swift"
+        ))
+
+        XCTAssertTrue(contentSource.contains("if listViewModel.isBatchSelectionMode"))
+        XCTAssertTrue(contentSource.contains("batchSelectionEntryView(book: book, index: index)"))
+        XCTAssertTrue(contentSource.contains("listViewModel.toggleBatchDownloadSelection(book: book)"))
+        XCTAssertTrue(contentSource.contains("Image(systemName: isSelected ? \"checkmark.circle.fill\" : \"circle\")"))
+        XCTAssertTrue(contentSource.contains("Button(\"Select All\")"))
+        XCTAssertTrue(contentSource.contains("Text(\"Download (\\(listViewModel.selectedBatchDownloadBookIds.count))\")"))
+        XCTAssertTrue(contentSource.contains("Button(\"Clear\")"))
+        XCTAssertTrue(contentSource.contains("Button(\"Cancel\")"))
+        XCTAssertTrue(contentSource.contains("listViewModel.prepareSelectedBatchDownload(books: books)"))
+        XCTAssertTrue(contentSource.contains("LibraryInfoBatchDownloadSheet("))
+        XCTAssertTrue(toolbarSource.contains("listViewModel.enterBatchSelectionMode()"))
+
+        XCTAssertFalse(contentSource.contains("List(selection:"))
+        XCTAssertFalse(contentSource.contains("selection: selectedBookIdBinding"))
     }
 
     func testBrowseSearchHeaderUsesInlineLayoutAndHidesClearButtonWhenEmpty() throws {
@@ -296,12 +322,8 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
     }
 
     func testPrepareBatchDownload() {
-        let uuid = UUID()
-        let server = CalibreServer(uuid: uuid, name: "S", baseUrl: "http://x", hasPublicUrl: false, publicUrl: "", hasAuth: false, username: "", password: "")
-        let library = CalibreLibrary(server: server, key: "lib", name: "lib")
-
-        let book1 = CalibreBook(id: 1, library: library)
-        let book2 = CalibreBook(id: 2, library: library)
+        let book1 = makeBook(id: 1)
+        let book2 = makeBook(id: 2)
 
         listViewModel.prepareBatchDownload(books: [book1, book2])
 
@@ -309,6 +331,75 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertEqual(listViewModel.downloadBookList[0].id, 1)
         XCTAssertEqual(listViewModel.downloadBookList[1].id, 2)
         XCTAssertTrue(listViewModel.batchDownloadSheetPresenting)
+    }
+
+    func testBatchSelectionModeCanEnterCancelToggleAndClear() {
+        let book1 = makeBook(id: 1)
+        let book2 = makeBook(id: 2)
+
+        listViewModel.enterBatchSelectionMode()
+
+        XCTAssertTrue(listViewModel.isBatchSelectionMode)
+        XCTAssertTrue(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+
+        listViewModel.toggleBatchDownloadSelection(book: book1)
+        listViewModel.toggleBatchDownloadSelection(book: book2)
+
+        XCTAssertEqual(listViewModel.selectedBatchDownloadBookIds, Set([book1.inShelfId, book2.inShelfId]))
+
+        listViewModel.toggleBatchDownloadSelection(book: book1)
+
+        XCTAssertEqual(listViewModel.selectedBatchDownloadBookIds, Set([book2.inShelfId]))
+
+        listViewModel.clearBatchDownloadSelection()
+
+        XCTAssertTrue(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+        XCTAssertTrue(listViewModel.isBatchSelectionMode)
+
+        listViewModel.toggleBatchDownloadSelection(book: book1)
+        listViewModel.cancelBatchSelectionMode()
+
+        XCTAssertFalse(listViewModel.isBatchSelectionMode)
+        XCTAssertTrue(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+    }
+
+    func testBatchSelectionSelectAllPruneAndPrepareUsesCurrentListOrder() {
+        let book1 = makeBook(id: 1)
+        let book2 = makeBook(id: 2)
+        let book3 = makeBook(id: 3)
+        let staleBook = makeBook(id: 4)
+
+        listViewModel.enterBatchSelectionMode()
+        listViewModel.selectAllBatchDownloadBooks(books: [book1, book2, book3])
+
+        XCTAssertEqual(
+            listViewModel.selectedBatchDownloadBookIds,
+            Set([book1.inShelfId, book2.inShelfId, book3.inShelfId])
+        )
+
+        listViewModel.selectedBatchDownloadBookIds.insert(staleBook.inShelfId)
+        listViewModel.pruneBatchDownloadSelection(books: [book2, book1])
+
+        XCTAssertEqual(listViewModel.selectedBatchDownloadBookIds, Set([book1.inShelfId, book2.inShelfId]))
+
+        listViewModel.toggleBatchDownloadSelection(book: book2)
+        listViewModel.prepareSelectedBatchDownload(books: [book3, book2, book1])
+
+        XCTAssertEqual(listViewModel.downloadBookList.map(\.inShelfId), [book1.inShelfId])
+        XCTAssertTrue(listViewModel.batchDownloadSheetPresenting)
+        XCTAssertFalse(listViewModel.isBatchSelectionMode)
+        XCTAssertTrue(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+    }
+
+    func testPrepareSelectedBatchDownloadDoesNothingWithoutSelection() {
+        let book1 = makeBook(id: 1)
+
+        listViewModel.enterBatchSelectionMode()
+        listViewModel.prepareSelectedBatchDownload(books: [book1])
+
+        XCTAssertTrue(listViewModel.downloadBookList.isEmpty)
+        XCTAssertFalse(listViewModel.batchDownloadSheetPresenting)
+        XCTAssertTrue(listViewModel.isBatchSelectionMode)
     }
 
     func testBuildSectionsEmpty() {
@@ -460,6 +551,21 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
             self.listViewModel.activeDownload(for: book)?.isPaused == true
         }
         XCTAssertEqual(listViewModel.activeDownload(for: book)?.progress, 0.5)
+    }
+
+    private func makeBook(id: Int32, libraryName: String = "lib") -> CalibreBook {
+        let server = CalibreServer(
+            uuid: UUID(),
+            name: "S",
+            baseUrl: "http://x",
+            hasPublicUrl: false,
+            publicUrl: "",
+            hasAuth: false,
+            username: "",
+            password: ""
+        )
+        let library = CalibreLibrary(server: server, key: libraryName, name: libraryName)
+        return CalibreBook(id: id, library: library)
     }
 
     private func waitForViewModelUpdate(
