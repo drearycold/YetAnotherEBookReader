@@ -75,6 +75,17 @@ struct LibraryInfoBookListHeader: View {
             if !filterItems.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
+                        Button {
+                            libraryInfoViewModel.clearCategoryFilters(searchViewModel: viewModel)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                        .foregroundColor(.secondary)
+
                         ForEach(filterItems) { filterItem in
                             HStack(spacing: 4) {
                                 Text("\(filterItem.key): \(filterItem.value)")

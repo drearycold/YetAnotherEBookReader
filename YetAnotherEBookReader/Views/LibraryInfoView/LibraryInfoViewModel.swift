@@ -246,6 +246,24 @@ extension LibraryInfoView {
             }
         }
 
+        func setFilterCategoryValues(
+            key: String,
+            values: Set<String>,
+            preservingLibraryScope: Bool = false
+        ) {
+            var filters = filterCriteriaCategory
+            if values.isEmpty {
+                filters.removeValue(forKey: key)
+            } else {
+                filters[key] = values
+            }
+            filterCriteriaCategory = filters
+
+            if !preservingLibraryScope {
+                filterCriteriaLibraries = []
+            }
+        }
+
         func applyCategoryItemSelection(
             categoryName: String,
             itemName: String,
@@ -257,6 +275,26 @@ extension LibraryInfoView {
                 preservingLibraryScope: preservingLibraryScope
             )
 
+            applySortRule(forCategoryName: categoryName)
+        }
+
+        func applyCategoryValuesSelection(
+            categoryName: String,
+            itemNames: Set<String>,
+            preservingLibraryScope: Bool = false
+        ) {
+            setFilterCategoryValues(
+                key: categoryName,
+                values: itemNames,
+                preservingLibraryScope: preservingLibraryScope
+            )
+
+            if !itemNames.isEmpty {
+                applySortRule(forCategoryName: categoryName)
+            }
+        }
+
+        private func applySortRule(forCategoryName categoryName: String) {
             if categoryName == "Series" {
                 if sortCriteria.by != .SeriesIndex {
                     lastSortCriteria.append(sortCriteria)
@@ -319,6 +357,11 @@ extension LibraryInfoView {
 
         func removeFilterCategory(key: String, value: String, searchViewModel: UnifiedSearchViewModel) {
             removeFilterCategory(key: key, value: value)
+            searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
+        }
+
+        func clearCategoryFilters(searchViewModel: UnifiedSearchViewModel) {
+            filterCriteriaCategory = [:]
             searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
         }
         

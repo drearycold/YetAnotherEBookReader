@@ -16,6 +16,8 @@ struct LibraryInfoCategoryItemsView: View {
     let categoryName: String
     let preservesLibraryScope: Bool
     @ObservedObject var categoryViewModel: UnifiedCategoryViewModel
+    @State private var draftSelectedItemNames = Set<String>()
+    @State private var didInitializeDraftSelection = false
 
     init(
         categoryName: String,
@@ -51,14 +53,25 @@ struct LibraryInfoCategoryItemsView: View {
             }
         }
         .toolbar {
-            Button {
-                categoryViewModel.forceRefreshCategory(
-                    categoryName: categoryName,
-                    libraryIds: viewModel.filterCriteriaLibraries
-                )
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    categoryViewModel.forceRefreshCategory(
+                        categoryName: categoryName,
+                        libraryIds: viewModel.filterCriteriaLibraries
+                    )
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+
+                if preservesLibraryScope {
+                    Button("Done") {
+                        applyHeaderCategorySelection()
+                    }
+                }
             }
+        }
+        .onAppear {
+            initializeHeaderDraftSelectionIfNeeded()
         }
     }
 
@@ -66,9 +79,15 @@ struct LibraryInfoCategoryItemsView: View {
     private func categoryItemRow(_ categoryItem: UnifiedCategoryItem) -> some View {
         if preservesLibraryScope {
             Button {
-                selectHeaderCategoryItem(categoryItem.name)
+                toggleDraftCategoryItem(categoryItem.name)
             } label: {
-                Text(categoryItem.name)
+                HStack {
+                    Text(categoryItem.name)
+                    Spacer()
+                    if draftSelectedItemNames.contains(categoryItem.name) {
+                        Image(systemName: "checkmark")
+                    }
+                }
             }
         } else {
             NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
@@ -106,10 +125,24 @@ struct LibraryInfoCategoryItemsView: View {
         unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
     }
 
-    private func selectHeaderCategoryItem(_ itemName: String) {
-        viewModel.applyCategoryItemSelection(
+    private func initializeHeaderDraftSelectionIfNeeded() {
+        guard preservesLibraryScope, !didInitializeDraftSelection else { return }
+        draftSelectedItemNames = viewModel.filterCriteriaCategory[categoryName] ?? []
+        didInitializeDraftSelection = true
+    }
+
+    private func toggleDraftCategoryItem(_ itemName: String) {
+        if draftSelectedItemNames.contains(itemName) {
+            draftSelectedItemNames.remove(itemName)
+        } else {
+            draftSelectedItemNames.insert(itemName)
+        }
+    }
+
+    private func applyHeaderCategorySelection() {
+        viewModel.applyCategoryValuesSelection(
             categoryName: categoryName,
-            itemName: itemName,
+            itemNames: draftSelectedItemNames,
             preservingLibraryScope: true
         )
         resetToFirstPage()
