@@ -12,68 +12,117 @@ struct LibraryInfoBookListHeader: View {
     let geometry: GeometryProxy
 
     var body: some View {
-        HStack(spacing: 6) {
-            Button {
-                listViewModel.searchHistoryPresenting = true
-            } label: {
-                Image(systemName: "chevron.down")
-            }
-            .popover(isPresented: $listViewModel.searchHistoryPresenting) {
-                Text("Search History")
-            }
-
-            TextField("Search Title & Authors", text: $listViewModel.searchString)
-                .onAppear {
-                    listViewModel.syncDraftFromCriteria(libraryInfoViewModel.searchString)
-                }
-                .onSubmit {
-                    listViewModel.submitSearch(libraryInfoViewModel: libraryInfoViewModel, searchViewModel: viewModel)
-                }
-                .keyboardType(.webSearch)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            if !listViewModel.searchString.isEmpty {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
                 Button {
-                    listViewModel.clearSearch(libraryInfoViewModel: libraryInfoViewModel, searchViewModel: viewModel)
+                    listViewModel.searchHistoryPresenting = true
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
+                    Image(systemName: "chevron.down")
                 }
-            }
+                .popover(isPresented: $listViewModel.searchHistoryPresenting) {
+                    Text("Search History")
+                }
 
-            Menu {
-                ForEach(libraryInfoViewModel.filterCriteriaCategory.sorted(by: { $0.key < $1.key}), id: \.key) { categoryFilter in
-                    ForEach(categoryFilter.value.filter({
-                        categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
-                    }).sorted(), id: \.self) { categoryFilterValue in
-                        Button {
-                            if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.remove(categoryFilterValue) != nil {
-                                if libraryInfoViewModel.filterCriteriaCategory[categoryFilter.key]?.isEmpty == true {
-                                    libraryInfoViewModel.filterCriteriaCategory.removeValue(forKey: categoryFilter.key)
-                                }
-                                libraryInfoViewModel.searchStringChanged(searchString: listViewModel.searchString, searchViewModel: viewModel)
-                            }
-                        } label: {
-                            HStack {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                                Text("\(categoryFilter.key): \(categoryFilterValue)")
-                            }
-                        }
+                TextField("Search Title & Authors", text: $listViewModel.searchString)
+                    .onAppear {
+                        listViewModel.syncDraftFromCriteria(libraryInfoViewModel.searchString)
+                    }
+                    .onSubmit {
+                        listViewModel.submitSearch(libraryInfoViewModel: libraryInfoViewModel, searchViewModel: viewModel)
+                    }
+                    .keyboardType(.webSearch)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if !listViewModel.searchString.isEmpty {
+                    Button {
+                        listViewModel.clearSearch(libraryInfoViewModel: libraryInfoViewModel, searchViewModel: viewModel)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
                     }
                 }
 
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .foregroundColor(
-                        libraryInfoViewModel.filterCriteriaCategory.filter({ categoryFilter in
-                            categoryFilter.value.filter({
-                                categoryFilter.key != libraryInfoViewModel.categoriesSelected || $0 != libraryInfoViewModel.categoryItemSelected
-                            }).isEmpty == false
-                        }).isEmpty ? .gray : .accentColor
-                    )
+                let categoryMenuItems = libraryInfoViewModel.availableCategoryMenuItems
+                Group {
+                    if categoryMenuItems.isEmpty {
+                        Button {} label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .foregroundColor(.gray)
+                        }
+                        .disabled(true)
+                    } else {
+                        Menu {
+                            ForEach(categoryMenuItems) { categoryItem in
+                                Button {
+                                    libraryInfoViewModel.headerCategorySelected = categoryItem.name
+                                } label: {
+                                    HStack {
+                                        Text(categoryItem.name)
+                                        Text("\(categoryItem.itemsCount)")
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .foregroundColor(.accentColor)
+                        }
+                    }
+                }
+                .padding(.trailing, 4)
             }
-            .padding(.trailing, 4)
+
+            let filterItems = libraryInfoViewModel.visibleFilterItems
+            if !filterItems.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(filterItems) { filterItem in
+                            HStack(spacing: 4) {
+                                Text("\(filterItem.key): \(filterItem.value)")
+                                    .font(.caption)
+
+                                Button {
+                                    libraryInfoViewModel.removeFilterCategory(
+                                        key: filterItem.key,
+                                        value: filterItem.value,
+                                        searchViewModel: viewModel
+                                    )
+                                } label: {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.caption)
+                                }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                            .foregroundColor(.accentColor)
+                        }
+                    }
+                }
+            }
+
+            NavigationLink(
+                isActive: Binding(
+                    get: {
+                        libraryInfoViewModel.headerCategorySelected != nil
+                    },
+                    set: { isActive in
+                        if !isActive {
+                            libraryInfoViewModel.headerCategorySelected = nil
+                        }
+                    }
+                )
+            ) {
+                if let categoryName = libraryInfoViewModel.headerCategorySelected {
+                    CategoryDetailView(categoryName: categoryName, preservesLibraryScope: true)
+                        .environmentObject(libraryInfoViewModel)
+                        .environmentObject(viewModel)
+                } else {
+                    EmptyView()
+                }
+            } label: {
+                EmptyView()
+            }
+            .hidden()
         }
     }
 }

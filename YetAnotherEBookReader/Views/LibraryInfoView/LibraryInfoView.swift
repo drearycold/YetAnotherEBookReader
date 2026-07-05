@@ -88,7 +88,8 @@ struct LibraryInfoView: View {
                     .navigationTitle("All Books")
                     .onAppear {
 //                        resetSearchCriteria()
-                        viewModel.filterCriteriaLibraries.removeAll()
+                        _ = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()
+                        viewModel.filterCriteriaLibraries = []
                         resetToFirstPage()
                     }
                 
@@ -109,10 +110,13 @@ struct LibraryInfoView: View {
                     bookListView()
                         .navigationTitle(Text(library.name))
                         .onAppear {
-                            resetSearchCriteria()
-                            if let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
-                                viewModel.filterCriteriaCategory = savedFilterCriteriaCategory
-                                self.savedFilterCriteriaCategory = nil
+                            let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()
+                            if !preserveFilters {
+                                resetSearchCriteria()
+                                if let savedFilterCriteriaCategory = self.savedFilterCriteriaCategory {
+                                    viewModel.restoreFilterCriteriaCategory(savedFilterCriteriaCategory)
+                                    self.savedFilterCriteriaCategory = nil
+                                }
                             }
                             viewModel.filterCriteriaLibraries.insert(library.id)
                             resetToFirstPage()
@@ -148,11 +152,7 @@ struct LibraryInfoView: View {
     }
     
     func updateFilterCategory(key: String, value: String) {
-        if viewModel.filterCriteriaCategory[key] == nil {
-            viewModel.filterCriteriaCategory[key] = .init()
-        }
-        viewModel.filterCriteriaCategory[key]?.insert(value)
-        
+        viewModel.addFilterCategory(key: key, value: value)
         resetToFirstPage()
     }
     
@@ -161,8 +161,7 @@ struct LibraryInfoView: View {
     }
     
     func resetSearchCriteria() {
-        viewModel.filterCriteriaCategory.removeAll()
-        viewModel.filterCriteriaLibraries.removeAll()
+        viewModel.clearFilterCriteria()
     }
 }
 

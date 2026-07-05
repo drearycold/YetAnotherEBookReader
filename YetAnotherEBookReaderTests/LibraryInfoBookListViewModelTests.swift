@@ -79,6 +79,137 @@ class LibraryInfoBookListViewModelTests: XCTestCase {
         XCTAssertFalse(source.contains(".padding([.leading, .trailing], 24)"))
     }
 
+    func testBrowseSearchHeaderUsesCategoryMenuAndActiveFilterChips() throws {
+        let source = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoBookListHeader.swift"
+        ))
+
+        XCTAssertTrue(source.contains("let filterItems = libraryInfoViewModel.visibleFilterItems"))
+        XCTAssertTrue(source.contains("let categoryMenuItems = libraryInfoViewModel.availableCategoryMenuItems"))
+        XCTAssertTrue(source.contains("if categoryMenuItems.isEmpty"))
+        XCTAssertTrue(source.contains(".disabled(true)"))
+        XCTAssertTrue(source.contains("ForEach(categoryMenuItems)"))
+        XCTAssertTrue(source.contains("libraryInfoViewModel.headerCategorySelected = categoryItem.name"))
+        XCTAssertTrue(source.contains("CategoryDetailView(categoryName: categoryName, preservesLibraryScope: true)"))
+        XCTAssertTrue(source.contains("ForEach(filterItems)"))
+        XCTAssertTrue(source.contains("libraryInfoViewModel.removeFilterCategory("))
+
+        XCTAssertFalse(source.contains("filterCriteriaCategory[categoryFilter.key]?.remove"))
+        XCTAssertFalse(source.contains("categoryFilter.key != libraryInfoViewModel.categoriesSelected"))
+        XCTAssertFalse(source.contains("searchStringChanged(searchString: listViewModel.searchString"))
+    }
+
+    func testHeaderCategorySelectionReturnsToExistingBookList() throws {
+        let source = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoCategoryItemsView.swift"
+        ))
+        let parentSource = try String(contentsOf: sourceFileURL(
+            "YetAnotherEBookReader/Views/LibraryInfoView/LibraryInfoView.swift"
+        ))
+
+        XCTAssertTrue(source.contains("if preservesLibraryScope"))
+        XCTAssertTrue(source.contains("Button {"))
+        XCTAssertTrue(source.contains("selectHeaderCategoryItem(categoryItem.name)"))
+        XCTAssertTrue(source.contains("viewModel.preserveFilterCriteriaOnNextBookListAppear()"))
+        XCTAssertTrue(source.contains("viewModel.headerCategorySelected = nil"))
+        XCTAssertTrue(source.contains("NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected)"))
+        XCTAssertTrue(source.contains("selectRootCategoryItem(categoryItem.name)"))
+        XCTAssertTrue(parentSource.contains("let preserveFilters = viewModel.consumePreserveFilterCriteriaOnNextBookListAppear()"))
+        XCTAssertTrue(parentSource.contains("if !preserveFilters"))
+    }
+
+    func testFilterCriteriaCategoryAPIsUpdateCriteriaAndVisibleItems() {
+        libraryInfoViewModel.filterCriteriaLibraries = ["library-id"]
+        libraryInfoViewModel.replaceFilterCategory(key: "Authors", value: "Author A")
+
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaLibraries, [])
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaCategory, ["Authors": Set(["Author A"])])
+        XCTAssertEqual(
+            libraryInfoViewModel.currentLibrarySearchResultKey.criteria.filterCriteriaCategory,
+            ["Authors": Set(["Author A"])]
+        )
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.count, 1)
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.first?.key, "Authors")
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.first?.value, "Author A")
+
+        libraryInfoViewModel.addFilterCategory(key: "Tags", value: "Fiction")
+        libraryInfoViewModel.addFilterCategory(key: "Tags", value: "Sci-Fi")
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaCategory["Tags"], Set(["Fiction", "Sci-Fi"]))
+        XCTAssertEqual(
+            libraryInfoViewModel.visibleFilterItems.map { "\($0.key):\($0.value)" },
+            ["Authors:Author A", "Tags:Fiction", "Tags:Sci-Fi"]
+        )
+
+        libraryInfoViewModel.removeFilterCategory(key: "Tags", value: "Fiction")
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaCategory["Tags"], Set(["Sci-Fi"]))
+
+        libraryInfoViewModel.removeFilterCategory(key: "Tags", value: "Sci-Fi")
+        XCTAssertNil(libraryInfoViewModel.filterCriteriaCategory["Tags"])
+    }
+
+    func testHeaderCategoryMenuItemsDoNotDependOnActiveFilters() {
+        libraryInfoViewModel.availableCategories = [
+            CategoryCacheSummary(categoryName: "Tags", itemsCount: 2, totalNumber: 3),
+            CategoryCacheSummary(categoryName: "Authors", itemsCount: 1, totalNumber: 1)
+        ]
+
+        XCTAssertTrue(libraryInfoViewModel.visibleFilterItems.isEmpty)
+        XCTAssertTrue(libraryInfoViewModel.hasHeaderCategoryMenuContent)
+        XCTAssertEqual(libraryInfoViewModel.availableCategoryMenuItems.map(\.name), ["Authors", "Tags"])
+    }
+
+    func testReplaceFilterCategoryCanPreserveLibraryScopeForHeaderCategoryFlow() {
+        libraryInfoViewModel.filterCriteriaLibraries = ["library-id"]
+
+        libraryInfoViewModel.applyCategoryItemSelection(
+            categoryName: "Tags",
+            itemName: "Fiction",
+            preservingLibraryScope: true
+        )
+
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaLibraries, ["library-id"])
+        XCTAssertEqual(libraryInfoViewModel.filterCriteriaCategory, ["Tags": Set(["Fiction"])])
+    }
+
+    func testHeaderCategoryReturnPreserveFlagIsConsumedOnce() {
+        XCTAssertFalse(libraryInfoViewModel.consumePreserveFilterCriteriaOnNextBookListAppear())
+
+        libraryInfoViewModel.preserveFilterCriteriaOnNextBookListAppear()
+
+        XCTAssertTrue(libraryInfoViewModel.consumePreserveFilterCriteriaOnNextBookListAppear())
+        XCTAssertFalse(libraryInfoViewModel.consumePreserveFilterCriteriaOnNextBookListAppear())
+    }
+
+    func testApplyCategoryItemSelectionUsesCategorySortRules() {
+        libraryInfoViewModel.sortCriteria = LibrarySearchSort(by: .Title, ascending: true)
+        libraryInfoViewModel.applyCategoryItemSelection(categoryName: "Series", itemName: "Foundation")
+        XCTAssertEqual(libraryInfoViewModel.sortCriteria.by, .SeriesIndex)
+        XCTAssertTrue(libraryInfoViewModel.sortCriteria.ascending)
+
+        libraryInfoViewModel.sortCriteria = LibrarySearchSort(by: .Title, ascending: true)
+        libraryInfoViewModel.applyCategoryItemSelection(categoryName: "Authors", itemName: "Author A")
+        XCTAssertEqual(libraryInfoViewModel.sortCriteria.by, .Publication)
+        XCTAssertFalse(libraryInfoViewModel.sortCriteria.ascending)
+
+        libraryInfoViewModel.sortCriteria = LibrarySearchSort(by: .Title, ascending: true)
+        libraryInfoViewModel.applyCategoryItemSelection(categoryName: "Tags", itemName: "Fiction")
+        XCTAssertEqual(libraryInfoViewModel.sortCriteria.by, .Modified)
+        XCTAssertFalse(libraryInfoViewModel.sortCriteria.ascending)
+    }
+
+    func testVisibleFilterItemsIncludesCurrentCategorySelection() {
+        libraryInfoViewModel.categoriesSelected = "Authors"
+        libraryInfoViewModel.categoryItemSelected = "Author A"
+        libraryInfoViewModel.replaceFilterCategory(key: "Authors", value: "Author A")
+
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.count, 1)
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.first?.key, "Authors")
+        XCTAssertEqual(libraryInfoViewModel.visibleFilterItems.first?.value, "Author A")
+
+        libraryInfoViewModel.clearFilterCriteria()
+        XCTAssertTrue(libraryInfoViewModel.visibleFilterItems.isEmpty)
+    }
+
     func testSyncDraftFromCriteria() {
         listViewModel.syncDraftFromCriteria("Hello World")
         XCTAssertEqual(listViewModel.searchString, "Hello World")

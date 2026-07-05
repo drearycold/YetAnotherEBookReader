@@ -40,10 +40,16 @@ struct LibraryInfoCategoryListView: View {
 
 struct CategoryDetailView: View {
     let categoryName: String
+    let preservesLibraryScope: Bool
     @Environment(\.appContainer) var container
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     @StateObject private var categoryViewModel = UnifiedCategoryViewModel()
+
+    init(categoryName: String, preservesLibraryScope: Bool = false) {
+        self.categoryName = categoryName
+        self.preservesLibraryScope = preservesLibraryScope
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -74,7 +80,11 @@ struct CategoryDetailView: View {
             
             Divider()
             
-            LibraryInfoCategoryItemsView(categoryName: categoryName, categoryViewModel: categoryViewModel)
+            LibraryInfoCategoryItemsView(
+                categoryName: categoryName,
+                preservesLibraryScope: preservesLibraryScope,
+                categoryViewModel: categoryViewModel
+            )
                 .environmentObject(viewModel)
                 .environmentObject(unifiedSearchViewModel)
         }

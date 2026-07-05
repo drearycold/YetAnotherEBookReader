@@ -49,6 +49,25 @@ extension LibraryInfoView {
 
     
     @MainActor class ViewModel: ObservableObject {
+        struct VisibleFilterItem: Identifiable, Equatable {
+            let key: String
+            let value: String
+
+            var id: String {
+                "\(key)\u{0}\(value)"
+            }
+        }
+
+        struct HeaderCategoryMenuItem: Identifiable, Equatable {
+            let name: String
+            let itemsCount: Int
+            let totalNumber: Int
+
+            var id: String {
+                name
+            }
+        }
+
         var calibreLibraries: [String: CalibreLibrary] = [:]
         
         //booklist group
@@ -97,8 +116,40 @@ extension LibraryInfoView {
         @Published var categoryFilterString: String = ""
         
         @Published var availableCategories: [CategoryCacheSummary] = []
+        @Published var headerCategorySelected: String? = nil
+
+        private var preservesFilterCriteriaOnNextBookListAppear = false
         
         private var categoryObserverTask: Task<Void, Never>?
+
+        var visibleFilterItems: [VisibleFilterItem] {
+            filterCriteriaCategory
+                .flatMap { key, values in
+                    values.map { VisibleFilterItem(key: key, value: $0) }
+                }
+                .sorted {
+                    if $0.key == $1.key {
+                        return $0.value < $1.value
+                    }
+                    return $0.key < $1.key
+                }
+        }
+
+        var availableCategoryMenuItems: [HeaderCategoryMenuItem] {
+            availableCategories
+                .map {
+                    HeaderCategoryMenuItem(
+                        name: $0.categoryName,
+                        itemsCount: $0.itemsCount,
+                        totalNumber: $0.totalNumber
+                    )
+                }
+                .sorted { $0.name < $1.name }
+        }
+
+        var hasHeaderCategoryMenuContent: Bool {
+            !availableCategoryMenuItems.isEmpty
+        }
         
         func fetchAvailableCategories() {
             guard let container = AppContainer.shared else { return }
@@ -180,12 +231,91 @@ extension LibraryInfoView {
             self.searchString = trimmed
             searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
         }
-        
-        func updateFilterCategory(key: String, value: String, searchViewModel: UnifiedSearchViewModel) {
-            if filterCriteriaCategory[key] == nil {
-                filterCriteriaCategory[key] = .init()
+
+        func restoreFilterCriteriaCategory(_ filters: [String: Set<String>]) {
+            filterCriteriaCategory = filters
+        }
+
+        func replaceFilterCategory(key: String, value: String, preservingLibraryScope: Bool = false) {
+            filterCriteriaCategory = [key: Set([value])]
+            if !preservingLibraryScope {
+                filterCriteriaLibraries = []
             }
-            filterCriteriaCategory[key]?.insert(value)
+        }
+
+        func applyCategoryItemSelection(
+            categoryName: String,
+            itemName: String,
+            preservingLibraryScope: Bool = false
+        ) {
+            replaceFilterCategory(
+                key: categoryName,
+                value: itemName,
+                preservingLibraryScope: preservingLibraryScope
+            )
+
+            if categoryName == "Series" {
+                if sortCriteria.by != .SeriesIndex {
+                    lastSortCriteria.append(sortCriteria)
+                }
+
+                sortCriteria.by = .SeriesIndex
+                sortCriteria.ascending = true
+            } else if categoryName == "Publisher" || categoryName == "Authors" {
+                if sortCriteria.by != .Publication {
+                    lastSortCriteria.append(sortCriteria)
+                }
+
+                sortCriteria.by = .Publication
+                sortCriteria.ascending = false
+            } else {
+                sortCriteria.by = .Modified
+                sortCriteria.ascending = false
+            }
+        }
+
+        func preserveFilterCriteriaOnNextBookListAppear() {
+            preservesFilterCriteriaOnNextBookListAppear = true
+        }
+
+        func consumePreserveFilterCriteriaOnNextBookListAppear() -> Bool {
+            let shouldPreserve = preservesFilterCriteriaOnNextBookListAppear
+            preservesFilterCriteriaOnNextBookListAppear = false
+            return shouldPreserve
+        }
+
+        func addFilterCategory(key: String, value: String) {
+            var filters = filterCriteriaCategory
+            var values = filters[key] ?? Set<String>()
+            values.insert(value)
+            filters[key] = values
+            filterCriteriaCategory = filters
+        }
+
+        func removeFilterCategory(key: String, value: String) {
+            var filters = filterCriteriaCategory
+            guard var values = filters[key] else { return }
+            values.remove(value)
+            if values.isEmpty {
+                filters.removeValue(forKey: key)
+            } else {
+                filters[key] = values
+            }
+            filterCriteriaCategory = filters
+        }
+
+        func clearFilterCriteria() {
+            filterCriteriaCategory = [:]
+            filterCriteriaLibraries = []
+        }
+
+        func updateFilterCategory(key: String, value: String, searchViewModel: UnifiedSearchViewModel) {
+            addFilterCategory(key: key, value: value)
+            searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
+        }
+
+        func removeFilterCategory(key: String, value: String, searchViewModel: UnifiedSearchViewModel) {
+            removeFilterCategory(key: key, value: value)
             searchViewModel.startSearch(key: self.currentLibrarySearchResultKey)
         }
         

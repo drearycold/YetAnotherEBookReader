@@ -14,7 +14,18 @@ struct LibraryInfoCategoryItemsView: View {
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     
     let categoryName: String
+    let preservesLibraryScope: Bool
     @ObservedObject var categoryViewModel: UnifiedCategoryViewModel
+
+    init(
+        categoryName: String,
+        preservesLibraryScope: Bool = false,
+        categoryViewModel: UnifiedCategoryViewModel
+    ) {
+        self.categoryName = categoryName
+        self.preservesLibraryScope = preservesLibraryScope
+        self.categoryViewModel = categoryViewModel
+    }
 
     var body: some View {
         VStack {
@@ -29,44 +40,7 @@ struct LibraryInfoCategoryItemsView: View {
                 } else {
                     List {
                         ForEach(result.items) { categoryItem in
-                            NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
-                                bookListView()
-                                    .onAppear {
-                                        if viewModel.filterCriteriaCategory[categoryName]?.contains(categoryItem.name) == true {
-                                            return
-                                        }
-                                        
-                                        resetSearchCriteria()
-                                        
-                                        viewModel.filterCriteriaCategory[categoryName] = .init([categoryItem.name])
-                                        
-                                        if viewModel.categoriesSelected == "Series" {
-                                            if viewModel.sortCriteria.by != .SeriesIndex {
-                                                viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                            }
-                                            
-                                            viewModel.sortCriteria.by = .SeriesIndex
-                                            viewModel.sortCriteria.ascending = true
-                                        } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
-                                            if viewModel.sortCriteria.by != .Publication {
-                                                viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                            }
-                                            
-                                            viewModel.sortCriteria.by = .Publication
-                                            viewModel.sortCriteria.ascending = false
-                                        }
-                                        else {
-                                            viewModel.sortCriteria.by = .Modified
-                                            viewModel.sortCriteria.ascending = false
-                                        }
-                                        
-                                        resetToFirstPage()
-                                    }
-                                    .navigationTitle("\(categoryName): \(categoryItem.name)")
-                            } label: {
-                                Text(categoryItem.name)
-                            }
-                            .isDetailLink(false)
+                            categoryItemRow(categoryItem)
                         }
                     }
                 }
@@ -82,6 +56,28 @@ struct LibraryInfoCategoryItemsView: View {
             } label: {
                 Image(systemName: "arrow.triangle.2.circlepath")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func categoryItemRow(_ categoryItem: UnifiedCategoryItem) -> some View {
+        if preservesLibraryScope {
+            Button {
+                selectHeaderCategoryItem(categoryItem.name)
+            } label: {
+                Text(categoryItem.name)
+            }
+        } else {
+            NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
+                bookListView()
+                    .onAppear {
+                        selectRootCategoryItem(categoryItem.name)
+                    }
+                    .navigationTitle("\(categoryName): \(categoryItem.name)")
+            } label: {
+                Text(categoryItem.name)
+            }
+            .isDetailLink(false)
         }
     }
     
@@ -100,11 +96,34 @@ struct LibraryInfoCategoryItemsView: View {
     }
     
     func resetSearchCriteria() {
-        viewModel.filterCriteriaCategory.removeAll()
-        viewModel.filterCriteriaLibraries.removeAll()
+        viewModel.clearFilterCriteria()
     }
     
     func resetToFirstPage() {
         unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
+    }
+
+    private func selectHeaderCategoryItem(_ itemName: String) {
+        viewModel.applyCategoryItemSelection(
+            categoryName: categoryName,
+            itemName: itemName,
+            preservingLibraryScope: true
+        )
+        resetToFirstPage()
+        viewModel.preserveFilterCriteriaOnNextBookListAppear()
+        viewModel.headerCategorySelected = nil
+    }
+
+    private func selectRootCategoryItem(_ itemName: String) {
+        if viewModel.filterCriteriaCategory[categoryName]?.contains(itemName) == true {
+            return
+        }
+
+        viewModel.applyCategoryItemSelection(
+            categoryName: categoryName,
+            itemName: itemName,
+            preservingLibraryScope: false
+        )
+        resetToFirstPage()
     }
 }
