@@ -20,7 +20,7 @@ struct MainView: View {
     @Environment(\.horizontalSizeClass) var originalSizeClass
 
     @ObservedObject var viewModel: MainViewModel
-    
+
     init(container: AppContainer, viewModel: MainViewModel) {
         self.viewModel = viewModel
     }
@@ -33,6 +33,7 @@ struct MainView: View {
                 TabView(selection: $viewModel.activeTab) {
                     RecentShelfView(viewModel: viewModel.recentShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
+                        .yabrAppChrome(.wood, isActive: viewModel.activeTab == 0)
                         .tabItem {
                             Image(systemName: "doc.text.fill")
                             Text("Recent")
@@ -41,28 +42,31 @@ struct MainView: View {
                         .onAppear {
                             container.publishCalibreUpdate(.shelf)
                         }
-                        
+
                     SectionShelfView(viewModel: viewModel.sectionShelfViewModel)
                         .environment(\.horizontalSizeClass, originalSizeClass)
+                        .yabrAppChrome(.wood, isActive: viewModel.activeTab == 1)
                         .tabItem {
                             Image(systemName: "books.vertical.fill")
                             Text("Discover")
                         }
                         .tag(1)
-                    
+
                     LibraryInfoView()
                         .environment(\.horizontalSizeClass, originalSizeClass)
+                        .yabrAppChrome(.system, isActive: viewModel.activeTab == 2)
                         .tabItem {
                             Image(systemName: "building.columns.fill")
                             Text("Browse")
                         }
                         .tag(2)
-                    
+
                     NavigationView {
                         SettingsView(viewModel: viewModel.settingsViewModel)
                     }
                     .navigationViewStyle(StackNavigationViewStyle())
                     .environment(\.horizontalSizeClass, originalSizeClass)
+                    .yabrAppChrome(.system, isActive: viewModel.activeTab == 3)
                     .tabItem {
                         Image(systemName: "gearshape.fill")
                         Text("Settings")
@@ -73,37 +77,37 @@ struct MainView: View {
             } else {
                 Color.clear
             }
-            
+
             if viewModel.showWelcome {
                 VStack {
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Welcome!")
-                        
+
                         Text("""
                         Get start from
                         \"Settings\" -> \"Server & Library\"
                         to link with Calibre Server.
                         """)
-                        
+
                         Text("""
                         Then go to "Browse"
                         to add book to Shelf by toggling \(Image(systemName: "star"))
                         or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
                         """)
-                        
+
                         Text("Start reading by touching book cover.")
-                        
+
                         Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
-                        
+
                         Text("Enjoy your book!")
-                        
+
                         Text("(This notice will disappear after first book has been added to shelf)")
                     }
                     .multilineTextAlignment(.leading)
                     .padding()
                     .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
                     .frame(maxWidth: 400)
-                    
+
                     Rectangle().frame(height: 50).opacity(0.0)
                 }
             }
@@ -158,23 +162,23 @@ struct MainView: View {
             VStack(spacing: 4) {
                 VStack(spacing: 16) {
                     Text("D.S.Reader").font(.title)
-                    
+
                     Image("logo_1024")
                         .resizable().frame(width: 128, height: 128, alignment: .center)
-                    
+
                     Text("")
                 }
                 Text("""
                     Welcome to D.S.Reader, an e-Book Reader for EPUB, PDF and CBZ formats, with custom fonts and custom dictionary support.
-                    
+
                     When paired with calibre Content Server, you can easily browse your libraries, download books for reading.
                     It will track and sync your reading progress and highlights across all devices paired with the same server.
-                    
+
                     Accept our "Private Policy" and "Terms & Conditions" to start.
-                    
+
                     (Dismissing this notice means you will accept.")
                     """)
-                
+
                 if let yabrPrivacyHtml = YabrAppInfo.shared.privacyHtml {
                     Button(action: { viewModel.privacyWebViewPresenting = true }) {
                         Text("Private Policy")
@@ -189,14 +193,14 @@ struct MainView: View {
                         WebViewUI(content: yabrTermsHtml, baseURL: YabrAppInfo.shared.baseUrl)
                     }
                 }
-                
+
                 HStack {
                     Button(action: {
                         viewModel.declineTerms()
                     }) {
                         Text("Decline and Exit").foregroundColor(.red)
                     }.padding()
-                    
+
                     Button(action: {
                         viewModel.acceptTerms()
                     }) {
@@ -274,7 +278,7 @@ struct MainView: View {
             }
         }
     }
-    
+
     private func requestIDFA() {
         ATTrackingManager.requestTrackingAuthorization(completionHandler: { status in
             // Tracking authorization completed. Start loading ads here.
@@ -287,7 +291,7 @@ struct MainView: View {
         let parameters = UMPRequestParameters()
         // false means users are not under age.
         parameters.tagForUnderAgeOfConsent = false
-        
+
         UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(
             with: parameters,
             completionHandler: { error in
@@ -304,7 +308,7 @@ struct MainView: View {
             })
         #endif
     }
-    
+
     #if canImport(GoogleMobileAds)
     private func loadForm() {
         UMPConsentForm.load(
@@ -330,7 +334,7 @@ struct MainView: View {
 @available(macCatalyst 14.0, *)
 struct MainView_Previews: PreviewProvider {
     static private var container = AppContainer()
-    
+
     static var previews: some View {
         MainView(container: container, viewModel: MainViewModel(container: container, sessionManager: container.sessionManager))
             .environment(\.appContainer, container)

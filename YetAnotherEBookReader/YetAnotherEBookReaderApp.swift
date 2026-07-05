@@ -18,14 +18,14 @@ struct YetAnotherEBookReaderApp: App {
     private let container: AppContainer
     @StateObject private var mainViewModel: MainViewModel
     @Environment(\.scenePhase) private var scenePhase
-    
+
     @State private var launchState: LaunchState = .initializing(status: "Initializing...")
     @State private var bootstrapInFlight = false
     @State private var probeTimerTask: Task<Void, Never>?
 
     private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
     private static let uiTestingMockLibraryArgument = "--ui-testing-mock-library"
-    
+
     init() {
         let isUITestingMockLibrary = ProcessInfo.processInfo.arguments.contains(Self.uiTestingMockLibraryArgument)
         let containerInstance = isUITestingMockLibrary
@@ -40,45 +40,14 @@ struct YetAnotherEBookReaderApp: App {
             _launchState = State(initialValue: .ready)
             UserDefaults.standard.setValue(true, forKey: Constants.KEY_DEFAULTS_INITIAL_TERMS_ACCEPTED)
         }
-        
+
         setupAppearance()
     }
-    
+
     private func setupAppearance() {
-        let woodColor = UIColor(ShelfLegacyMetrics.shelfBackgroundColor)
-        
-        let navBarAppearance = UINavigationBarAppearance()
-        navBarAppearance.configureWithOpaqueBackground()
-        navBarAppearance.backgroundColor = woodColor
-        navBarAppearance.shadowColor = .clear
-        navBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.black]
-        navBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.black]
-        
-        UINavigationBar.appearance().standardAppearance = navBarAppearance
-        UINavigationBar.appearance().scrollEdgeAppearance = navBarAppearance
-        UINavigationBar.appearance().compactAppearance = navBarAppearance
-        
-        let tabBarAppearance = UITabBarAppearance()
-        tabBarAppearance.configureWithOpaqueBackground()
-        tabBarAppearance.backgroundColor = woodColor
-        tabBarAppearance.shadowColor = .clear
-        
-        let normalTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.black.withAlphaComponent(0.6)]
-        let selectedTextAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.systemBlue]
-        let normalIconColor = UIColor.black.withAlphaComponent(0.5)
-        let selectedIconColor = UIColor.systemBlue
-        
-        for layoutAppearance in [tabBarAppearance.stackedLayoutAppearance, tabBarAppearance.inlineLayoutAppearance, tabBarAppearance.compactInlineLayoutAppearance] {
-            layoutAppearance.normal.iconColor = normalIconColor
-            layoutAppearance.normal.titleTextAttributes = normalTextAttributes
-            layoutAppearance.selected.iconColor = selectedIconColor
-            layoutAppearance.selected.titleTextAttributes = selectedTextAttributes
-        }
-        
-        UITabBar.appearance().standardAppearance = tabBarAppearance
-        UITabBar.appearance().scrollEdgeAppearance = tabBarAppearance
+        YabrAppChromeStyle.wood.applyAsDefaultAppearance()
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ZStack {
@@ -93,7 +62,7 @@ struct YetAnotherEBookReaderApp: App {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ShelfLegacyMetrics.shelfBackgroundColor)
-                    
+
                 case .failed(let message):
                     VStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -107,7 +76,7 @@ struct YetAnotherEBookReaderApp: App {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ShelfLegacyMetrics.shelfBackgroundColor)
-                    
+
                 case .ready:
                     MainView(container: container, viewModel: mainViewModel)
                         .environment(\.appContainer, container)
@@ -125,7 +94,7 @@ struct YetAnotherEBookReaderApp: App {
                 } else {
                     bootstrapInFlight = true
                     launchState = .initializing(status: "Initializing...")
-                    
+
                     DispatchQueue.global(qos: .userInitiated).async {
                         do {
                             try container.tryInitializeDatabase() { status in
@@ -165,7 +134,7 @@ struct YetAnotherEBookReaderApp: App {
             }
         }
     }
-    
+
     @MainActor
     func enableProbeTimer() {
         probeTimerTask?.cancel()
@@ -182,7 +151,7 @@ struct YetAnotherEBookReaderApp: App {
             }
         }
     }
-    
+
     @MainActor
     func disableProbeTimer() {
         probeTimerTask?.cancel()
