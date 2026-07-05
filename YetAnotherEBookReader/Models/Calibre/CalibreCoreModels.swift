@@ -152,6 +152,8 @@ struct CalibreLibrary: Hashable, Identifiable {
 }
 
 struct CalibreBook: Hashable {
+    static let resetMetadataTitle = "__RESET__"
+
     static func identity(serverUUID: String, libraryName: String, id: String) -> String {
         [id, "^", libraryName, "@", serverUUID].joined()
     }
@@ -287,6 +289,9 @@ struct CalibreBook: Hashable {
     }
     var lastSynced  = Date(timeIntervalSince1970: .zero)
     var lastUpdated = Date(timeIntervalSince1970: .zero)
+    var needsMetadataRefresh: Bool {
+        lastSynced < lastModified || title == Self.resetMetadataTitle
+    }
 
     func readDateGRByLocale(
         pluginGoodreadsSync: CalibreGoodreadsSyncPrefs.PluginPrefs

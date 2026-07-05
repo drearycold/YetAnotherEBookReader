@@ -271,9 +271,10 @@ final class RealmBookRepositoryTests: XCTestCase, LibraryResolver {
         repository.resetBooks(serverUUID: server.uuid.uuidString, libraryName: library.name)
         
         let fetched = repository.getBook(id: book.inShelfId)
-        XCTAssertEqual(fetched?.title, "__RESET__")
-        XCTAssertEqual(fetched?.lastModified.timeIntervalSince1970, 0)
-        XCTAssertEqual(fetched?.lastSynced.timeIntervalSince1970, 0)
+        XCTAssertEqual(fetched?.title, "Original Title")
+        XCTAssertEqual(fetched?.lastModified, book.lastModified)
+        XCTAssertEqual(fetched?.lastSynced, .distantPast)
+        XCTAssertEqual(fetched?.needsMetadataRefresh, true)
     }
     
     func testObserveBookPublishesInitialRealmNotificationAndUpdates() async throws {

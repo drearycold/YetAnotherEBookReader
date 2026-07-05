@@ -137,6 +137,7 @@ class UnifiedSearchServiceTests: XCTestCase {
         book.timestamp = Date()
         book.pubDate = Date()
         book.lastModified = Date()
+        book.lastSynced = book.lastModified
         return book
     }
 
@@ -159,6 +160,23 @@ class UnifiedSearchServiceTests: XCTestCase {
             lock.lock()
             defer { lock.unlock() }
             return requests
+        }
+    }
+
+    final class MetadataRequestRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requestedIds = [[Int32]]()
+
+        func append(ids: [Int32]) {
+            lock.lock()
+            requestedIds.append(ids)
+            lock.unlock()
+        }
+
+        func snapshot() -> [[Int32]] {
+            lock.lock()
+            defer { lock.unlock() }
+            return requestedIds
         }
     }
 
@@ -622,6 +640,201 @@ class UnifiedSearchServiceTests: XCTestCase {
         XCTAssertEqual(source.bookIds, rebuiltIds)
         XCTAssertEqual(source.books.first?.id, 50)
         XCTAssertEqual(source.books.first?.title, "AAA Updated Title")
+    }
+
+    func testLibrarySearchRefreshesResetSentinelBooksBeforeReturningCachedResult() async throws {
+        let criteria = SearchCriteria(
+            searchString: "reset-sentinel-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        var resetBook = CalibreBook(id: 301, library: mockLibrary1)
+        resetBook.title = CalibreBook.resetMetadataTitle
+        resetBook.lastModified = Date(timeIntervalSince1970: 0)
+        resetBook.lastSynced = Date(timeIntervalSince1970: 0)
+
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 1,
+                bookIds: [301],
+                books: [resetBook]
+            )
+        )
+
+        let metadataRequests = MetadataRequestRecorder()
+        let metadataJSON = Self.makeMetadataJSON(bookIds: [301], titles: [301: "Restored Server Title"])
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/books/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let ids = components?.queryItems?.first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                metadataRequests.append(ids: ids)
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 100,
+            force: false
+        )
+
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+
+        XCTAssertEqual(metadataRequests.snapshot(), [[301]])
+        XCTAssertEqual(source.books.map(\.title), ["Restored Server Title"])
+        XCTAssertFalse(source.books.contains { $0.title == CalibreBook.resetMetadataTitle })
+    }
+
+    func testLibrarySearchRefreshesExistingStaleBooksDuringSearchFetch() async throws {
+        let criteria = SearchCriteria(
+            searchString: "stale-existing-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        var staleBook = createMockBook(id: 401, title: "Old Cached Title", library: mockLibrary1)
+        staleBook.lastModified = Date(timeIntervalSince1970: 200)
+        staleBook.lastSynced = Date(timeIntervalSince1970: 100)
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 1,
+                bookIds: [401],
+                books: [staleBook]
+            )
+        )
+
+        let metadataRequests = MetadataRequestRecorder()
+        let metadataJSON = Self.makeMetadataJSON(bookIds: [401], titles: [401: "Fresh Server Title"])
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                let json = Self.makeSearchResultJSON(total: 1, offset: offset, num: num, bookIds: [401], query: "stale-existing-refresh")
+                return (response, json.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let ids = components?.queryItems?.first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                metadataRequests.append(ids: ids)
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 100,
+            force: true
+        )
+
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+
+        XCTAssertEqual(metadataRequests.snapshot(), [[401]])
+        XCTAssertEqual(source.books.map(\.title), ["Fresh Server Title"])
+    }
+
+    func testLibrarySearchDoesNotRefreshFreshExistingBooksDuringSearchFetch() async throws {
+        let criteria = SearchCriteria(
+            searchString: "fresh-existing-no-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let freshBook = createMockBook(id: 501, title: "Fresh Cached Title", library: mockLibrary1)
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 1,
+                bookIds: [501],
+                books: [freshBook]
+            )
+        )
+
+        let metadataRequests = MetadataRequestRecorder()
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                let json = Self.makeSearchResultJSON(total: 1, offset: offset, num: num, bookIds: [501], query: "fresh-existing-no-refresh")
+                return (response, json.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let ids = components?.queryItems?.first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                metadataRequests.append(ids: ids)
+                return (response, "{}".data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 100,
+            force: true
+        )
+
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+
+        XCTAssertEqual(metadataRequests.snapshot(), [])
+        XCTAssertEqual(source.books.map(\.title), ["Fresh Cached Title"])
     }
 
     func testLibrarySearchDeduplicatesDuplicateServerIdsDuringRebuild() async throws {
@@ -1254,7 +1467,21 @@ class MockSearchCacheRepository: SearchCacheRepository {
         lock.lock()
         defer { lock.unlock() }
         let key = makeKey(libraryId: libraryId, search: search, sortBy: sortBy, sortAsc: sortAsc, filters: filters)
-        return _cachedLibraryResults[key]
+        guard var cached = _cachedLibraryResults[key] else { return nil }
+        let storedBooks = _booksByLibrary[libraryId] ?? [:]
+        cached.sources = cached.sources.mapValues { source in
+            let fallbackBooks = source.books.reduce(into: [Int32: CalibreBook]()) { partialResult, book in
+                partialResult[book.id] = book
+            }
+            let books = source.bookIds.compactMap { storedBooks[$0] ?? fallbackBooks[$0] }
+            return LibrarySourceSearchResult(
+                generation: source.generation,
+                totalNumber: source.totalNumber,
+                bookIds: source.bookIds,
+                books: books
+            )
+        }
+        return cached
     }
     
     func saveLibrarySourceResult(
@@ -1278,6 +1505,14 @@ class MockSearchCacheRepository: SearchCacheRepository {
         )
         cached.sources[sourceUrl] = result
         _cachedLibraryResults[key] = cached
+
+        if !result.books.isEmpty {
+            var books = _booksByLibrary[libraryId] ?? [:]
+            for book in result.books {
+                books[book.id] = book
+            }
+            _booksByLibrary[libraryId] = books
+        }
         
         lock.unlock()
     }

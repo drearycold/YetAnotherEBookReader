@@ -46,7 +46,8 @@ actor LibrarySearchService {
         let targetSource = getTargetSource(for: library)
         let sourceObj = cacheResult?.sources[targetSource]
 
-        let shouldRebuildCache = force || sourceObj == nil || sourceObj!.generation < library.lastModified
+        let isStaleGeneration = sourceObj.map { $0.generation < library.lastModified } ?? false
+        let shouldRebuildCache = force || sourceObj == nil || isStaleGeneration
         let needsFetch: Bool
         if shouldRebuildCache {
             needsFetch = true
@@ -56,7 +57,27 @@ actor LibrarySearchService {
             needsFetch = false
         }
 
-        if !needsFetch, let cached = cacheResult {
+        if !needsFetch, let cached = cacheResult, let sourceObj {
+            let booksById = sourceObj.books.reduce(into: [Int32: CalibreBook]()) { partialResult, book in
+                partialResult[book.id] = book
+            }
+            let refreshIDs = metadataRefreshIDs(bookIds: sourceObj.bookIds, booksById: booksById)
+            guard !refreshIDs.isEmpty else {
+                return cached
+            }
+
+            _ = try await refreshMetadata(library: library, bookIds: refreshIDs)
+
+            if let updatedCachedResult = try repository.fetchLibraryCachedResult(
+                libraryId: library.id,
+                search: criteria.searchString,
+                sortBy: criteria.sortCriteria.by,
+                sortAsc: criteria.sortCriteria.ascending,
+                filters: criteria.filterCriteriaCategory
+            ) {
+                return updatedCachedResult
+            }
+
             return cached
         }
 
@@ -102,35 +123,18 @@ actor LibrarySearchService {
 
         var booksById = cachedBooksById
         let existingBooks = try repository.fetchBooks(library: library, bookIds: currentBookIds)
-        booksById.merge(existingBooks) { current, _ in current }
+        booksById.merge(existingBooks) { _, new in new }
 
-        for bookId in currentBookIds where booksById[bookId] == nil {
-            toFetchIDs.append(bookId)
-        }
+        toFetchIDs = isStaleGeneration
+            ? currentBookIds
+            : metadataRefreshIDs(bookIds: currentBookIds, booksById: booksById)
 
         try Task.checkCancellation()
 
         if !toFetchIDs.isEmpty {
-            let metadataTask = service.buildBooksMetadataTask(
-                library: library,
-                books: toFetchIDs.map { CalibreBook(id: $0, library: library) },
-                getAnnotations: false
-            )
-            if let metadataTask = metadataTask {
-                let completedTask = await service.getBooksMetadata(task: metadataTask)
-
-                try Task.checkCancellation()
-
-                if let entries = completedTask.booksMetadataEntry {
-                    try repository.writeMetadataEntries(
-                        library: library,
-                        entries: entries,
-                        json: completedTask.booksMetadataJSON
-                    )
-
-                    let fetchedBooks = try repository.fetchBooks(library: library, bookIds: toFetchIDs)
-                    booksById.merge(fetchedBooks) { current, _ in current }
-                }
+            let fetchedBooks = try await refreshMetadata(library: library, bookIds: toFetchIDs)
+            for (bookId, book) in fetchedBooks {
+                booksById[bookId] = book
             }
         }
 
@@ -223,6 +227,40 @@ actor LibrarySearchService {
 
         let existingIds = Set(source.bookIds)
         return searchResult.book_ids.contains { existingIds.contains($0) }
+    }
+
+    private func metadataRefreshIDs(bookIds: [Int32], booksById: [Int32: CalibreBook]) -> [Int32] {
+        bookIds.filter { bookId in
+            guard let book = booksById[bookId] else { return true }
+            return book.needsMetadataRefresh
+        }
+    }
+
+    private func refreshMetadata(
+        library: CalibreLibrary,
+        bookIds: [Int32]
+    ) async throws -> [Int32: CalibreBook] {
+        guard !bookIds.isEmpty else { return [:] }
+
+        let metadataTask = service.buildBooksMetadataTask(
+            library: library,
+            books: bookIds.map { CalibreBook(id: $0, library: library) },
+            getAnnotations: false
+        )
+        guard let metadataTask else { return [:] }
+
+        let completedTask = await service.getBooksMetadata(task: metadataTask)
+
+        try Task.checkCancellation()
+
+        guard let entries = completedTask.booksMetadataEntry else { return [:] }
+        try repository.writeMetadataEntries(
+            library: library,
+            entries: entries,
+            json: completedTask.booksMetadataJSON
+        )
+
+        return try repository.fetchBooks(library: library, bookIds: bookIds)
     }
 
     private func performLocalSearch(task: CalibreLibrarySearchTask) throws -> CalibreLibrarySearchTask {
