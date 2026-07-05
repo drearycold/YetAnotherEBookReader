@@ -8,13 +8,14 @@ import OSLog
 
 @MainActor
 class LibraryInfoBookListViewModel: ObservableObject {
-    @Published var selectedBookIds = Set<String>()
     @Published var downloadBookList = [CalibreBook]()
     @Published private(set) var activeDownloads: [URL: BookFormatDownload] = [:]
     
     @Published var searchString = ""
     
     @Published var batchDownloadSheetPresenting = false
+    @Published var isBatchSelectionMode = false
+    @Published var selectedBatchDownloadBookIds = Set<String>()
     @Published var booksListInfoPresenting = false
     @Published var searchHistoryPresenting = false
     private var activeDownloadsTask: Task<Void, Never>?
@@ -57,6 +58,50 @@ class LibraryInfoBookListViewModel: ObservableObject {
         downloadBookList.removeAll(keepingCapacity: true)
         downloadBookList = books
         batchDownloadSheetPresenting = true
+    }
+
+    func enterBatchSelectionMode() {
+        selectedBatchDownloadBookIds.removeAll(keepingCapacity: true)
+        isBatchSelectionMode = true
+    }
+
+    func cancelBatchSelectionMode() {
+        selectedBatchDownloadBookIds.removeAll(keepingCapacity: true)
+        isBatchSelectionMode = false
+    }
+
+    func toggleBatchDownloadSelection(book: CalibreBook) {
+        let bookId = book.inShelfId
+        if selectedBatchDownloadBookIds.contains(bookId) {
+            selectedBatchDownloadBookIds.remove(bookId)
+        } else {
+            selectedBatchDownloadBookIds.insert(bookId)
+        }
+    }
+
+    func selectAllBatchDownloadBooks(books: [CalibreBook]) {
+        selectedBatchDownloadBookIds = Set(books.map(\.inShelfId))
+    }
+
+    func clearBatchDownloadSelection() {
+        selectedBatchDownloadBookIds.removeAll(keepingCapacity: true)
+    }
+
+    func pruneBatchDownloadSelection(books: [CalibreBook]) {
+        selectedBatchDownloadBookIds.formIntersection(Set(books.map(\.inShelfId)))
+    }
+
+    func selectedBatchDownloadBooks(from books: [CalibreBook]) -> [CalibreBook] {
+        books.filter { selectedBatchDownloadBookIds.contains($0.inShelfId) }
+    }
+
+    func prepareSelectedBatchDownload(books: [CalibreBook]) {
+        let selectedBooks = selectedBatchDownloadBooks(from: books)
+        guard !selectedBooks.isEmpty else { return }
+
+        prepareBatchDownload(books: selectedBooks)
+        selectedBatchDownloadBookIds.removeAll(keepingCapacity: true)
+        isBatchSelectionMode = false
     }
     
     func buildSections(

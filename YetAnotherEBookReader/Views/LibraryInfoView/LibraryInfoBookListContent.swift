@@ -15,12 +15,14 @@ struct LibraryInfoBookListContent: View {
     
     var body: some View {
         ScrollViewReader { proxy in
-            List(selection: $listViewModel.selectedBookIds) {
+            let books = viewModel.unifiedSearchResult?.books ?? []
+            let bookIds = books.map(\.inShelfId)
+
+            List {
                 #if DEBUG
                 debugView()
                 #endif
                 
-                let books = viewModel.unifiedSearchResult?.books ?? []
                 if books.isEmpty {
                     Text(libraryInfoViewModel.getLibraryLoadingCount(container: container, searchResult: viewModel.unifiedSearchResult, libraryStatuses: viewModel.libraryStatuses) > 0 ? "Loading books..." : "Found no books.")
                 } else {
@@ -48,15 +50,19 @@ struct LibraryInfoBookListContent: View {
             .onAppear {
                 print("LIBRARYINFOVIEW books=\(viewModel.unifiedSearchResult?.books.count ?? 0)")
             }
+            .onChange(of: bookIds) { _ in
+                listViewModel.pruneBatchDownloadSelection(books: books)
+            }
             .disabled(viewModel.isSearchLoading)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
-                    LibraryInfoBookListDownloadButton(
-                        listViewModel: listViewModel,
-                        viewModel: viewModel,
-                        geometry: geometry
-                    )
-                    .disabled(viewModel.isSearchLoading)
+                    if !listViewModel.isBatchSelectionMode {
+                        LibraryInfoBookListDownloadButton(
+                            listViewModel: listViewModel,
+                            viewModel: viewModel
+                        )
+                        .disabled(viewModel.isSearchLoading || books.isEmpty)
+                    }
                     
                     LibraryInfoBookListSortMenu(
                         libraryInfoViewModel: libraryInfoViewModel,
@@ -65,18 +71,79 @@ struct LibraryInfoBookListContent: View {
                     .disabled(viewModel.isSearchLoading)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if listViewModel.isBatchSelectionMode {
+                    batchSelectionBar(books: books)
+                }
+            }
+            .popover(isPresented: $listViewModel.batchDownloadSheetPresenting,
+                     attachmentAnchor: .point(.bottom),
+                     arrowEdge: .bottom
+            ) {
+                LibraryInfoBatchDownloadSheet(
+                    presenting: $listViewModel.batchDownloadSheetPresenting,
+                    downloadBookList: $listViewModel.downloadBookList
+                )
+                .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func batchSelectionBar(books: [CalibreBook]) -> some View {
+        HStack {
+            Button("Select All") {
+                listViewModel.selectAllBatchDownloadBooks(books: books)
+            }
+            .font(.headline)
+
+            Spacer()
+
+            Button {
+                listViewModel.prepareSelectedBatchDownload(books: books)
+            } label: {
+                HStack {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("Download (\(listViewModel.selectedBatchDownloadBookIds.count))")
+                }
+            }
+            .font(.headline)
+            .disabled(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+
+            Spacer()
+
+            Button("Clear") {
+                listViewModel.clearBatchDownloadSelection()
+            }
+            .font(.headline)
+            .disabled(listViewModel.selectedBatchDownloadBookIds.isEmpty)
+
+            Spacer()
+
+            Button("Cancel") {
+                listViewModel.cancelBatchSelectionMode()
+            }
+            .font(.headline)
+        }
+        .padding()
+        .background(
+            Color(.secondarySystemGroupedBackground)
+                .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: -4)
+        )
     }
     
     @ViewBuilder
     private func listEntryView(book: CalibreBook, index: Int) -> some View {
         Group {
-            if container.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
-                NavigationLink (
-                    destination: BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY),
-                    tag: book.inShelfId,
-                    selection: selectedBookIdBinding
-                ) {
+            if listViewModel.isBatchSelectionMode {
+                batchSelectionEntryView(book: book, index: index)
+            } else if container.bookManager.bookExists(forPrimaryKey: book.inShelfId) {
+                NavigationLink {
+                    BookDetailView(bookId: book.inShelfId, viewMode: .LIBRARY)
+                        .onAppear {
+                            container.bookManager.selectedBookId = book.inShelfId
+                        }
+                } label: {
                     LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
                         onRowAppear(index: index)
                     }
@@ -107,6 +174,26 @@ struct LibraryInfoBookListContent: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func batchSelectionEntryView(book: CalibreBook, index: Int) -> some View {
+        Button {
+            listViewModel.toggleBatchDownloadSelection(book: book)
+        } label: {
+            HStack(spacing: 8) {
+                let isSelected = listViewModel.selectedBatchDownloadBookIds.contains(book.inShelfId)
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.title3)
+                    .foregroundColor(isSelected ? .accentColor : .secondary)
+                    .frame(width: 28)
+
+                LibraryInfoBookRow(book: book, index: index, activeDownload: listViewModel.activeDownload(for: book)) {
+                    onRowAppear(index: index)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
     
     private func onRowAppear(index: Int) {
         guard let result = viewModel.unifiedSearchResult else { return }
@@ -114,13 +201,6 @@ struct LibraryInfoBookListContent: View {
         viewModel.expandSearchUnifiedBookLimit()
     }
 
-    private var selectedBookIdBinding: Binding<String?> {
-        Binding(
-            get: { container.bookManager.selectedBookId },
-            set: { container.bookManager.selectedBookId = $0 }
-        )
-    }
-    
     @ViewBuilder
     private func debugView() -> some View {
         Group {

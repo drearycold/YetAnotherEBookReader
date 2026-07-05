@@ -14,59 +14,37 @@ struct LibraryInfoCategoryItemsView: View {
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     
     let categoryName: String
+    let preservesLibraryScope: Bool
     @ObservedObject var categoryViewModel: UnifiedCategoryViewModel
+    @State private var draftSelectedItemNames = Set<String>()
+    @State private var didInitializeDraftSelection = false
+
+    init(
+        categoryName: String,
+        preservesLibraryScope: Bool = false,
+        categoryViewModel: UnifiedCategoryViewModel
+    ) {
+        self.categoryName = categoryName
+        self.preservesLibraryScope = preservesLibraryScope
+        self.categoryViewModel = categoryViewModel
+    }
 
     var body: some View {
         VStack {
-
-            if let result = categoryViewModel.unifiedCategoryResult {
-                if result.items.isEmpty,
-                   result.itemsCount > 999,
-                   result.totalNumber > 999 {
-                    VStack {
-                        Text("Found \(result.itemsCount) items, too many to list them all, please use filter")
-                    }
-                } else {
-                    List {
-                        ForEach(result.items) { categoryItem in
-                            NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
-                                bookListView()
-                                    .onAppear {
-                                        if viewModel.filterCriteriaCategory[categoryName]?.contains(categoryItem.name) == true {
-                                            return
-                                        }
-                                        
-                                        resetSearchCriteria()
-                                        
-                                        viewModel.filterCriteriaCategory[categoryName] = .init([categoryItem.name])
-                                        
-                                        if viewModel.categoriesSelected == "Series" {
-                                            if viewModel.sortCriteria.by != .SeriesIndex {
-                                                viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                            }
-                                            
-                                            viewModel.sortCriteria.by = .SeriesIndex
-                                            viewModel.sortCriteria.ascending = true
-                                        } else if viewModel.categoriesSelected == "Publisher" || viewModel.categoriesSelected == "Authors" {
-                                            if viewModel.sortCriteria.by != .Publication {
-                                                viewModel.lastSortCriteria.append(viewModel.sortCriteria)
-                                            }
-                                            
-                                            viewModel.sortCriteria.by = .Publication
-                                            viewModel.sortCriteria.ascending = false
-                                        }
-                                        else {
-                                            viewModel.sortCriteria.by = .Modified
-                                            viewModel.sortCriteria.ascending = false
-                                        }
-                                        
-                                        resetToFirstPage()
-                                    }
-                                    .navigationTitle("\(categoryName): \(categoryItem.name)")
-                            } label: {
-                                Text(categoryItem.name)
+            if !categoryViewModel.items.isEmpty {
+                List {
+                    ForEach(categoryViewModel.items) { categoryItem in
+                        categoryItemRow(categoryItem)
+                            .onAppear {
+                                categoryViewModel.loadNextPageIfNeeded(currentItem: categoryItem)
                             }
-                            .isDetailLink(false)
+                    }
+
+                    if categoryViewModel.isLoadingMore {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
                         }
                     }
                 }
@@ -77,11 +55,54 @@ struct LibraryInfoCategoryItemsView: View {
             }
         }
         .toolbar {
-            Button {
-                categoryViewModel.forceRefreshCategory(categoryName: categoryName)
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
+            ToolbarItemGroup(placement: .navigationBarTrailing) {
+                Button {
+                    let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []
+                    categoryViewModel.forceRefreshCategory(
+                        categoryName: categoryName,
+                        libraryIds: scopedLibraryIds
+                    )
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                }
+
+                if preservesLibraryScope {
+                    Button("Done") {
+                        applyHeaderCategorySelection()
+                    }
+                }
             }
+        }
+        .onAppear {
+            initializeHeaderDraftSelectionIfNeeded()
+        }
+    }
+
+    @ViewBuilder
+    private func categoryItemRow(_ categoryItem: UnifiedCategoryItem) -> some View {
+        if preservesLibraryScope {
+            Button {
+                toggleDraftCategoryItem(categoryItem.name)
+            } label: {
+                HStack {
+                    Text(categoryItem.name)
+                    Spacer()
+                    if draftSelectedItemNames.contains(categoryItem.name) {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } else {
+            NavigationLink(tag: categoryItem.name, selection: $viewModel.categoryItemSelected) {
+                bookListView()
+                    .onAppear {
+                        selectRootCategoryItem(categoryItem.name)
+                    }
+                    .navigationTitle("\(categoryName): \(categoryItem.name)")
+            } label: {
+                Text(categoryItem.name)
+            }
+            .isDetailLink(false)
         }
     }
     
@@ -100,11 +121,48 @@ struct LibraryInfoCategoryItemsView: View {
     }
     
     func resetSearchCriteria() {
-        viewModel.filterCriteriaCategory.removeAll()
-        viewModel.filterCriteriaLibraries.removeAll()
+        viewModel.clearFilterCriteria()
     }
     
     func resetToFirstPage() {
         unifiedSearchViewModel.startSearch(key: viewModel.currentLibrarySearchResultKey)
+    }
+
+    private func initializeHeaderDraftSelectionIfNeeded() {
+        guard preservesLibraryScope, !didInitializeDraftSelection else { return }
+        draftSelectedItemNames = viewModel.filterCriteriaCategory[categoryName] ?? []
+        didInitializeDraftSelection = true
+    }
+
+    private func toggleDraftCategoryItem(_ itemName: String) {
+        if draftSelectedItemNames.contains(itemName) {
+            draftSelectedItemNames.remove(itemName)
+        } else {
+            draftSelectedItemNames.insert(itemName)
+        }
+    }
+
+    private func applyHeaderCategorySelection() {
+        viewModel.applyCategoryValuesSelection(
+            categoryName: categoryName,
+            itemNames: draftSelectedItemNames,
+            preservingLibraryScope: true
+        )
+        resetToFirstPage()
+        viewModel.preserveFilterCriteriaOnNextBookListAppear()
+        viewModel.headerCategorySelected = nil
+    }
+
+    private func selectRootCategoryItem(_ itemName: String) {
+        if viewModel.filterCriteriaCategory[categoryName]?.contains(itemName) == true {
+            return
+        }
+
+        viewModel.applyCategoryItemSelection(
+            categoryName: categoryName,
+            itemName: itemName,
+            preservingLibraryScope: false
+        )
+        resetToFirstPage()
     }
 }

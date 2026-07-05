@@ -325,10 +325,6 @@ class CalibreLibraryManager {
     }
 
     func startProbeLibraryLastModifiedTask() {
-        let dateFormatter = ISO8601DateFormatter()
-        let dateFormatter2 = ISO8601DateFormatter()
-        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
-
         guard let container = self.container else { return }
         let requests = container.probeLibraryLastModifiedRequests()
         probeLibraryLastModifiedTask?.cancel()
@@ -346,20 +342,38 @@ class CalibreLibraryManager {
                         limit: 1
                     )
 
-                    await MainActor.run {
+                    let updatedLibrary = await MainActor.run { () -> CalibreLibrary? in
+                        let dateFormatter = ISO8601DateFormatter()
+                        let dateFormatter2 = ISO8601DateFormatter()
+                        dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
+
                         guard var library = self.calibreLibraries[syncResult.request.library.id],
                               let lastModifiedStr = syncResult.list.data.last_modified.first?.value.v,
                               let lastModified = dateFormatter.date(from: lastModifiedStr) ?? dateFormatter2.date(from: lastModifiedStr)
                         else {
-                            return
+                            return nil
                         }
+
+                        var libraryNeedsSync: CalibreLibrary? = nil
                         if lastModified > library.lastModified {
                             library.lastModified = lastModified
                             self.calibreLibraries[syncResult.request.library.id] = library
                             try? self.libraryRepository.saveLibrary(library)
+                            libraryNeedsSync = library
                         }
 
                         self.container?.publishCalibreUpdate(.library(library))
+                        return libraryNeedsSync
+                    }
+
+                    if let updatedLibrary {
+                        await self.syncLibrary(
+                            request: .init(
+                                library: updatedLibrary,
+                                autoUpdateOnly: true,
+                                incremental: true
+                            )
+                        )
                     }
                 } catch {
                     self.logger.error("Failed to probe library last modified: \(error.localizedDescription)")
@@ -425,16 +439,6 @@ class CalibreLibraryManager {
                     }
                 }
 
-                result.categories.filter { $0.is_category }.forEach { category in
-                    Task {
-                        do {
-                            _ = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
-                        } catch {
-                            logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
-                        }
-                    }
-                }
-
                 let dateFormatter = ISO8601DateFormatter()
                 let dateFormatter2 = ISO8601DateFormatter()
                 dateFormatter2.formatOptions.formUnion(.withFractionalSeconds)
@@ -464,9 +468,20 @@ class CalibreLibraryManager {
 
                 await saveBookMetadata(metadata: .init(library: library, action: .complete(result.lastModified, result.result["result"] ?? [:]), preMsg: "", postMsg: "Success"))
 
+                var updatedLibrary = self.calibreLibraries[library.id] ?? library
+                if let lastModified = result.lastModified,
+                   updatedLibrary.lastModified < lastModified {
+                    updatedLibrary.lastModified = lastModified
+                }
+                await refreshCategoryCaches(
+                    container: container,
+                    library: updatedLibrary,
+                    categories: result.categories
+                )
+
                 if container.serverManager.isServerReachable(server: library.server) {
-                    await container.publishCalibreUpdate(.server(library.server))
-                    container.publishProbeLibraryLastModifiedRequest(.init(library: library, autoUpdateOnly: false, incremental: false))
+                    container.publishCalibreUpdate(.server(library.server))
+                    container.publishProbeLibraryLastModifiedRequest(.init(library: updatedLibrary, autoUpdateOnly: false, incremental: false))
                 }
             }
         } else {
@@ -475,25 +490,50 @@ class CalibreLibraryManager {
             self.librarySyncStatus[libraryId]?.isSync = false
 
             if !isError {
-                let library = result.request.library
-
-                result.categories.filter { $0.is_category }.forEach { category in
-                    Task {
-                        do {
-                            _ = try await container.libraryCategoryService.fetchAndCacheCategory(library: library, category: category)
-                        } catch {
-                            logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
-                        }
-                    }
-                }
+                let library = self.calibreLibraries[result.request.library.id] ?? result.request.library
+                await refreshCategoryCaches(
+                    container: container,
+                    library: library,
+                    categories: result.categories
+                )
 
                 self.librarySyncStatus[libraryId]?.msg = "Success (Categories)"
 
                 if container.serverManager.isServerReachable(server: library.server) {
-                    await container.publishCalibreUpdate(.server(library.server))
+                    container.publishCalibreUpdate(.server(library.server))
                 }
             } else {
                 self.librarySyncStatus[libraryId]?.msg = result.errmsg
+            }
+        }
+    }
+
+    @MainActor
+    private func refreshCategoryCaches(
+        container: AppContainerProtocol,
+        library: CalibreLibrary,
+        categories: [CalibreLibraryCategory]
+    ) async {
+        let activeCategories = categories.filter { $0.is_category }
+        let activeCategoryNames = Set(activeCategories.map(\.name))
+
+        do {
+            try container.categoryCacheRepository.removeLibraryCategoryResultsNotIn(
+                libraryId: library.id,
+                activeCategoryNames: activeCategoryNames
+            )
+        } catch {
+            logger.error("Failed to prune stale categories for \(library.name): \(error.localizedDescription)")
+        }
+
+        for category in activeCategories {
+            do {
+                _ = try await container.libraryCategoryService.fetchAndCacheCategory(
+                    library: library,
+                    category: category
+                )
+            } catch {
+                logger.error("Failed to fetch and cache category \(category.name) for \(library.name): \(error.localizedDescription)")
             }
         }
     }

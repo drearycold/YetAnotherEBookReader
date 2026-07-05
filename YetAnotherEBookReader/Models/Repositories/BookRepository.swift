@@ -259,9 +259,7 @@ class RealmBookRepository: BookRepositoryProtocol {
             .filter("serverUUID == %@ AND libraryName == %@", serverUUID, libraryName)
         try? realm.write {
             books.forEach {
-                $0.lastModified = .init(timeIntervalSince1970: 0)
-                $0.lastSynced = .init(timeIntervalSince1970: 0)
-                $0.title = "__RESET__"
+                $0.lastSynced = .distantPast
             }
         }
     }

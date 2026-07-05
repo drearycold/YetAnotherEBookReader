@@ -747,8 +747,17 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
     }
 
     func fetchCategorySummaries() throws -> [CategoryCacheSummary] {
+        try fetchCategorySummaries(libraryIds: [])
+    }
+
+    func fetchCategorySummaries(libraryIds: Set<String>) throws -> [CategoryCacheSummary] {
         var summariesByName: [String: (itemsCount: Int, totalNumber: Int)] = [:]
         for result in cache.values {
+            if !libraryIds.isEmpty,
+               !libraryIds.contains(result.libraryId) {
+                continue
+            }
+
             let name = result.categoryName
             let current = summariesByName[name] ?? (0, 0)
             summariesByName[name] = (
@@ -763,6 +772,65 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
                 totalNumber: stats.totalNumber
             )
         }.sorted { $0.categoryName < $1.categoryName }
+    }
+
+    func fetchUnifiedCategoryItemsPage(
+        categoryName: String,
+        searchString: String,
+        libraryIds: Set<String>,
+        offset: Int,
+        limit: Int
+    ) throws -> UnifiedCategoryPageResult {
+        let trimmedSearch = searchString.trimmingCharacters(in: .whitespacesAndNewlines)
+        var grouped: [String: [String: LibraryCategoryItem]] = [:]
+        var sourceTotalNumber = 0
+
+        for result in cache.values where result.categoryName == categoryName {
+            if !libraryIds.isEmpty,
+               !libraryIds.contains(result.libraryId) {
+                continue
+            }
+
+            sourceTotalNumber += result.totalNumber
+            for item in result.items {
+                if !trimmedSearch.isEmpty,
+                   !item.name.localizedCaseInsensitiveContains(trimmedSearch) {
+                    continue
+                }
+
+                var entry = grouped[item.name] ?? [:]
+                entry[result.libraryId] = item
+                grouped[item.name] = entry
+            }
+        }
+
+        let allItems: [UnifiedCategoryItem] = grouped.map { name, libraryItems in
+            let stats = libraryItems.values.reduce((0, 0.0)) { partialResult, item in
+                (partialResult.0 + item.count, partialResult.1 + item.averageRating * Double(item.count))
+            }
+            let totalCount = stats.0
+            return UnifiedCategoryItem(
+                categoryName: categoryName,
+                name: name,
+                averageRating: totalCount > 0 ? stats.1 / Double(totalCount) : 0.0,
+                count: totalCount,
+                libraryItems: libraryItems
+            )
+        }.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
+
+        let safeOffset = max(0, offset)
+        let safeLimit = max(1, limit)
+        let pageItems = Array(allItems.dropFirst(safeOffset).prefix(safeLimit))
+
+        return UnifiedCategoryPageResult(
+            categoryName: categoryName,
+            search: trimmedSearch,
+            totalNumber: sourceTotalNumber,
+            itemsCount: allItems.count,
+            items: pageItems,
+            hasMore: safeOffset + pageItems.count < allItems.count,
+            nextOffset: safeOffset + pageItems.count
+        )
     }
 
     func observeCategorySummaries() -> AsyncStream<[CategoryCacheSummary]> {
@@ -794,6 +862,15 @@ final class MockCategoryCacheRepository: CategoryCacheRepository, @unchecked Sen
                 totalNumber: result.totalNumber
             )
             cache["\(libraryId)-\(categoryName)"] = staleResult
+        }
+    }
+
+    func removeLibraryCategoryResultsNotIn(
+        libraryId: String,
+        activeCategoryNames: Set<String>
+    ) throws {
+        cache = cache.filter { _, result in
+            result.libraryId != libraryId || activeCategoryNames.contains(result.categoryName)
         }
     }
 

@@ -47,6 +47,7 @@ final class CalibreLibraryManagerTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        URLProtocol.unregisterClass(MockURLProtocol.self)
         container = nil
         libraryManager = nil
         library = nil
@@ -369,6 +370,203 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertEqual(syncStatus?.msg, "Success")
     }
 
+    func testSyncLibraryRefreshesChangedCategoriesWithUpdatedGenerationAndPrunesDeletedCategories() async throws {
+        let oldLastModified = Date(timeIntervalSince1970: 100)
+        library.lastModified = oldLastModified
+        libraryManager.calibreLibraries[library.id] = library
+        try libraryRepository.saveLibrary(library)
+        configureReachableMockSession()
+
+        try container.categoryCacheRepository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Authors",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Authors",
+                items: [LibraryCategoryItem(name: "Old Author", averageRating: 1.0, count: 1, url: "old-author")],
+                generation: oldLastModified,
+                totalNumber: 1
+            )
+        )
+        try container.categoryCacheRepository.saveLibraryCategoryResult(
+            libraryId: library.id,
+            categoryName: "Publisher",
+            result: LibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Publisher",
+                items: [LibraryCategoryItem(name: "Removed Publisher", averageRating: 0.0, count: 1, url: "removed-publisher")],
+                generation: oldLastModified,
+                totalNumber: 1
+            )
+        )
+
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let statusCode = 200
+            let jsonString: String
+
+            if path.contains("custom_columns") {
+                jsonString = "{}"
+            } else if path.contains("/ajax/categories/") {
+                jsonString = """
+                [
+                    {"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true},
+                    {"name": "Tags", "url": "/ajax/category/Tags", "icon": "tag", "is_category": true}
+                ]
+                """
+            } else if path.contains("/cdb/cmd/list") {
+                jsonString = """
+                {
+                    "book_ids": [101],
+                    "data": {
+                        "last_modified": {
+                            "101": {"v": "2026-06-23T18:00:00Z"}
+                        }
+                    }
+                }
+                """
+            } else if path.contains("/ajax/category/Authors") {
+                jsonString = """
+                {
+                    "category_name": "Authors",
+                    "base_url": "",
+                    "total_num": 1,
+                    "offset": 0,
+                    "num": 10000,
+                    "sort": "name",
+                    "sort_order": "asc",
+                    "items": [
+                        {"name": "New Author", "average_rating": 4.5, "count": 7, "url": "new-author", "has_children": false}
+                    ]
+                }
+                """
+            } else if path.contains("/ajax/category/Tags") {
+                jsonString = """
+                {
+                    "category_name": "Tags",
+                    "base_url": "",
+                    "total_num": 1,
+                    "offset": 0,
+                    "num": 10000,
+                    "sort": "name",
+                    "sort_order": "asc",
+                    "items": [
+                        {"name": "New Tag", "average_rating": 0.0, "count": 2, "url": "new-tag", "has_children": false}
+                    ]
+                }
+                """
+            } else {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+            return (response, jsonString.data(using: .utf8)!)
+        }
+
+        await libraryManager.syncLibrary(
+            request: CalibreSyncLibraryRequest(library: library, autoUpdateOnly: false, incremental: false)
+        )
+
+        let authors = try XCTUnwrap(
+            container.categoryCacheRepository.fetchLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Authors"
+            )
+        )
+        XCTAssertGreaterThan(authors.generation, oldLastModified)
+        XCTAssertEqual(authors.items.map(\.name), ["New Author"])
+        XCTAssertEqual(authors.items.first?.count, 7)
+
+        let tags = try XCTUnwrap(
+            container.categoryCacheRepository.fetchLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Tags"
+            )
+        )
+        XCTAssertEqual(tags.items.map(\.name), ["New Tag"])
+        XCTAssertNil(
+            try container.categoryCacheRepository.fetchLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: "Publisher"
+            )
+        )
+    }
+
+    func testProbeLastModifiedTriggersCategoryRefresh() async throws {
+        let oldLastModified = Date(timeIntervalSince1970: 100)
+        library.lastModified = oldLastModified
+        library.autoUpdate = false
+        libraryManager.calibreLibraries[library.id] = library
+        try libraryRepository.saveLibrary(library)
+        configureReachableMockSession()
+
+        MockURLProtocol.requestHandler = { request in
+            let path = request.url?.path ?? ""
+            let jsonString: String
+
+            if path.contains("/cdb/cmd/list") {
+                jsonString = """
+                {
+                    "result": {
+                        "book_ids": [101],
+                        "data": {
+                            "last_modified": {
+                                "101": {"v": "2026-06-23T18:00:00Z"}
+                            }
+                        }
+                    }
+                }
+                """
+            } else if path.contains("custom_columns") {
+                jsonString = "{}"
+            } else if path.contains("/ajax/categories/") {
+                jsonString = """
+                [
+                    {"name": "Authors", "url": "/ajax/category/Authors", "icon": "author", "is_category": true}
+                ]
+                """
+            } else if path.contains("/ajax/category/Authors") {
+                jsonString = """
+                {
+                    "category_name": "Authors",
+                    "base_url": "",
+                    "total_num": 1,
+                    "offset": 0,
+                    "num": 10000,
+                    "sort": "name",
+                    "sort_order": "asc",
+                    "items": [
+                        {"name": "Probe Author", "average_rating": 4.0, "count": 3, "url": "probe-author", "has_children": false}
+                    ]
+                }
+                """
+            } else {
+                return (
+                    HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!,
+                    Data()
+                )
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            return (response, jsonString.data(using: .utf8)!)
+        }
+
+        libraryManager.startProbeLibraryLastModifiedTask()
+        await Task.yield()
+        container.publishProbeLibraryLastModifiedRequest(
+            .init(library: library, autoUpdateOnly: false, incremental: false)
+        )
+
+        let authors = try await waitForCachedCategory(named: "Authors") { result in
+            result.items.map(\.name) == ["Probe Author"]
+        }
+        XCTAssertGreaterThan(authors.generation, oldLastModified)
+        XCTAssertEqual(libraryManager.calibreLibraries[library.id]?.lastModified, authors.generation)
+    }
+
     func testPopulateLocalLibraryBooksWithFiles() throws {
         guard let documentDirectoryURL = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else {
             XCTFail("Failed to get document directory")
@@ -393,5 +591,55 @@ final class CalibreLibraryManagerTests: XCTestCase {
         XCTAssertTrue(completionWasOnMainThread)
 
         try? FileManager.default.removeItem(at: testBookFile)
+    }
+
+    private func configureReachableMockSession() {
+        URLProtocol.registerClass(MockURLProtocol.self)
+
+        let probeRequest = CalibreProbeServerRequest(server: server, isPublic: false, updateLibrary: false, autoUpdateOnly: false, incremental: false)
+        let info = CalibreServerInfo(
+            server: server,
+            isPublic: false,
+            url: URL(string: "http://localhost")!,
+            reachable: true,
+            probing: false,
+            errorMsg: "Success",
+            defaultLibrary: library.id,
+            libraryMap: [library.id: library.name],
+            request: probeRequest
+        )
+        container.calibreServerInfoStaging = [server.uuid.uuidString: info]
+
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: sessionConfig)
+        for timeout in [10.0, 600.0] {
+            for qos in [DispatchQoS.QoSClass.default, .background, .utility, .userInitiated, .userInteractive, .unspecified] {
+                let key = CalibreServerURLSessionKey(server: server, timeout: timeout, qos: qos)
+                container.calibreServerService.metadataSessions[key] = mockSession
+            }
+        }
+    }
+
+    private func waitForCachedCategory(
+        named categoryName: String,
+        matching predicate: (LibraryCategoryResult) -> Bool
+    ) async throws -> LibraryCategoryResult {
+        for _ in 0..<50 {
+            if let result = try container.categoryCacheRepository.fetchLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: categoryName
+            ), predicate(result) {
+                return result
+            }
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        return try XCTUnwrap(
+            container.categoryCacheRepository.fetchLibraryCategoryResult(
+                libraryId: library.id,
+                categoryName: categoryName
+            )
+        )
     }
 }

@@ -8,25 +8,14 @@ import SwiftUI
 struct LibraryInfoBookListDownloadButton: View {
     @ObservedObject var listViewModel: LibraryInfoBookListViewModel
     @ObservedObject var viewModel: UnifiedSearchViewModel
-    let geometry: GeometryProxy
     
     var body: some View {
         Button {
-            listViewModel.prepareBatchDownload(books: viewModel.unifiedSearchResult?.books ?? [])
+            listViewModel.enterBatchSelectionMode()
         } label: {
             Image(systemName: "square.and.arrow.down.on.square")
         }
         .disabled(viewModel.isSearchLoading)
-        .popover(isPresented: $listViewModel.batchDownloadSheetPresenting,
-                 attachmentAnchor: .point(.bottom),
-                 arrowEdge: .bottom
-        ) {
-            LibraryInfoBatchDownloadSheet(
-                presenting: $listViewModel.batchDownloadSheetPresenting,
-                downloadBookList: $listViewModel.downloadBookList
-            )
-            .frame(idealWidth: geometry.size.width - 50, idealHeight: geometry.size.height - 50)
-        }
     }
 }
 

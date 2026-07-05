@@ -40,27 +40,37 @@ struct LibraryInfoCategoryListView: View {
 
 struct CategoryDetailView: View {
     let categoryName: String
+    let preservesLibraryScope: Bool
     @Environment(\.appContainer) var container
     @EnvironmentObject var viewModel: LibraryInfoView.ViewModel
     @EnvironmentObject var unifiedSearchViewModel: UnifiedSearchViewModel
     @StateObject private var categoryViewModel = UnifiedCategoryViewModel()
+    @State private var filterReloadTask: Task<Void, Never>?
+
+    init(categoryName: String, preservesLibraryScope: Bool = false) {
+        self.categoryName = categoryName
+        self.preservesLibraryScope = preservesLibraryScope
+    }
     
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 TextField("Filter \(categoryName)", text: $viewModel.categoryFilterString, onCommit: {
+                    filterReloadTask?.cancel()
                     triggerMerge()
                 })
                 .keyboardType(.webSearch)
                 .padding([.leading, .trailing], 24)
                 .onChange(of: viewModel.categoryFilterString) { newValue in
                     viewModel.categoryFilter = viewModel.categoryFilterString.trimmingCharacters(in: .whitespacesAndNewlines)
+                    scheduleFilterReload()
                 }
                 HStack {
                     Spacer()
                     Button {
                         viewModel.categoryFilterString = ""
                         viewModel.categoryFilter = ""
+                        filterReloadTask?.cancel()
                         triggerMerge()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -74,7 +84,11 @@ struct CategoryDetailView: View {
             
             Divider()
             
-            LibraryInfoCategoryItemsView(categoryName: categoryName, categoryViewModel: categoryViewModel)
+            LibraryInfoCategoryItemsView(
+                categoryName: categoryName,
+                preservesLibraryScope: preservesLibraryScope,
+                categoryViewModel: categoryViewModel
+            )
                 .environmentObject(viewModel)
                 .environmentObject(unifiedSearchViewModel)
         }
@@ -85,6 +99,7 @@ struct CategoryDetailView: View {
             triggerMerge()
         }
         .onDisappear {
+            filterReloadTask?.cancel()
             if viewModel.categoriesSelected == nil {
                 viewModel.categoryName = ""
             }
@@ -93,6 +108,22 @@ struct CategoryDetailView: View {
     
     private func triggerMerge() {
         viewModel.categoryName = categoryName
-        categoryViewModel.mergeCategory(categoryName: categoryName, searchString: viewModel.categoryFilter)
+        let scopedLibraryIds = preservesLibraryScope ? viewModel.filterCriteriaLibraries : []
+        categoryViewModel.reloadCategory(
+            categoryName: categoryName,
+            searchString: viewModel.categoryFilter,
+            libraryIds: scopedLibraryIds
+        )
+    }
+
+    private func scheduleFilterReload() {
+        filterReloadTask?.cancel()
+        filterReloadTask = Task {
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                triggerMerge()
+            }
+        }
     }
 }

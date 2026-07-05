@@ -377,7 +377,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         token.invalidate()
     }
 
-    func testSearchCacheLocalLibrarySearchFiltersSortsAndPaginates() throws {
+    func testSearchCacheLocalLibrarySearchUnionsSameCategoryFiltersSortsAndPaginates() throws {
         let config = Realm.Configuration(inMemoryIdentifier: "SearchCacheLocalSearch-\(UUID().uuidString)")
         let store = RealmSearchCacheStore(config: config, container: container)
         let realm = try Realm(configuration: config)
@@ -409,7 +409,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
         let criteria = SearchCriteria(
             searchString: "swift",
             sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
-            filterCriteriaCategory: ["Tags": Set(["Programming"])]
+            filterCriteriaCategory: ["Tags": Set(["Programming", "Food"])]
         )
 
         let result = try store.searchLocalLibrary(
@@ -419,7 +419,7 @@ class UnifiedSearchIntegrationTests: XCTestCase {
             limit: 1
         )
 
-        XCTAssertEqual(result.totalNumber, 2)
+        XCTAssertEqual(result.totalNumber, 3)
         XCTAssertEqual(result.numBooksWithoutSearch, 3)
         XCTAssertEqual(result.offset, 1)
         XCTAssertEqual(result.num, 1)

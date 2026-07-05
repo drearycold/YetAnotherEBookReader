@@ -49,6 +49,37 @@ final class CalibreServerServiceTests: XCTestCase {
         try await super.tearDown()
     }
 
+    func testBuildLibrarySearchTasksUsesOrWithinCategoryAndAndAcrossCategories() throws {
+        let criteria = SearchCriteria(
+            searchString: "swift",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [
+                "Tags": Set(["Programming", "Food"]),
+                "Authors": Set(["Casey"])
+            ]
+        )
+
+        let tasks = service.buildLibrarySearchTasks(
+            library: library,
+            searchCriteria: criteria,
+            parameters: [:]
+        )
+
+        let task = try XCTUnwrap(tasks.first { $0.booksListUrl.scheme != "file" })
+        let queryItems = try XCTUnwrap(
+            URLComponents(url: task.booksListUrl, resolvingAgainstBaseURL: false)?.queryItems
+        )
+        let query = try XCTUnwrap(queryItems.first { $0.name == "query" }?.value)
+
+        XCTAssertTrue(query.contains("swift"))
+        XCTAssertTrue(query.contains(" AND "))
+        XCTAssertTrue(query.contains("authors:\"=Casey\""))
+        XCTAssertTrue(
+            query.contains("tags:\"=Programming\" OR tags:\"=Food\"")
+            || query.contains("tags:\"=Food\" OR tags:\"=Programming\"")
+        )
+    }
+
     func testValidatedDataMapsUnauthorizedToAuthFailed() async throws {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(
