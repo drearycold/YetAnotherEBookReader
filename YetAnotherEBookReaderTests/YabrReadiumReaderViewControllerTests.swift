@@ -46,7 +46,7 @@ final class YabrReadiumReaderViewControllerTests: XCTestCase {
         controller.readiumPreferences = ReadiumPreferenceValue(verticalMargin: 20)
 
         controller.applyPreferences(ReaderEnginePreferences(
-            themeMode: 2,
+            themeMode: 3,
             fontSizePercentage: 140,
             fontFamily: "Avenir",
             lineHeight: 1.45,
@@ -180,6 +180,13 @@ private final class MockReaderPreferenceRepository: ReaderPreferenceRepositoryPr
 
     func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {
         savedInitialPreferences = preferences
+    }
+
+    func loadFolioPreferences(for book: CalibreBook) -> FolioReaderPreferenceValue? {
+        nil
+    }
+
+    func saveFolioPreferences(_ preferences: FolioReaderPreferenceValue, for book: CalibreBook) {
     }
 
     func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? {

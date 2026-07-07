@@ -24,8 +24,21 @@ struct ReaderEnginePosition {
     var positionTrackingStyle: Int = 0
 }
 
+enum ReaderEngineThemeMode: Int {
+    case light = 0
+    case sepia = 1
+    case green = 2
+    case dark = 3
+    case night = 4
+
+    static func fromSharedRawValue(_ rawValue: Int) -> ReaderEngineThemeMode {
+        ReaderEngineThemeMode(rawValue: rawValue) ?? .light
+    }
+}
+
 struct ReaderEnginePreferences {
-    var themeMode: Int = 0 // 0: Light, 1: Sepia, 2: Dark
+    // Shared cross-engine theme: 0 light, 1 sepia, 2 green, 3 dark, 4 night.
+    var themeMode: Int = ReaderEngineThemeMode.light.rawValue
     var fontSizePercentage: Double = 100.0
     var fontFamily: String = "Original"
     var lineHeight: Double = 1.2

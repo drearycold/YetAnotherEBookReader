@@ -8,6 +8,7 @@
 
 import UIKit
 import FolioReaderKit
+import FolioEPUBCore
 import ReadiumZIPFoundation
 
 #if canImport(GoogleMobileAds)

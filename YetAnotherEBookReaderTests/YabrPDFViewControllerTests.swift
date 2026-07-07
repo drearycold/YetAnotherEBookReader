@@ -55,7 +55,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
 
     func testApplyPreferencesMapsReaderEnginePreferencesToPDFOptions() {
         let controller = SpyYabrPDFViewController()
-        let preferences = ReaderEnginePreferences(themeMode: 2, scroll: true, scrollDirection: 1)
+        let preferences = ReaderEnginePreferences(themeMode: 3, scroll: true, scrollDirection: 1)
 
         controller.applyPreferences(preferences)
 
@@ -85,7 +85,7 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(value.isDark("dark", "light"), "dark")
 
         let engine = value.toReaderEnginePreferences()
-        XCTAssertEqual(engine.themeMode, 2)
+        XCTAssertEqual(engine.themeMode, 3)
         XCTAssertEqual(engine.scroll, true)
         XCTAssertEqual(engine.scrollDirection, 1)
 
@@ -98,6 +98,12 @@ final class YabrPDFViewControllerTests: XCTestCase {
         XCTAssertEqual(updated.themeMode, .serpia)
         XCTAssertEqual(updated.pageMode, .Scroll)
         XCTAssertEqual(updated.scrollDirection, .Horizontal)
+
+        updated.apply(ReaderEnginePreferences(themeMode: 2))
+        XCTAssertEqual(updated.themeMode, .forest)
+
+        updated.apply(ReaderEnginePreferences(themeMode: 4))
+        XCTAssertEqual(updated.themeMode, .dark)
     }
 
     func testPDFOptionViewModelCommitTriggersSingleCallback() {
@@ -401,6 +407,13 @@ private final class MockPDFPreferenceRepository: ReaderPreferenceRepositoryProto
     }
 
     func savePreferences(_ preferences: ReaderEnginePreferences, for book: CalibreBook, readerType: ReaderType) {
+    }
+
+    func loadFolioPreferences(for book: CalibreBook) -> FolioReaderPreferenceValue? {
+        nil
+    }
+
+    func saveFolioPreferences(_ preferences: FolioReaderPreferenceValue, for book: CalibreBook) {
     }
 
     func loadReadiumPreferences(for book: CalibreBook) -> ReadiumPreferenceValue? {

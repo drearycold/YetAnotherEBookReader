@@ -6,7 +6,12 @@ The current branch is `fix/library-book-list`. Branch implementation work has be
 Keep this file focused on the active branch and the few current project notes a future agent needs by default. Full historical records live under `.agents/memory-bank/history/`.
 
 ## Current Branch Projects
-No active implementation projects remain in this context.
+Uncommitted reader preference compatibility work is present in the working tree:
+`ReaderEnginePreferences.themeMode` now uses canonical shared theme values, and
+`ReaderPreferenceRepository.loadInitialPreferences` falls back across compatible
+reader engines when the target engine has no saved preferences for the book.
+FolioReader now also has full native per-book preference persistence so
+Folio-only settings are not lost through the cross-engine compatibility layer.
 
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 

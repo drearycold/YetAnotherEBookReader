@@ -218,8 +218,10 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
-            // Load and apply initial preferences for FolioReader
-            if let enginePrefs = container.readerPreferenceRepository.loadInitialPreferences(
+            // The Folio provider already restores complete native per-book preferences.
+            // Apply the compatibility subset only when Folio has no complete native row.
+            if container.readerPreferenceRepository.loadFolioPreferences(for: book) == nil,
+               let enginePrefs = container.readerPreferenceRepository.loadInitialPreferences(
                 for: book,
                 readerType: readerInfo.readerType
             ) {

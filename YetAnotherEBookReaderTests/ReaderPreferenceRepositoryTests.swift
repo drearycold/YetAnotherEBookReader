@@ -50,7 +50,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
     func testReadiumPreferencesSaveAndLoad() throws {
         let book = TestFixtures.makeBook()
         let prefs = ReaderEnginePreferences(
-            themeMode: 2,
+            themeMode: 3,
             fontSizePercentage: 135,
             fontFamily: "Avenir",
             lineHeight: 1.4,
@@ -63,7 +63,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         repository.savePreferences(prefs, for: book, readerType: .ReadiumEPUB)
 
         let loaded = repository.loadInitialPreferences(for: book, readerType: .ReadiumEPUB)
-        XCTAssertEqual(loaded?.themeMode, 2)
+        XCTAssertEqual(loaded?.themeMode, 3)
         XCTAssertEqual(loaded?.fontSizePercentage, 135)
         XCTAssertEqual(loaded?.fontFamily, "Avenir")
         XCTAssertEqual(loaded?.lineHeight, 1.4)
@@ -165,7 +165,7 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
     func testFolioPreferencesSaveAndLoad() throws {
         let book = TestFixtures.makeBook()
         let prefs = ReaderEnginePreferences(
-            themeMode: 2,
+            themeMode: 3,
             fontSizePercentage: 120,
             fontFamily: "Georgia",
             lineHeight: 1.2,
@@ -182,17 +182,117 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         let saved = realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: book.bookPrefId)
 
         XCTAssertEqual(saved?.nightMode, true)
-        XCTAssertEqual(saved?.themeMode, 2)
+        XCTAssertEqual(saved?.themeMode, 3)
         XCTAssertEqual(saved?.currentFontSize, "24px")
         XCTAssertEqual(saved?.currentFont, "Georgia")
         XCTAssertEqual(saved?.currentScrollDirection, 1)
 
         let loaded = repository.loadInitialPreferences(for: book, readerType: .YabrEPUB)
-        XCTAssertEqual(loaded?.themeMode, 2)
+        XCTAssertEqual(loaded?.themeMode, 3)
         XCTAssertEqual(loaded?.fontSizePercentage, 120)
         XCTAssertEqual(loaded?.fontFamily, "Georgia")
         XCTAssertEqual(loaded?.scroll, true)
         XCTAssertEqual(loaded?.scrollDirection, 1)
+    }
+
+    func testFolioNativePreferencesSaveAndLoadRoundTripAllFields() throws {
+        let book = TestFixtures.makeBook(id: 37)
+        let preferences = makeFullFolioPreferenceValue()
+
+        repository.saveFolioPreferences(preferences, for: book)
+
+        XCTAssertEqual(repository.loadFolioPreferences(for: book), preferences)
+
+        let config = serverScopedProvider.configuration(for: book.library.server)
+        let realm = try Realm(configuration: config)
+        let saved = try XCTUnwrap(realm.object(ofType: FolioReaderPreferenceRealm.self, forPrimaryKey: book.bookPrefId))
+        XCTAssertTrue(saved.hasCompletePreferenceValue)
+        XCTAssertEqual(saved.toValue(defaults: .fallbackDefaults), preferences)
+    }
+
+    func testFolioCompatibilitySaveDoesNotBecomeFullNativePreferences() {
+        let book = TestFixtures.makeBook(id: 38)
+
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 3), for: book, readerType: .YabrEPUB)
+
+        XCTAssertNil(repository.loadFolioPreferences(for: book))
+        XCTAssertEqual(repository.loadInitialPreferences(for: book, readerType: .YabrEPUB)?.themeMode, 3)
+    }
+
+    func testFolioGreenFallsBackToPDFAndReadiumNearestThemes() {
+        let pdfBook = TestFixtures.makeBook(id: 30)
+        let readiumBook = TestFixtures.makeBook(id: 31)
+
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 2), for: pdfBook, readerType: .YabrEPUB)
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 2), for: readiumBook, readerType: .YabrEPUB)
+
+        XCTAssertEqual(repository.loadInitialPreferences(for: pdfBook, readerType: .YabrPDF)?.themeMode, 2)
+        XCTAssertEqual(repository.loadInitialPreferences(for: readiumBook, readerType: .ReadiumEPUB)?.themeMode, 1)
+    }
+
+    func testFolioDarkAndNightFallbackToDarkInOtherEngines() {
+        let readiumBook = TestFixtures.makeBook(id: 32)
+        let pdfBook = TestFixtures.makeBook(id: 33)
+
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 3), for: readiumBook, readerType: .YabrEPUB)
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 4), for: pdfBook, readerType: .YabrEPUB)
+
+        XCTAssertEqual(repository.loadInitialPreferences(for: readiumBook, readerType: .ReadiumEPUB)?.themeMode, 3)
+        XCTAssertEqual(repository.loadInitialPreferences(for: pdfBook, readerType: .YabrPDF)?.themeMode, 3)
+    }
+
+    func testReadiumDarkFallsBackToFolioAsSharedDark() {
+        let book = TestFixtures.makeBook(id: 34)
+
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 3), for: book, readerType: .ReadiumEPUB)
+
+        let loaded = repository.loadInitialPreferences(for: book, readerType: .YabrEPUB)
+        XCTAssertEqual(loaded?.themeMode, 3)
+    }
+
+    func testPDFForestFallsBackToFolioAsSharedGreen() {
+        let book = TestFixtures.makeBook(id: 35)
+
+        repository.savePDFPreferences(PDFPreferenceValue(themeMode: .forest), for: book)
+
+        let loaded = repository.loadInitialPreferences(for: book, readerType: .YabrEPUB)
+        XCTAssertEqual(loaded?.themeMode, 2)
+    }
+
+    func testTargetSpecificPreferencesWinOverFallbackPreferences() {
+        let book = TestFixtures.makeBook(id: 36)
+
+        repository.savePreferences(ReaderEnginePreferences(themeMode: 3), for: book, readerType: .YabrEPUB)
+        repository.savePDFPreferences(PDFPreferenceValue(themeMode: .forest), for: book)
+
+        let loaded = repository.loadInitialPreferences(for: book, readerType: .YabrPDF)
+        XCTAssertEqual(loaded?.themeMode, 2)
+    }
+
+    func testNativeFolioPreferencesWinOverCrossEngineFallback() {
+        let book = TestFixtures.makeBook(id: 39)
+        let folioPreferences = makeFullFolioPreferenceValue(themeMode: 2, currentLineHeight: 9)
+
+        repository.saveReadiumPreferences(ReadiumPreferenceValue(id: book.bookPrefId, themeMode: 2), for: book)
+        repository.savePDFPreferences(PDFPreferenceValue(themeMode: .dark), for: book)
+        repository.saveFolioPreferences(folioPreferences, for: book)
+
+        let loaded = repository.loadInitialPreferences(for: book, readerType: .YabrEPUB)
+        XCTAssertEqual(loaded?.themeMode, 2)
+        XCTAssertEqual(loaded?.lineHeight ?? 0, 1.95, accuracy: 0.0001)
+        XCTAssertEqual(loaded?.pageMargins ?? 0, 47.0 / 60.0, accuracy: 0.0001)
+        XCTAssertEqual(repository.loadFolioPreferences(for: book)?.currentLineHeight, 9)
+    }
+
+    func testFolioNativeLayoutPrefsMapIntoCompatibleReaderPreferences() {
+        let book = TestFixtures.makeBook(id: 41)
+        let folioPreferences = makeFullFolioPreferenceValue(currentLineHeight: 6)
+
+        repository.saveFolioPreferences(folioPreferences, for: book)
+
+        let loaded = repository.loadInitialPreferences(for: book, readerType: .ReadiumEPUB)
+        XCTAssertEqual(loaded?.lineHeight, 1.8)
+        XCTAssertEqual(loaded?.pageMargins ?? 0, 47.0 / 60.0, accuracy: 0.0001)
     }
 
     func testSavePreferencesCreatesObjectsForAllSupportedReaderTypes() throws {
@@ -302,6 +402,62 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         XCTAssertEqual(repository.loadReadiumPreferences(for: book), preferences)
     }
 
+    func testReadiumCompatibilitySavePreservesReadiumOnlyFields() {
+        let book = TestFixtures.makeBook(id: 40)
+        let nativePreferences = ReadiumPreferenceValue(
+            id: book.bookPrefId,
+            themeMode: 1,
+            fontSizePercentage: 125,
+            fontFamily: "Avenir",
+            lineHeight: 1.35,
+            pageMargins: 1.6,
+            publisherStyles: false,
+            scroll: false,
+            textAlign: 4,
+            columnCount: 2,
+            fontWeight: 1.2,
+            letterSpacing: 0.1,
+            wordSpacing: 0.2,
+            hyphens: true,
+            imageFilter: 2,
+            textNormalization: true,
+            typeScale: 1.3,
+            paragraphIndent: 0.3,
+            paragraphSpacing: 0.4,
+            volumeKeyPaging: true,
+            verticalMargin: 20,
+            readingProgression: 1,
+            fit: 2,
+            ligatures: true,
+            offsetFirstPage: true,
+            spread: 2,
+            verticalText: true,
+            pageSpacing: 8,
+            scrollAxis: 1,
+            visibleScrollbar: false
+        )
+
+        repository.saveReadiumPreferences(nativePreferences, for: book)
+        repository.savePreferences(
+            ReaderEnginePreferences(themeMode: 3, fontSizePercentage: 150, fontFamily: "Georgia", scroll: true),
+            for: book,
+            readerType: .ReadiumEPUB
+        )
+
+        let loaded = repository.loadReadiumPreferences(for: book)
+        XCTAssertEqual(loaded?.themeMode, 2)
+        XCTAssertEqual(loaded?.fontSizePercentage, 150)
+        XCTAssertEqual(loaded?.fontFamily, "Georgia")
+        XCTAssertEqual(loaded?.publisherStyles, false)
+        XCTAssertEqual(loaded?.textAlign, 4)
+        XCTAssertEqual(loaded?.columnCount, 2)
+        XCTAssertEqual(loaded?.fontWeight, 1.2)
+        XCTAssertEqual(loaded?.letterSpacing, 0.1)
+        XCTAssertEqual(loaded?.spread, 2)
+        XCTAssertEqual(loaded?.pageSpacing, 8)
+        XCTAssertEqual(loaded?.visibleScrollbar, false)
+    }
+
     func testFolioProfileRepositoryEnsuresDefaultProfile() throws {
         let folioReader = FolioReader()
         let defaults = FolioReaderProfileValue(defaultsFrom: folioReader)
@@ -354,5 +510,39 @@ final class ReaderPreferenceRepositoryTests: XCTestCase {
         folioProfileRepository.removeProfile(named: "Default")
 
         XCTAssertEqual(folioProfileRepository.listProfiles(filter: nil, defaults: defaults), ["Default"])
+    }
+
+    private func makeFullFolioPreferenceValue(
+        themeMode: Int = 4,
+        currentLineHeight: Int = 8
+    ) -> FolioReaderPreferenceValue {
+        FolioReaderPreferenceValue(
+            nightMode: themeMode >= 3,
+            themeMode: themeMode,
+            currentFont: "Avenir",
+            currentFontSize: "24px",
+            currentFontWeight: "700",
+            currentAudioRate: 2,
+            currentHighlightStyle: FolioReaderHighlightStyle.blue.rawValue,
+            currentMediaOverlayStyle: MediaOverlayStyle.textColor.rawValue,
+            currentScrollDirection: 2,
+            currentNavigationMenuIndex: 1,
+            currentAnnotationMenuIndex: 2,
+            currentNavigationMenuBookListStyle: NavigationMenuBookListStyle.Grid.rawValue,
+            currentMarginTop: 21,
+            currentMarginBottom: 22,
+            currentMarginLeft: 23,
+            currentMarginRight: 24,
+            currentVMarginLinked: false,
+            currentHMarginLinked: false,
+            currentLetterSpacing: 7,
+            currentLineHeight: currentLineHeight,
+            currentTextIndent: 9,
+            doWrapPara: true,
+            doClearClass: false,
+            styleOverride: StyleOverrideTypes.AllText.rawValue,
+            structuralStyle: FolioReaderStructuralStyle.bundle.rawValue,
+            structuralTrackingTocLevel: FolioReaderPositionTrackingStyle.level2.rawValue
+        )
     }
 }

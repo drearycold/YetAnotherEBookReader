@@ -56,13 +56,15 @@ class FolioReaderPreferenceRealm: Object {
         currentFontSize = src.currentFontSize
         currentFontWeight = src.currentFontWeight
         
-        //skipping currentAudioRate
-        //skipping currentHighlightStyle
-        //skipping currentMediaOverlayStyle
+        currentAudioRate = src.currentAudioRate
+        currentHighlightStyle = src.currentHighlightStyle
+        currentMediaOverlayStyle = src.currentMediaOverlayStyle
         
         currentScrollDirection = src.currentScrollDirection
         
-        //skipping currentMenuIndex
+        currentNavigationMenuIndex = src.currentNavigationMenuIndex
+        currentAnnotationMenuIndex = src.currentAnnotationMenuIndex
+        currentNavigationMenuBookListStyle = src.currentNavigationMenuBookListStyle
         
         currentVMarginLinked = src.currentVMarginLinked
         currentMarginTop = src.currentMarginTop
@@ -79,9 +81,9 @@ class FolioReaderPreferenceRealm: Object {
         doWrapPara = src.doWrapPara
         doClearClass = src.doClearClass
         
-        //skipping styleOverride
-        //skipping structuralStyle
-        //skipping structuralTocLevel
+        styleOverride = src.styleOverride
+        structuralStyle = src.structuralStyle
+        structuralTrackingTocLevel = src.structuralTrackingTocLevel
     }
 
     func toValue(defaults: FolioReaderProfileValue) -> FolioReaderProfileValue {
@@ -91,7 +93,13 @@ class FolioReaderPreferenceRealm: Object {
             currentFont: currentFont ?? defaults.currentFont,
             currentFontSize: currentFontSize ?? defaults.currentFontSize,
             currentFontWeight: currentFontWeight ?? defaults.currentFontWeight,
+            currentAudioRate: currentAudioRate != .min ? currentAudioRate : defaults.currentAudioRate,
+            currentHighlightStyle: currentHighlightStyle != .min ? currentHighlightStyle : defaults.currentHighlightStyle,
+            currentMediaOverlayStyle: currentMediaOverlayStyle != .min ? currentMediaOverlayStyle : defaults.currentMediaOverlayStyle,
             currentScrollDirection: currentScrollDirection != .min ? currentScrollDirection : defaults.currentScrollDirection,
+            currentNavigationMenuIndex: currentNavigationMenuIndex != .min ? currentNavigationMenuIndex : defaults.currentNavigationMenuIndex,
+            currentAnnotationMenuIndex: currentAnnotationMenuIndex != .min ? currentAnnotationMenuIndex : defaults.currentAnnotationMenuIndex,
+            currentNavigationMenuBookListStyle: currentNavigationMenuBookListStyle != .min ? currentNavigationMenuBookListStyle : defaults.currentNavigationMenuBookListStyle,
             currentMarginTop: currentMarginTop != .min ? currentMarginTop : defaults.currentMarginTop,
             currentMarginBottom: currentMarginBottom != .min ? currentMarginBottom : defaults.currentMarginBottom,
             currentMarginLeft: currentMarginLeft != .min ? currentMarginLeft : defaults.currentMarginLeft,
@@ -102,7 +110,10 @@ class FolioReaderPreferenceRealm: Object {
             currentLineHeight: currentLineHeight != .min ? currentLineHeight : defaults.currentLineHeight,
             currentTextIndent: currentTextIndent != .min ? currentTextIndent : defaults.currentTextIndent,
             doWrapPara: doWrapPara,
-            doClearClass: doClearClass
+            doClearClass: doClearClass,
+            styleOverride: styleOverride != .min ? styleOverride : defaults.styleOverride,
+            structuralStyle: structuralStyle,
+            structuralTrackingTocLevel: structuralTrackingTocLevel
         )
     }
 
@@ -112,7 +123,13 @@ class FolioReaderPreferenceRealm: Object {
         currentFont = value.currentFont
         currentFontSize = value.currentFontSize
         currentFontWeight = value.currentFontWeight
+        currentAudioRate = value.currentAudioRate
+        currentHighlightStyle = value.currentHighlightStyle
+        currentMediaOverlayStyle = value.currentMediaOverlayStyle
         currentScrollDirection = value.currentScrollDirection
+        currentNavigationMenuIndex = value.currentNavigationMenuIndex
+        currentAnnotationMenuIndex = value.currentAnnotationMenuIndex
+        currentNavigationMenuBookListStyle = value.currentNavigationMenuBookListStyle
         currentMarginTop = value.currentMarginTop
         currentMarginBottom = value.currentMarginBottom
         currentMarginLeft = value.currentMarginLeft
@@ -124,5 +141,30 @@ class FolioReaderPreferenceRealm: Object {
         currentTextIndent = value.currentTextIndent
         doWrapPara = value.doWrapPara
         doClearClass = value.doClearClass
+        styleOverride = value.styleOverride
+        structuralStyle = value.structuralStyle
+        structuralTrackingTocLevel = value.structuralTrackingTocLevel
+    }
+
+    var hasCompletePreferenceValue: Bool {
+        currentFont != nil &&
+        currentFontSize != nil &&
+        currentFontWeight != nil &&
+        themeMode != .min &&
+        currentAudioRate != .min &&
+        currentHighlightStyle != .min &&
+        currentMediaOverlayStyle != .min &&
+        currentScrollDirection != .min &&
+        currentNavigationMenuIndex != .min &&
+        currentAnnotationMenuIndex != .min &&
+        currentNavigationMenuBookListStyle != .min &&
+        currentMarginTop != .min &&
+        currentMarginBottom != .min &&
+        currentMarginLeft != .min &&
+        currentMarginRight != .min &&
+        currentLetterSpacing != .min &&
+        currentLineHeight != .min &&
+        currentTextIndent != .min &&
+        styleOverride != .min
     }
 }

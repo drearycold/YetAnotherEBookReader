@@ -278,7 +278,7 @@ extension ReadiumPreferenceValue {
 
     func toReaderEnginePreferences() -> ReaderEnginePreferences {
         ReaderEnginePreferences(
-            themeMode: themeMode,
+            themeMode: sharedThemeMode,
             fontSizePercentage: fontSizePercentage,
             fontFamily: fontFamily,
             lineHeight: lineHeight,
@@ -290,7 +290,7 @@ extension ReadiumPreferenceValue {
     }
 
     mutating func apply(_ preferences: ReaderEnginePreferences) {
-        themeMode = preferences.themeMode
+        themeMode = readiumThemeMode(fromSharedThemeMode: preferences.themeMode)
         fontSizePercentage = preferences.fontSizePercentage
         fontFamily = preferences.fontFamily
         lineHeight = preferences.lineHeight
@@ -298,5 +298,27 @@ extension ReadiumPreferenceValue {
         scroll = preferences.scroll
         scrollAxis = preferences.scrollDirection
         volumeKeyPaging = preferences.volumeKeyPaging
+    }
+
+    private var sharedThemeMode: Int {
+        switch themeMode {
+        case 1:
+            return ReaderEngineThemeMode.sepia.rawValue
+        case 2:
+            return ReaderEngineThemeMode.dark.rawValue
+        default:
+            return ReaderEngineThemeMode.light.rawValue
+        }
+    }
+
+    private func readiumThemeMode(fromSharedThemeMode themeMode: Int) -> Int {
+        switch ReaderEngineThemeMode.fromSharedRawValue(themeMode) {
+        case .sepia, .green:
+            return 1
+        case .dark, .night:
+            return 2
+        case .light:
+            return 0
+        }
     }
 }

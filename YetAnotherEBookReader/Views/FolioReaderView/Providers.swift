@@ -21,7 +21,9 @@ extension EpubFolioReaderContainer {
                 folioReader,
                 delegate: self.readerEngineDelegate,
                 bookId: book.bookPrefId,
-                profileRepository: container?.folioReaderProfileRepository
+                profileRepository: container?.folioReaderProfileRepository,
+                preferenceRepository: container?.readerPreferenceRepository,
+                book: book
             )
             self.folioReaderPreferenceProvider = preferenceProvider
             return preferenceProvider
@@ -126,26 +128,59 @@ func percentageToFolioFontSize(_ percentage: Double) -> String {
     return folioFontSizes[index]
 }
 
+func folioLineHeightToShared(_ lineHeight: Int) -> Double {
+    1.0 + Double(lineHeight + 10) * 0.05
+}
+
+func sharedLineHeightToFolio(_ lineHeight: Double) -> Int {
+    max(0, min(10, Int(round((lineHeight - 1.0) / 0.05 - 10.0))))
+}
+
+func folioPageMarginsToShared(left: Int, right: Int) -> Double {
+    (Double(left + right) / 2.0) / 30.0
+}
+
+func sharedPageMarginsToFolio(_ pageMargins: Double, defaultValue: Int) -> Int {
+    max(0, min(50, Int(round(Double(defaultValue) * pageMargins))))
+}
+
 class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     let folioReader: FolioReader
     weak var delegate: ReaderEngineDelegate?
     var bookId: String
     private let profileRepository: FolioReaderProfileRepositoryProtocol?
+    private let preferenceRepository: ReaderPreferenceRepositoryProtocol?
+    private let book: CalibreBook?
 
     private var values = [String: Any]()
 
-    init(_ folioReader: FolioReader, delegate: ReaderEngineDelegate?, bookId: String, profileRepository: FolioReaderProfileRepositoryProtocol? = nil) {
+    init(
+        _ folioReader: FolioReader,
+        delegate: ReaderEngineDelegate?,
+        bookId: String,
+        profileRepository: FolioReaderProfileRepositoryProtocol? = nil,
+        preferenceRepository: ReaderPreferenceRepositoryProtocol? = nil,
+        book: CalibreBook? = nil
+    ) {
         self.folioReader = folioReader
         self.delegate = delegate
         self.bookId = bookId
         self.profileRepository = profileRepository
+        self.preferenceRepository = preferenceRepository
+        self.book = book
 
         values["nightMode"] = false
         values["themeMode"] = FolioReaderThemeMode.serpia.rawValue
         values["currentFont"] = "Georgia"
         values["currentFontSize"] = FolioReader.DefaultFontSize
         values["currentFontWeight"] = FolioReader.DefaultFontWeight
+        values["currentAudioRate"] = 1
+        values["currentHighlightStyle"] = FolioReaderHighlightStyle.yellow.rawValue
+        values["currentMediaOverlayStyle"] = MediaOverlayStyle.default.rawValue
         values["currentScrollDirection"] = folioReader.defaultScrollDirection.rawValue
+        values["currentNavigationMenuIndex"] = 0
+        values["currentAnnotationMenuIndex"] = 0
+        values["currentNavigationMenuBookListStyle"] = NavigationMenuBookListStyle.List.rawValue
         values["currentMarginTop"] = folioReader.defaultMarginTop
         values["currentMarginBottom"] = folioReader.defaultMarginBottom
         values["currentMarginLeft"] = folioReader.defaultMarginLeft
@@ -157,11 +192,17 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         values["currentTextIndent"] = FolioReader.DefaultTextIndent
         values["doWrapPara"] = false
         values["doClearClass"] = true
+        values["styleOverride"] = StyleOverrideTypes.PNode.rawValue
+        values["structuralStyle"] = FolioReaderStructuralStyle.atom.rawValue
+        values["structuralTrackingTocLevel"] = FolioReaderPositionTrackingStyle.linear.rawValue
 
         let defaultProfile = FolioReaderProfileValue(defaultsFrom: folioReader)
         profileRepository?.ensureDefaultProfile(defaults: defaultProfile)
         if let profile = profileRepository?.loadProfile(named: "Default", defaults: defaultProfile) {
             profile.apply(to: &values, folioReader: folioReader)
+        }
+        if let book, let preferences = preferenceRepository?.loadFolioPreferences(for: book) {
+            preferences.apply(to: &values, folioReader: folioReader)
         }
     }
 
@@ -171,6 +212,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
 
     func preference(setString value: String, for key: String) {
         values[key] = value
+        saveCurrentPreferences()
         notifyDelegate()
     }
 
@@ -180,6 +222,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
 
     func preference(setInt value: Int, for key: String) {
         values[key] = value
+        saveCurrentPreferences()
         notifyDelegate()
     }
 
@@ -189,6 +232,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
 
     func preference(setBool value: Bool, for key: String) {
         values[key] = value
+        saveCurrentPreferences()
         notifyDelegate()
     }
 
@@ -197,6 +241,7 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
         profileRepository?.ensureDefaultProfile(defaults: defaultProfile)
         if let profile = profileRepository?.loadProfile(named: name, defaults: defaultProfile) {
             profile.apply(to: &values, folioReader: folioReader)
+            saveCurrentPreferences()
             notifyDelegate()
         }
     }
@@ -219,34 +264,56 @@ class FolioReaderDelegatePreferenceProvider: FolioReaderPreferenceProvider {
     }
 
     func applyPreferences(_ preferences: ReaderEnginePreferences) {
-        let nightMode = (preferences.themeMode == 2)
+        let nightMode = (preferences.themeMode >= ReaderEngineThemeMode.dark.rawValue)
         values["nightMode"] = nightMode
         values["themeMode"] = preferences.themeMode
 
         values["currentFontSize"] = percentageToFolioFontSize(preferences.fontSizePercentage)
         values["currentFont"] = preferences.fontFamily
         values["currentScrollDirection"] = preferences.scrollDirection
+        values["currentLineHeight"] = sharedLineHeightToFolio(preferences.lineHeight)
+        values["currentMarginTop"] = sharedPageMarginsToFolio(preferences.pageMargins, defaultValue: folioReader.defaultMarginTop)
+        values["currentMarginBottom"] = sharedPageMarginsToFolio(preferences.pageMargins, defaultValue: folioReader.defaultMarginBottom)
+        values["currentMarginLeft"] = sharedPageMarginsToFolio(preferences.pageMargins, defaultValue: folioReader.defaultMarginLeft)
+        values["currentMarginRight"] = sharedPageMarginsToFolio(preferences.pageMargins, defaultValue: folioReader.defaultMarginRight)
+        values["currentVMarginLinked"] = true
+        values["currentHMarginLinked"] = true
     }
 
     private func notifyDelegate() {
-        let themeMode = values["themeMode"] as? Int ?? (values["nightMode"] as? Bool == true ? 2 : 1)
+        let themeMode = values["themeMode"] as? Int ?? (
+            values["nightMode"] as? Bool == true
+                ? ReaderEngineThemeMode.night.rawValue
+                : ReaderEngineThemeMode.sepia.rawValue
+        )
         let fontSizeStr = values["currentFontSize"] as? String ?? FolioReader.DefaultFontSize
         let fontSizePercentage = folioFontSizeToPercentage(fontSizeStr)
         let fontFamily = values["currentFont"] as? String ?? "Original"
         let scrollDirection = values["currentScrollDirection"] as? Int ?? 0
+        let lineHeight = folioLineHeightToShared(values["currentLineHeight"] as? Int ?? FolioReader.DefaultLineHeight)
+        let pageMargins = folioPageMarginsToShared(
+            left: values["currentMarginLeft"] as? Int ?? folioReader.defaultMarginLeft,
+            right: values["currentMarginRight"] as? Int ?? folioReader.defaultMarginRight
+        )
 
         let enginePrefs = ReaderEnginePreferences(
             themeMode: themeMode,
             fontSizePercentage: fontSizePercentage,
             fontFamily: fontFamily,
-            lineHeight: 1.2,
-            pageMargins: 1.0,
+            lineHeight: lineHeight,
+            pageMargins: pageMargins,
             scroll: scrollDirection == 0 ? false : true,
             scrollDirection: scrollDirection,
             volumeKeyPaging: false
         )
 
         delegate?.readerEngine(folioReader, didUpdatePreferences: enginePrefs)
+    }
+
+    private func saveCurrentPreferences() {
+        guard let book else { return }
+        let preferences = FolioReaderPreferenceValue(values: values, folioReader: folioReader)
+        preferenceRepository?.saveFolioPreferences(preferences, for: book)
     }
 }
 
@@ -382,7 +449,7 @@ extension BookHighlight {
 
         highlight.cfiStart = cfiStart
         highlight.cfiEnd = cfiEnd
-        highlight.spineName = spineName
+        highlight.spineName = spineName ?? ""
 
         highlight.style = FolioReaderHighlightStyle.classForStyle(type)
 

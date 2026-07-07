@@ -38,11 +38,13 @@ extension PDFPreferenceValue {
             themeMode: {
                 switch themeMode {
                 case .serpia:
-                    return 1
+                    return ReaderEngineThemeMode.sepia.rawValue
+                case .forest:
+                    return ReaderEngineThemeMode.green.rawValue
                 case .dark:
-                    return 2
+                    return ReaderEngineThemeMode.dark.rawValue
                 default:
-                    return 0
+                    return ReaderEngineThemeMode.light.rawValue
                 }
             }(),
             fontSizePercentage: 100.0,
@@ -56,12 +58,14 @@ extension PDFPreferenceValue {
     }
 
     mutating func apply(_ preferences: ReaderEnginePreferences) {
-        switch preferences.themeMode {
-        case 1:
+        switch ReaderEngineThemeMode.fromSharedRawValue(preferences.themeMode) {
+        case .sepia:
             themeMode = .serpia
-        case 2:
+        case .green:
+            themeMode = .forest
+        case .dark, .night:
             themeMode = .dark
-        default:
+        case .light:
             themeMode = .none
         }
         pageMode = preferences.scroll ? .Scroll : .Page

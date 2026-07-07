@@ -58,8 +58,9 @@ final class ReadingSessionManagerTests: XCTestCase {
         let expectation = self.expectation(description: "Reading book change published")
         
         let manager = manager!
+        let shelfIdSnapshots = manager.readingBookInShelfIdSnapshots()
         let observationTask = Task {
-            for await shelfId in manager.readingBookInShelfIdSnapshots() {
+            for await shelfId in shelfIdSnapshots {
                 guard shelfId == book.inShelfId else { continue }
                 expectation.fulfill()
                 return
