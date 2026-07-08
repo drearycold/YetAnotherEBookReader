@@ -217,6 +217,10 @@ final class ReaderWorkspaceViewModel: ObservableObject {
         return presentationsByID[activePresentationID]
     }
 
+    var supportsReaderWindows: Bool {
+        container.supportsReaderWindows
+    }
+
     func readerLifecycleEvents() -> AsyncStream<ScenePhase> {
         lifecycleBroadcaster.stream()
     }
@@ -268,7 +272,7 @@ final class ReaderWorkspaceViewModel: ObservableObject {
     }
 
     func openActivePresentationInNewWindow() {
-        guard let activePresentation else { return }
+        guard supportsReaderWindows, let activePresentation else { return }
         let newPresentation = container.openReader(
             book: activePresentation.book,
             readerInfo: activePresentation.readerInfo,
@@ -276,9 +280,7 @@ final class ReaderWorkspaceViewModel: ObservableObject {
             placement: .registryOnly,
             reuseExisting: false
         )
-        if container.requestReaderWindow(for: newPresentation) == false {
-            attachPresentation(id: newPresentation.id)
-        }
+        _ = container.requestReaderWindow(for: newPresentation)
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {

@@ -312,14 +312,17 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     @MainActor
-    func requestReaderWindow(for presentation: ReaderPresentation) -> Bool {
+    var supportsReaderWindows: Bool {
         #if targetEnvironment(macCatalyst)
-        let supportsReaderWindow = true
+        return true
         #else
-        let supportsReaderWindow = UIDevice.current.userInterfaceIdiom == .pad && UIApplication.shared.supportsMultipleScenes
+        return UIDevice.current.userInterfaceIdiom == .pad && UIApplication.shared.supportsMultipleScenes
         #endif
+    }
 
-        guard supportsReaderWindow else { return false }
+    @MainActor
+    func requestReaderWindow(for presentation: ReaderPresentation) -> Bool {
+        guard supportsReaderWindows else { return false }
         let activity = ReaderSceneActivity.make(presentationID: presentation.id, title: presentation.title)
         UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil, errorHandler: nil)
         return true

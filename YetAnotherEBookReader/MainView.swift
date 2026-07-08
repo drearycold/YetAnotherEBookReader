@@ -323,17 +323,26 @@ private struct ReaderWorkspaceView: View {
     @ObservedObject var viewModel: ReaderWorkspaceViewModel
     @State private var toolbarHeight: CGFloat = 0
 
-    private var topReaderInset: CGFloat {
+    private var toolbarPlacement: ReaderWorkspaceToolbarPlacement {
+        #if targetEnvironment(macCatalyst)
+        return .top
+        #else
+        return UIDevice.current.userInterfaceIdiom == .phone ? .bottom : .top
+        #endif
+    }
+
+    private var readerToolbarInset: CGFloat {
         toolbarHeight > 0 ? toolbarHeight + 8 : 76
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: toolbarPlacement.alignment) {
             Color.black.ignoresSafeArea()
 
             readerContent
-                .padding(.top, topReaderInset)
-                .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
+                .padding(.top, toolbarPlacement == .top ? readerToolbarInset : 0)
+                .padding(.bottom, toolbarPlacement == .bottom ? readerToolbarInset : 0)
+                .ignoresSafeArea(.container, edges: toolbarPlacement.ignoredReaderEdges)
 
             readerToolbar
                 .background(
@@ -428,11 +437,13 @@ private struct ReaderWorkspaceView: View {
                 }
             }
 
-            Button(action: {
-                viewModel.openActivePresentationInNewWindow()
-            }) {
-                Image(systemName: "rectangle.on.rectangle")
-                    .frame(width: 28, height: 28)
+            if viewModel.supportsReaderWindows {
+                Button(action: {
+                    viewModel.openActivePresentationInNewWindow()
+                }) {
+                    Image(systemName: "rectangle.on.rectangle")
+                        .frame(width: 28, height: 28)
+                }
             }
 
             Button(action: {
@@ -446,8 +457,32 @@ private struct ReaderWorkspaceView: View {
         .padding(8)
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
-        .padding(.top, 10)
+        .padding(.top, toolbarPlacement == .top ? 10 : 0)
+        .padding(.bottom, toolbarPlacement == .bottom ? 10 : 0)
         .padding(.horizontal, 12)
+    }
+}
+
+private enum ReaderWorkspaceToolbarPlacement {
+    case top
+    case bottom
+
+    var alignment: Alignment {
+        switch self {
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        }
+    }
+
+    var ignoredReaderEdges: Edge.Set {
+        switch self {
+        case .top:
+            return [.horizontal, .bottom]
+        case .bottom:
+            return [.horizontal]
+        }
     }
 }
 

@@ -123,6 +123,26 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 Recorded result: `git diff --check` passed, 22 focused tests passed, and the
 iOS Simulator build succeeded.
 
+Reader workspace iPhone toolbar follow-up completed: `ReaderWorkspaceView` now
+places the floating reader tab toolbar at the bottom on iPhone while keeping the
+top toolbar on iPad and Mac Catalyst. Reader content applies the measured
+toolbar inset on the active edge, and the "open in new window" button is hidden
+when the current platform does not support reader windows. `AppContainer`
+centralizes the reader-window support check, and `ReaderWorkspaceViewModel`
+no-ops the new-window action on unsupported platforms so iPhone no longer
+creates a duplicate reader presentation. Validation:
+
+```bash
+git diff --check
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests -only-testing:YetAnotherEBookReaderTests/BookDetailViewModelTests -only-testing:YetAnotherEBookReaderTests/RecentShelfViewModelTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: `git diff --check` passed, 52 focused tests passed, and the
+standard iOS Simulator build succeeded. Manual iPhone/iPad reader toolbar
+verification is still recommended because this is a visual placement change.
+
 FolioReader zero-margin follow-up completed: the residual top/bottom whitespace
 was rooted in FolioReaderKit reserving safe-area/status-bar height and page
 indicator height inside `FolioReaderPage.webViewFrame()`/`anchorBoundsFrame()`,
@@ -145,6 +165,54 @@ Recorded result: both diff checks passed, FolioReaderKit ran 71 tests with 0
 failures, DSReader focused tests ran 35 tests with 0 failures, and the standard
 iOS Simulator build succeeded. Manual iPhone/iPad margin verification is still
 recommended because this change targets visual reader layout.
+
+FolioReader internal close-button follow-up completed: the redundant close
+button came from FolioReaderKit always inserting `closeReader(_:)` into the
+left navigation bar buttons. FolioReaderKit now exposes compatibility-default
+`FolioReaderConfig.showCloseButton`, and DSReader's Folio configuration sets it
+to `false` because reader close/tab management is owned by the workspace chrome.
+Validation:
+
+```bash
+git diff --check
+git -C /Users/peterlee/git/FolioReaderKit diff --check
+xcrun simctl shutdown all
+xcodebuild test -scheme FolioReaderKit -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:FolioReaderKitTests/FolioReaderConfigTests -only-testing:FolioReaderKitTests/NavigationBarVisibilityTests
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/FolioReaderProviderBookIdTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: both diff checks passed, FolioReaderKit focused tests ran 11
+tests with 0 failures, DSReader focused tests ran 26 tests with 0 failures, and
+the standard iOS Simulator build succeeded. The DSReader focused test command
+also printed the known post-suite `Missing AppContainer environment` fatal after
+success; xcodebuild still returned success. Manual FolioReader visual
+verification is still recommended for the actual nav-bar appearance.
+
+FolioReader iPadOS menu tab placement follow-up completed: iPadOS 18+ can
+promote `UITabBarController` tabs away from the old bottom placement, which made
+FolioReader's Page/Font/Paragraph/Advanced/Profile settings tabs appear at the
+top on newer iPads. FolioReaderKit now exposes compatibility-default
+`FolioReaderConfig.forceBottomMenuTabBar`; `FolioReaderCenter` applies `.tabBar`
+mode on iOS 18+ and, when the flag is enabled, applies a compact horizontal
+trait override only to the settings menu controller. DSReader enables the flag
+for Folio containers. Validation:
+
+```bash
+git diff --check
+git -C /Users/peterlee/git/FolioReaderKit diff --check
+xcrun simctl shutdown all
+xcodebuild test -scheme FolioReaderKit -destination 'platform=iOS Simulator,name=iPhone 17' -only-testing:FolioReaderKitTests/FolioReaderConfigTests -only-testing:FolioReaderKitTests/NavigationBarVisibilityTests
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/FolioReaderProviderBookIdTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: both diff checks passed, FolioReaderKit focused tests ran 13
+tests with 0 failures, DSReader focused tests ran 27 tests with 0 failures, and
+the standard iOS Simulator build succeeded. The first sandboxed build attempt
+failed because SwiftPM/clang cache writes outside the workspace were blocked;
+the approved non-sandbox `xcodebuild` rerun succeeded. Manual iPadOS visual
+verification is still recommended for the actual menu tab placement.
 
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 

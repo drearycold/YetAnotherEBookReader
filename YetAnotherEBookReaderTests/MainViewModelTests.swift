@@ -166,6 +166,27 @@ import Combine
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentations.count, 2)
     }
 
+    func testOpenActivePresentationInNewWindowDoesNotDuplicateWhenUnsupported() async throws {
+        guard mockAppContainer.supportsReaderWindows == false else {
+            throw XCTSkip("Current test destination supports reader windows.")
+        }
+
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        mockAppContainer.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+
+        let attached = await waitUntil {
+            self.viewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attached)
+        let originalPresentationIDs = mockAppContainer.sessionManager.readerPresentations.map(\.id)
+
+        viewModel.readerWorkspaceViewModel.openActivePresentationInNewWindow()
+
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), originalPresentationIDs)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, originalPresentationIDs)
+    }
+
     func testReaderSceneActivityAttachesPresentation() async throws {
         let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
         let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)

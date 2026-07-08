@@ -65,6 +65,18 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertNil(identity.canonicalizing("unrelated-id"))
     }
 
+    func testDSReaderFolioConfigurationHidesInternalCloseButton() {
+        let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
+
+        XCTAssertFalse(config.showCloseButton)
+    }
+
+    func testDSReaderFolioConfigurationForcesBottomMenuTabBar() {
+        let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
+
+        XCTAssertTrue(config.forceBottomMenuTabBar)
+    }
+
     func testReadPositionProviderRestoresCanonicalPositionWithFolioReaderRuntimeId() {
         let savedPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
         container.readingPositionRepository.savePosition(savedPosition, for: book)
