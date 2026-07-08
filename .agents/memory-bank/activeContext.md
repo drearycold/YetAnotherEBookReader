@@ -123,6 +123,29 @@ xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBoo
 Recorded result: `git diff --check` passed, 22 focused tests passed, and the
 iOS Simulator build succeeded.
 
+FolioReader zero-margin follow-up completed: the residual top/bottom whitespace
+was rooted in FolioReaderKit reserving safe-area/status-bar height and page
+indicator height inside `FolioReaderPage.webViewFrame()`/`anchorBoundsFrame()`,
+plus bundled CSS forcing `@page` top/bottom margins. FolioReaderKit now has
+compatibility-default config switches for those reserved page-frame components,
+DSReader disables both for FolioReader containers so the workspace chrome
+remains the only top inset, and bundled CSS no longer injects nonzero `@page`
+top/bottom margins. Validation:
+
+```bash
+git diff --check
+git -C /Users/peterlee/git/FolioReaderKit diff --check
+xcrun simctl shutdown all
+xcodebuild test -scheme FolioReaderKit -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/FolioReaderProviderBookIdTests -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: both diff checks passed, FolioReaderKit ran 71 tests with 0
+failures, DSReader focused tests ran 35 tests with 0 failures, and the standard
+iOS Simulator build succeeded. Manual iPhone/iPad margin verification is still
+recommended because this change targets visual reader layout.
+
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 
 ## Pre-Merge Archive Rule

@@ -17,6 +17,8 @@ extension EpubFolioReaderContainer {
         config.allowSharing = true
         config.enableTTS = false
         config.displayTitle = UITraitCollection.current.horizontalSizeClass == .regular
+        config.reserveSafeAreaInsidePageFrame = false
+        config.reservePageIndicatorInsidePageFrame = false
         //config.localizedShareWebLink = URL(string: "yabr://share.book/")
         
         #if DEBUG
