@@ -18,9 +18,20 @@ import ReadiumGCDWebServer
 struct YabrEBookReader: View {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let lifecycleEvents: () -> AsyncStream<ScenePhase>
+
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
+    ) {
+        self.book = book
+        self.readerInfo = readerInfo
+        self.lifecycleEvents = lifecycleEvents
+    }
     
     var body: some View {
-        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo)
+        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, lifecycleEvents: lifecycleEvents)
             .ignoresSafeArea()
     }
 }
@@ -30,21 +41,32 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let lifecycleEvents: () -> AsyncStream<ScenePhase>
     
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
     
     @Environment(\.appContainer) var container
     
-    init(book: CalibreBook, readerInfo: ReaderInfo) {
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
+    ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.lifecycleEvents = lifecycleEvents
         
         errorViewController.view.addSubview(errorLabel)
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        let nav = YabrEBookReaderNavigationController(container: container, book: book, readerInfo: readerInfo)
+        let nav = YabrEBookReaderNavigationController(
+            container: container,
+            book: book,
+            readerInfo: readerInfo,
+            lifecycleEvents: lifecycleEvents
+        )
         nav.container = container
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         nav.navigationBar.isTranslucent = true

@@ -12,6 +12,38 @@ import Foundation
 import SwiftUI
 import OSLog
 
+enum ReaderOpenPlacement {
+    case currentWorkspace
+    case registryOnly
+}
+
+struct ReaderOpenRequest: Equatable {
+    let presentationID: ReaderPresentation.ID
+    let targetWorkspaceID: UUID?
+}
+
+enum ReaderSceneActivity {
+    static let activityType = "com.drearycold.dsreader.reader"
+    private static let presentationIDKey = "presentationID"
+
+    static func make(presentationID: ReaderPresentation.ID, title: String) -> NSUserActivity {
+        let activity = NSUserActivity(activityType: activityType)
+        activity.title = title
+        activity.userInfo = [presentationIDKey: presentationID.uuidString]
+        activity.targetContentIdentifier = presentationID.uuidString
+        activity.isEligibleForHandoff = false
+        activity.isEligibleForSearch = false
+        return activity
+    }
+
+    static func presentationID(from activity: NSUserActivity) -> ReaderPresentation.ID? {
+        guard activity.activityType == activityType,
+              let value = activity.userInfo?[presentationIDKey] as? String
+        else { return nil }
+        return UUID(uuidString: value)
+    }
+}
+
 final class AppContainer: AppContainerProtocol, LibraryProvider {
     static var shared: AppContainer?
 
@@ -71,7 +103,11 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
-    private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
+    private let readerOpenRequestBroadcaster = ManagerAsyncBroadcaster<ReaderOpenRequest>()
+    private var activeReaderWorkspaceID: UUID?
+    private var activeAppSceneIDs = Set<UUID>()
+    private var probeTimerTask: Task<Void, Never>?
+    private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
 
     var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
@@ -171,8 +207,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         calibreUpdateBroadcaster.finish()
         bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
-        bookReaderActivityBroadcaster.finish()
+        readerOpenRequestBroadcaster.finish()
         probeLibraryLastModifiedBroadcaster.finish()
+        probeTimerTask?.cancel()
     }
 
     @MainActor
@@ -194,12 +231,98 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     @MainActor
-    func publishBookReaderActivity(_ phase: ScenePhase) {
-        bookReaderActivityBroadcaster.send(phase)
+    func setActiveReaderWorkspace(id: UUID?) {
+        activeReaderWorkspaceID = id
     }
 
-    func bookReaderActivities() -> AsyncStream<ScenePhase> {
-        bookReaderActivityBroadcaster.stream()
+    @MainActor
+    func clearActiveReaderWorkspace(id: UUID) {
+        if activeReaderWorkspaceID == id {
+            activeReaderWorkspaceID = nil
+        }
+    }
+
+    @MainActor
+    func markAppSceneActive(id: UUID) {
+        let wasEmpty = activeAppSceneIDs.isEmpty
+        activeAppSceneIDs.insert(id)
+        if wasEmpty {
+            enableProbeTimer()
+        }
+    }
+
+    @MainActor
+    func markAppSceneBackground(id: UUID) {
+        activeAppSceneIDs.remove(id)
+        if activeAppSceneIDs.isEmpty {
+            disableProbeTimer()
+        }
+    }
+
+    @MainActor
+    private func enableProbeTimer() {
+        probeTimerTask?.cancel()
+        serverManager.probeServersReachability(with: [], updateLibrary: true)
+        probeTimerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: Self.probeIntervalNanoseconds)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled else { break }
+                self?.serverManager.probeServersReachability(with: [], updateLibrary: true)
+            }
+        }
+    }
+
+    @MainActor
+    private func disableProbeTimer() {
+        probeTimerTask?.cancel()
+        probeTimerTask = nil
+    }
+
+    @discardableResult
+    func openReader(
+        book: CalibreBook,
+        readerInfo: ReaderInfo? = nil,
+        source: ReaderPresentationSource,
+        placement: ReaderOpenPlacement = .currentWorkspace,
+        reuseExisting: Bool = true
+    ) -> ReaderPresentation {
+        let presentation = sessionManager.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: source,
+            reuseExisting: reuseExisting
+        )
+        if placement == .currentWorkspace {
+            readerOpenRequestBroadcaster.send(
+                ReaderOpenRequest(
+                    presentationID: presentation.id,
+                    targetWorkspaceID: activeReaderWorkspaceID
+                )
+            )
+        }
+        return presentation
+    }
+
+    func readerOpenRequests() -> AsyncStream<ReaderOpenRequest> {
+        readerOpenRequestBroadcaster.stream()
+    }
+
+    @MainActor
+    func requestReaderWindow(for presentation: ReaderPresentation) -> Bool {
+        #if targetEnvironment(macCatalyst)
+        let supportsReaderWindow = true
+        #else
+        let supportsReaderWindow = UIDevice.current.userInterfaceIdiom == .pad && UIApplication.shared.supportsMultipleScenes
+        #endif
+
+        guard supportsReaderWindow else { return false }
+        let activity = ReaderSceneActivity.make(presentationID: presentation.id, title: presentation.title)
+        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil, errorHandler: nil)
+        return true
     }
 
     @MainActor

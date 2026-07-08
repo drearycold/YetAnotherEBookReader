@@ -74,6 +74,7 @@ final class ReadingSessionManagerTests: XCTestCase {
         let secondPresentation = manager.openReader(book: secondBook, readerInfo: secondInfo, source: .bookDetail)
 
         XCTAssertEqual(manager.readerPresentations.map(\.id), [firstPresentation.id, secondPresentation.id])
+        XCTAssertEqual(manager.readerPresentation(id: firstPresentation.id)?.book.id, firstBook.id)
         XCTAssertEqual(manager.activeReaderPresentation?.id, secondPresentation.id)
 
         manager.activateReader(id: firstPresentation.id)
@@ -81,6 +82,51 @@ final class ReadingSessionManagerTests: XCTestCase {
 
         manager.closeReader(id: firstPresentation.id)
         XCTAssertEqual(manager.readerPresentations.map(\.id), [secondPresentation.id])
+        XCTAssertEqual(manager.activeReaderPresentation?.id, secondPresentation.id)
+    }
+
+    func testOpenReaderReusesExistingMatchingPresentation() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 101, library: library)
+        let readerInfo = ReaderInfo(
+            deviceName: container.deviceName,
+            url: URL(fileURLWithPath: "/tmp/first.epub"),
+            missing: false,
+            format: .EPUB,
+            readerType: .YabrEPUB,
+            position: TestFixtures.makeReadingPosition(id: container.deviceName)
+        )
+
+        let firstPresentation = manager.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+        let secondPresentation = manager.openReader(book: book, readerInfo: readerInfo, source: .bookDetail)
+
+        XCTAssertEqual(secondPresentation.id, firstPresentation.id)
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [firstPresentation.id])
+        XCTAssertEqual(manager.activeReaderPresentation?.id, firstPresentation.id)
+    }
+
+    func testOpenReaderCanCreateDuplicateWhenRequested() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let book = CalibreBook(id: 101, library: library)
+        let readerInfo = ReaderInfo(
+            deviceName: container.deviceName,
+            url: URL(fileURLWithPath: "/tmp/first.epub"),
+            missing: false,
+            format: .EPUB,
+            readerType: .YabrEPUB,
+            position: TestFixtures.makeReadingPosition(id: container.deviceName)
+        )
+
+        let firstPresentation = manager.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+        let secondPresentation = manager.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .shelf,
+            reuseExisting: false
+        )
+
+        XCTAssertNotEqual(secondPresentation.id, firstPresentation.id)
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [firstPresentation.id, secondPresentation.id])
         XCTAssertEqual(manager.activeReaderPresentation?.id, secondPresentation.id)
     }
     

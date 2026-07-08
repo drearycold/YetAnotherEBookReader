@@ -14,7 +14,6 @@
 //
 
 import Foundation
-import SwiftUI
 
 protocol CalibreServerSnapshotProviding: AnyObject {
     var calibreServers: [String: CalibreServer] { get }
@@ -106,11 +105,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
     func publishDismissAll(_ reason: String)
 
     func dismissAllEvents() -> AsyncStream<String>
-
-    @MainActor
-    func publishBookReaderActivity(_ phase: ScenePhase)
-
-    func bookReaderActivities() -> AsyncStream<ScenePhase>
 
     func publishProbeLibraryLastModifiedRequest(_ request: CalibreSyncLibraryRequest)
 

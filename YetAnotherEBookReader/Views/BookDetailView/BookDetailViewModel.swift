@@ -271,7 +271,7 @@ class BookDetailViewModel: ObservableObject {
         guard let container else { return }
         let readerInfo = container.sessionManager.prepareBookReading(book: book)
         guard readerInfo.missing == false else { return }
-        container.sessionManager.openReader(book: book, readerInfo: readerInfo, source: .bookDetail)
+        container.openReader(book: book, readerInfo: readerInfo, source: .bookDetail)
     }
 
     var updatingMetadata: Bool {

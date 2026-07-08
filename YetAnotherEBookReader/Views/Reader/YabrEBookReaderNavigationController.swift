@@ -30,14 +30,21 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let lifecycleEvents: () -> AsyncStream<ScenePhase>
     
     private var activityTask: Task<Void, Never>?
     private var currentSessionHandle: ReadingSessionHandle?
     
-    init(container: AppContainer, book: CalibreBook, readerInfo: ReaderInfo) {
+    init(
+        container: AppContainer,
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        lifecycleEvents: @escaping () -> AsyncStream<ScenePhase>
+    ) {
         self.container = container
         self.book = book
         self.readerInfo = readerInfo
+        self.lifecycleEvents = lifecycleEvents
         
         super.init(navigationBarClass: nil, toolbarClass: nil)
     }
@@ -53,7 +60,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     override func viewWillAppear(_ animated: Bool) {
         currentSessionHandle = container.readingPositionRepository.beginSession(at: readerInfo.position, for: book)
         activityTask?.cancel()
-        let activities = container.bookReaderActivities()
+        let activities = lifecycleEvents()
         activityTask = Task { @MainActor [weak self] in
             for await activity in activities {
                 guard !Task.isCancelled else { return }

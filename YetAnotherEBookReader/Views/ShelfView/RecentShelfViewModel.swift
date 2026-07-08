@@ -118,7 +118,7 @@ final class RecentShelfViewModel: ObservableObject {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
         } else {
-            container.sessionManager.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+            container.openReader(book: book, readerInfo: readerInfo, source: .shelf)
         }
     }
     

@@ -39,6 +39,12 @@ struct ReaderPresentation: Identifiable, Equatable {
     var inShelfId: String { book.inShelfId }
     var title: String { book.title }
 
+    func matches(book: CalibreBook, readerInfo: ReaderInfo) -> Bool {
+        self.book.inShelfId == book.inShelfId &&
+            self.readerInfo.format == readerInfo.format &&
+            self.readerInfo.readerType == readerInfo.readerType
+    }
+
     static func == (lhs: ReaderPresentation, rhs: ReaderPresentation) -> Bool {
         lhs.id == rhs.id
     }
@@ -91,6 +97,10 @@ class ReadingSessionManager {
     var activeReaderPresentation: ReaderPresentation? {
         guard let activeReaderPresentationID else { return nil }
         return readerPresentations.first { $0.id == activeReaderPresentationID }
+    }
+
+    func readerPresentation(id: ReaderPresentation.ID) -> ReaderPresentation? {
+        readerPresentations.first { $0.id == id }
     }
 
     var presentingEBookReaderFromShelf: Bool {
@@ -233,9 +243,22 @@ class ReadingSessionManager {
     func openReader(
         book: CalibreBook,
         readerInfo: ReaderInfo? = nil,
-        source: ReaderPresentationSource
+        source: ReaderPresentationSource,
+        reuseExisting: Bool = true
     ) -> ReaderPresentation {
         let resolvedReaderInfo = readerInfo ?? prepareBookReading(book: book)
+        if reuseExisting,
+           let existingPresentation = readerPresentations.first(where: { $0.matches(book: book, readerInfo: resolvedReaderInfo) }) {
+            legacyReadingBook = existingPresentation.book
+            legacyReaderInfo = existingPresentation.readerInfo
+            legacyPresentingEBookReaderFromShelf = true
+            activeReaderPresentationID = existingPresentation.id
+            readingBookBroadcaster.send(self.readingBook)
+            readerInfoBroadcaster.send(self.readerInfo)
+            selectedPosition = existingPresentation.readerInfo.position.id
+            return existingPresentation
+        }
+
         let presentation = ReaderPresentation(
             book: book,
             readerInfo: resolvedReaderInfo,

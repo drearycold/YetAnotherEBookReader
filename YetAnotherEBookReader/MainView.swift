@@ -111,16 +111,11 @@ struct MainView: View {
                     Rectangle().frame(height: 50).opacity(0.0)
                 }
             }
-        }
-        .fullScreenCover(isPresented: Binding(
-            get: { viewModel.activeReaderPresentation != nil },
-            set: { isPresented in
-                if isPresented == false {
-                    viewModel.closeActiveReader()
-                }
+
+            if viewModel.readerWorkspaceViewModel.hasReaders {
+                ReaderWorkspaceView(viewModel: viewModel.readerWorkspaceViewModel)
+                    .zIndex(10)
             }
-        )) {
-            ReaderWorkspaceView(viewModel: viewModel)
         }
         .alert(item: $viewModel.alertItem) { item in
             if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
@@ -325,45 +320,142 @@ struct MainView: View {
 
 @available(macCatalyst 14.0, *)
 private struct ReaderWorkspaceView: View {
-    @ObservedObject var viewModel: MainViewModel
+    @ObservedObject var viewModel: ReaderWorkspaceViewModel
+    @State private var toolbarHeight: CGFloat = 0
+
+    private var topReaderInset: CGFloat {
+        toolbarHeight > 0 ? toolbarHeight + 8 : 76
+    }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            if let presentation = viewModel.activeReaderPresentation {
-                YabrEBookReader(book: presentation.book, readerInfo: presentation.readerInfo)
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
+
+            readerContent
+                .padding(.top, topReaderInset)
+                .ignoresSafeArea(.container, edges: [.horizontal, .bottom])
+
+            readerToolbar
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: ReaderToolbarHeightPreferenceKey.self, value: proxy.size.height)
+                    }
+                )
+        }
+        .onPreferenceChange(ReaderToolbarHeightPreferenceKey.self) { height in
+            toolbarHeight = height
+        }
+        .opacity(viewModel.isPresented ? 1 : 0)
+        .allowsHitTesting(viewModel.isPresented)
+        .accessibilityHidden(viewModel.isPresented == false)
+    }
+
+    @ViewBuilder
+    private var readerContent: some View {
+        if viewModel.presentations.isEmpty == false {
+            ZStack {
+                ForEach(viewModel.presentations) { presentation in
+                    YabrEBookReaderRepresentable(
+                        book: presentation.book,
+                        readerInfo: presentation.readerInfo,
+                        lifecycleEvents: viewModel.readerLifecycleEvents
+                    )
                     .id(presentation.id)
-            } else {
-                NavigationView {
-                    Text("No Suitable Format/Reader/Position Combo")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button(action: {
-                                    viewModel.closeActiveReader()
-                                }) {
-                                    Image(systemName: "xmark")
-                                }
+                    .opacity(viewModel.activePresentationID == presentation.id ? 1 : 0)
+                    .allowsHitTesting(viewModel.activePresentationID == presentation.id)
+                    .accessibilityHidden(viewModel.activePresentationID != presentation.id)
+                }
+            }
+        } else if viewModel.isPresented {
+            NavigationView {
+                Text("No Suitable Format/Reader/Position Combo")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(action: {
+                                viewModel.hideReader()
+                            }) {
+                                Image(systemName: "xmark")
                             }
                         }
+                    }
+            }
+        }
+    }
+
+    private var readerToolbar: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                viewModel.hideReader()
+            }) {
+                Image(systemName: "rectangle.leadinghalf.inset.filled")
+                    .frame(width: 28, height: 28)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(viewModel.presentations) { presentation in
+                        HStack(spacing: 6) {
+                            Button(action: {
+                                viewModel.activatePresentation(id: presentation.id)
+                            }) {
+                                Text(presentation.title)
+                                    .lineLimit(1)
+                                    .font(.caption)
+                            }
+
+                            Button(action: {
+                                viewModel.closePresentation(id: presentation.id)
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.caption2)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.activePresentationID == presentation.id ? Color.accentColor : Color.secondary.opacity(0.35))
+                        )
+                        .foregroundColor(.white)
+                        .contextMenu {
+                            Button(action: {
+                                viewModel.closePresentation(id: presentation.id)
+                            }) {
+                                Label("Close", systemImage: "xmark")
+                            }
+                        }
+                    }
                 }
             }
 
-            if viewModel.readerPresentations.count > 1 {
-                Menu {
-                    ForEach(viewModel.readerPresentations) { presentation in
-                        Button(presentation.title) {
-                            viewModel.activateReader(presentation)
-                        }
-                    }
-                } label: {
-                    Image(systemName: "books.vertical")
-                        .font(.headline)
-                        .padding(10)
-                        .background(.ultraThinMaterial)
-                        .clipShape(Circle())
-                }
-                .padding()
+            Button(action: {
+                viewModel.openActivePresentationInNewWindow()
+            }) {
+                Image(systemName: "rectangle.on.rectangle")
+                    .frame(width: 28, height: 28)
+            }
+
+            Button(action: {
+                viewModel.closeActivePresentation()
+            }) {
+                Image(systemName: "xmark")
+                    .frame(width: 28, height: 28)
             }
         }
+        .buttonStyle(.plain)
+        .padding(8)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .padding(.top, 10)
+        .padding(.horizontal, 12)
+    }
+}
+
+private struct ReaderToolbarHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

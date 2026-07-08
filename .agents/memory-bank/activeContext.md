@@ -1,7 +1,9 @@
 # Active Context
 
 ## Current Focus
-The current branch is `fix/library-book-list`. Branch implementation work has been completed and archived before PR creation.
+The current branch is `codex/folio-reader-integration`. Active work is focused
+on reader architecture modernization: multiple reader presentations, reader
+workspace tabs, and iPad/Mac window scene support.
 
 Keep this file focused on the active branch and the few current project notes a future agent needs by default. Full historical records live under `.agents/memory-bank/history/`.
 
@@ -13,13 +15,13 @@ reader engines when the target engine has no saved preferences for the book.
 FolioReader now also has full native per-book preference persistence so
 Folio-only settings are not lost through the cross-engine compatibility layer.
 
-Reader presentation is being moved off the old single global reader state. The
-current working tree adds `ReaderPresentation` snapshots to
-`ReadingSessionManager`, routes shelf/detail/import/reading-position open actions
-through `openReader(...)`, removes the `AppContainer.presentingStack` dismiss
-workaround, and binds FolioReader providers to the concrete reader instance's
-book/readerInfo instead of `bookManager.readingBook` / `sessionManager.readerInfo`.
-Validation completed for this slice:
+Reader presentation has moved off the old single global reader state. The branch
+adds `ReaderPresentation` snapshots to `ReadingSessionManager`, routes
+shelf/detail/import/reading-position open actions through `openReader(...)`,
+removes the `AppContainer.presentingStack` dismiss workaround, and binds
+FolioReader providers to the concrete reader instance's book/readerInfo instead
+of `bookManager.readingBook` / `sessionManager.readerInfo`. Validation completed
+for this slice:
 
 ```bash
 git diff --check
@@ -39,6 +41,87 @@ Review follow-up completed: `ReaderWorkspaceView` now keys `YabrEBookReader` by
 underlying UIKit reader instead of reusing the old representable controller.
 Validation rerun after the fix: `git diff --check`, the same 71 focused reader
 tests, and the standard iOS Simulator build all passed.
+
+Reader workspace/window scene upgrade is implemented in the current working
+tree. `MainView` now hosts a persistent reader workspace overlay with tabs
+instead of a single full-screen cover; hiding the reader keeps mounted tabs
+alive. `ReaderWorkspaceViewModel` owns per-scene reader tab membership,
+activation, close, hide/show, and "open active reader in a new window" behavior.
+`YetAnotherEBookReaderApp` now creates one `MainViewModel` per scene and handles
+reader scene restoration through `NSUserActivity`. `AppContainer` owns reader
+open requests, active reader workspace routing, scene activity helpers, and the
+app-wide probe timer tied to active app scenes. The old app-wide
+`bookReaderActivity` async bridge was removed; reader lifecycle events now flow
+from each workspace to its hosted reader controllers.
+
+Validation completed for the workspace/window scene slice:
+
+```bash
+git diff --check
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/BookDetailViewModelTests -only-testing:YetAnotherEBookReaderTests/RecentShelfViewModelTests -only-testing:YetAnotherEBookReaderTests/FolioReaderProviderBookIdTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: `git diff --check` passed, 73 focused tests passed, and the
+iOS Simulator build succeeded. Follow-up risk: inactive reader tabs remain
+mounted so state is preserved, but reader analytics/lifecycle semantics are still
+scene-wide rather than "visible tab only." The compatibility
+`activeReaderPresentation` / `readingBook` / `readerInfo` accessors still exist
+for older callers and tests and can be removed in a later cleanup.
+
+Reader workspace top-obstruction follow-up completed: the workspace now measures
+the floating tab toolbar height and applies a matching top inset to the hosted
+reader content/fallback view, so the toolbar no longer covers the first lines of
+reader text. The workspace uses the underlying `YabrEBookReaderRepresentable`
+inside this inset container so the legacy `YabrEBookReader.ignoresSafeArea()`
+wrapper remains unchanged for other call sites. Validation:
+
+```bash
+git diff --check
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests -only-testing:YetAnotherEBookReaderTests/BookDetailViewModelTests -only-testing:YetAnotherEBookReaderTests/RecentShelfViewModelTests
+```
+
+Recorded result: `git diff --check` passed, the iOS Simulator build succeeded,
+and 48 focused tests passed.
+
+Reader workspace hide-button follow-up completed: the left toolbar button was
+calling `ReaderWorkspaceViewModel.hideReader()`, but the outer `MainView` owned
+the overlay opacity/hit-testing modifiers while only `ReaderWorkspaceView`
+observed the nested workspace object. The overlay now keeps those modifiers
+inside `ReaderWorkspaceView`, so `isPresented` changes redraw the same view that
+handles the button. Validation:
+
+```bash
+git diff --check
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/MainViewModelTests
+```
+
+Recorded result: `git diff --check` passed, the iOS Simulator build succeeded,
+and 11 `MainViewModelTests` passed.
+
+Reader workspace duplicate-tab follow-up completed: reopening the same book from
+Recent Shelf now reuses the existing `ReaderPresentation` when the book,
+format, and reader type match, so the workspace activates the existing tab
+instead of appending another identical tab. `AppContainer.openReader` and
+`ReadingSessionManager.openReader` keep `reuseExisting` enabled by default;
+`ReaderWorkspaceViewModel.openActivePresentationInNewWindow()` passes
+`reuseExisting: false` so the explicit new-window action can still create a
+separate same-book presentation. Validation:
+
+```bash
+git diff --check
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests -only-testing:YetAnotherEBookReaderTests/MainViewModelTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: `git diff --check` passed, 22 focused tests passed, and the
+iOS Simulator build succeeded.
 
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 

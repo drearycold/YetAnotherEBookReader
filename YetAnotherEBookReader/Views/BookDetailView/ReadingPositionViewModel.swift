@@ -132,7 +132,7 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
             position: position
         )
 
-        container.sessionManager.openReader(book: book, readerInfo: readerInfo, source: .readingPosition)
+        container.openReader(book: book, readerInfo: readerInfo, source: .readingPosition)
     }
 
     func updatePosition() {
