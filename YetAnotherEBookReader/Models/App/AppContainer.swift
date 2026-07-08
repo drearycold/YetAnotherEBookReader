@@ -106,8 +106,11 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let readerOpenRequestBroadcaster = ManagerAsyncBroadcaster<ReaderOpenRequest>()
     private var activeReaderWorkspaceID: UUID?
     private var activeAppSceneIDs = Set<UUID>()
+    private var transferringReaderPresentationIDs = Set<ReaderPresentation.ID>()
     private var probeTimerTask: Task<Void, Never>?
     private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
+    var readerWindowSupportOverride: Bool?
+    var readerWindowRequestHandler: ((NSUserActivity?) -> Void)?
 
     var downloadManager = BookDownloadManager()
     lazy var sessionManager = ReadingSessionManager(container: self)
@@ -313,6 +316,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
 
     @MainActor
     var supportsReaderWindows: Bool {
+        if let readerWindowSupportOverride {
+            return readerWindowSupportOverride
+        }
         #if targetEnvironment(macCatalyst)
         return true
         #else
@@ -321,11 +327,38 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     @MainActor
+    func requestEmptyReaderWindow() -> Bool {
+        guard supportsReaderWindows else { return false }
+        requestReaderScene(userActivity: nil)
+        return true
+    }
+
+    @MainActor
     func requestReaderWindow(for presentation: ReaderPresentation) -> Bool {
         guard supportsReaderWindows else { return false }
         let activity = ReaderSceneActivity.make(presentationID: presentation.id, title: presentation.title)
-        UIApplication.shared.requestSceneSessionActivation(nil, userActivity: activity, options: nil, errorHandler: nil)
+        requestReaderScene(userActivity: activity)
         return true
+    }
+
+    @MainActor
+    func markReaderPresentationTransfer(id: ReaderPresentation.ID) {
+        transferringReaderPresentationIDs.insert(id)
+    }
+
+    @MainActor
+    func consumeReaderPresentationTransfer(id: ReaderPresentation.ID?) -> Bool {
+        guard let id else { return false }
+        return transferringReaderPresentationIDs.remove(id) != nil
+    }
+
+    @MainActor
+    private func requestReaderScene(userActivity: NSUserActivity?) {
+        if let readerWindowRequestHandler {
+            readerWindowRequestHandler(userActivity)
+        } else {
+            UIApplication.shared.requestSceneSessionActivation(nil, userActivity: userActivity, options: nil, errorHandler: nil)
+        }
     }
 
     @MainActor

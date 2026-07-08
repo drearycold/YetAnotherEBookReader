@@ -18,20 +18,23 @@ import ReadiumGCDWebServer
 struct YabrEBookReader: View {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ScenePhase>
 
     init(
         book: CalibreBook,
         readerInfo: ReaderInfo,
+        presentationID: ReaderPresentation.ID? = nil,
         lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
     }
     
     var body: some View {
-        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, lifecycleEvents: lifecycleEvents)
+        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, presentationID: presentationID, lifecycleEvents: lifecycleEvents)
             .ignoresSafeArea()
     }
 }
@@ -41,6 +44,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ScenePhase>
     
     let errorViewController = UIViewController()
@@ -51,10 +55,12 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     init(
         book: CalibreBook,
         readerInfo: ReaderInfo,
+        presentationID: ReaderPresentation.ID? = nil,
         lifecycleEvents: @escaping () -> AsyncStream<ScenePhase> = { AsyncStream { $0.finish() } }
     ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
         
         errorViewController.view.addSubview(errorLabel)
@@ -65,6 +71,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             container: container,
             book: book,
             readerInfo: readerInfo,
+            presentationID: presentationID,
             lifecycleEvents: lifecycleEvents
         )
         nav.container = container

@@ -166,7 +166,7 @@ import Combine
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentations.count, 2)
     }
 
-    func testOpenActivePresentationInNewWindowDoesNotDuplicateWhenUnsupported() async throws {
+    func testReaderWindowActionsDoNothingWhenUnsupported() async throws {
         guard mockAppContainer.supportsReaderWindows == false else {
             throw XCTSkip("Current test destination supports reader windows.")
         }
@@ -181,10 +181,105 @@ import Combine
         XCTAssertTrue(attached)
         let originalPresentationIDs = mockAppContainer.sessionManager.readerPresentations.map(\.id)
 
-        viewModel.readerWorkspaceViewModel.openActivePresentationInNewWindow()
+        viewModel.readerWorkspaceViewModel.openEmptyReaderWindow()
+        viewModel.readerWorkspaceViewModel.moveActivePresentationToNewWindow()
 
         XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), originalPresentationIDs)
         XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, originalPresentationIDs)
+    }
+
+    func testOpenEmptyReaderWindowDoesNotChangeReaderTabs() async throws {
+        mockAppContainer.readerWindowSupportOverride = true
+        var requestedActivities: [NSUserActivity?] = []
+        mockAppContainer.readerWindowRequestHandler = { activity in
+            requestedActivities.append(activity)
+        }
+
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        mockAppContainer.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+
+        let attached = await waitUntil {
+            self.viewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attached)
+        let originalPresentationIDs = mockAppContainer.sessionManager.readerPresentations.map(\.id)
+
+        viewModel.readerWorkspaceViewModel.openEmptyReaderWindow()
+
+        XCTAssertEqual(requestedActivities.count, 1)
+        XCTAssertNil(requestedActivities[0])
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), originalPresentationIDs)
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, originalPresentationIDs)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
+    }
+
+    func testMoveActivePresentationToNewWindowMovesLastTabWithoutClosingSession() async throws {
+        mockAppContainer.readerWindowSupportOverride = true
+        var requestedActivities: [NSUserActivity?] = []
+        mockAppContainer.readerWindowRequestHandler = { activity in
+            requestedActivities.append(activity)
+        }
+
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        mockAppContainer.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+
+        let attached = await waitUntil {
+            self.viewModel.readerWorkspaceViewModel.activePresentation?.book.inShelfId == book.inShelfId
+        }
+        XCTAssertTrue(attached)
+        let presentationID = try XCTUnwrap(viewModel.readerWorkspaceViewModel.activePresentationID)
+
+        viewModel.readerWorkspaceViewModel.moveActivePresentationToNewWindow()
+
+        XCTAssertEqual(requestedActivities.count, 1)
+        XCTAssertEqual(ReaderSceneActivity.presentationID(from: try XCTUnwrap(requestedActivities[0])), presentationID)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), [presentationID])
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.presentationIDs.isEmpty)
+        XCTAssertNil(viewModel.readerWorkspaceViewModel.activePresentationID)
+        XCTAssertFalse(viewModel.readerWorkspaceViewModel.isPresented)
+        XCTAssertTrue(mockAppContainer.consumeReaderPresentationTransfer(id: presentationID))
+        XCTAssertFalse(mockAppContainer.consumeReaderPresentationTransfer(id: presentationID))
+    }
+
+    func testMoveActivePresentationToNewWindowActivatesRemainingTab() async throws {
+        mockAppContainer.readerWindowSupportOverride = true
+        var requestedActivities: [NSUserActivity?] = []
+        mockAppContainer.readerWindowRequestHandler = { activity in
+            requestedActivities.append(activity)
+        }
+
+        let library = try XCTUnwrap(mockAppContainer.libraryManager.calibreLibraries.first?.value)
+        let firstBook = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        var secondBook = CalibreBook(id: 909, library: library)
+        secondBook.title = "Second Reader"
+        secondBook.formats = firstBook.formats
+        mockAppContainer.bookManager.booksInShelf[firstBook.inShelfId] = firstBook
+        mockAppContainer.bookManager.booksInShelf[secondBook.inShelfId] = secondBook
+
+        let firstInfo = mockAppContainer.sessionManager.prepareBookReading(book: firstBook)
+        let secondInfo = mockAppContainer.sessionManager.prepareBookReading(book: secondBook)
+        let firstPresentation = mockAppContainer.openReader(book: firstBook, readerInfo: firstInfo, source: .shelf)
+        let secondPresentation = mockAppContainer.openReader(book: secondBook, readerInfo: secondInfo, source: .bookDetail)
+
+        let attached = await waitUntil {
+            self.viewModel.readerWorkspaceViewModel.presentationIDs == [firstPresentation.id, secondPresentation.id] &&
+                self.viewModel.readerWorkspaceViewModel.activePresentationID == secondPresentation.id
+        }
+        XCTAssertTrue(attached)
+
+        viewModel.readerWorkspaceViewModel.moveActivePresentationToNewWindow()
+
+        XCTAssertEqual(requestedActivities.count, 1)
+        XCTAssertEqual(ReaderSceneActivity.presentationID(from: try XCTUnwrap(requestedActivities[0])), secondPresentation.id)
+        XCTAssertEqual(mockAppContainer.sessionManager.readerPresentations.map(\.id), [firstPresentation.id, secondPresentation.id])
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.presentationIDs, [firstPresentation.id])
+        XCTAssertEqual(viewModel.readerWorkspaceViewModel.activePresentationID, firstPresentation.id)
+        XCTAssertTrue(viewModel.readerWorkspaceViewModel.isPresented)
+        XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.id, firstPresentation.id)
+        XCTAssertTrue(mockAppContainer.consumeReaderPresentationTransfer(id: secondPresentation.id))
+        XCTAssertFalse(mockAppContainer.consumeReaderPresentationTransfer(id: secondPresentation.id))
     }
 
     func testReaderSceneActivityAttachesPresentation() async throws {

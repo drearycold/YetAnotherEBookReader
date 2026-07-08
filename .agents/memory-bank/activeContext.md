@@ -214,6 +214,27 @@ failed because SwiftPM/clang cache writes outside the workspace were blocked;
 the approved non-sandbox `xcodebuild` rerun succeeded. Manual iPadOS visual
 verification is still recommended for the actual menu tab placement.
 
+Reader workspace iPad/Catalyst window-button follow-up completed: the previous
+single multi-window button duplicated the active book into a new reader
+presentation. The toolbar now exposes two explicit window actions on platforms
+that support reader windows: `New Window` opens an empty app scene, and `Move
+Reader to New Window` transfers the active reader presentation to a new scene
+without creating a duplicate presentation. Moving a reader detaches the tab from
+the current workspace only; a one-shot transfer marker prevents the old UIKit
+reader controller's `viewWillDisappear` from being treated as a user close.
+Validation:
+
+```bash
+git diff --check
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: `git diff --check` passed, 26 focused tests passed, and the
+standard iOS Simulator build succeeded. Manual iPad/Catalyst verification is
+still recommended for actual scene activation behavior.
+
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 
 ## Pre-Merge Archive Rule

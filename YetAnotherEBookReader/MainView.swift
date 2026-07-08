@@ -367,6 +367,7 @@ private struct ReaderWorkspaceView: View {
                     YabrEBookReaderRepresentable(
                         book: presentation.book,
                         readerInfo: presentation.readerInfo,
+                        presentationID: presentation.id,
                         lifecycleEvents: viewModel.readerLifecycleEvents
                     )
                     .id(presentation.id)
@@ -439,11 +440,22 @@ private struct ReaderWorkspaceView: View {
 
             if viewModel.supportsReaderWindows {
                 Button(action: {
-                    viewModel.openActivePresentationInNewWindow()
+                    viewModel.openEmptyReaderWindow()
                 }) {
-                    Image(systemName: "rectangle.on.rectangle")
+                    Image(systemName: "plus.rectangle")
                         .frame(width: 28, height: 28)
                 }
+                .accessibilityLabel("New Window")
+                .help("Open a new empty window")
+
+                Button(action: {
+                    viewModel.moveActivePresentationToNewWindow()
+                }) {
+                    Image(systemName: "arrow.up.right.square")
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("Move Reader to New Window")
+                .help("Move the current reader to a new window")
             }
 
             Button(action: {

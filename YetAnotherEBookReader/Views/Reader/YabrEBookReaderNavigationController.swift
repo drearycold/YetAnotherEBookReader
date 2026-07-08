@@ -30,6 +30,7 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let presentationID: ReaderPresentation.ID?
     let lifecycleEvents: () -> AsyncStream<ScenePhase>
     
     private var activityTask: Task<Void, Never>?
@@ -39,11 +40,13 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
         container: AppContainer,
         book: CalibreBook,
         readerInfo: ReaderInfo,
+        presentationID: ReaderPresentation.ID?,
         lifecycleEvents: @escaping () -> AsyncStream<ScenePhase>
     ) {
         self.container = container
         self.book = book
         self.readerInfo = readerInfo
+        self.presentationID = presentationID
         self.lifecycleEvents = lifecycleEvents
         
         super.init(navigationBarClass: nil, toolbarClass: nil)
@@ -79,11 +82,13 @@ class YabrEBookReaderNavigationController: UINavigationController, AlertDelegate
             currentSessionHandle = nil
         }
         
-        let bookToClose = book
-        let positionAtClose = readerInfo.position
-        
-        Task {
-            await self.container.sessionManager.onBookReaderClosed(book: bookToClose, lastPosition: positionAtClose)
+        if container.consumeReaderPresentationTransfer(id: presentationID) == false {
+            let bookToClose = book
+            let positionAtClose = readerInfo.position
+
+            Task {
+                await self.container.sessionManager.onBookReaderClosed(book: bookToClose, lastPosition: positionAtClose)
+            }
         }
     }
 

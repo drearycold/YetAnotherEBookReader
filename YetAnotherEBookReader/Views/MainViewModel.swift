@@ -271,16 +271,16 @@ final class ReaderWorkspaceViewModel: ObservableObject {
         isPresented = false
     }
 
-    func openActivePresentationInNewWindow() {
+    func openEmptyReaderWindow() {
+        guard supportsReaderWindows else { return }
+        _ = container.requestEmptyReaderWindow()
+    }
+
+    func moveActivePresentationToNewWindow() {
         guard supportsReaderWindows, let activePresentation else { return }
-        let newPresentation = container.openReader(
-            book: activePresentation.book,
-            readerInfo: activePresentation.readerInfo,
-            source: activePresentation.source,
-            placement: .registryOnly,
-            reuseExisting: false
-        )
-        _ = container.requestReaderWindow(for: newPresentation)
+        guard container.requestReaderWindow(for: activePresentation) else { return }
+        container.markReaderPresentationTransfer(id: activePresentation.id)
+        detachPresentation(id: activePresentation.id)
     }
 
     func handleScenePhase(_ scenePhase: ScenePhase) {
@@ -321,6 +321,23 @@ final class ReaderWorkspaceViewModel: ObservableObject {
                 guard request.targetWorkspaceID == nil || request.targetWorkspaceID == self.id else { continue }
                 self.attachPresentation(id: request.presentationID)
             }
+        }
+    }
+
+    private func detachPresentation(id presentationID: ReaderPresentation.ID) {
+        let wasActive = activePresentationID == presentationID
+        presentationIDs.removeAll { $0 == presentationID }
+
+        if wasActive {
+            activePresentationID = presentationIDs.last
+            if let activePresentationID {
+                container.sessionManager.activateReader(id: activePresentationID)
+            }
+        }
+
+        if presentationIDs.isEmpty {
+            activePresentationID = nil
+            isPresented = false
         }
     }
 }
