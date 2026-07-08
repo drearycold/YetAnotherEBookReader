@@ -48,6 +48,41 @@ final class ReadingSessionManagerTests: XCTestCase {
         XCTAssertEqual(manager.formatReaderMap[.PDF], [.YabrPDF, .ReadiumPDF])
         XCTAssertEqual(manager.formatReaderMap[.CBZ], [.ReadiumCBZ])
     }
+
+    func testOpenReaderSupportsMultiplePresentations() throws {
+        let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)
+        let firstBook = CalibreBook(id: 101, library: library)
+        let secondBook = CalibreBook(id: 202, library: library)
+        let firstInfo = ReaderInfo(
+            deviceName: container.deviceName,
+            url: URL(fileURLWithPath: "/tmp/first.epub"),
+            missing: false,
+            format: .EPUB,
+            readerType: .YabrEPUB,
+            position: TestFixtures.makeReadingPosition(id: container.deviceName)
+        )
+        let secondInfo = ReaderInfo(
+            deviceName: container.deviceName,
+            url: URL(fileURLWithPath: "/tmp/second.epub"),
+            missing: false,
+            format: .EPUB,
+            readerType: .YabrEPUB,
+            position: TestFixtures.makeReadingPosition(id: container.deviceName)
+        )
+
+        let firstPresentation = manager.openReader(book: firstBook, readerInfo: firstInfo, source: .shelf)
+        let secondPresentation = manager.openReader(book: secondBook, readerInfo: secondInfo, source: .bookDetail)
+
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [firstPresentation.id, secondPresentation.id])
+        XCTAssertEqual(manager.activeReaderPresentation?.id, secondPresentation.id)
+
+        manager.activateReader(id: firstPresentation.id)
+        XCTAssertEqual(manager.activeReaderPresentation?.id, firstPresentation.id)
+
+        manager.closeReader(id: firstPresentation.id)
+        XCTAssertEqual(manager.readerPresentations.map(\.id), [secondPresentation.id])
+        XCTAssertEqual(manager.activeReaderPresentation?.id, secondPresentation.id)
+    }
     
     func testSelectedReadingBook_publishesChange() throws {
         let library = try XCTUnwrap(container.libraryManager.calibreLibraries.first?.value)

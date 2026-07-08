@@ -19,6 +19,8 @@ import GoogleMobileAds
 class EpubFolioReaderContainer: FolioReaderContainer {
 //    var savedPositionObserver: NSKeyValueObservation?
     var container: AppContainer?
+    var calibreBook: CalibreBook?
+    var readerInfo: ReaderInfo?
     weak var readerEngineDelegate: ReaderEngineDelegate?
     
     var yabrFolioReaderPageDelegate: YabrFolioReaderPageDelegate!

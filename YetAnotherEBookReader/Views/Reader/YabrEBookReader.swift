@@ -214,6 +214,8 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
 
             epubReaderContainer.container = container
+            epubReaderContainer.calibreBook = book
+            epubReaderContainer.readerInfo = readerInfo
             epubReaderContainer.readerEngineDelegate = context.coordinator
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)

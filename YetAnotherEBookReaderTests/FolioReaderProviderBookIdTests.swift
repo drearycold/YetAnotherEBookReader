@@ -378,11 +378,9 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             epubPath: "/dev/null/non-existent-\(UUID().uuidString).epub",
             webServer: webServer
         )
-        // Ensure the provider factory can build a real FolioReaderDelegateHighlightProvider
-        // instead of falling back to FolioReaderDummyHighlightProvider.
-        container.sessionManager.readingBook = book
-        container.sessionManager.readerInfo = readerInfo
         epubContainer.container = container
+        epubContainer.calibreBook = book
+        epubContainer.readerInfo = readerInfo
         epubContainer.readerEngineDelegate = nil
         // Sanity: the provider must not exist before the fix runs
         epubContainer.folioReaderHighlightProvider = nil

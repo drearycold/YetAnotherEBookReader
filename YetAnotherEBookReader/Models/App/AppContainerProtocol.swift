@@ -73,7 +73,6 @@ protocol AppContainerProtocol: AnyObject, LibraryResolver, ServerResolver, Calib
 
     var logger: CalibreActivityLogger? { get set }
     var coverCache: BookCoverCaching { get }
-    var presentingStack: [Binding<Bool>] { get set }
 
     // MARK: - Calibre cache (used directly by services/repositories)
 

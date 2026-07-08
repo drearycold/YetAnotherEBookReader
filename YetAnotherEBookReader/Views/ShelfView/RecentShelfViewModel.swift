@@ -95,8 +95,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
 
     func prepareReading(bookId: String) -> ReaderInfo? {
-        container.bookManager.readingBookInShelfId = bookId
-        guard let book = container.bookManager.readingBook else { return nil }
+        guard let book = container.bookManager.booksInShelf[bookId] ?? container.bookManager.getBook(for: bookId) else { return nil }
         return container.sessionManager.prepareBookReading(book: book)
     }
 
@@ -108,7 +107,6 @@ final class RecentShelfViewModel: ObservableObject {
 
         guard let book = container.bookManager.booksInShelf[bookId] else { return }
 
-        container.bookManager.readingBookInShelfId = bookId
         let readerInfo = container.sessionManager.prepareBookReading(book: book)
 
         if readerInfo.missing {
@@ -120,8 +118,7 @@ final class RecentShelfViewModel: ObservableObject {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
         } else {
-            container.sessionManager.readerInfo = readerInfo
-            container.bookManager.presentingEBookReaderFromShelf = true
+            container.sessionManager.openReader(book: book, readerInfo: readerInfo, source: .shelf)
         }
     }
     

@@ -11,9 +11,9 @@ import SwiftUI
 final class MainViewModel: ObservableObject {
     private let container: AppContainer
     private let sessionManager: ReadingSessionManager
-    private var dismissAllTask: Task<Void, Never>?
     private var bookImportTask: Task<Void, Never>?
     private var readerPresentationTask: Task<Void, Never>?
+    private var readerPresentationListTask: Task<Void, Never>?
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
@@ -22,13 +22,8 @@ final class MainViewModel: ObservableObject {
     @Published var termsWebViewPresenting = false
     @Published var bookImportActionSheetPresenting = false
     @Published var bookImportInfo: BookImportInfo?
-    @Published var presentingEBookReaderFromShelf = false {
-        didSet {
-            if sessionManager.presentingEBookReaderFromShelf != presentingEBookReaderFromShelf {
-                sessionManager.presentingEBookReaderFromShelf = presentingEBookReaderFromShelf
-            }
-        }
-    }
+    @Published var readerPresentations: [ReaderPresentation] = []
+    @Published var activeReaderPresentation: ReaderPresentation?
     
     // Reactive triggers for UI-level side effects (consent and URL opening)
     @Published var consentRequestTriggered = false
@@ -49,21 +44,12 @@ final class MainViewModel: ObservableObject {
     }
 
     deinit {
-        dismissAllTask?.cancel()
         bookImportTask?.cancel()
         readerPresentationTask?.cancel()
+        readerPresentationListTask?.cancel()
     }
     
     private func setupSubscriptions() {
-        dismissAllTask?.cancel()
-        let dismissEvents = container.dismissAllEvents()
-        dismissAllTask = Task { @MainActor [weak self] in
-            for await _ in dismissEvents {
-                guard !Task.isCancelled else { return }
-                self?.sessionManager.presentingEBookReaderFromShelf = false
-            }
-        }
-
         bookImportTask?.cancel()
         let bookImportEvents = container.bookImportEvents()
         bookImportTask = Task { @MainActor [weak self] in
@@ -75,25 +61,26 @@ final class MainViewModel: ObservableObject {
         }
 
         readerPresentationTask?.cancel()
-        let readerPresentationSnapshots = sessionManager.presentingReaderSnapshots()
+        let readerPresentationSnapshots = sessionManager.activeReaderPresentationSnapshots()
         readerPresentationTask = Task { @MainActor [weak self] in
-            for await isPresenting in readerPresentationSnapshots {
+            for await presentation in readerPresentationSnapshots {
                 guard !Task.isCancelled else { return }
-                self?.presentingEBookReaderFromShelf = isPresenting
+                self?.activeReaderPresentation = presentation
+            }
+        }
+
+        readerPresentationListTask?.cancel()
+        let readerPresentationListSnapshots = sessionManager.readerPresentationSnapshots()
+        readerPresentationListTask = Task { @MainActor [weak self] in
+            for await presentations in readerPresentationListSnapshots {
+                guard !Task.isCancelled else { return }
+                self?.readerPresentations = presentations
             }
         }
     }
     
     var showWelcome: Bool {
         activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
-    }
-
-    var readingBook: CalibreBook? {
-        sessionManager.readingBook
-    }
-
-    var readerInfo: ReaderInfo? {
-        sessionManager.readerInfo
     }
     
     func onAppear() {
@@ -116,22 +103,16 @@ final class MainViewModel: ObservableObject {
     }
     
     func handleImportedBook(_ info: BookImportInfo) {
-        dismissAll { [weak self] in
-            guard let self = self else { return }
-            self.container.publishDismissAll("")
-            self.activeTab = 0
-            self.bookImportActionSheetPresenting = false
+        activeTab = 0
+        bookImportActionSheetPresenting = false
 
-            if let localLibrary = self.container.libraryManager.localLibrary,
-               let bookId = info.bookId,
-               let book = self.container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
-                self.container.publishCalibreUpdate(.book(book))
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) {
-                self.bookImportActionSheetPresenting = true
-            }
+        if let localLibrary = container.libraryManager.localLibrary,
+           let bookId = info.bookId,
+           let book = container.bookManager.booksInShelf[CalibreBook(id: bookId, library: localLibrary).inShelfId] {
+            container.publishCalibreUpdate(.book(book))
         }
+
+        bookImportActionSheetPresenting = true
     }
 
     func importBookAsNew(url: URL, bookId: Int32?) {
@@ -148,9 +129,10 @@ final class MainViewModel: ObservableObject {
         guard let bookId = bookImportInfo?.bookId,
               let localLibrary = container.libraryManager.localLibrary else { return }
         let book = CalibreBook(id: bookId, library: localLibrary)
-        container.bookManager.readingBookInShelfId = book.inShelfId
-        guard sessionManager.readingBook != nil, sessionManager.readerInfo != nil else { return }
-        sessionManager.presentingEBookReaderFromShelf = true
+        guard let importedBook = container.bookManager.booksInShelf[book.inShelfId] ?? container.bookRepository.getBook(id: book.inShelfId) else { return }
+        let readerInfo = sessionManager.prepareBookReading(book: importedBook)
+        guard readerInfo.missing == false else { return }
+        sessionManager.openReader(book: importedBook, readerInfo: readerInfo, source: .importResult)
     }
 
     func reportImportError() {
@@ -164,21 +146,18 @@ final class MainViewModel: ObservableObject {
     func updateCurrentPosition() {
         container.sessionManager.updateCurrentPosition(alertDelegate: self)
     }
-    
-    func dismissAll(completion: @escaping () -> Void) {
-        if let latest = container.presentingStack.last {
-            if latest.wrappedValue == true {
-                latest.wrappedValue = false
-                DispatchQueue.main.asyncAfter(deadline: .now().advanced(by: .milliseconds(250))) { [weak self] in
-                    self?.dismissAll(completion: completion)
-                }
-            } else {
-                _ = container.presentingStack.popLast()
-                dismissAll(completion: completion)
-            }
-        } else {
-            completion()
-        }
+
+    func closeReader(_ presentation: ReaderPresentation) {
+        sessionManager.closeReader(id: presentation.id)
+    }
+
+    func closeActiveReader() {
+        guard let activeReaderPresentation else { return }
+        closeReader(activeReaderPresentation)
+    }
+
+    func activateReader(_ presentation: ReaderPresentation) {
+        sessionManager.activateReader(id: presentation.id)
     }
 }
 

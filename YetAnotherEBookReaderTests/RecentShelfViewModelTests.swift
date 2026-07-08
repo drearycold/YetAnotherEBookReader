@@ -84,7 +84,8 @@ import Combine
             viewModel.selectionState.isEditing = false
             
             viewModel.tapBook(bookId: mockBook.inShelfId)
-            let _ = viewModel.activeAlert
+            XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.book.inShelfId, mockBook.inShelfId)
+            XCTAssertEqual(mockAppContainer.sessionManager.activeReaderPresentation?.source, .shelf)
         }
     }
 

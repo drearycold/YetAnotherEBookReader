@@ -103,14 +103,6 @@ struct ReadingPositionDetailView: View {
         .navigationTitle(
             Text("\(_VM.position.id) with \(_VM.position.readerName)")
         )
-        .fullScreenCover(isPresented: $_VM.presentingReadSheet) {
-            if let book = _VM.readingBook, let readerInfo = _VM.readerInfo {
-                YabrEBookReader(book: book, readerInfo: readerInfo)
-                    .environment(\.appContainer, _VM.container)
-            } else {
-                Text("Nil Book")
-            }
-        }
         .alert(item: $_VM.alertItem) { item in
             Alert(title: Text(item.id), message: Text(item.msg ?? item.id))
         }
@@ -121,16 +113,17 @@ struct ReadingPositionDetailView_Previews: PreviewProvider {
     static let container = AppContainer(mock: true)
 
     static var previews: some View {
+        let book = container.bookManager.booksInShelf.values.first!
         let listModel = ReadingPositionListViewModel(
             container: container,
-            book: container.bookManager.readingBook!,
-            positions: container.readingPositionRepository.getPositions(for: container.bookManager.readingBook!)
+            book: book,
+            positions: container.readingPositionRepository.getPositions(for: book)
         )
         ReadingPositionDetailView(
             viewModel: ReadingPositionDetailViewModel(
                 container: container,
                 listModel: listModel,
-                position: container.readingPositionRepository.getPositions(for: container.bookManager.readingBook!).first!
+                position: container.readingPositionRepository.getPositions(for: book).first!
             )
         )
     }

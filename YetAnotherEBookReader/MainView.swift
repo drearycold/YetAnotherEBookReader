@@ -112,23 +112,15 @@ struct MainView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $viewModel.presentingEBookReaderFromShelf) {
-            if let book = viewModel.readingBook, let readerInfo = viewModel.readerInfo {
-                YabrEBookReader(book: book, readerInfo: readerInfo)
-            } else {
-                NavigationView {
-                    Text("No Suitable Format/Reader/Position Combo")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button(action: {
-                                    viewModel.presentingEBookReaderFromShelf = false
-                                }) {
-                                    Image(systemName: "xmark")
-                                }
-                            }
-                        }
+        .fullScreenCover(isPresented: Binding(
+            get: { viewModel.activeReaderPresentation != nil },
+            set: { isPresented in
+                if isPresented == false {
+                    viewModel.closeActiveReader()
                 }
             }
+        )) {
+            ReaderWorkspaceView(viewModel: viewModel)
         }
         .alert(item: $viewModel.alertItem) { item in
             if item.id == "ForwardProgress" || item.id == "BackwardProgress" {
@@ -329,6 +321,50 @@ struct MainView: View {
             })
     }
     #endif
+}
+
+@available(macCatalyst 14.0, *)
+private struct ReaderWorkspaceView: View {
+    @ObservedObject var viewModel: MainViewModel
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if let presentation = viewModel.activeReaderPresentation {
+                YabrEBookReader(book: presentation.book, readerInfo: presentation.readerInfo)
+                    .id(presentation.id)
+            } else {
+                NavigationView {
+                    Text("No Suitable Format/Reader/Position Combo")
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button(action: {
+                                    viewModel.closeActiveReader()
+                                }) {
+                                    Image(systemName: "xmark")
+                                }
+                            }
+                        }
+                }
+            }
+
+            if viewModel.readerPresentations.count > 1 {
+                Menu {
+                    ForEach(viewModel.readerPresentations) { presentation in
+                        Button(presentation.title) {
+                            viewModel.activateReader(presentation)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "books.vertical")
+                        .font(.headline)
+                        .padding(10)
+                        .background(.ultraThinMaterial)
+                        .clipShape(Circle())
+                }
+                .padding()
+            }
+        }
+    }
 }
 
 @available(macCatalyst 14.0, *)

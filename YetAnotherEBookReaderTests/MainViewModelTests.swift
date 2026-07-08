@@ -87,21 +87,23 @@ import Combine
 
         viewModel.recentShelfViewModel.tapBook(bookId: book.inShelfId)
 
-        let presented = await waitUntil { self.viewModel.presentingEBookReaderFromShelf }
+        let presented = await waitUntil { self.viewModel.activeReaderPresentation != nil }
         XCTAssertTrue(presented)
-        XCTAssertNotNil(viewModel.readingBook)
-        XCTAssertNotNil(viewModel.readerInfo)
-        XCTAssertFalse(viewModel.readerInfo?.missing ?? true)
+        XCTAssertEqual(viewModel.activeReaderPresentation?.book.inShelfId, book.inShelfId)
+        XCTAssertEqual(viewModel.activeReaderPresentation?.source, .shelf)
+        XCTAssertFalse(viewModel.activeReaderPresentation?.readerInfo.missing ?? true)
     }
 
     func testReaderPresentationDismissalSyncsSessionState() async throws {
-        mockAppContainer.sessionManager.presentingEBookReaderFromShelf = true
-        let presented = await waitUntil { self.viewModel.presentingEBookReaderFromShelf }
+        let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
+        let readerInfo = mockAppContainer.sessionManager.prepareBookReading(book: book)
+        mockAppContainer.sessionManager.openReader(book: book, readerInfo: readerInfo, source: .shelf)
+        let presented = await waitUntil { self.viewModel.activeReaderPresentation != nil }
         XCTAssertTrue(presented)
 
-        viewModel.presentingEBookReaderFromShelf = false
+        viewModel.closeActiveReader()
 
-        XCTAssertFalse(mockAppContainer.sessionManager.presentingEBookReaderFromShelf)
+        XCTAssertNil(mockAppContainer.sessionManager.activeReaderPresentation)
     }
 
     private func waitUntil(

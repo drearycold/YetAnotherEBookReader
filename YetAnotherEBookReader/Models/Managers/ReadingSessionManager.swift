@@ -9,12 +9,49 @@ import Foundation
 import UIKit
 import OSLog
 
+enum ReaderPresentationSource: String, Equatable {
+    case shelf
+    case bookDetail
+    case importResult
+    case readingPosition
+    case preview
+    case compatibility
+}
+
+struct ReaderPresentation: Identifiable, Equatable {
+    let id: UUID
+    let book: CalibreBook
+    let readerInfo: ReaderInfo
+    let source: ReaderPresentationSource
+
+    init(
+        id: UUID = UUID(),
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        source: ReaderPresentationSource
+    ) {
+        self.id = id
+        self.book = book
+        self.readerInfo = readerInfo
+        self.source = source
+    }
+
+    var inShelfId: String { book.inShelfId }
+    var title: String { book.title }
+
+    static func == (lhs: ReaderPresentation, rhs: ReaderPresentation) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 class ReadingSessionManager {
     private let stateChangeBroadcaster = ManagerAsyncBroadcaster<Void>()
     private let readingBookInShelfIdBroadcaster = ManagerAsyncBroadcaster<String?>()
     private let readingBookBroadcaster = ManagerAsyncBroadcaster<CalibreBook?>()
     private let readerInfoBroadcaster = ManagerAsyncBroadcaster<ReaderInfo?>()
     private let presentingReaderBroadcaster = ManagerAsyncBroadcaster<Bool>()
+    private let readerPresentationsBroadcaster = ManagerAsyncBroadcaster<[ReaderPresentation]>()
+    private let activeReaderPresentationBroadcaster = ManagerAsyncBroadcaster<ReaderPresentation?>()
     private let selectedPositionBroadcaster = ManagerAsyncBroadcaster<String>()
 
     var defaultFormat = Format.PDF {
@@ -26,8 +63,48 @@ class ReadingSessionManager {
     var formatList = [Format]()
     
     private let logger = Logger(subsystem: "YetAnotherEBookReader", category: "ReadingSessionManager")
-    var presentingEBookReaderFromShelf = false {
+    private var legacyPresentingEBookReaderFromShelf = false
+
+    var readerPresentations: [ReaderPresentation] = [] {
         didSet {
+            if let activeReaderPresentationID,
+               readerPresentations.contains(where: { $0.id == activeReaderPresentationID }) == false {
+                self.activeReaderPresentationID = readerPresentations.last?.id
+            } else if activeReaderPresentationID == nil {
+                self.activeReaderPresentationID = readerPresentations.last?.id
+            }
+            readerPresentationsBroadcaster.send(readerPresentations)
+            activeReaderPresentationBroadcaster.send(activeReaderPresentation)
+            presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
+            publishStateChange()
+        }
+    }
+
+    var activeReaderPresentationID: ReaderPresentation.ID? {
+        didSet {
+            activeReaderPresentationBroadcaster.send(activeReaderPresentation)
+            presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
+            publishStateChange()
+        }
+    }
+
+    var activeReaderPresentation: ReaderPresentation? {
+        guard let activeReaderPresentationID else { return nil }
+        return readerPresentations.first { $0.id == activeReaderPresentationID }
+    }
+
+    var presentingEBookReaderFromShelf: Bool {
+        get { legacyPresentingEBookReaderFromShelf || activeReaderPresentation != nil }
+        set {
+            legacyPresentingEBookReaderFromShelf = newValue
+            if newValue,
+               activeReaderPresentation == nil,
+               let legacyReadingBook,
+               let legacyReaderInfo {
+                _ = openReader(book: legacyReadingBook, readerInfo: legacyReaderInfo, source: .compatibility)
+            } else if newValue == false {
+                readerPresentations.removeAll()
+            }
             presentingReaderBroadcaster.send(presentingEBookReaderFromShelf)
             publishStateChange()
         }
@@ -48,22 +125,36 @@ class ReadingSessionManager {
     }
     
     @available(*, deprecated)
-    var readingBook: CalibreBook? = nil {
-        didSet {
+    private var legacyReadingBook: CalibreBook? = nil
+
+    @available(*, deprecated)
+    var readingBook: CalibreBook? {
+        get { activeReaderPresentation?.book ?? legacyReadingBook }
+        set {
+            legacyReadingBook = newValue
+            if let newValue {
+                let preparedInfo = prepareBookReading(book: newValue)
+                legacyReaderInfo = preparedInfo
+            } else {
+                legacyReaderInfo = nil
+            }
             readingBookBroadcaster.send(readingBook)
             publishStateChange()
             guard let readingBook = readingBook else {
                 self.selectedPosition = ""
                 return
             }
-            
-            readerInfo = prepareBookReading(book: readingBook)
+
             self.selectedPosition = readerInfo?.position.id ?? container?.deviceName ?? ""
         }
     }
-    
-    var readerInfo: ReaderInfo? = nil {
-        didSet {
+
+    private var legacyReaderInfo: ReaderInfo? = nil
+
+    var readerInfo: ReaderInfo? {
+        get { activeReaderPresentation?.readerInfo ?? legacyReaderInfo }
+        set {
+            legacyReaderInfo = newValue
             readerInfoBroadcaster.send(readerInfo)
             publishStateChange()
         }
@@ -118,6 +209,14 @@ class ReadingSessionManager {
         presentingReaderBroadcaster.stream(initialValue: presentingEBookReaderFromShelf)
     }
 
+    func readerPresentationSnapshots() -> AsyncStream<[ReaderPresentation]> {
+        readerPresentationsBroadcaster.stream(initialValue: readerPresentations)
+    }
+
+    func activeReaderPresentationSnapshots() -> AsyncStream<ReaderPresentation?> {
+        activeReaderPresentationBroadcaster.stream(initialValue: activeReaderPresentation)
+    }
+
     func selectedPositionSnapshots() -> AsyncStream<String> {
         selectedPositionBroadcaster.stream(initialValue: selectedPosition)
     }
@@ -128,6 +227,50 @@ class ReadingSessionManager {
     
     func onBookReaderClosed(book: CalibreBook, lastPosition: BookDeviceReadingPosition) async {
         await handleBookReaderClosed(book: book, lastPosition: lastPosition)
+    }
+
+    @discardableResult
+    func openReader(
+        book: CalibreBook,
+        readerInfo: ReaderInfo? = nil,
+        source: ReaderPresentationSource
+    ) -> ReaderPresentation {
+        let resolvedReaderInfo = readerInfo ?? prepareBookReading(book: book)
+        let presentation = ReaderPresentation(
+            book: book,
+            readerInfo: resolvedReaderInfo,
+            source: source
+        )
+        legacyReadingBook = book
+        legacyReaderInfo = resolvedReaderInfo
+        legacyPresentingEBookReaderFromShelf = true
+        readerPresentations.append(presentation)
+        activeReaderPresentationID = presentation.id
+        readingBookBroadcaster.send(self.readingBook)
+        readerInfoBroadcaster.send(self.readerInfo)
+        selectedPosition = resolvedReaderInfo.position.id
+        return presentation
+    }
+
+    func closeReader(id: ReaderPresentation.ID) {
+        let wasActive = activeReaderPresentationID == id
+        readerPresentations.removeAll { $0.id == id }
+        if wasActive {
+            activeReaderPresentationID = readerPresentations.last?.id
+        }
+        if readerPresentations.isEmpty {
+            legacyPresentingEBookReaderFromShelf = false
+        }
+        readingBookBroadcaster.send(self.readingBook)
+        readerInfoBroadcaster.send(self.readerInfo)
+    }
+
+    func activateReader(id: ReaderPresentation.ID) {
+        guard readerPresentations.contains(where: { $0.id == id }) else { return }
+        legacyPresentingEBookReaderFromShelf = true
+        activeReaderPresentationID = id
+        readingBookBroadcaster.send(self.readingBook)
+        readerInfoBroadcaster.send(self.readerInfo)
     }
     
     func prepareBookReading(book: CalibreBook) -> ReaderInfo {
@@ -176,7 +319,8 @@ class ReadingSessionManager {
         return ReaderInfo(deviceName: container.deviceName, url: savedURL, missing: urlMissing, format: formatReaderPair.0, readerType: formatReaderPair.1, position: formatReaderPair.2)
     }
     
-    func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) {
+    @discardableResult
+    func prepareBookReading(url: URL, format: Format, readerType: ReaderType, position: BookDeviceReadingPosition) -> ReaderInfo {
         let readerInfo = ReaderInfo(
             deviceName: container?.deviceName ?? "",
             url: url,
@@ -186,6 +330,7 @@ class ReadingSessionManager {
             position: position
         )
         self.readerInfo = readerInfo
+        return readerInfo
     }
     
     func listBookDeviceReadingPositionHistory(library: CalibreLibrary? = nil, bookId: Int32? = nil, startDateAfter: Date? = nil) -> [String: [BookDeviceReadingPositionHistory]] {

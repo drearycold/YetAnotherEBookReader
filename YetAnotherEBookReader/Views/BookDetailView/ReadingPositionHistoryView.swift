@@ -213,7 +213,7 @@ struct ReadingPositionHistoryView_Previews: PreviewProvider {
     @State static private var presenting = true
     
     static var previews: some View {
-        if let book = container.bookManager.readingBook {
+        if let book = container.bookManager.booksInShelf.values.first {
             NavigationView {
                 ReadingPositionHistoryView(presenting: $presenting, library: book.library, bookId: book.id)
             }

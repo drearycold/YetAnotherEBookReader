@@ -71,8 +71,6 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
-    var presentingStack = [Binding<Bool>]()
-
     private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
 
     var downloadManager = BookDownloadManager()

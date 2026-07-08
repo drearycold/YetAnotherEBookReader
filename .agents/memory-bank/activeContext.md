@@ -13,6 +13,33 @@ reader engines when the target engine has no saved preferences for the book.
 FolioReader now also has full native per-book preference persistence so
 Folio-only settings are not lost through the cross-engine compatibility layer.
 
+Reader presentation is being moved off the old single global reader state. The
+current working tree adds `ReaderPresentation` snapshots to
+`ReadingSessionManager`, routes shelf/detail/import/reading-position open actions
+through `openReader(...)`, removes the `AppContainer.presentingStack` dismiss
+workaround, and binds FolioReader providers to the concrete reader instance's
+book/readerInfo instead of `bookManager.readingBook` / `sessionManager.readerInfo`.
+Validation completed for this slice:
+
+```bash
+git diff --check
+xcrun simctl shutdown all
+xcodebuild test -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath /tmp/YabrDerivedData -clonedSourcePackagesDirPath /tmp/YabrSourcePackages -only-testing:YetAnotherEBookReaderTests/ReadingSessionManagerTests -only-testing:YetAnotherEBookReaderTests/MainViewModelTests -only-testing:YetAnotherEBookReaderTests/BookDetailViewModelTests -only-testing:YetAnotherEBookReaderTests/RecentShelfViewModelTests -only-testing:YetAnotherEBookReaderTests/FolioReaderProviderBookIdTests
+xcodebuild build -project YetAnotherEBookReader.xcodeproj -scheme YetAnotherEBookReader -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' -clonedSourcePackagesDirPath /tmp/YabrSourcePackages
+```
+
+Recorded result: `git diff --check` passed, 71 focused tests passed, and the
+iOS Simulator build succeeded. Follow-up risk: the compatibility
+`readingBook`/`readerInfo`/`presentingEBookReaderFromShelf` accessors still exist
+inside the manager layer for older tests/callers and can be removed in a later
+cleanup once remaining manager-level references are migrated.
+
+Review follow-up completed: `ReaderWorkspaceView` now keys `YabrEBookReader` by
+`ReaderPresentation.id` so activating another reader presentation rebuilds the
+underlying UIKit reader instead of reusing the old representable controller.
+Validation rerun after the fix: `git diff --check`, the same 71 focused reader
+tests, and the standard iOS Simulator build all passed.
+
 Completed `fix/library-book-list` work was archived into [Network, Search, And Cache Modernization](history/network-search-cache-modernization.md) under **fix/library-book-list Branch Archive (2026-07-05, complete)**.
 
 ## Pre-Merge Archive Rule
