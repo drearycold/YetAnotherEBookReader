@@ -14,6 +14,8 @@ final class MainViewModel: ObservableObject {
     private var bookImportTask: Task<Void, Never>?
     private var readerPresentationTask: Task<Void, Never>?
     private var readerPresentationListTask: Task<Void, Never>?
+    private var welcomeBooksInShelfTask: Task<Void, Never>?
+    private var welcomeShelfLoadedTask: Task<Void, Never>?
     
     @Published var activeTab: Int = 0
     @Published var alertItem: AlertItem?
@@ -24,6 +26,7 @@ final class MainViewModel: ObservableObject {
     @Published var bookImportInfo: BookImportInfo?
     @Published var readerPresentations: [ReaderPresentation] = []
     @Published var activeReaderPresentation: ReaderPresentation?
+    @Published private(set) var welcomeShelfStateVersion = 0
     
     // Reactive triggers for UI-level side effects (consent and URL opening)
     @Published var consentRequestTriggered = false
@@ -49,6 +52,8 @@ final class MainViewModel: ObservableObject {
         bookImportTask?.cancel()
         readerPresentationTask?.cancel()
         readerPresentationListTask?.cancel()
+        welcomeBooksInShelfTask?.cancel()
+        welcomeShelfLoadedTask?.cancel()
     }
     
     private func setupSubscriptions() {
@@ -79,10 +84,36 @@ final class MainViewModel: ObservableObject {
                 self?.readerPresentations = presentations
             }
         }
+
+        welcomeBooksInShelfTask?.cancel()
+        let booksInShelfSnapshots = container.bookManager.booksInShelfSnapshots()
+        welcomeBooksInShelfTask = Task { @MainActor [weak self] in
+            for await _ in booksInShelfSnapshots {
+                guard !Task.isCancelled else { return }
+                self?.welcomeShelfStateVersion += 1
+            }
+        }
+
+        welcomeShelfLoadedTask?.cancel()
+        let shelfLoadedSnapshots = container.bookManager.isShelfLoadedSnapshots()
+        welcomeShelfLoadedTask = Task { @MainActor [weak self] in
+            for await _ in shelfLoadedSnapshots {
+                guard !Task.isCancelled else { return }
+                self?.welcomeShelfStateVersion += 1
+            }
+        }
     }
     
     var showWelcome: Bool {
         activeTab < 1 && container.isDatabaseReady && container.bookManager.booksInShelf.isEmpty && container.bookManager.isShelfLoaded
+    }
+
+    func openWelcomeSettings() {
+        activeTab = 3
+    }
+
+    func openWelcomeBrowse() {
+        activeTab = 2
     }
     
     func onAppear() {

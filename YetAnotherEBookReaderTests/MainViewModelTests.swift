@@ -81,6 +81,38 @@ import Combine
         XCTAssertTrue(viewModel.showWelcome)
     }
 
+    func testShelfStateChangesRefreshWelcomePresentation() async throws {
+        let initialSnapshotsArrived = await waitUntil {
+            self.viewModel.welcomeShelfStateVersion >= 2
+        }
+        XCTAssertTrue(initialSnapshotsArrived)
+
+        let baseline = viewModel.welcomeShelfStateVersion
+
+        mockAppContainer.bookManager.isShelfLoaded.toggle()
+
+        let refreshed = await waitUntil {
+            self.viewModel.welcomeShelfStateVersion > baseline
+        }
+        XCTAssertTrue(refreshed)
+    }
+
+    func testOpenWelcomeSettingsSelectsSettingsTab() throws {
+        viewModel.activeTab = 0
+
+        viewModel.openWelcomeSettings()
+
+        XCTAssertEqual(viewModel.activeTab, 3)
+    }
+
+    func testOpenWelcomeBrowseSelectsBrowseTab() throws {
+        viewModel.activeTab = 0
+
+        viewModel.openWelcomeBrowse()
+
+        XCTAssertEqual(viewModel.activeTab, 2)
+    }
+
     func testRecentShelfTapPublishesReaderPresentation() async throws {
         let book = try XCTUnwrap(mockAppContainer.bookManager.readingBook)
         mockAppContainer.bookManager.booksInShelf[book.inShelfId] = book

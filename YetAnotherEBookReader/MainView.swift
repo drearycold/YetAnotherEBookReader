@@ -79,37 +79,10 @@ struct MainView: View {
             }
 
             if viewModel.showWelcome {
-                VStack {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Welcome!")
-
-                        Text("""
-                        Get start from
-                        \"Settings\" -> \"Server & Library\"
-                        to link with Calibre Server.
-                        """)
-
-                        Text("""
-                        Then go to "Browse"
-                        to add book to Shelf by toggling \(Image(systemName: "star"))
-                        or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
-                        """)
-
-                        Text("Start reading by touching book cover.")
-
-                        Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
-
-                        Text("Enjoy your book!")
-
-                        Text("(This notice will disappear after first book has been added to shelf)")
-                    }
-                    .multilineTextAlignment(.leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
-                    .frame(maxWidth: 400)
-
-                    Rectangle().frame(height: 50).opacity(0.0)
-                }
+                WelcomeEmptyShelfView(
+                    openSettings: viewModel.openWelcomeSettings,
+                    openBrowse: viewModel.openWelcomeBrowse
+                )
             }
 
             if viewModel.readerWorkspaceViewModel.hasReaders {
@@ -316,6 +289,145 @@ struct MainView: View {
             })
     }
     #endif
+}
+
+@available(macCatalyst 14.0, *)
+private struct WelcomeEmptyShelfView: View {
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+
+    let openSettings: () -> Void
+    let openBrowse: () -> Void
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 22) {
+                header
+                summary
+                actionButtons
+                dismissHint
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 30)
+            .frame(maxWidth: 520)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 8)
+            .padding(.horizontal, 24)
+
+            Spacer()
+            Spacer(minLength: 56)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.08).ignoresSafeArea())
+    }
+
+    private var header: some View {
+        VStack(spacing: 14) {
+            Image("logo_1024")
+                .resizable()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(spacing: 6) {
+                Text("Welcome to D.S.Reader")
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text("Your reading shelf is ready to be set up.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var summary: some View {
+        Text("Connect a calibre library or browse available libraries to start building your reading shelf.")
+            .font(.body)
+            .foregroundColor(.primary)
+            .multilineTextAlignment(.center)
+            .lineSpacing(3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if horizontalSizeClass == .compact {
+            VStack(spacing: 10) {
+                primaryAction
+                secondaryAction
+            }
+        } else {
+            HStack(spacing: 12) {
+                primaryAction
+                secondaryAction
+            }
+        }
+    }
+
+    private var primaryAction: some View {
+        Button(action: openSettings) {
+            Label("Set Up Server & Library", systemImage: "server.rack")
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(WelcomePrimaryButtonStyle())
+        .accessibilityHint("Opens Settings to configure a calibre server and library.")
+    }
+
+    private var secondaryAction: some View {
+        Button(action: openBrowse) {
+            Label("Browse Libraries", systemImage: "building.columns")
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(WelcomeSecondaryButtonStyle())
+        .accessibilityHint("Opens Browse to explore configured libraries.")
+    }
+
+    private var dismissHint: some View {
+        Text("This panel disappears after your first book is added to the shelf.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct WelcomePrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .foregroundColor(.white)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.75) : Color.accentColor)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct WelcomeSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .foregroundColor(.accentColor)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.16) : Color.accentColor.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+            )
+    }
 }
 
 @available(macCatalyst 14.0, *)
