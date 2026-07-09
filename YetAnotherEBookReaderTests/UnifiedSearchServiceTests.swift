@@ -198,9 +198,24 @@ class UnifiedSearchServiceTests: XCTestCase {
         """
     }
 
-    nonisolated static func makeMetadataJSON(bookIds: [Int32], titles: [Int32: String] = [:]) -> String {
+    nonisolated static func makeMetadataJSON(
+        bookIds: [Int32],
+        titles: [Int32: String] = [:],
+        formats: [Int32: [String]] = [:]
+    ) -> String {
         let entries = bookIds.map { id in
             let title = titles[id] ?? "Book \(id)"
+            let bookFormats = formats[id] ?? ["epub"]
+            let formatMetadata = bookFormats.map { format in
+                """
+                    "\(format)": { "path": "book-\(id).\(format)", "size": 100, "mtime": "2026-01-01T00:00:00+00:00" }
+                """
+            }.joined(separator: ",")
+            let formatList = bookFormats.map { "\"\($0)\"" }.joined(separator: ",")
+            let mainFormat = bookFormats.first ?? "epub"
+            let otherFormats = bookFormats.dropFirst().map { format in
+                "\"\(format)\": \"/get/\(format)/\(id)/lib1\""
+            }.joined(separator: ",")
             return """
             "\(id)": {
                 "thumbnail": "/get/thumb/\(id)/lib1",
@@ -228,11 +243,11 @@ class UnifiedSearchServiceTests: XCTestCase {
                 "comments": "",
                 "timestamp": "2026-01-01T00:00:00+00:00",
                 "format_metadata": {
-                    "epub": { "path": "book-\(id).epub", "size": 100, "mtime": "2026-01-01T00:00:00+00:00" }
+                    \(formatMetadata)
                 },
-                "formats": ["epub"],
-                "main_format": {"epub": "/get/epub/\(id)/lib1"},
-                "other_formats": {},
+                "formats": [\(formatList)],
+                "main_format": {"\(mainFormat)": "/get/\(mainFormat)/\(id)/lib1"},
+                "other_formats": {\(otherFormats)},
                 "category_urls": {}
             }
             """
@@ -265,6 +280,20 @@ class UnifiedSearchServiceTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: timeout)
         task.cancel()
         return results
+    }
+
+    func waitUntil(
+        timeout: TimeInterval = 2.0,
+        condition: @escaping () async -> Bool
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        return await condition()
     }
 
     func testLibrarySearchForceRefreshRebuildsFromFirstPage() async throws {
@@ -773,7 +802,7 @@ class UnifiedSearchServiceTests: XCTestCase {
         XCTAssertEqual(source.books.map(\.title), ["Fresh Server Title"])
     }
 
-    func testLibrarySearchDoesNotRefreshFreshExistingBooksDuringSearchFetch() async throws {
+    func testLibrarySearchDoesNotRefreshFreshExistingBooksDuringNormalSearchFetch() async throws {
         let criteria = SearchCriteria(
             searchString: "fresh-existing-no-refresh",
             sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
@@ -828,13 +857,185 @@ class UnifiedSearchServiceTests: XCTestCase {
             library: mockLibrary1,
             criteria: criteria,
             limit: 100,
-            force: true
+            force: false
         )
 
         let source = try XCTUnwrap(result.sources["http://localhost/1"])
 
         XCTAssertEqual(metadataRequests.snapshot(), [])
         XCTAssertEqual(source.books.map(\.title), ["Fresh Cached Title"])
+    }
+
+    func testLibrarySearchForceMetadataRefreshUpdatesFreshExistingFormats() async throws {
+        let criteria = SearchCriteria(
+            searchString: "fresh-existing-force-format-refresh",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        var freshBook = createMockBook(id: 601, title: "Fresh Cached Title", library: mockLibrary1)
+        freshBook.formats = [
+            "EPUB": FormatInfo(serverSize: 100, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date())
+        ]
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 1,
+                bookIds: [601],
+                books: [freshBook]
+            )
+        )
+
+        let metadataRequests = MetadataRequestRecorder()
+        let metadataJSON = Self.makeMetadataJSON(
+            bookIds: [601],
+            titles: [601: "Fresh Cached Title"],
+            formats: [601: ["epub", "pdf"]]
+        )
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                let json = Self.makeSearchResultJSON(total: 1, offset: offset, num: num, bookIds: [601], query: "fresh-existing-force-format-refresh")
+                return (response, json.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let ids = components?.queryItems?.first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                metadataRequests.append(ids: ids)
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let librarySearch = LibrarySearchService(service: serverService, repository: repository)
+        let result = try await librarySearch.searchAndFetchMetadata(
+            library: mockLibrary1,
+            criteria: criteria,
+            limit: 100,
+            force: true,
+            forceMetadataRefresh: true
+        )
+
+        let source = try XCTUnwrap(result.sources["http://localhost/1"])
+        let refreshedBook = try XCTUnwrap(source.books.first)
+
+        XCTAssertEqual(metadataRequests.snapshot(), [[601]])
+        XCTAssertNotNil(refreshedBook.formats["EPUB"])
+        XCTAssertNotNil(refreshedBook.formats["PDF"])
+    }
+
+    func testManualRefreshKeepsMetadataRefreshEnabledForLoadedMoreBooks() async throws {
+        let criteria = SearchCriteria(
+            searchString: "manual-refresh-load-more-formats",
+            sortCriteria: LibrarySearchSort(by: .Title, ascending: true),
+            filterCriteriaCategory: [:]
+        )
+        let key = SearchCriteriaMergedKey(libraryIds: [mockLibrary1.id], criteria: criteria)
+        let firstPageIds = (1...100).map(Int32.init)
+        let secondPageIds = (101...200).map(Int32.init)
+        let cachedBooks = firstPageIds.map { id -> CalibreBook in
+            var book = createMockBook(id: id, title: "Cached \(id)", library: mockLibrary1)
+            book.formats = [
+                "EPUB": FormatInfo(serverSize: 100, serverMTime: Date(), cached: false, cacheSize: 0, cacheMTime: Date())
+            ]
+            return book
+        }
+        try repository.saveLibrarySourceResult(
+            libraryId: mockLibrary1.id,
+            search: criteria.searchString,
+            sortBy: .Title,
+            sortAsc: true,
+            filters: [:],
+            sourceUrl: "http://localhost/1",
+            result: LibrarySourceSearchResult(
+                generation: mockLibrary1.lastModified,
+                totalNumber: 200,
+                bookIds: firstPageIds,
+                books: cachedBooks
+            )
+        )
+
+        let metadataRequests = MetadataRequestRecorder()
+        let allIds = firstPageIds + secondPageIds
+        let formats = allIds.reduce(into: [Int32: [String]]()) { partialResult, id in
+            partialResult[id] = ["epub", "pdf"]
+        }
+        let metadataJSON = Self.makeMetadataJSON(bookIds: allIds, formats: formats)
+
+        MockURLProtocol.requestHandler = { request in
+            guard let url = request.url else { throw URLError(.badURL) }
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+
+            if url.path.contains("ajax/search/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let offset = Int(components?.queryItems?.first(where: { $0.name == "offset" })?.value ?? "") ?? -1
+                let num = Int(components?.queryItems?.first(where: { $0.name == "num" })?.value ?? "") ?? -1
+                let ids = offset == 0 ? firstPageIds : secondPageIds
+                let json = Self.makeSearchResultJSON(total: 200, offset: offset, num: num, bookIds: ids, query: "manual-refresh-load-more-formats")
+                return (response, json.data(using: .utf8)!)
+            } else if url.path.contains("ajax/books/lib1") {
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                let ids = components?.queryItems?.first(where: { $0.name == "ids" })?.value?
+                    .split(separator: ",")
+                    .compactMap { Int32(String($0)) } ?? []
+                metadataRequests.append(ids: ids)
+                return (response, metadataJSON.data(using: .utf8)!)
+            }
+            throw URLError(.badURL)
+        }
+
+        let stream = await manager.search(key: key)
+        let streamTask = Task {
+            for await _ in stream {
+                guard !Task.isCancelled else { break }
+            }
+        }
+        defer {
+            streamTask.cancel()
+        }
+
+        let initialLoaded = await waitUntil {
+            await self.manager.getActiveSearch(for: key)?.books.count == 100
+        }
+        XCTAssertTrue(initialLoaded)
+
+        await manager.resetSearchAndWait(for: key, force: true)
+        let refreshedFirstPage = await waitUntil {
+            guard let result = await self.manager.getActiveSearch(for: key) else { return false }
+            return result.books.count == 100 && result.books.allSatisfy { $0.formats["PDF"] != nil }
+        }
+        XCTAssertTrue(refreshedFirstPage)
+
+        await manager.expandLimit(for: key, by: 100)
+        let expandedAndRefreshed = await waitUntil {
+            guard let result = await self.manager.getActiveSearch(for: key) else { return false }
+            return result.books.count == 200 && result.books.suffix(100).allSatisfy { $0.formats["PDF"] != nil }
+        }
+        XCTAssertTrue(expandedAndRefreshed)
+
+        XCTAssertEqual(metadataRequests.snapshot(), [firstPageIds, secondPageIds])
     }
 
     func testLibrarySearchDeduplicatesDuplicateServerIdsDuringRebuild() async throws {
@@ -1554,14 +1755,8 @@ class MockSearchCacheRepository: SearchCacheRepository {
         entries.forEach { key, entry in
             guard let entry = entry, let bookId = Int32(key) else { return }
             var book = books[bookId] ?? CalibreBook(id: bookId, library: library)
-            book.title = entry.title
-            book.publisher = entry.publisher ?? ""
-            book.series = entry.series ?? ""
-            book.seriesIndex = entry.series_index ?? 0.0
-            book.rating = Int(entry.rating * 2)
-            book.authors = entry.authors
-            book.tags = entry.tags
-            book.comments = entry.comments ?? ""
+            let root = json?[key] as? NSDictionary ?? NSDictionary()
+            book.applyMetadataValue(CalibreBookMetadataValue(entry: entry, root: root))
             books[bookId] = book
         }
         _booksByLibrary[library.id] = books

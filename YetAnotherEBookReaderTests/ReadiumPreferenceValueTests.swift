@@ -220,7 +220,7 @@ final class ReadiumPreferenceValueTests: XCTestCase {
             scrollAxis: 1
         ).toReaderEnginePreferences()
 
-        XCTAssertEqual(prefs.themeMode, 2)
+        XCTAssertEqual(prefs.themeMode, 3)
         XCTAssertEqual(prefs.fontSizePercentage, 145)
         XCTAssertEqual(prefs.fontFamily, "Avenir")
         XCTAssertEqual(prefs.lineHeight, 1.35)
@@ -231,7 +231,7 @@ final class ReadiumPreferenceValueTests: XCTestCase {
 
         var value = ReadiumPreferenceValue()
         value.apply(ReaderEnginePreferences(
-            themeMode: 1,
+            themeMode: 2,
             fontSizePercentage: 130,
             fontFamily: "Georgia",
             lineHeight: 1.42,
@@ -249,5 +249,8 @@ final class ReadiumPreferenceValueTests: XCTestCase {
         XCTAssertEqual(value.scroll, true)
         XCTAssertEqual(value.scrollAxis, 1)
         XCTAssertEqual(value.volumeKeyPaging, true)
+
+        value.apply(ReaderEnginePreferences(themeMode: 4))
+        XCTAssertEqual(value.themeMode, 2)
     }
 }

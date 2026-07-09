@@ -12,6 +12,43 @@ import Foundation
 import SwiftUI
 import OSLog
 
+enum ReaderOpenPlacement {
+    case currentWorkspace
+    case registryOnly
+}
+
+struct ReaderOpenRequest: Equatable {
+    let presentationID: ReaderPresentation.ID
+    let targetWorkspaceID: UUID?
+}
+
+struct ReaderPresentationTransfer: Equatable {
+    let presentationID: ReaderPresentation.ID
+    let targetWorkspaceID: UUID
+}
+
+enum ReaderSceneActivity {
+    static let activityType = "com.drearycold.dsreader.reader"
+    private static let presentationIDKey = "presentationID"
+
+    static func make(presentationID: ReaderPresentation.ID, title: String) -> NSUserActivity {
+        let activity = NSUserActivity(activityType: activityType)
+        activity.title = title
+        activity.userInfo = [presentationIDKey: presentationID.uuidString]
+        activity.targetContentIdentifier = presentationID.uuidString
+        activity.isEligibleForHandoff = false
+        activity.isEligibleForSearch = false
+        return activity
+    }
+
+    static func presentationID(from activity: NSUserActivity) -> ReaderPresentation.ID? {
+        guard activity.activityType == activityType,
+              let value = activity.userInfo?[presentationIDKey] as? String
+        else { return nil }
+        return UUID(uuidString: value)
+    }
+}
+
 final class AppContainer: AppContainerProtocol, LibraryProvider {
     static var shared: AppContainer?
 
@@ -71,12 +108,22 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     private let bookImportBroadcaster = ManagerAsyncBroadcaster<BookImportInfo>()
     private let dismissAllBroadcaster = ManagerAsyncBroadcaster<String>()
 
-    var presentingStack = [Binding<Bool>]()
-
-    private let bookReaderActivityBroadcaster = ManagerAsyncBroadcaster<ScenePhase>()
+    private let readerOpenRequestBroadcaster = ManagerAsyncBroadcaster<ReaderOpenRequest>()
+    private let readerPresentationTransferBroadcaster = ManagerAsyncBroadcaster<ReaderPresentationTransfer>()
+    private var activeReaderWorkspaceID: UUID?
+    private var activeAppSceneIDs = Set<UUID>()
+    private var transferringReaderPresentationIDs = Set<ReaderPresentation.ID>()
+    private var probeTimerTask: Task<Void, Never>?
+    private static let probeIntervalNanoseconds: UInt64 = 60 * 1_000_000_000
+    var readerWindowSupportOverride: Bool?
+    var readerWindowRequestHandler: ((NSUserActivity?) -> Void)?
+    var readerPresentationPersistenceStore: ReaderPresentationPersistenceStore = UserDefaultsReaderPresentationPersistenceStore()
 
     var downloadManager = BookDownloadManager()
-    lazy var sessionManager = ReadingSessionManager(container: self)
+    lazy var sessionManager = ReadingSessionManager(
+        container: self,
+        persistenceStore: readerPresentationPersistenceStore
+    )
 
     var updatingMetadata = false {
         didSet {
@@ -173,8 +220,10 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         calibreUpdateBroadcaster.finish()
         bookImportBroadcaster.finish()
         dismissAllBroadcaster.finish()
-        bookReaderActivityBroadcaster.finish()
+        readerOpenRequestBroadcaster.finish()
+        readerPresentationTransferBroadcaster.finish()
         probeLibraryLastModifiedBroadcaster.finish()
+        probeTimerTask?.cancel()
     }
 
     @MainActor
@@ -196,12 +245,146 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
     }
 
     @MainActor
-    func publishBookReaderActivity(_ phase: ScenePhase) {
-        bookReaderActivityBroadcaster.send(phase)
+    func setActiveReaderWorkspace(id: UUID?) {
+        activeReaderWorkspaceID = id
     }
 
-    func bookReaderActivities() -> AsyncStream<ScenePhase> {
-        bookReaderActivityBroadcaster.stream()
+    @MainActor
+    func clearActiveReaderWorkspace(id: UUID) {
+        if activeReaderWorkspaceID == id {
+            activeReaderWorkspaceID = nil
+        }
+    }
+
+    @MainActor
+    func markAppSceneActive(id: UUID) {
+        let wasEmpty = activeAppSceneIDs.isEmpty
+        activeAppSceneIDs.insert(id)
+        if wasEmpty {
+            enableProbeTimer()
+        }
+    }
+
+    @MainActor
+    func markAppSceneBackground(id: UUID) {
+        activeAppSceneIDs.remove(id)
+        if activeAppSceneIDs.isEmpty {
+            disableProbeTimer()
+        }
+    }
+
+    @MainActor
+    private func enableProbeTimer() {
+        probeTimerTask?.cancel()
+        serverManager.probeServersReachability(with: [], updateLibrary: true)
+        probeTimerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: Self.probeIntervalNanoseconds)
+                } catch {
+                    break
+                }
+                guard !Task.isCancelled else { break }
+                self?.serverManager.probeServersReachability(with: [], updateLibrary: true)
+            }
+        }
+    }
+
+    @MainActor
+    private func disableProbeTimer() {
+        probeTimerTask?.cancel()
+        probeTimerTask = nil
+    }
+
+    @discardableResult
+    func openReader(
+        book: CalibreBook,
+        readerInfo: ReaderInfo? = nil,
+        source: ReaderPresentationSource,
+        placement: ReaderOpenPlacement = .currentWorkspace,
+        targetWorkspaceID: UUID? = nil,
+        reuseExisting: Bool = true
+    ) -> ReaderPresentation {
+        let presentation = sessionManager.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: source,
+            reuseExisting: reuseExisting
+        )
+        if placement == .currentWorkspace {
+            readerOpenRequestBroadcaster.send(
+                ReaderOpenRequest(
+                    presentationID: presentation.id,
+                    targetWorkspaceID: targetWorkspaceID
+                )
+            )
+        }
+        return presentation
+    }
+
+    func readerOpenRequests() -> AsyncStream<ReaderOpenRequest> {
+        readerOpenRequestBroadcaster.stream()
+    }
+
+    @MainActor
+    func publishReaderPresentationTransfer(presentationID: ReaderPresentation.ID, targetWorkspaceID: UUID) {
+        readerPresentationTransferBroadcaster.send(
+            ReaderPresentationTransfer(
+                presentationID: presentationID,
+                targetWorkspaceID: targetWorkspaceID
+            )
+        )
+    }
+
+    func readerPresentationTransfers() -> AsyncStream<ReaderPresentationTransfer> {
+        readerPresentationTransferBroadcaster.stream()
+    }
+
+    @MainActor
+    var supportsReaderWindows: Bool {
+        if let readerWindowSupportOverride {
+            return readerWindowSupportOverride
+        }
+        #if targetEnvironment(macCatalyst)
+        return true
+        #else
+        return UIDevice.current.userInterfaceIdiom == .pad && UIApplication.shared.supportsMultipleScenes
+        #endif
+    }
+
+    @MainActor
+    func requestEmptyReaderWindow() -> Bool {
+        guard supportsReaderWindows else { return false }
+        requestReaderScene(userActivity: nil)
+        return true
+    }
+
+    @MainActor
+    func requestReaderWindow(for presentation: ReaderPresentation) -> Bool {
+        guard supportsReaderWindows else { return false }
+        let activity = ReaderSceneActivity.make(presentationID: presentation.id, title: presentation.title)
+        requestReaderScene(userActivity: activity)
+        return true
+    }
+
+    @MainActor
+    func markReaderPresentationTransfer(id: ReaderPresentation.ID) {
+        transferringReaderPresentationIDs.insert(id)
+    }
+
+    @MainActor
+    func consumeReaderPresentationTransfer(id: ReaderPresentation.ID?) -> Bool {
+        guard let id else { return false }
+        return transferringReaderPresentationIDs.remove(id) != nil
+    }
+
+    @MainActor
+    private func requestReaderScene(userActivity: NSUserActivity?) {
+        if let readerWindowRequestHandler {
+            readerWindowRequestHandler(userActivity)
+        } else {
+            UIApplication.shared.requestSceneSessionActivation(nil, userActivity: userActivity, options: nil, errorHandler: nil)
+        }
     }
 
     @MainActor
@@ -227,6 +410,9 @@ final class AppContainer: AppContainerProtocol, LibraryProvider {
         testRealmEnvironment: TestRealmEnvironment? = nil
     ) {
         AppContainer.shared = self
+        if mock {
+            readerPresentationPersistenceStore = InMemoryReaderPresentationPersistenceStore()
+        }
 
         setupRealmDefaults()
 
@@ -463,5 +649,16 @@ extension EnvironmentValues {
     var appContainer: AppContainer {
         get { self[AppContainerEnvironmentKey.self] }
         set { self[AppContainerEnvironmentKey.self] = newValue }
+    }
+}
+
+private struct ReaderWorkspaceIDEnvironmentKey: EnvironmentKey {
+    static var defaultValue: UUID? = nil
+}
+
+extension EnvironmentValues {
+    var readerWorkspaceID: UUID? {
+        get { self[ReaderWorkspaceIDEnvironmentKey.self] }
+        set { self[ReaderWorkspaceIDEnvironmentKey.self] = newValue }
     }
 }

@@ -30,6 +30,7 @@ actor UnifiedSearchService {
         let libraryIds: Set<String>
         var currentResult: UnifiedSearchResult
         var libraryStatuses: [String: LibrarySearchStatus]
+        var forceMetadataRefreshForLoadedBooks: Bool
     }
 
     init(
@@ -184,9 +185,16 @@ actor UnifiedSearchService {
                 criteria: key.criteria,
                 libraryIds: key.libraryIds,
                 currentResult: initialResult,
-                libraryStatuses: initialStatuses
+                libraryStatuses: initialStatuses,
+                forceMetadataRefreshForLoadedBooks: false
             )
         }()
+
+        if force {
+            activeSearch.forceMetadataRefreshForLoadedBooks = true
+        } else if activeSearch.currentResult.books.isEmpty {
+            activeSearch.forceMetadataRefreshForLoadedBooks = false
+        }
 
         for libraryId in activeLibraryIds {
             activeSearch.libraryStatuses[libraryId] = LibrarySearchStatus(loading: true, error: nil)
@@ -207,7 +215,8 @@ actor UnifiedSearchService {
                                 library: library,
                                 criteria: key.criteria,
                                 limit: limit,
-                                force: force
+                                force: force,
+                                forceMetadataRefresh: activeSearch.forceMetadataRefreshForLoadedBooks
                             )
                             return (library.id, .success(result))
                         } catch {

@@ -149,9 +149,30 @@ class BookDetailViewModelTests: XCTestCase {
     
     func testReadBookWhenInShelf() throws {
         mockCalibreBook.inShelf = true
+        mockCalibreBook.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "detail-test.epub",
+            serverSize: 1024,
+            serverMTime: Date(),
+            cached: true,
+            cacheSize: 1024,
+            cacheMTime: Date(),
+            manifest: nil
+        )
+        if let savedURL = getSavedUrl(book: mockCalibreBook, format: .EPUB) {
+            try FileManager.default.createDirectory(
+                at: savedURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8))
+        }
+
         viewModel.readBook(book: mockCalibreBook)
-        XCTAssertNotNil(mockAppContainer.sessionManager.readerInfo, "Reader info should be populated when reading an in-shelf book")
-        XCTAssertEqual(mockAppContainer.sessionManager.readingBook?.inShelfId, mockCalibreBook.inShelfId, "Reading book should be populated when opening a book from detail")
+        let presentation = mockAppContainer.sessionManager.activeReaderPresentation
+        XCTAssertNotNil(presentation, "Reader presentation should be created when reading an in-shelf book")
+        XCTAssertEqual(presentation?.book.inShelfId, mockCalibreBook.inShelfId, "Reader presentation should target the selected detail book")
+        XCTAssertEqual(presentation?.source, .bookDetail)
     }
     
     func testParseManifestToTOCSuccess() throws {
@@ -182,61 +203,6 @@ class BookDetailViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.updatingMetadata)
         mockAppContainer.updatingMetadata = true
         XCTAssertTrue(viewModel.updatingMetadata)
-    }
-
-    func testPushAndPopPresenting() throws {
-        var presenting = false
-        let binding = Binding<Bool>(
-            get: { presenting },
-            set: { presenting = $0 }
-        )
-        
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        viewModel.pushPresenting(binding)
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        
-        viewModel.popPresenting()
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-    }
-
-    func testPresentationSheetProperties() throws {
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        
-        viewModel.presentingReadingSheet = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        viewModel.presentingReadingSheet = false
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        
-        viewModel.presentingPreviewSheet = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        viewModel.presentingPreviewSheet = false
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        
-        viewModel.activityListViewPresenting = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        viewModel.activityListViewPresenting = false
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        
-        viewModel.readingPositionHistoryViewPresenting = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        viewModel.readingPositionHistoryViewPresenting = false
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-    }
-
-    func testPresentationSheetPropertiesBindingInteractions() throws {
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        
-        viewModel.presentingReadingSheet = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        
-        let binding = mockAppContainer.presentingStack.last
-        XCTAssertNotNil(binding)
-        XCTAssertTrue(binding?.wrappedValue ?? false)
-        
-        // Dismiss via binding (e.g. SwiftUI sheet dismissal)
-        binding?.wrappedValue = false
-        XCTAssertFalse(viewModel.presentingReadingSheet)
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
     }
 
     private func setupMockGoodreadsSync(dateReadColumn: String = "#date_read", readingProgressColumn: String = "#progress") {
@@ -675,15 +641,35 @@ class ReadingPositionViewModelTests: XCTestCase {
         XCTAssertEqual(detailVM.selectedFormat, .EPUB)
     }
     
-    func testDetailViewModelPresentingSheet() throws {
+    func testDetailViewModelReadSelectedFormatOpensReaderPresentation() throws {
         let position = BookDeviceReadingPosition(id: "device-1", readerName: ReaderType.YabrEPUB.rawValue)
         let detailVM = ReadingPositionDetailViewModel(container: mockAppContainer, listModel: listViewModel, position: position)
-        
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
-        detailVM.presentingReadSheet = true
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 1)
-        detailVM.presentingReadSheet = false
-        XCTAssertEqual(mockAppContainer.presentingStack.count, 0)
+
+        mockBook.formats[Format.EPUB.rawValue] = FormatInfo(
+            selected: true,
+            filename: "position-test.epub",
+            serverSize: 1024,
+            serverMTime: Date(),
+            cached: true,
+            cacheSize: 1024,
+            cacheMTime: Date(),
+            manifest: nil
+        )
+        if let savedURL = getSavedUrl(book: mockBook, format: .EPUB) {
+            try FileManager.default.createDirectory(
+                at: savedURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true,
+                attributes: nil
+            )
+            FileManager.default.createFile(atPath: savedURL.path, contents: Data("EPUB".utf8))
+        }
+
+        detailVM.readSelectedFormat()
+
+        let presentation = mockAppContainer.sessionManager.activeReaderPresentation
+        XCTAssertEqual(presentation?.book.inShelfId, mockBook.inShelfId)
+        XCTAssertEqual(presentation?.source, .readingPosition)
+        XCTAssertEqual(presentation?.readerInfo.position.id, position.id)
     }
     
     func testHistoryViewModelLoadData() throws {

@@ -67,36 +67,26 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
     @Published var container: AppContainer
     @Published var listModel: ReadingPositionListViewModel
     @Published var position: BookDeviceReadingPosition
+    var targetWorkspaceID: UUID?
     
     @Published var selectedFormat = Format.UNKNOWN
     @Published var selectedFormatReader = ReaderType.UNSUPPORTED
     @Published var startPage = ""
     @Published var alertItem: AlertItem?
     
-    @Published var presentingReadSheet = false {
-        willSet {
-            if newValue {
-                let binding = Binding<Bool>(
-                    get: { [weak self] in self?.presentingReadSheet ?? false },
-                    set: { [weak self] in self?.presentingReadSheet = $0 }
-                )
-                container.presentingStack.append(binding)
-            }
-        }
-        didSet {
-            if oldValue {
-                _ = container.presentingStack.popLast()
-            }
-        }
-    }
-
     let percentFormatter = NumberFormatter()
     let dateFormatter = DateFormatter()
 
-    init (container: AppContainer, listModel: ReadingPositionListViewModel, position: BookDeviceReadingPosition) {
+    init(
+        container: AppContainer,
+        listModel: ReadingPositionListViewModel,
+        position: BookDeviceReadingPosition,
+        targetWorkspaceID: UUID? = nil
+    ) {
         self.container = container
         self.listModel = listModel
         self.position = position
+        self.targetWorkspaceID = targetWorkspaceID
 
         if let format = container.sessionManager.formatOfReader(readerName: position.readerName) {
             self.selectedFormat = format
@@ -124,14 +114,6 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
         return container.sessionManager.formatReaderMap[selectedFormat] ?? []
     }
 
-    var readingBook: CalibreBook? {
-        return container.bookManager.readingBook
-    }
-
-    var readerInfo: ReaderInfo? {
-        return container.sessionManager.readerInfo
-    }
-    
     var isSelectedFormatCached: Bool {
         return listModel.book.formats[selectedFormat.rawValue]?.cached == true
     }
@@ -150,25 +132,28 @@ class ReadingPositionDetailViewModel: ObservableObject, AlertDelegate {
             return
         }
 
-        container.sessionManager.prepareBookReading(
+        let readerInfo = container.sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: selectedFormatReader,
             position: position
         )
 
-        presentingReadSheet = true
+        container.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .readingPosition,
+            targetWorkspaceID: targetWorkspaceID
+        )
     }
 
     func updatePosition() {
         container.sessionManager.updateCurrentPosition(alertDelegate: self)
 
-        if let book = container.bookManager.readingBook {
-            listModel.book = book
-            listModel.positions = container.readingPositionRepository.getPositions(for: book)
-            if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(self.position.id)) {
-                self.position = position
-            }
+        let book = listModel.book
+        listModel.positions = container.readingPositionRepository.getPositions(for: book)
+        if let position = container.readingPositionRepository.getPosition(for: book, policy: .latestForDevice(self.position.id)) {
+            self.position = position
         }
     }
 }
@@ -240,7 +225,7 @@ class ReadingPositionHistoryViewModel: ObservableObject {
 
             if let book = container.bookRepository.getBook(library: library, bookId: bookId) {
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
-            } else if let book = container.bookManager.readingBook {
+            } else if let book = container.sessionManager.activeReaderPresentation?.book {
                 listViewModel = ReadingPositionListViewModel(container: container, book: book, positions: container.readingPositionRepository.getPositions(for: book))
             }
 

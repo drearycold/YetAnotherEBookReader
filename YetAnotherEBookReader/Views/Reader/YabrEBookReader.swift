@@ -18,9 +18,23 @@ import ReadiumGCDWebServer
 struct YabrEBookReader: View {
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let presentationID: ReaderPresentation.ID?
+    let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
+
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        presentationID: ReaderPresentation.ID? = nil,
+        lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
+    ) {
+        self.book = book
+        self.readerInfo = readerInfo
+        self.presentationID = presentationID
+        self.lifecycleEvents = lifecycleEvents
+    }
     
     var body: some View {
-        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo)
+        YabrEBookReaderRepresentable(book: book, readerInfo: readerInfo, presentationID: presentationID, lifecycleEvents: lifecycleEvents)
             .ignoresSafeArea()
     }
 }
@@ -30,21 +44,36 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
     
     let book: CalibreBook
     let readerInfo: ReaderInfo
+    let presentationID: ReaderPresentation.ID?
+    let lifecycleEvents: () -> AsyncStream<ReaderPresentationLifecycleEvent>
     
     let errorViewController = UIViewController()
     let errorLabel = UILabel()
     
     @Environment(\.appContainer) var container
     
-    init(book: CalibreBook, readerInfo: ReaderInfo) {
+    init(
+        book: CalibreBook,
+        readerInfo: ReaderInfo,
+        presentationID: ReaderPresentation.ID? = nil,
+        lifecycleEvents: @escaping () -> AsyncStream<ReaderPresentationLifecycleEvent> = { AsyncStream { $0.finish() } }
+    ) {
         self.book = book
         self.readerInfo = readerInfo
+        self.presentationID = presentationID
+        self.lifecycleEvents = lifecycleEvents
         
         errorViewController.view.addSubview(errorLabel)
     }
     
     func makeUIViewController(context: Context) -> UIViewController {
-        let nav = YabrEBookReaderNavigationController(container: container, book: book, readerInfo: readerInfo)
+        let nav = YabrEBookReaderNavigationController(
+            container: container,
+            book: book,
+            readerInfo: readerInfo,
+            presentationID: presentationID,
+            lifecycleEvents: lifecycleEvents
+        )
         nav.container = container
         nav.modalPresentationStyle = UIModalPresentationStyle.fullScreen
         nav.navigationBar.isTranslucent = true
@@ -214,12 +243,16 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             let epubReaderContainer = EpubFolioReaderContainer(withConfig: readerConfiguration, folioReader: folioReader, epubPath: readerInfo.url.path, webServer: webServer)
 
             epubReaderContainer.container = container
+            epubReaderContainer.calibreBook = book
+            epubReaderContainer.readerInfo = readerInfo
             epubReaderContainer.readerEngineDelegate = context.coordinator
             epubReaderContainer.open(bookReadingPosition: readerInfo.position)
             _ = epubReaderContainer.folioReaderPreferenceProvider(epubReaderContainer.folioReader).preference(listProfile: nil)
             
-            // Load and apply initial preferences for FolioReader
-            if let enginePrefs = container.readerPreferenceRepository.loadInitialPreferences(
+            // The Folio provider already restores complete native per-book preferences.
+            // Apply the compatibility subset only when Folio has no complete native row.
+            if container.readerPreferenceRepository.loadFolioPreferences(for: book) == nil,
+               let enginePrefs = container.readerPreferenceRepository.loadInitialPreferences(
                 for: book,
                 readerType: readerInfo.readerType
             ) {
@@ -283,6 +316,7 @@ struct YabrEBookReaderRepresentable: UIViewControllerRepresentable {
             dbPosition.epoch = Date().timeIntervalSince1970
             
             parent.container.readingPositionRepository.savePosition(dbPosition, for: parent.book)
+            parent.container.sessionManager.recordReaderPresentationPosition(id: parent.presentationID, position: dbPosition)
         }
         
         func readerEngine(_ engine: AnyObject, didAddHighlight highlight: ReaderEngineHighlight) {

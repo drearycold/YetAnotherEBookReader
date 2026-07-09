@@ -18,10 +18,7 @@ struct AddModServerView: View {
     @Binding var isActive: Bool
     
     @State private var localLibraryImportBooksPicked = [URL]()
-    @State private var localLibraryImportPresenting = false {
-        willSet { if newValue { container.presentingStack.append($localLibraryImportPresenting) } }
-        didSet { if oldValue { _ = container.presentingStack.popLast() } }
-    }
+    @State private var localLibraryImportPresenting = false
     
     var body: some View {
         Form {

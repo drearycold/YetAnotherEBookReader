@@ -24,9 +24,6 @@ struct BookCoverView: View {
             Button(action: {
                 guard viewModel.activeDownloads.filter({ $1.isActive && $1.book.id == book.id }).isEmpty else { return }
                 viewModel.readBook(book: book)
-                if book.inShelf {
-                    viewModel.presentingReadingSheet = true
-                }
             }) {
                 if viewModel.activeDownloads.filter({ $1.book.id == book.id && $1.isActive }).isEmpty == false ||
                     book.formats.filter({ $0.value.selected == true && $0.value.cached == false }).isEmpty == false {
@@ -47,14 +44,6 @@ struct BookCoverView: View {
                 }
             }
             .opacity(0.8)
-            .fullScreenCover(isPresented: $viewModel.presentingReadingSheet) {
-                if let readerInfo = viewModel.readerInfo {
-                    YabrEBookReader(
-                        book: book,
-                        readerInfo: readerInfo
-                    )
-                }
-            }
         }
         .frame(width: 300, height: 400)
     }

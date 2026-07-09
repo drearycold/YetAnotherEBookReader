@@ -65,6 +65,18 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertNil(identity.canonicalizing("unrelated-id"))
     }
 
+    func testDSReaderFolioConfigurationHidesInternalCloseButton() {
+        let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
+
+        XCTAssertFalse(config.showCloseButton)
+    }
+
+    func testDSReaderFolioConfigurationForcesBottomMenuTabBar() {
+        let config = EpubFolioReaderContainer.Configuration(bookURL: readerInfo.url)
+
+        XCTAssertTrue(config.forceBottomMenuTabBar)
+    }
+
     func testReadPositionProviderRestoresCanonicalPositionWithFolioReaderRuntimeId() {
         let savedPosition = makePosition(page: 14, offsetX: 22, offsetY: 33, cfi: "epubcfi(/6/14)")
         container.readingPositionRepository.savePosition(savedPosition, for: book)
@@ -378,11 +390,9 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             epubPath: "/dev/null/non-existent-\(UUID().uuidString).epub",
             webServer: webServer
         )
-        // Ensure the provider factory can build a real FolioReaderDelegateHighlightProvider
-        // instead of falling back to FolioReaderDummyHighlightProvider.
-        container.sessionManager.readingBook = book
-        container.sessionManager.readerInfo = readerInfo
         epubContainer.container = container
+        epubContainer.calibreBook = book
+        epubContainer.readerInfo = readerInfo
         epubContainer.readerEngineDelegate = nil
         // Sanity: the provider must not exist before the fix runs
         epubContainer.folioReaderHighlightProvider = nil
@@ -561,7 +571,7 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
 
         // 2. Change some properties in-memory
         provider.preference(setBool: true, for: "nightMode")
-        provider.preference(setInt: 2, for: "themeMode") // Dark theme
+        provider.preference(setInt: 2, for: "themeMode") // Green theme
         provider.preference(setString: "Avenir", for: "currentFont")
 
         // 3. Save as custom profile "DarkAvenir"
@@ -644,6 +654,148 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
         XCTAssertEqual(repository.loadProfileNameParam, "Default")
         XCTAssertEqual(provider.preference(boolFor: "nightMode", default: false), true)
         XCTAssertEqual(provider.preference(stringFor: "currentFont", default: ""), "Avenir")
+    }
+
+    func testProviderAppliesSharedThemeNightModeMapping() {
+        let folioReader = FolioReader()
+        let mockDelegate = MockReaderEngineDelegate()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: mockDelegate,
+            bookId: book.bookPrefId,
+            profileRepository: MockFolioReaderProfileRepository()
+        )
+
+        provider.applyPreferences(ReaderEnginePreferences(themeMode: 2))
+        XCTAssertEqual(provider.preference(intFor: "themeMode", default: -1), 2)
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: true), false)
+
+        provider.applyPreferences(ReaderEnginePreferences(themeMode: 3))
+        XCTAssertEqual(provider.preference(intFor: "themeMode", default: -1), 3)
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: false), true)
+
+        provider.applyPreferences(ReaderEnginePreferences(themeMode: 4))
+        XCTAssertEqual(provider.preference(intFor: "themeMode", default: -1), 4)
+        XCTAssertEqual(provider.preference(boolFor: "nightMode", default: false), true)
+
+        provider.preference(setInt: 3, for: "themeMode")
+        XCTAssertEqual(mockDelegate.lastUpdatedPreferences?.themeMode, 3)
+    }
+
+    func testProviderPersistsPerBookNativePreferencesFromSetters() {
+        let folioReader = FolioReader()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+
+        provider.preference(setInt: 4, for: "themeMode")
+        provider.preference(setBool: true, for: "nightMode")
+        provider.preference(setString: "Avenir", for: "currentFont")
+        provider.preference(setInt: 31, for: "currentMarginTop")
+        provider.preference(setInt: 2, for: "currentNavigationMenuIndex")
+        provider.preference(setInt: NavigationMenuBookListStyle.Grid.rawValue, for: "currentNavigationMenuBookListStyle")
+        provider.preference(setInt: 6, for: "currentLineHeight")
+        provider.preference(setInt: StyleOverrideTypes.AllText.rawValue, for: "styleOverride")
+        provider.preference(setInt: FolioReaderStructuralStyle.bundle.rawValue, for: "structuralStyle")
+
+        let saved = container.readerPreferenceRepository.loadFolioPreferences(for: book)
+        XCTAssertEqual(saved?.themeMode, 4)
+        XCTAssertEqual(saved?.nightMode, true)
+        XCTAssertEqual(saved?.currentFont, "Avenir")
+        XCTAssertEqual(saved?.currentMarginTop, 31)
+        XCTAssertEqual(saved?.currentNavigationMenuIndex, 2)
+        XCTAssertEqual(saved?.currentNavigationMenuBookListStyle, NavigationMenuBookListStyle.Grid.rawValue)
+        XCTAssertEqual(saved?.currentLineHeight, 6)
+        XCTAssertEqual(saved?.styleOverride, StyleOverrideTypes.AllText.rawValue)
+        XCTAssertEqual(saved?.structuralStyle, FolioReaderStructuralStyle.bundle.rawValue)
+
+        let restoredProvider = FolioReaderDelegatePreferenceProvider(
+            FolioReader(),
+            delegate: nil,
+            bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+        XCTAssertEqual(restoredProvider.preference(intFor: "themeMode", default: -1), 4)
+        XCTAssertEqual(restoredProvider.preference(stringFor: "currentFont", default: ""), "Avenir")
+        XCTAssertEqual(restoredProvider.preference(intFor: "currentMarginTop", default: -1), 31)
+        XCTAssertEqual(restoredProvider.preference(intFor: "currentLineHeight", default: -1), 6)
+    }
+
+    func testProviderApplyCompatibilityPreferencesDoesNotCreateNativeFolioRowUntilUserChange() {
+        let folioReader = FolioReader()
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+
+        provider.applyPreferences(
+            ReaderEnginePreferences(
+                themeMode: 3,
+                fontSizePercentage: 130,
+                fontFamily: "Palatino",
+                lineHeight: 1.75,
+                pageMargins: 1.5,
+                scroll: true,
+                scrollDirection: 1
+            )
+        )
+
+        XCTAssertNil(container.readerPreferenceRepository.loadFolioPreferences(for: book))
+
+        provider.preference(setInt: 7, for: "currentLineHeight")
+
+        let saved = container.readerPreferenceRepository.loadFolioPreferences(for: book)
+        XCTAssertEqual(saved?.themeMode, 3)
+        XCTAssertEqual(saved?.currentFont, "Palatino")
+        XCTAssertEqual(saved?.currentFontSize, "26px")
+        XCTAssertEqual(saved?.currentScrollDirection, 1)
+        XCTAssertEqual(saved?.currentLineHeight, 7)
+        XCTAssertEqual(saved?.currentMarginTop, sharedPageMarginsToFolio(1.5, defaultValue: folioReader.defaultMarginTop))
+        XCTAssertEqual(saved?.currentMarginBottom, sharedPageMarginsToFolio(1.5, defaultValue: folioReader.defaultMarginBottom))
+        XCTAssertEqual(saved?.currentMarginLeft, sharedPageMarginsToFolio(1.5, defaultValue: folioReader.defaultMarginLeft))
+        XCTAssertEqual(saved?.currentMarginRight, sharedPageMarginsToFolio(1.5, defaultValue: folioReader.defaultMarginRight))
+    }
+
+    func testProviderLoadsPerBookNativePreferencesAfterDefaultProfile() {
+        let folioReader = FolioReader()
+        let profileRepository = MockFolioReaderProfileRepository()
+        profileRepository.loadProfileReturn = makeFolioPreferenceValue(
+            themeMode: 1,
+            currentFont: "ProfileFont",
+            currentMarginTop: 9,
+            currentLineHeight: 4
+        )
+        container.readerPreferenceRepository.saveFolioPreferences(
+            makeFolioPreferenceValue(
+                themeMode: 4,
+                currentFont: "NativeFont",
+                currentMarginTop: 33,
+                currentLineHeight: 8
+            ),
+            for: book
+        )
+
+        let provider = FolioReaderDelegatePreferenceProvider(
+            folioReader,
+            delegate: nil,
+            bookId: book.bookPrefId,
+            profileRepository: profileRepository,
+            preferenceRepository: container.readerPreferenceRepository,
+            book: book
+        )
+
+        XCTAssertEqual(provider.preference(intFor: "themeMode", default: -1), 4)
+        XCTAssertEqual(provider.preference(stringFor: "currentFont", default: ""), "NativeFont")
+        XCTAssertEqual(provider.preference(intFor: "currentMarginTop", default: -1), 33)
+        XCTAssertEqual(provider.preference(intFor: "currentLineHeight", default: -1), 8)
     }
 
     func testProviderSaveAndRemoveDelegateToRepository() {
@@ -760,6 +912,42 @@ final class FolioReaderProviderBookIdTests: XCTestCase {
             objectTypes: [FolioReaderPreferenceRealm.self]
         )
         return RealmFolioReaderProfileRepository(realmConfiguration: config)
+    }
+
+    private func makeFolioPreferenceValue(
+        themeMode: Int,
+        currentFont: String,
+        currentMarginTop: Int,
+        currentLineHeight: Int
+    ) -> FolioReaderPreferenceValue {
+        FolioReaderPreferenceValue(
+            nightMode: themeMode >= 3,
+            themeMode: themeMode,
+            currentFont: currentFont,
+            currentFontSize: "24px",
+            currentFontWeight: "700",
+            currentAudioRate: 2,
+            currentHighlightStyle: FolioReaderHighlightStyle.blue.rawValue,
+            currentMediaOverlayStyle: MediaOverlayStyle.textColor.rawValue,
+            currentScrollDirection: 1,
+            currentNavigationMenuIndex: 1,
+            currentAnnotationMenuIndex: 2,
+            currentNavigationMenuBookListStyle: NavigationMenuBookListStyle.Grid.rawValue,
+            currentMarginTop: currentMarginTop,
+            currentMarginBottom: 22,
+            currentMarginLeft: 23,
+            currentMarginRight: 24,
+            currentVMarginLinked: false,
+            currentHMarginLinked: false,
+            currentLetterSpacing: 7,
+            currentLineHeight: currentLineHeight,
+            currentTextIndent: 9,
+            doWrapPara: true,
+            doClearClass: false,
+            styleOverride: StyleOverrideTypes.AllText.rawValue,
+            structuralStyle: FolioReaderStructuralStyle.bundle.rawValue,
+            structuralTrackingTocLevel: FolioReaderPositionTrackingStyle.level2.rawValue
+        )
     }
 }
 

@@ -28,6 +28,7 @@ enum RecentShelfAlert: Identifiable {
 @MainActor @available(macCatalyst 14.0, *)
 final class RecentShelfViewModel: ObservableObject {
     let container: AppContainer
+    let targetWorkspaceID: UUID?
     private var recentSnapshotTask: Task<Void, Never>?
     private var calibreEventTask: Task<Void, Never>?
     
@@ -41,8 +42,9 @@ final class RecentShelfViewModel: ObservableObject {
     @Published var presentingHistoryBookId: String? = nil
     @Published var activeAlert: RecentShelfAlert? = nil
     
-    init(container: AppContainer) {
+    init(container: AppContainer, targetWorkspaceID: UUID? = nil) {
         self.container = container
+        self.targetWorkspaceID = targetWorkspaceID
         setupTasks()
     }
 
@@ -95,8 +97,7 @@ final class RecentShelfViewModel: ObservableObject {
     }
 
     func prepareReading(bookId: String) -> ReaderInfo? {
-        container.bookManager.readingBookInShelfId = bookId
-        guard let book = container.bookManager.readingBook else { return nil }
+        guard let book = container.bookManager.booksInShelf[bookId] ?? container.bookManager.getBook(for: bookId) else { return nil }
         return container.sessionManager.prepareBookReading(book: book)
     }
 
@@ -108,7 +109,6 @@ final class RecentShelfViewModel: ObservableObject {
 
         guard let book = container.bookManager.booksInShelf[bookId] else { return }
 
-        container.bookManager.readingBookInShelfId = bookId
         let readerInfo = container.sessionManager.prepareBookReading(book: book)
 
         if readerInfo.missing {
@@ -120,8 +120,12 @@ final class RecentShelfViewModel: ObservableObject {
                 activeAlert = .missingFormat(book: book, format: readerInfo.format)
             }
         } else {
-            container.sessionManager.readerInfo = readerInfo
-            container.bookManager.presentingEBookReaderFromShelf = true
+            container.openReader(
+                book: book,
+                readerInfo: readerInfo,
+                source: .shelf,
+                targetWorkspaceID: targetWorkspaceID
+            )
         }
     }
     

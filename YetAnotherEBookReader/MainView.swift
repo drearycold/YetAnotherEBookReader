@@ -79,55 +79,15 @@ struct MainView: View {
             }
 
             if viewModel.showWelcome {
-                VStack {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Welcome!")
-
-                        Text("""
-                        Get start from
-                        \"Settings\" -> \"Server & Library\"
-                        to link with Calibre Server.
-                        """)
-
-                        Text("""
-                        Then go to "Browse"
-                        to add book to Shelf by toggling \(Image(systemName: "star"))
-                        or by downloading (\(Image(systemName: "tray.and.arrow.down"))) individual format.
-                        """)
-
-                        Text("Start reading by touching book cover.")
-
-                        Text("Don't forget to play with \"Reader Options\" and various in-reader settings.")
-
-                        Text("Enjoy your book!")
-
-                        Text("(This notice will disappear after first book has been added to shelf)")
-                    }
-                    .multilineTextAlignment(.leading)
-                    .padding()
-                    .background(Color.gray.opacity(0.5).cornerRadius(16).frame(minWidth: 300, minHeight: 360))
-                    .frame(maxWidth: 400)
-
-                    Rectangle().frame(height: 50).opacity(0.0)
-                }
+                WelcomeEmptyShelfView(
+                    openSettings: viewModel.openWelcomeSettings,
+                    openBrowse: viewModel.openWelcomeBrowse
+                )
             }
-        }
-        .fullScreenCover(isPresented: $viewModel.presentingEBookReaderFromShelf) {
-            if let book = viewModel.readingBook, let readerInfo = viewModel.readerInfo {
-                YabrEBookReader(book: book, readerInfo: readerInfo)
-            } else {
-                NavigationView {
-                    Text("No Suitable Format/Reader/Position Combo")
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button(action: {
-                                    viewModel.presentingEBookReaderFromShelf = false
-                                }) {
-                                    Image(systemName: "xmark")
-                                }
-                            }
-                        }
-                }
+
+            if viewModel.readerWorkspaceViewModel.hasReaders {
+                ReaderWorkspaceView(viewModel: viewModel.readerWorkspaceViewModel)
+                    .zIndex(10)
             }
         }
         .alert(item: $viewModel.alertItem) { item in
@@ -277,6 +237,7 @@ struct MainView: View {
                 viewModel.urlToOpen = nil
             }
         }
+        .environment(\.readerWorkspaceID, viewModel.readerWorkspaceViewModel.id)
     }
 
     private func requestIDFA() {
@@ -329,6 +290,337 @@ struct MainView: View {
             })
     }
     #endif
+}
+
+@available(macCatalyst 14.0, *)
+private struct WelcomeEmptyShelfView: View {
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+
+    let openSettings: () -> Void
+    let openBrowse: () -> Void
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 22) {
+                header
+                summary
+                actionButtons
+                dismissHint
+            }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 30)
+            .frame(maxWidth: 520)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 18, x: 0, y: 8)
+            .padding(.horizontal, 24)
+
+            Spacer()
+            Spacer(minLength: 56)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.black.opacity(0.08).ignoresSafeArea())
+    }
+
+    private var header: some View {
+        VStack(spacing: 14) {
+            Image("logo_1024")
+                .resizable()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(spacing: 6) {
+                Text("Welcome to D.S.Reader")
+                    .font(.title2.weight(.semibold))
+                    .multilineTextAlignment(.center)
+
+                Text("Your reading shelf is ready to be set up.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var summary: some View {
+        Text("Connect a calibre library or browse available libraries to start building your reading shelf.")
+            .font(.body)
+            .foregroundColor(.primary)
+            .multilineTextAlignment(.center)
+            .lineSpacing(3)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if horizontalSizeClass == .compact {
+            VStack(spacing: 10) {
+                primaryAction
+                secondaryAction
+            }
+        } else {
+            HStack(spacing: 12) {
+                primaryAction
+                secondaryAction
+            }
+        }
+    }
+
+    private var primaryAction: some View {
+        Button(action: openSettings) {
+            Label("Set Up Server & Library", systemImage: "server.rack")
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(WelcomePrimaryButtonStyle())
+        .accessibilityHint("Opens Settings to configure a calibre server and library.")
+    }
+
+    private var secondaryAction: some View {
+        Button(action: openBrowse) {
+            Label("Browse Libraries", systemImage: "building.columns")
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(WelcomeSecondaryButtonStyle())
+        .accessibilityHint("Opens Browse to explore configured libraries.")
+    }
+
+    private var dismissHint: some View {
+        Text("This panel disappears after your first book is added to the shelf.")
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+private struct WelcomePrimaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .foregroundColor(.white)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.75) : Color.accentColor)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct WelcomeSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .foregroundColor(.accentColor)
+            .background(configuration.isPressed ? Color.accentColor.opacity(0.16) : Color.accentColor.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.25), lineWidth: 1)
+            )
+    }
+}
+
+@available(macCatalyst 14.0, *)
+private struct ReaderWorkspaceView: View {
+    @ObservedObject var viewModel: ReaderWorkspaceViewModel
+    @State private var toolbarHeight: CGFloat = 0
+
+    private var toolbarPlacement: ReaderWorkspaceToolbarPlacement {
+        #if targetEnvironment(macCatalyst)
+        return .top
+        #else
+        return UIDevice.current.userInterfaceIdiom == .phone ? .bottom : .top
+        #endif
+    }
+
+    private var readerToolbarInset: CGFloat {
+        toolbarHeight > 0 ? toolbarHeight + 8 : 76
+    }
+
+    var body: some View {
+        ZStack(alignment: toolbarPlacement.alignment) {
+            Color.black.ignoresSafeArea()
+
+            readerContent
+                .padding(.top, toolbarPlacement == .top ? readerToolbarInset : 0)
+                .padding(.bottom, toolbarPlacement == .bottom ? readerToolbarInset : 0)
+                .ignoresSafeArea(.container, edges: toolbarPlacement.ignoredReaderEdges)
+
+            readerToolbar
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: ReaderToolbarHeightPreferenceKey.self, value: proxy.size.height)
+                    }
+                )
+        }
+        .onPreferenceChange(ReaderToolbarHeightPreferenceKey.self) { height in
+            toolbarHeight = height
+        }
+        .opacity(viewModel.isPresented ? 1 : 0)
+        .allowsHitTesting(viewModel.isPresented)
+        .accessibilityHidden(viewModel.isPresented == false)
+    }
+
+    @ViewBuilder
+    private var readerContent: some View {
+        if viewModel.mountedPresentations.isEmpty == false {
+            ZStack {
+                ForEach(viewModel.mountedPresentations) { presentation in
+                    let isActive = viewModel.activePresentationID == presentation.id
+                    YabrEBookReaderRepresentable(
+                        book: presentation.book,
+                        readerInfo: presentation.readerInfo,
+                        presentationID: presentation.id,
+                        lifecycleEvents: {
+                            viewModel.readerLifecycleEvents(for: presentation.id)
+                        }
+                    )
+                    .id(presentation.id)
+                    .opacity(isActive ? 1 : 0)
+                    .allowsHitTesting(isActive)
+                    .accessibilityHidden(isActive == false)
+                    .zIndex(isActive ? 1 : 0)
+                }
+            }
+        } else if viewModel.isPresented {
+            NavigationView {
+                Text("No Suitable Format/Reader/Position Combo")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(action: {
+                                viewModel.hideReader()
+                            }) {
+                                Image(systemName: "xmark")
+                            }
+                        }
+                    }
+            }
+        }
+    }
+
+    private var readerToolbar: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                viewModel.hideReader()
+            }) {
+                Image(systemName: "rectangle.leadinghalf.inset.filled")
+                    .frame(width: 28, height: 28)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(viewModel.presentations) { presentation in
+                        HStack(spacing: 6) {
+                            Button(action: {
+                                viewModel.activatePresentation(id: presentation.id)
+                            }) {
+                                Text(presentation.title)
+                                    .lineLimit(1)
+                                    .font(.caption)
+                            }
+
+                            Button(action: {
+                                viewModel.closePresentation(id: presentation.id)
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.caption2)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.activePresentationID == presentation.id ? Color.accentColor : Color.secondary.opacity(0.35))
+                        )
+                        .foregroundColor(.white)
+                        .contextMenu {
+                            Button(action: {
+                                viewModel.closePresentation(id: presentation.id)
+                            }) {
+                                Label("Close", systemImage: "xmark")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if viewModel.supportsReaderWindows {
+                Button(action: {
+                    viewModel.openEmptyReaderWindow()
+                }) {
+                    Image(systemName: "plus.rectangle")
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("New Window")
+                .help("Open a new empty window")
+
+                Button(action: {
+                    viewModel.moveActivePresentationToNewWindow()
+                }) {
+                    Image(systemName: "arrow.up.right.square")
+                        .frame(width: 28, height: 28)
+                }
+                .accessibilityLabel("Move Reader to New Window")
+                .help("Move the current reader to a new window")
+            }
+
+            Button(action: {
+                viewModel.closeActivePresentation()
+            }) {
+                Image(systemName: "xmark")
+                    .frame(width: 28, height: 28)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(8)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .padding(.top, toolbarPlacement == .top ? 10 : 0)
+        .padding(.bottom, toolbarPlacement == .bottom ? 10 : 0)
+        .padding(.horizontal, 12)
+    }
+}
+
+private enum ReaderWorkspaceToolbarPlacement {
+    case top
+    case bottom
+
+    var alignment: Alignment {
+        switch self {
+        case .top:
+            return .top
+        case .bottom:
+            return .bottom
+        }
+    }
+
+    var ignoredReaderEdges: Edge.Set {
+        switch self {
+        case .top:
+            return [.horizontal, .bottom]
+        case .bottom:
+            return [.horizontal]
+        }
+    }
+}
+
+private struct ReaderToolbarHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 @available(macCatalyst 14.0, *)

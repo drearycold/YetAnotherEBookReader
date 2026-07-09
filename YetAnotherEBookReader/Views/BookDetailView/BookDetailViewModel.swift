@@ -17,66 +17,17 @@ class BookDetailViewModel: ObservableObject {
     
     @Published var alertItem: AlertItem?
     
-    @Published var presentingReadingSheet = false {
-        willSet {
-            if newValue {
-                let binding = Binding<Bool>(
-                    get: { [weak self] in self?.presentingReadingSheet ?? false },
-                    set: { [weak self] in self?.presentingReadingSheet = $0 }
-                )
-                pushPresenting(binding)
-            }
-        }
-        didSet { if oldValue { popPresenting() } }
-    }
+    @Published var presentingPreviewSheet = false
     
-    @Published var presentingPreviewSheet = false {
-        willSet {
-            if newValue {
-                let binding = Binding<Bool>(
-                    get: { [weak self] in self?.presentingPreviewSheet ?? false },
-                    set: { [weak self] in self?.presentingPreviewSheet = $0 }
-                )
-                pushPresenting(binding)
-            }
-        }
-        didSet { if oldValue { popPresenting() } }
-    }
-    
-    @Published var activityListViewPresenting = false {
-        willSet {
-            if newValue {
-                let binding = Binding<Bool>(
-                    get: { [weak self] in self?.activityListViewPresenting ?? false },
-                    set: { [weak self] in self?.activityListViewPresenting = $0 }
-                )
-                pushPresenting(binding)
-            }
-        }
-        didSet { if oldValue { popPresenting() } }
-    }
+    @Published var activityListViewPresenting = false
 
-    @Published var readingPositionHistoryViewPresenting = false {
-        willSet {
-            if newValue {
-                let binding = Binding<Bool>(
-                    get: { [weak self] in self?.readingPositionHistoryViewPresenting ?? false },
-                    set: { [weak self] in self?.readingPositionHistoryViewPresenting = $0 }
-                )
-                pushPresenting(binding)
-            }
-        }
-        didSet { if oldValue { popPresenting() } }
-    }
+    @Published var readingPositionHistoryViewPresenting = false
     
     private weak var container: AppContainer?
+    var targetWorkspaceID: UUID?
     private var fetchTask: Task<Void, Never>?
     private var activeDownloadsTask: Task<Void, Never>?
     @Published var activeDownloads: [URL: BookFormatDownload] = [:]
-    var readerInfo: ReaderInfo? {
-        return container?.sessionManager.readerInfo
-    }
-
     var deviceName: String {
         return container?.deviceName ?? ""
     }
@@ -89,8 +40,9 @@ class BookDetailViewModel: ObservableObject {
         return container
     }
     
-    init(container: AppContainer? = AppContainer.shared) {
+    init(container: AppContainer? = AppContainer.shared, targetWorkspaceID: UUID? = nil) {
         self.container = container
+        self.targetWorkspaceID = targetWorkspaceID
         print("BookDetailViewModel INIT")
     }
     
@@ -262,7 +214,7 @@ class BookDetailViewModel: ObservableObject {
 
         let readPosition = container.readingPositionRepository.createInitial(deviceName: container.deviceName, reader: reader)
 
-        container.sessionManager.prepareBookReading(
+        _ = container.sessionManager.prepareBookReading(
             url: bookFileUrl,
             format: format,
             readerType: reader,
@@ -318,19 +270,19 @@ class BookDetailViewModel: ObservableObject {
     }
 
     private func prepareReadingSession(for book: CalibreBook) {
-        container?.bookManager.readingBook = book
+        guard let container else { return }
+        let readerInfo = container.sessionManager.prepareBookReading(book: book)
+        guard readerInfo.missing == false else { return }
+        container.openReader(
+            book: book,
+            readerInfo: readerInfo,
+            source: .bookDetail,
+            targetWorkspaceID: targetWorkspaceID
+        )
     }
 
     var updatingMetadata: Bool {
         return container?.updatingMetadata ?? false
-    }
-
-    func pushPresenting(_ binding: Binding<Bool>) {
-        container?.presentingStack.append(binding)
-    }
-
-    func popPresenting() {
-        _ = container?.presentingStack.popLast()
     }
 
     func parseTOCNode(node: NSDictionary, level: Int) -> String {
